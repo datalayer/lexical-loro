@@ -8,7 +8,7 @@ A real-time collaborative editing application for [Lexical](https://github.com/f
 
 Features both simple text editing and rich text editing with Lexical. Multiple users can edit the same documents simultaneously with conflict-free collaborative editing powered by Conflict-free Replicated Data Types (CRDTs).
 
-**DISCLAIMER** Collaborative Cursors still need fixes with , see...
+**DISCLAIMER** Collaborative Cursors still need fixes, see [this issue](https://github.com/datalayer/lexical-loro/issues/1).
 
 **NEW** Now supports both Node.js and Python WebSocket servers!
 
