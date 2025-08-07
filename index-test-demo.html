@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lexical Collaborative Editor Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9fafb;
+        }
+        .demo-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .demo-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .demo-header h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        .demo-header p {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+        .feature-list {
+            background-color: #f3f4f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .feature-list h3 {
+            margin-top: 0;
+            color: #374151;
+        }
+        .feature-list ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .feature-list li {
+            margin-bottom: 8px;
+            color: #4b5563;
+        }
+        .instructions {
+            background-color: #ecfdf5;
+            border-left: 4px solid #10b981;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+        }
+        .instructions h4 {
+            margin-top: 0;
+            color: #047857;
+        }
+        .instructions p {
+            margin-bottom: 8px;
+            color: #065f46;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-header">
+            <h1>🚀 Lexical Collaborative Editor Enhanced</h1>
+            <p>Rich text editing with block types, real-time collaboration, and CRDT synchronization</p>
+        </div>
+
+        <div class="feature-list">
+            <h3>✨ New Features Added:</h3>
+            <ul>
+                <li><strong>Block Type Dropdown:</strong> Switch between Paragraph, Heading 1, and Code blocks</li>
+                <li><strong>Heading Support:</strong> Create properly styled H1 headings with the dropdown</li>
+                <li><strong>Code Block Support:</strong> Insert code blocks with syntax highlighting</li>
+                <li><strong>Enhanced Toolbar:</strong> Improved visual design with better spacing and styling</li>
+                <li><strong>Real-time Sync:</strong> All block formatting changes sync across collaborators</li>
+            </ul>
+        </div>
+
+        <div class="instructions">
+            <h4>📝 How to Test:</h4>
+            <p>1. Start the server: <code>npm run server</code> (or <code>npm run server:py</code> for Python)</p>
+            <p>2. Start the development server: <code>npm run dev</code></p>
+            <p>3. Open <strong>http://localhost:5173</strong> in your browser</p>
+            <p>4. Use the dropdown menu in the toolbar to switch between text types</p>
+            <p>5. Try the formatting buttons (Bold, Italic, Underline) with different block types</p>
+            <p>6. Open multiple browser tabs to test collaboration features</p>
+        </div>
+
+        <div class="feature-list">
+            <h3>🔧 Technical Implementation:</h3>
+            <ul>
+                <li><strong>Lexical Framework:</strong> Facebook's extensible text editor framework</li>
+                <li><strong>Loro CRDT:</strong> Conflict-free replicated data type for real-time collaboration</li>
+                <li><strong>Block Types:</strong> Proper paragraph, heading, and code node handling</li>
+                <li><strong>State Management:</strong> React hooks for toolbar state synchronization</li>
+                <li><strong>CSS Styling:</strong> Custom themed components with hover and active states</li>
+            </ul>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 0.9rem;">
+                🎯 Ready to test! The editor now supports paragraph formatting with an intuitive dropdown interface.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

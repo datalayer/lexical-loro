@@ -1,0 +1,196 @@
+/* Collaborative Editor Styles */
+.collaborative-editor {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.editor-header h2 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-indicator {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-indicator.connected {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-indicator.disconnected {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.error-message {
+  color: #dc2626;
+  font-size: 0.875rem;
+  background-color: #fee2e2;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+
+.disconnect-button {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.disconnect-button:hover {
+  background-color: #dc2626;
+}
+
+.disconnect-button:active {
+  transform: translateY(1px);
+}
+
+.editor-container {
+  margin-bottom: 20px;
+}
+
+.editor-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.editor-textarea {
+  width: 100%;
+  min-height: 400px;
+  padding: 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color 0.2s ease;
+  background-color: #ffffff;
+}
+
+/* Cursor and selection overlays */
+.cursor-overlays,
+.selection-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.remote-cursor {
+  position: absolute;
+  background-color: #ff6b6b;
+  width: 2px;
+  height: 20px;
+  pointer-events: none;
+  z-index: 1001;
+  animation: cursor-blink 1s infinite;
+}
+
+.cursor-label {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  background-color: inherit;
+  color: white;
+  padding: 2px 6px;
+  font-size: 10px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.remote-selection {
+  position: absolute;
+  background-color: rgba(255, 107, 107, 0.2);
+  pointer-events: none;
+  z-index: 999;
+  border-radius: 2px;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+.editor-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.editor-textarea::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.editor-info {
+  background-color: #f9fafb;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.editor-info p {
+  margin: 5px 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.editor-info p:first-child {
+  margin-top: 0;
+}
+
+.editor-info p:last-child {
+  margin-bottom: 0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .collaborative-editor {
+    padding: 10px;
+  }
+  
+  .editor-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .editor-textarea {
+    font-size: 16px; /* Prevent zoom on iOS */
+    min-height: 300px;
+  }
+}

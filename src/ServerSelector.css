@@ -1,0 +1,81 @@
+.server-selector {
+  margin-bottom: 20px;
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.server-selector h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.server-options {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.server-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: white;
+  flex: 1;
+  min-width: 200px;
+}
+
+.server-option:hover {
+  border-color: #007acc;
+}
+
+.server-option.active {
+  border-color: #007acc;
+  background-color: #f0f8ff;
+}
+
+.server-option input[type="radio"] {
+  margin: 0;
+}
+
+.server-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.server-name {
+  font-weight: bold;
+  color: #333;
+}
+
+.server-url {
+  font-size: 12px;
+  color: #666;
+  font-family: monospace;
+}
+
+.server-tech {
+  font-size: 11px;
+  color: #888;
+}
+
+.connection-notice {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+}
+
+.server-option:has(input:disabled),
+.server-option input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

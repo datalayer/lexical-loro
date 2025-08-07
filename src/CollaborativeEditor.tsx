@@ -1,0 +1,260 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { LoroDoc, LoroText } from 'loro-crdt';
+import './CollaborativeEditor.css';
+
+interface CollaborativeEditorProps {
+  websocketUrl?: string;
+  onConnectionChange?: (connected: boolean) => void;
+}
+
+export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
+  websocketUrl = 'ws://localhost:8081',
+  onConnectionChange
+}) => {
+  const [text, setText] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const docRef = useRef<LoroDoc>(new LoroDoc());
+  const textRef = useRef<LoroText | null>(null);
+  const isLocalChange = useRef(false);
+  const hasReceivedInitialSnapshot = useRef(false);
+  const isConnectingRef = useRef(false);
+
+  // Initialize Loro document and text object
+  useEffect(() => {
+    const doc = docRef.current;
+    textRef.current = doc.getText('shared-text');
+    
+    // Subscribe to document changes
+    const unsubscribe = doc.subscribe(() => {
+      if (!isLocalChange.current) {
+        // This is a remote change, update the UI
+        const currentText = textRef.current?.toString() || '';
+        setText(currentText);
+      }
+      isLocalChange.current = false;
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // WebSocket connection management
+  useEffect(() => {
+    const connectWebSocket = () => {
+      // Prevent multiple simultaneous connection attempts
+      if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
+        return;
+      }
+      
+      isConnectingRef.current = true;
+      
+      try {
+        const ws = new WebSocket(websocketUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          isConnectingRef.current = false;
+          setIsConnected(true);
+          setError(null);
+          onConnectionChange?.(true);
+          console.log('Connected to WebSocket server');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'loro-update') {
+              // Apply remote update to local document
+              const update = new Uint8Array(data.update);
+              docRef.current.import(update);
+            } else if (data.type === 'initial-snapshot') {
+              // Apply initial snapshot from server
+              const snapshot = new Uint8Array(data.snapshot);
+              docRef.current.import(snapshot);
+              hasReceivedInitialSnapshot.current = true;
+              console.log('📄 Received and applied initial snapshot');
+            } else if (data.type === 'welcome') {
+              console.log('👋 Welcome message received:', data.message);
+              
+              // Request current snapshot from server after a small delay
+              setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({
+                    type: 'request-snapshot',
+                    docId: 'shared-text'
+                  }));
+                  console.log('📞 Requested current snapshot from server');
+                }
+              }, 100);
+            } else if (data.type === 'snapshot-request') {
+              // Another client is requesting a snapshot, send ours if we have content
+              const currentText = textRef.current?.toString() || '';
+              if (currentText.length > 0) {
+                const snapshot = docRef.current.exportSnapshot();
+                ws.send(JSON.stringify({
+                  type: 'snapshot',
+                  snapshot: Array.from(snapshot),
+                  docId: 'shared-text'
+                }));
+                console.log('📄 Sent snapshot in response to request');
+              }
+            }
+          } catch (err) {
+            console.error('Error processing WebSocket message:', err);
+          }
+        };
+
+        ws.onclose = () => {
+          isConnectingRef.current = false;
+          setIsConnected(false);
+          onConnectionChange?.(false);
+          console.log('Disconnected from WebSocket server');
+          
+          // Attempt to reconnect after 3 seconds
+          setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = (err) => {
+          isConnectingRef.current = false;
+          setError('WebSocket connection error');
+          console.error('WebSocket error:', err);
+        };
+
+      } catch (err) {
+        isConnectingRef.current = false;
+        setError('Failed to connect to WebSocket server');
+        console.error('WebSocket connection failed:', err);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isConnectingRef.current = false;
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [websocketUrl]); // Removed onConnectionChange from dependencies
+
+  const handleTextChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = event.target.value;
+    const currentText = text;
+    
+    // Mark this as a local change
+    isLocalChange.current = true;
+    
+    // Find the difference and apply it to Loro document
+    if (newText.length > currentText.length) {
+      // Text was inserted
+      const insertPos = findInsertPosition(currentText, newText);
+      const insertedText = newText.slice(insertPos, insertPos + (newText.length - currentText.length));
+      textRef.current?.insert(insertPos, insertedText);
+    } else if (newText.length < currentText.length) {
+      // Text was deleted
+      const deletePos = findDeletePosition(currentText, newText);
+      const deleteLen = currentText.length - newText.length;
+      textRef.current?.delete(deletePos, deleteLen);
+    } else {
+      // Text was replaced
+      textRef.current?.delete(0, currentText.length);
+      textRef.current?.insert(0, newText);
+    }
+    
+    // Update local state
+    setText(newText);
+    
+    // Send update to WebSocket server
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const update = docRef.current.exportFrom();
+      wsRef.current.send(JSON.stringify({
+        type: 'loro-update',
+        update: Array.from(update),
+        docId: 'shared-text'
+      }));
+
+      // Also send a snapshot every 10 changes to keep server state updated
+      if (Math.random() < 0.1) { // 10% chance to send snapshot
+        const snapshot = docRef.current.exportSnapshot();
+        wsRef.current.send(JSON.stringify({
+          type: 'snapshot',
+          snapshot: Array.from(snapshot),
+          docId: 'shared-text'
+        }));
+      }
+    }
+  }, [text]);
+
+  // Helper function to find where text was inserted
+  const findInsertPosition = (oldText: string, newText: string): number => {
+    let pos = 0;
+    while (pos < oldText.length && pos < newText.length && oldText[pos] === newText[pos]) {
+      pos++;
+    }
+    return pos;
+  };
+
+  // Helper function to find where text was deleted
+  const findDeletePosition = (oldText: string, newText: string): number => {
+    let pos = 0;
+    while (pos < oldText.length && pos < newText.length && oldText[pos] === newText[pos]) {
+      pos++;
+    }
+    return pos;
+  };
+
+  // Disconnect function
+  const handleDisconnect = useCallback(() => {
+    if (wsRef.current) {
+      isConnectingRef.current = false;
+      wsRef.current.close();
+      setIsConnected(false);
+      onConnectionChange?.(false);
+    }
+  }, [onConnectionChange]);
+
+  return (
+    <div className="collaborative-editor">
+      <div className="editor-header">
+        <h2>Collaborative Text Editor</h2>
+        <div className="connection-status">
+          <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+            {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+          </span>
+          {isConnected && (
+            <button 
+              onClick={handleDisconnect}
+              className="disconnect-button"
+              title="Disconnect from server"
+            >
+              🔌 Disconnect
+            </button>
+          )}
+          {error && <span className="error-message">{error}</span>}
+        </div>
+      </div>
+      
+      <div className="editor-container">
+        <textarea
+          value={text}
+          onChange={handleTextChange}
+          placeholder="Start typing... Your changes will be shared in real-time!"
+          className="editor-textarea"
+          rows={20}
+          cols={80}
+        />
+      </div>
+      
+      <div className="editor-info">
+        <p>WebSocket URL: {websocketUrl}</p>
+        <p>Document ID: shared-text</p>
+        <p>Characters: {text.length}</p>
+      </div>
+    </div>
+  );
+};
