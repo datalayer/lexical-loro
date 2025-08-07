@@ -4,7 +4,7 @@
 
 # Collaborative Plugin for Lexical based on Loro CRDT
 
-A real-time collaborative editing application for [Lexical](https://github.com/facebook/lexical) built with [Loro CRDT](https://github.com/loro-dev), React, TypeScript, Vite.
+A real-time collaborative editing application for [Lexical](https://github.com/facebook/lexical) built with [Loro CRDT](https://github.com/loro-dev), React, TypeScript, Vite with a Python WebSocket server using [loro-py](https://github.com/loro-dev/loro-py) to maintain the Lexical JSON model sever-side
 
 Features both simple text editing and rich text editing with Lexical. Multiple users can edit the same documents simultaneously with conflict-free collaborative editing powered by Conflict-free Replicated Data Types (CRDTs).
 
