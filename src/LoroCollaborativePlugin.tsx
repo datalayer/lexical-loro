@@ -1172,182 +1172,33 @@ export function LoroCollaborativePlugin({
                 
                 console.log('👁️ Successfully used stable cursor data:', { anchorPos, focusPos });
               } else {
-                console.log('👁️ Stable cursor nodes no longer valid, creating intelligent fallback position');
+                console.log('👁️ Node keys invalid, using simple positioning like cursor movement');
                 
-                // IMPROVED: Instead of trying LORO conversion (which we skip), create smart fallback
-                const fallbackPosition = editor.getEditorState().read(() => {
-                  // Use the improved fallback logic that maintains relative position
-                  const referencePosition = {
-                    anchorKey: stableCursor.anchorKey,
-                    anchorOffset: stableCursor.anchorOffset
-                  };
-                  
-                  console.log('👁️ Using reference position for smart fallback after stable cursor invalidation:', referencePosition);
-                  
+                // SIMPLIFIED: Use the same simple approach as cursor movement
+                const simplePosition = editor.getEditorState().read(() => {
                   const root = $getRoot();
+                  const children = root.getChildren();
                   
-                  // BETTER STRATEGY: Try to find which paragraph/element the original cursor was in
-                  // and place the fallback cursor in a similar paragraph
-                  
-                  const fullDocumentText = root.getTextContent();
-                  console.log('👁️ Full document text for position calculation:', {
-                    text: JSON.stringify(fullDocumentText),
-                    length: fullDocumentText.length
-                  });
-                  
-                  // Step 1: Collect all paragraphs/text nodes with their positions
-                  const textNodesInfo: Array<{
-                    node: LexicalNode;
-                    key: string;
-                    text: string;
-                    globalStartPos: number;
-                    globalEndPos: number;
-                    paragraphIndex: number;
-                  }> = [];
-                  
-                  let currentGlobalPos = 0;
-                  let paragraphIndex = 0;
-                  
-                  const collectParagraphInfo = (node: LexicalNode): void => {
-                    if ($isTextNode(node)) {
-                      const textContent = node.getTextContent();
-                      const textLength = textContent.length;
-                      
-                      textNodesInfo.push({
-                        node,
-                        key: node.getKey(),
-                        text: textContent,
-                        globalStartPos: currentGlobalPos,
-                        globalEndPos: currentGlobalPos + textLength,
-                        paragraphIndex: paragraphIndex
-                      });
-                      
-                      currentGlobalPos += textLength;
-                    } else if ($isElementNode(node)) {
-                      const nodeType = node.getType();
-                      const isParagraph = nodeType === 'paragraph' || nodeType === 'heading';
-                      
-                      if (isParagraph && textNodesInfo.length > 0) {
-                        paragraphIndex++; // New paragraph
-                      }
-                      
-                      const children = node.getChildren();
-                      children.forEach(child => collectParagraphInfo(child));
-                      
-                      // Handle paragraph breaks (newlines between paragraphs)
-                      if (isParagraph && children.length > 0) {
-                        // Check if this paragraph is followed by another paragraph
-                        const parent = node.getParent();
-                        if (parent && $isElementNode(parent)) {
-                          const siblings = parent.getChildren();
-                          const currentIndex = siblings.indexOf(node);
-                          if (currentIndex < siblings.length - 1) {
-                            const nextSibling = siblings[currentIndex + 1];
-                            if ($isElementNode(nextSibling) && 
-                                (nextSibling.getType() === 'paragraph' || nextSibling.getType() === 'heading')) {
-                              // Add newline characters between paragraphs
-                              currentGlobalPos += 2; // Typical paragraph break
-                            }
-                          }
-                        }
+                  // Find the first text node and use it, like cursor movement does
+                  for (const child of children) {
+                    if ($isElementNode(child)) {
+                      const textChildren = child.getChildren().filter($isTextNode);
+                      if (textChildren.length > 0) {
+                        const firstTextNode = textChildren[0];
+                        const textLength = firstTextNode.getTextContentSize();
+                        // Use a safe offset, clamped to available text
+                        const safeOffset = Math.min(Math.max(0, stableCursor.anchorOffset), textLength);
+                        
+                        return {
+                          key: firstTextNode.getKey(),
+                          offset: safeOffset,
+                          type: 'text' as const
+                        };
                       }
                     }
-                  };
-                  
-                  collectParagraphInfo(root);
-                  
-                  console.log('👁️ Document structure analysis:', {
-                    totalParagraphs: Math.max(...textNodesInfo.map(info => info.paragraphIndex)) + 1,
-                    textNodesInfo: textNodesInfo.map(info => ({
-                      key: info.key,
-                      text: info.text.substring(0, 20) + (info.text.length > 20 ? '...' : ''),
-                      globalRange: `${info.globalStartPos}-${info.globalEndPos}`,
-                      paragraphIndex: info.paragraphIndex
-                    }))
-                  });
-                  
-                  // Step 2: Try to determine which paragraph the original cursor was likely in
-                  // Look for a node with the same key first
-                  let originalParagraphIndex = 0;
-                  const originalNodeInfo = textNodesInfo.find(info => info.key === referencePosition.anchorKey);
-                  
-                  if (originalNodeInfo) {
-                    originalParagraphIndex = originalNodeInfo.paragraphIndex;
-                    console.log('👁️ Found original node in document structure:', {
-                      originalKey: referencePosition.anchorKey,
-                      paragraphIndex: originalParagraphIndex,
-                      text: originalNodeInfo.text.substring(0, 30)
-                    });
-                  } else {
-                    // If we can't find the exact node, estimate based on paragraph count and offset
-                    const totalParagraphs = Math.max(...textNodesInfo.map(info => info.paragraphIndex)) + 1;
-                    const originalOffset = referencePosition.anchorOffset;
-                    
-                    if (originalOffset <= 5 && totalParagraphs > 1) {
-                      originalParagraphIndex = 0; // Likely first paragraph
-                    } else if (originalOffset <= 15 && totalParagraphs > 2) {
-                      originalParagraphIndex = Math.min(1, totalParagraphs - 1); // Likely second paragraph
-                    } else if (totalParagraphs > 1) {
-                      // Likely later paragraph
-                      originalParagraphIndex = Math.min(Math.floor(totalParagraphs * 0.5), totalParagraphs - 1);
-                    }
-                    
-                    console.log('👁️ Estimated original paragraph based on offset:', {
-                      originalOffset,
-                      totalParagraphs,
-                      estimatedParagraphIndex: originalParagraphIndex
-                    });
                   }
                   
-                  // Step 3: Find a text node in the same or similar paragraph
-                  let targetNodeInfo = textNodesInfo.find(info => info.paragraphIndex === originalParagraphIndex);
-                  
-                  // If no node in the target paragraph, use adjacent paragraphs
-                  if (!targetNodeInfo) {
-                    // Try paragraph before or after
-                    targetNodeInfo = textNodesInfo.find(info => 
-                      Math.abs(info.paragraphIndex - originalParagraphIndex) <= 1
-                    );
-                  }
-                  
-                  // If still no match, use first available
-                  if (!targetNodeInfo && textNodesInfo.length > 0) {
-                    targetNodeInfo = textNodesInfo[0];
-                  }
-                  
-                  if (targetNodeInfo) {
-                    const originalOffset = referencePosition.anchorOffset;
-                    const textLength = targetNodeInfo.text.length;
-                    
-                    // Calculate proportional offset within the target text node
-                    let targetOffset = 0;
-                    if (originalOffset <= 5) {
-                      targetOffset = Math.min(Math.max(1, originalOffset), textLength);
-                    } else if (originalOffset <= 15) {
-                      targetOffset = Math.min(Math.floor(textLength * 0.3), textLength);
-                    } else {
-                      targetOffset = Math.min(Math.floor(textLength * 0.5), textLength);
-                    }
-                    
-                    console.log('👁️ Applied paragraph-aware fallback (preserves Y-axis):', {
-                      nodeKey: targetNodeInfo.key,
-                      offset: targetOffset,
-                      originalOffset: originalOffset,
-                      originalParagraphIndex: originalParagraphIndex,
-                      targetParagraphIndex: targetNodeInfo.paragraphIndex,
-                      targetText: targetNodeInfo.text.substring(0, 30) + '...',
-                      nodeLength: textLength
-                    });
-                    
-                    return {
-                      key: targetNodeInfo.key,
-                      offset: targetOffset,
-                      type: 'text' as const
-                    };
-                  }
-                  
-                  // Ultimate fallback to root
-                  console.log('👁️ Using root as ultimate fallback');
+                  // If no text nodes, position at root
                   return {
                     key: root.getKey(),
                     offset: 0,
@@ -1355,9 +1206,9 @@ export function LoroCollaborativePlugin({
                   };
                 });
                 
-                anchorPos = fallbackPosition;
-                focusPos = fallbackPosition; // Same position for both anchor and focus
-                console.log('👁️ Applied intelligent fallback positions:', { anchorPos, focusPos });
+                anchorPos = simplePosition;
+                focusPos = simplePosition;
+                console.log('👁️ Using simple positioning for invalid nodes:', { anchorPos, focusPos });
               }
             } else {
               console.log('👁️ No stable cursor data available, creating smart fallback positions');
