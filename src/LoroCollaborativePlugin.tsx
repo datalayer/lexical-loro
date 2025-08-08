@@ -1185,59 +1185,38 @@ export function LoroCollaborativePlugin({
                 
                 console.log('👁️ Successfully used stable cursor data:', { anchorPos, focusPos });
               } else {
-                console.log('❌ Node keys invalid - using fallback positioning. Details:', {
-                  stableCursor,
-                  validAnchor,
-                  validFocus
-                });
-                console.log('👁️ Node keys invalid, using position-aware fallback like cursor movement');
+                console.log('👁️ Node keys invalid, using line-aware stable fallback');
                 
-                // IMPROVED: Calculate approximate global position and find correct text node
-                const positionAwarePosition = editor.getEditorState().read(() => {
+                // LINE-AWARE MINIMAL FALLBACK: Try to preserve which line the cursor was on
+                const lineAwarePosition = editor.getEditorState().read(() => {
                   const root = $getRoot();
+                  const children = root.getChildren();
                   
-                  // Step 1: Calculate total document text length and create position map
-                  let globalTextPosition = 0;
-                  const textNodeMap: Array<{
-                    node: LexicalNode;
-                    key: NodeKey;
-                    startPos: number;
-                    endPos: number;
-                    textLength: number;
-                  }> = [];
+                  // Build a simple map of text nodes (representing lines/paragraphs)
+                  const textNodesList: Array<{ node: any; lineIndex: number }> = [];
+                  let lineIndex = 0;
                   
-                  // Traverse document to build position map
-                  const traverseForPositions = (node: LexicalNode): void => {
-                    if ($isTextNode(node)) {
-                      const text = node.getTextContent();
-                      const textLength = text.length;
-                      
-                      textNodeMap.push({
-                        node,
-                        key: node.getKey(),
-                        startPos: globalTextPosition,
-                        endPos: globalTextPosition + textLength,
-                        textLength
-                      });
-                      
-                      globalTextPosition += textLength;
-                    } else if ($isElementNode(node)) {
-                      const children = node.getChildren();
-                      children.forEach(child => traverseForPositions(child));
+                  for (const child of children) {
+                    if ($isElementNode(child)) {
+                      const textChildren = child.getChildren().filter($isTextNode);
+                      for (const textNode of textChildren) {
+                        textNodesList.push({ node: textNode, lineIndex });
+                      }
+                      // Each element (paragraph/div) represents a new line
+                      if (textChildren.length > 0) {
+                        lineIndex++;
+                      }
                     }
-                  };
+                  }
                   
-                  traverseForPositions(root);
-                  
-                  console.log('👁️ Document position map:', {
-                    totalTextLength: globalTextPosition,
-                    textNodes: textNodeMap.length,
+                  console.log('👁️ Document structure for line-aware fallback:', {
+                    totalLines: lineIndex,
+                    totalTextNodes: textNodesList.length,
                     originalOffset: stableCursor.anchorOffset
                   });
                   
-                  // Step 2: Calculate what the original global position was
-                  if (textNodeMap.length === 0) {
-                    // No text nodes, fallback to root
+                  if (textNodesList.length === 0) {
+                    // No text nodes, use root
                     return {
                       key: root.getKey(),
                       offset: 0,
@@ -1245,118 +1224,51 @@ export function LoroCollaborativePlugin({
                     };
                   }
                   
-                  // CRITICAL FIX: Calculate the original global position by finding the original node
-                  let originalGlobalPos = 0;
-                  let foundOriginalNode = false;
+                  // SMART ESTIMATION: Use the original offset to guess which line
+                  const originalOffset = stableCursor.anchorOffset;
+                  let targetLineIndex = 0;
                   
-                  // Try to find where the original node was in the document structure
-                  for (const nodeInfo of textNodeMap) {
-                    if (nodeInfo.key === stableCursor.anchorKey) {
-                      // Found the exact original node! Calculate its global position
-                      originalGlobalPos = nodeInfo.startPos + stableCursor.anchorOffset;
-                      foundOriginalNode = true;
-                      console.log('👁️ Found original node in new document:', {
-                        originalKey: stableCursor.anchorKey,
-                        newNodePos: `${nodeInfo.startPos}-${nodeInfo.endPos}`,
-                        localOffset: stableCursor.anchorOffset,
-                        calculatedGlobalPos: originalGlobalPos
-                      });
-                      break;
-                    }
-                  }
-                  
-                  // If we didn't find the original node, estimate position by node order
-                  if (!foundOriginalNode) {
-                    console.log('⚠️ CRITICAL: Original node not found, need better estimation');
-                    
-                    // IMPROVED ESTIMATION: Try to preserve line-based positioning
-                    const originalOffset = stableCursor.anchorOffset;
-                    
-                    // Strategy: If we have multiple text nodes (multiple lines), 
-                    // estimate which line the cursor was on based on patterns
-                    if (textNodeMap.length > 1) {
-                      // Multi-line document - try to preserve line positioning
-                      
-                      // Pattern 1: Small offsets usually mean beginning of some line
-                      if (originalOffset <= 10) {
-                        // Likely at the beginning of a line - use first text node of a reasonable line
-                        const lineIndex = Math.min(Math.floor(originalOffset / 5), textNodeMap.length - 1);
-                        const selectedNode = textNodeMap[lineIndex];
-                        originalGlobalPos = selectedNode.startPos + Math.min(originalOffset, selectedNode.textLength);
-                        
-                        console.log('📍 Small offset pattern - likely beginning of line:', {
-                          originalOffset,
-                          estimatedLine: lineIndex,
-                          selectedNodeRange: `${selectedNode.startPos}-${selectedNode.endPos}`,
-                          finalGlobalPos: originalGlobalPos
-                        });
-                      } else {
-                        // Larger offset - might be middle/end of a line
-                        // Use the length of typical first line to estimate which line
-                        const firstLineLength = textNodeMap[0].textLength;
-                        const estimatedLineIndex = Math.min(
-                          Math.floor(originalOffset / Math.max(firstLineLength, 20)),
-                          textNodeMap.length - 1
-                        );
-                        
-                        const selectedNode = textNodeMap[estimatedLineIndex];
-                        const offsetInLine = originalOffset % Math.max(firstLineLength, 20);
-                        originalGlobalPos = selectedNode.startPos + Math.min(offsetInLine, selectedNode.textLength);
-                        
-                        console.log('📍 Large offset pattern - estimated line positioning:', {
-                          originalOffset,
-                          firstLineLength,
-                          estimatedLineIndex,
-                          offsetInLine,
-                          selectedNodeRange: `${selectedNode.startPos}-${selectedNode.endPos}`,
-                          finalGlobalPos: originalGlobalPos
-                        });
-                      }
+                  if (textNodesList.length > 1) {
+                    // Multiple lines available - estimate which line based on offset
+                    if (originalOffset <= 10) {
+                      targetLineIndex = 0; // Small offset = first line
+                    } else if (originalOffset <= 30) {
+                      targetLineIndex = Math.min(1, textNodesList.length - 1); // Medium offset = second line
                     } else {
-                      // Single line document - simple positioning
-                      originalGlobalPos = Math.min(originalOffset, globalTextPosition - 1);
-                    }
-                    
-                    console.log('👁️ Estimated global position for missing node:', {
-                      originalKey: stableCursor.anchorKey,
-                      originalOffset,
-                      estimatedGlobalPos: originalGlobalPos,
-                      totalDocLength: globalTextPosition
-                    });
-                  }
-                  
-                  // Step 3: Find which text node contains this global position
-                  let targetTextNode = textNodeMap[0]; // Default to first
-                  for (const nodeInfo of textNodeMap) {
-                    if (originalGlobalPos >= nodeInfo.startPos && originalGlobalPos <= nodeInfo.endPos) {
-                      targetTextNode = nodeInfo;
-                      break;
+                      // Large offset = later line (proportional)
+                      targetLineIndex = Math.min(
+                        Math.floor(originalOffset / 25), // Assume ~25 chars per line average
+                        textNodesList.length - 1
+                      );
                     }
                   }
                   
-                  // Calculate local offset within the target text node
-                  const localOffset = Math.min(
-                    Math.max(0, originalGlobalPos - targetTextNode.startPos),
-                    targetTextNode.textLength
-                  );
+                  // Find text node for the target line
+                  const targetTextNodeInfo = textNodesList.find(info => info.lineIndex === targetLineIndex) || textNodesList[0];
+                  const targetTextNode = targetTextNodeInfo.node;
                   
-                  console.log('👁️ Position-aware cursor placement:', {
-                    originalGlobalPos,
-                    selectedNode: targetTextNode.key,
-                    localOffset,
-                    nodeRange: `${targetTextNode.startPos}-${targetTextNode.endPos}`
+                  // Use a small, safe offset within that line
+                  const safeOffset = Math.min(1, targetTextNode.getTextContentSize());
+                  
+                  console.log('👁️ Line-aware positioning:', {
+                    originalOffset,
+                    estimatedLine: targetLineIndex,
+                    selectedLine: targetTextNodeInfo.lineIndex,
+                    nodeKey: targetTextNode.getKey(),
+                    safeOffset,
+                    nodeText: targetTextNode.getTextContent().substring(0, 15)
                   });
                   
                   return {
-                    key: targetTextNode.key,
-                    offset: localOffset,
+                    key: targetTextNode.getKey(),
+                    offset: safeOffset,
                     type: 'text' as const
                   };
                 });
                 
-                anchorPos = positionAwarePosition;
-                focusPos = positionAwarePosition;
-                console.log('👁️ Using position-aware fallback for invalid nodes:', { anchorPos, focusPos });
+                anchorPos = lineAwarePosition;
+                focusPos = lineAwarePosition;
+                console.log('👁️ Applied line-aware stable fallback:', { anchorPos, focusPos });
               }
             } else {
               console.log('👁️ No stable cursor data available, creating smart fallback positions');
