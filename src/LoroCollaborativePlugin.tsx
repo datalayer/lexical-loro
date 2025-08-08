@@ -736,9 +736,54 @@ export function LoroCollaborativePlugin({
     // Mark this as a local change
     isLocalChange.current = true;
     
-    // Replace the entire content with Lexical EditorState JSON
-    textRef.current.delete(0, currentLoroText.length);
-    textRef.current.insert(0, editorStateJson);
+    // FIXED: Use incremental text operations instead of wholesale replacement
+    // This prevents massive changes that can cause connection issues
+    try {
+      // Calculate the difference between current and new content
+      const oldContent = currentLoroText;
+      const newContent = editorStateJson;
+      
+      // Find common prefix and suffix to minimize changes
+      let prefixEnd = 0;
+      const minLength = Math.min(oldContent.length, newContent.length);
+      
+      // Find common prefix
+      while (prefixEnd < minLength && oldContent[prefixEnd] === newContent[prefixEnd]) {
+        prefixEnd++;
+      }
+      
+      // Find common suffix
+      let suffixStart = oldContent.length;
+      let newSuffixStart = newContent.length;
+      while (suffixStart > prefixEnd && newSuffixStart > prefixEnd && 
+             oldContent[suffixStart - 1] === newContent[newSuffixStart - 1]) {
+        suffixStart--;
+        newSuffixStart--;
+      }
+      
+      // Apply incremental changes
+      if (prefixEnd < suffixStart) {
+        // Delete the changed portion
+        const deleteLength = suffixStart - prefixEnd;
+        if (deleteLength > 0) {
+          textRef.current.delete(prefixEnd, deleteLength);
+        }
+      }
+      
+      if (prefixEnd < newSuffixStart) {
+        // Insert the new content
+        const insertText = newContent.substring(prefixEnd, newSuffixStart);
+        if (insertText.length > 0) {
+          textRef.current.insert(prefixEnd, insertText);
+        }
+      }
+      
+    } catch (error) {
+      console.warn('Error with incremental update, falling back to full replacement:', error);
+      // Fallback to full replacement if incremental update fails
+      textRef.current.delete(0, currentLoroText.length);
+      textRef.current.insert(0, editorStateJson);
+    }
     
     // Send update to WebSocket server
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
