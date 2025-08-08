@@ -6,6 +6,7 @@ import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table';
+import { TablePlugin } from '@lexical/react/LexicalTablePlugin';
 import { ListItemNode, ListNode } from '@lexical/list';
 import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
@@ -196,6 +197,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             ErrorBoundary={LexicalErrorBoundary}
           />
           <HistoryPlugin />
+          <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin 
             websocketUrl={websocketUrl} 
             docId="lexical-shared-doc" 

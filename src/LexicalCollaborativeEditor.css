@@ -425,3 +425,186 @@
   border-top: none;
   border-radius: 0 0 8px 8px;
 }
+
+/* ===== TABLE STYLES ===== */
+
+/* Table container and scrolling */
+.lexical-content-editable .tableScrollableWrapper {
+  overflow-x: auto;
+  margin: 25px 0 30px 0;
+}
+
+.lexical-content-editable .tableScrollableWrapper > table {
+  /* Remove the table's vertical margin and put it on the wrapper */
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Main table styles */
+.lexical-content-editable table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed;
+  width: fit-content;
+  margin: 25px 0 30px 0;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* Table cells */
+.lexical-content-editable td,
+.lexical-content-editable th {
+  border: 1px solid #bbb;
+  width: 75px;
+  min-width: 75px;
+  vertical-align: top;
+  text-align: start;
+  padding: 6px 8px;
+  position: relative;
+  outline: none;
+  overflow: auto;
+}
+
+/* Table headers */
+.lexical-content-editable th {
+  background-color: #f2f3f5;
+  font-weight: bold;
+  text-align: start;
+}
+
+/* Selected table */
+.lexical-content-editable table.tableSelected {
+  outline: 2px solid rgb(60, 132, 244);
+}
+
+/* Selected table cell */
+.lexical-content-editable .tableCellSelected {
+  caret-color: transparent;
+}
+
+.lexical-content-editable .tableCellSelected::after {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 0;
+  background-color: highlight;
+  mix-blend-mode: multiply;
+  content: '';
+  pointer-events: none;
+}
+
+/* Table cell resizer */
+.lexical-content-editable .tableCellResizer {
+  position: absolute;
+  right: -4px;
+  height: 100%;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 10;
+  top: 0;
+}
+
+/* Table selection styles */
+.lexical-content-editable .tableSelection *::selection {
+  background-color: transparent;
+}
+
+/* Table action buttons */
+.lexical-content-editable .tableCellActionButtonContainer {
+  display: block;
+  right: 5px;
+  top: 6px;
+  position: absolute;
+  z-index: 4;
+  width: 20px;
+  height: 20px;
+}
+
+.lexical-content-editable .tableCellActionButton {
+  background-color: #eee;
+  display: block;
+  border: 0;
+  border-radius: 20px;
+  width: 20px;
+  height: 20px;
+  color: #222;
+  cursor: pointer;
+}
+
+.lexical-content-editable .tableCellActionButton:hover {
+  background-color: #ddd;
+}
+
+/* Table add controls */
+.lexical-content-editable .tableAddColumns {
+  position: absolute;
+  background-color: #eee;
+  height: 100%;
+  animation: table-controls 0.2s ease;
+  border: 0;
+  cursor: pointer;
+}
+
+.lexical-content-editable .tableAddColumns:hover,
+.lexical-content-editable .tableAddRows:hover {
+  background-color: #c9dbf0;
+}
+
+.lexical-content-editable .tableAddRows {
+  position: absolute;
+  width: calc(100% - 25px);
+  background-color: #eee;
+  animation: table-controls 0.2s ease;
+  border: 0;
+  cursor: pointer;
+}
+
+@keyframes table-controls {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Table resize ruler */
+.lexical-content-editable .tableCellResizeRuler {
+  display: block;
+  position: absolute;
+  width: 1px;
+  background-color: rgb(60, 132, 244);
+  height: 100%;
+  top: 0;
+}
+
+/* Table content editable inside cells */
+.TableNode__contentEditable {
+  min-height: 20px;
+  border: 0px;
+  resize: none;
+  cursor: text;
+  display: block;
+  position: relative;
+  outline: 0px;
+  padding: 0;
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: inherit;
+}
+
+/* Responsive table on smaller screens */
+@media (max-width: 768px) {
+  .lexical-content-editable table {
+    font-size: 12px;
+  }
+  
+  .lexical-content-editable td,
+  .lexical-content-editable th {
+    padding: 4px 6px;
+    width: 60px;
+    min-width: 60px;
+  }
+}

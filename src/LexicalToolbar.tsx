@@ -10,6 +10,7 @@ import {
 import { $setBlocksType } from '@lexical/selection';
 import { $createHeadingNode } from '@lexical/rich-text';
 import { $createCodeNode } from '@lexical/code';
+import { INSERT_TABLE_COMMAND } from '@lexical/table';
 
 interface LexicalToolbarProps {
   className?: string;
@@ -70,6 +71,17 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
 
   const formatParagraph = useCallback(
     (blockType: string) => {
+      if (blockType === 'table') {
+        // Insert a 5x5 table
+        editor.dispatchCommand(INSERT_TABLE_COMMAND, {
+          columns: '5',
+          rows: '5',
+        });
+        // Reset to paragraph after inserting table
+        setBlockType('paragraph');
+        return;
+      }
+      
       if (blockType !== 'paragraph' && blockType !== 'h1' && blockType !== 'code') {
         return;
       }
@@ -105,6 +117,7 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
           <option value="paragraph">Paragraph</option>
           <option value="h1">Heading 1</option>
           <option value="code">Code</option>
+          <option value="table">Table (5x5)</option>
         </select>
       </div>
       
