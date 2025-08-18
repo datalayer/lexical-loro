@@ -31,6 +31,8 @@ import {
   $createTextNode,
   $getRoot,
   $getSelection,
+  $isElementNode,
+  $isRangeSelection,
   BLUR_COMMAND,
   CAN_REDO_COMMAND,
   CAN_UNDO_COMMAND,
@@ -167,23 +169,50 @@ export function useLoroCollaboration(
           if (loroText !== currentLexicalText) {
             console.log('Updating Lexical with Loro content');
             
-            // Clear the root and rebuild
-            root.clear();
+            // Get current selection to try to preserve cursor position
+            const selection = $getSelection();
+            let preserveSelectionKey: string | null = null;
+            let preserveSelectionOffset = 0;
             
-            if (loroText.length > 0) {
-              // Create a single paragraph and add the text as one node
-              // Don't split by newlines to avoid creating multiple paragraphs
-              const paragraph = $createParagraphNode();
-              const textNode = $createTextNode(loroText);
-              paragraph.append(textNode);
-              root.append(paragraph);
-            } else {
-              // Empty content, ensure we have at least one paragraph
-              const paragraph = $createParagraphNode();
-              root.append(paragraph);
+            if ($isRangeSelection(selection) && selection.isCollapsed()) {
+              preserveSelectionKey = selection.anchor.key;
+              preserveSelectionOffset = selection.anchor.offset;
             }
             
-            console.log('Updated Lexical content');
+            // Find the first paragraph to update its text content instead of clearing everything
+            let firstChild = root.getFirstChild();
+            if (!firstChild || !$isElementNode(firstChild)) {
+              // Create a paragraph if none exists
+              root.clear();
+              const paragraph = $createParagraphNode();
+              root.append(paragraph);
+              firstChild = paragraph;
+            }
+            
+            // Clear the paragraph's children and add the new text
+            const elementNode = firstChild as ElementNode;
+            elementNode.clear();
+            if (loroText.length > 0) {
+              const textNode = $createTextNode(loroText);
+              elementNode.append(textNode);
+              
+              // Try to restore selection if possible
+              if (preserveSelectionKey && preserveSelectionOffset <= loroText.length) {
+                try {
+                  textNode.select(preserveSelectionOffset, preserveSelectionOffset);
+                } catch (e) {
+                  // If selection restoration fails, just select at the end
+                  textNode.selectEnd();
+                }
+              }
+            } else {
+              // Empty content, ensure we have at least one empty paragraph
+              if (elementNode.isEmpty()) {
+                elementNode.select();
+              }
+            }
+            
+            console.log('Updated Lexical content while preserving structure');
           } else {
             console.log('Content is the same, no update needed');
           }

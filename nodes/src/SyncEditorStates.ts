@@ -30,6 +30,7 @@ import {
   $moveSelectionToPreviousNode,
   doesSelectionNeedRecovering,
 } from './Utils';
+import simpleDiffWithCursor from './shared/simpleDiffWithCursor';
 
 // Types for Loro events (simplified)
 interface LoroEvent {
@@ -94,16 +95,26 @@ export function $syncLexicalUpdateToLoro(
     if (currentText !== currentLoroText) {
       console.log('Text content differs, updating Loro');
       
-      // Use simple approach: clear and replace
-      // This is more reliable than complex diffing when structure changes
-      if (currentLoroText.length > 0) {
-        textContainer.delete(0, currentLoroText.length);
-      }
-      if (currentText.length > 0) {
-        textContainer.insert(0, currentText);
+      // Get current selection to preserve cursor position
+      const selection = $getSelection();
+      let cursorOffset = currentText.length;
+      
+      if ($isRangeSelection(selection) && selection.isCollapsed()) {
+        cursorOffset = selection.anchor.offset;
       }
       
-      console.log('Updated Loro text container, committing changes');
+      // Use diff-based approach for more precise updates
+      const diff = simpleDiffWithCursor(currentLoroText, currentText, cursorOffset);
+      
+      // Apply the diff to Loro
+      if (diff.remove > 0) {
+        textContainer.delete(diff.index, diff.remove);
+      }
+      if (diff.insert.length > 0) {
+        textContainer.insert(diff.index, diff.insert);
+      }
+      
+      console.log('Applied diff to Loro text container', diff);
       loroDoc.commit();
     } else {
       console.log('Text content is the same, no update needed');
