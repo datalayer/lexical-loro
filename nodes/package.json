@@ -1,10 +1,11 @@
 {
-  "name": "@datalayer/lexical-loro2",
+  "name": "@datalayer/lexical-loro-state",
   "private": false,
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run vite\"",
+    "dev:all": "concurrently \"npm run server\" \"npm run vite\"",
     "vite": "vite",
     "tsc": "tsc",
     "server": "node server.cjs",
