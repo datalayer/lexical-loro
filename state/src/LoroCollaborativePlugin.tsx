@@ -12,14 +12,154 @@ import {
   type NodeKey,
   $isTextNode,
   $isElementNode,
-  $isLineBreakNode
+  $isLineBreakNode,
+  createState,
+  $getState,
+  $setState
 } from 'lexical';
 import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc, LoroText, Cursor, EphemeralStore } from 'loro-crdt';
 import type { EphemeralStoreEvent, PeerID } from 'loro-crdt';
 
+// ============================================================================
+// STABLE NODE UUID SYSTEM using Lexical NodeState
+// ============================================================================
+
 /**
+ * NodeState configuration for storing stable UUIDs in Lexical nodes.
+ * This replaces the unstable NodeKey system for cursor positioning.
+ * 
+ * Based on Lexical NodeState documentation:
+ * https://lexical.dev/docs/concepts/node-state
+ */
+const stableNodeIdState = createState('stable-node-id', {
+  parse: (v: unknown) => typeof v === 'string' ? v : undefined,
+});
+
+/**
+ * Generate a stable UUID for nodes
+ */
+function generateStableNodeId(): string {
+  return `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Get or create a stable UUID for a Lexical node using NodeState
+ */
+function $getStableNodeId(node: LexicalNode): string {
+  let stableId = $getState(node, stableNodeIdState);
+  if (!stableId) {
+    stableId = generateStableNodeId();
+    $setState(node, stableNodeIdState, stableId);
+  }
+  return stableId;
+}
+
+/**
+ * Stable position interface that uses stable node UUIDs instead of NodeKeys
+ */
+interface StablePosition {
+  stableNodeId: string;  // Stable UUID instead of unstable NodeKey
+  offset: number;
+  type: 'text' | 'element';
+}
+
+// ============================================================================
+// STABLE CURSOR POSITION FUNCTIONS - UUID Based (No Performance Issues)
+// ============================================================================
+
+/**
+ * Create stable position data from Lexical selection point using UUID
+ * This replaces NodeKey-based approach with stable UUIDs
+ * Must be called within editor.getEditorState().read() or editor.update()
+ */
+function $createStablePositionFromPoint(point: {key: NodeKey, offset: number}): StablePosition | null {
+  const node = $getNodeByKey(point.key);
+  if (!node) {
+    console.warn('❌ Node not found for key:', point.key);
+    return null;
+  }
+
+  // Get or create stable UUID for this node
+  const stableNodeId = $getStableNodeId(node);
+  
+  return {
+    stableNodeId,
+    offset: point.offset,
+    type: $isTextNode(node) ? 'text' : 'element'
+  };
+}
+
+/**
+ * Find a node by its stable UUID (traverses the document tree)
+ * This is the reverse operation - finding node by stable ID
+ */
+function $findNodeByStableId(stableNodeId: string): LexicalNode | null {
+  const root = $getRoot();
+  
+  // Traverse the document tree to find node with matching stable ID
+  function traverse(node: LexicalNode): LexicalNode | null {
+    // Check if this node has the stable ID we're looking for
+    const nodeStableId = $getState(node, stableNodeIdState);
+    if (nodeStableId === stableNodeId) {
+      return node;
+    }
+    
+    // If this is an element node, traverse its children
+    if ($isElementNode(node)) {
+      const children = node.getChildren();
+      for (const child of children) {
+        const found = traverse(child);
+        if (found) return found;
+      }
+    }
+    
+    return null;
+  }
+  
+  return traverse(root);
+}
+
+/**
+ * Convert stable position back to NodeKey and offset for Lexical operations
+ * This allows compatibility with existing cursor positioning code
+ */
+function $resolveStablePosition(stablePos: StablePosition): {key: NodeKey, offset: number} | null {
+  const node = $findNodeByStableId(stablePos.stableNodeId);
+  if (!node) {
+    console.warn('❌ Could not find node for stable ID:', stablePos.stableNodeId);
+    return null;
+  }
+  
+  return {
+    key: node.getKey(),
+    offset: stablePos.offset
+  };
+}
+
+/**
+ * Ensure all nodes in the document have stable UUIDs
+ * This should be called after document updates to maintain stability
+ */
+function $ensureAllNodesHaveStableIds(): void {
+  const root = $getRoot();
+  
+  function traverse(node: LexicalNode): void {
+    // Ensure this node has a stable ID
+    $getStableNodeId(node);
+    
+    // If this is an element node, traverse its children
+    if ($isElementNode(node)) {
+      const children = node.getChildren();
+      for (const child of children) {
+        traverse(child);
+      }
+    }
+  }
+  
+  traverse(root);
+}/**
  * LoroCollaborativePlugin - Enhanced Cursor Management
  * 
  * IMPROVEMENTS IMPLEMENTED based on Loro Cursor documentation and YJS SyncCursors patterns:
@@ -840,6 +980,14 @@ export function LoroCollaborativePlugin({
           const paragraph = $createParagraphNode();
           root.append(paragraph);
         }
+        
+        // =================================================================
+        // CRITICAL: Ensure all nodes have stable UUIDs after document update
+        // This maintains cursor stability across collaborative edits
+        // =================================================================
+        $ensureAllNodesHaveStableIds();
+        console.log('🆔 Assigned stable UUIDs to all nodes after document update');
+        
       } catch (error) {
         console.error('Error parsing EditorState JSON:', error);
         // Fallback: create empty paragraph
@@ -863,21 +1011,38 @@ export function LoroCollaborativePlugin({
       const selection = $getSelection();
       if ($isRangeSelection(selection)) {
         try {
-          // Get node keys and offsets for stable tracking
+          // =================================================================
+          // NEW STABLE UUID APPROACH - Replace unstable NodeKeys
+          // =================================================================
+          
+          // Create stable positions using UUIDs instead of NodeKeys
+          const anchorStablePos = $createStablePositionFromPoint({
+            key: selection.anchor.key,
+            offset: selection.anchor.offset
+          });
+          
+          const focusStablePos = $createStablePositionFromPoint({
+            key: selection.focus.key, 
+            offset: selection.focus.offset
+          });
+          
+          if (!anchorStablePos || !focusStablePos) {
+            console.warn('❌ Failed to create stable positions');
+            return;
+          }
+          
+          console.log('🎯 Created stable UUID-based positions:', {
+            anchor: anchorStablePos,
+            focus: focusStablePos
+          });
+          
+          // LEGACY APPROACH for Loro cursor creation (still needed for now)
+          // Create Loro cursors using the resolved NodeKeys
           const anchorKey = selection.anchor.key;
           const anchorOffset = selection.anchor.offset;
           const focusKey = selection.focus.key;
           const focusOffset = selection.focus.offset;
           
-          console.log('🎯 Lexical selection:', {
-            anchorNodeKey: anchorKey,
-            anchorOffset: anchorOffset,
-            focusNodeKey: focusKey,
-            focusOffset: focusOffset
-          });
-          
-          // SIMPLIFIED CURSOR CREATION (inspired by YJS SyncCursors)
-          // Loro Cursor = container ID + character ID, much simpler than YJS
           const anchor = awarenessRef.current!.createLoroPosition(anchorKey, anchorOffset, textRef.current!);
           const focus = awarenessRef.current!.createLoroPosition(focusKey, focusOffset, textRef.current!);
           
@@ -886,11 +1051,9 @@ export function LoroCollaborativePlugin({
             return;
           }
           
-          console.log('🎯 Created simplified Loro cursors:', {
-            anchorKey,
-            anchorOffset,
-            focusKey,
-            focusOffset,
+          console.log('🎯 Created Loro cursors with stable position data:', {
+            anchorStableId: anchorStablePos.stableNodeId,
+            focusStableId: focusStablePos.stableNodeId,
             anchorCreated: !!anchor,
             focusCreated: !!focus
           });
@@ -900,16 +1063,19 @@ export function LoroCollaborativePlugin({
             clientId.split('_').find(part => /^\d{13}$/.test(part)) || clientId.slice(-8) : 
             clientId.slice(-8);
           
-          // SIMPLIFIED: Store minimal cursor data (no need for complex metadata)
+          // ENHANCED: Store stable UUID-based cursor data instead of NodeKeys
           const userWithCursorData = {
             name: extractedId,
             color: clientColor || '#007acc',
-            // Simplified stable cursor data - Loro handles complexity internally
+            // NEW: Use stable UUIDs that survive document edits
             stableCursor: {
-              anchorKey,
-              anchorOffset,
-              focusKey,
-              focusOffset,
+              // Store stable UUIDs instead of unstable NodeKeys
+              anchorStableId: anchorStablePos.stableNodeId,
+              anchorOffset: anchorStablePos.offset,
+              anchorType: anchorStablePos.type,
+              focusStableId: focusStablePos.stableNodeId,
+              focusOffset: focusStablePos.offset,
+              focusType: focusStablePos.type,
               timestamp: Date.now()
             }
           };
@@ -1133,8 +1299,62 @@ export function LoroCollaborativePlugin({
             
             // Check if we have stable cursor data in user metadata (preferred)
             const stableCursor = (cursorData.user as any)?.stableCursor;
-            if (stableCursor && stableCursor.anchorKey && typeof stableCursor.anchorOffset === 'number') {
-              console.log('👁️ Using stable cursor data from user metadata:', stableCursor);
+            
+            // =================================================================
+            // NEW STABLE UUID RESOLUTION - Replace NodeKey validation
+            // =================================================================
+            
+            if (stableCursor && stableCursor.anchorStableId && stableCursor.focusStableId) {
+              console.log('👁️ Using NEW stable UUID-based cursor data:', stableCursor);
+              
+              // Use stable UUIDs to resolve positions
+              const anchorResolved = editor.getEditorState().read(() => {
+                return $resolveStablePosition({
+                  stableNodeId: stableCursor.anchorStableId,
+                  offset: stableCursor.anchorOffset,
+                  type: stableCursor.anchorType || 'text'
+                });
+              });
+              
+              const focusResolved = editor.getEditorState().read(() => {
+                return $resolveStablePosition({
+                  stableNodeId: stableCursor.focusStableId,
+                  offset: stableCursor.focusOffset,
+                  type: stableCursor.focusType || 'text'
+                });
+              });
+              
+              if (anchorResolved && focusResolved) {
+                console.log('✅ Successfully resolved stable UUID positions:', {
+                  anchorStableId: stableCursor.anchorStableId,
+                  focusStableId: stableCursor.focusStableId,
+                  anchorNodeKey: anchorResolved.key,
+                  focusNodeKey: focusResolved.key
+                });
+                
+                anchorPos = {
+                  key: anchorResolved.key,
+                  offset: anchorResolved.offset,
+                  type: 'text' as const
+                };
+                
+                focusPos = {
+                  key: focusResolved.key,
+                  offset: focusResolved.offset,
+                  type: 'text' as const
+                };
+              } else {
+                console.warn('❌ Failed to resolve stable UUID positions:', {
+                  anchorStableId: stableCursor.anchorStableId,
+                  focusStableId: stableCursor.focusStableId,
+                  anchorResolved: !!anchorResolved,
+                  focusResolved: !!focusResolved
+                });
+              }
+            }
+            // FALLBACK: Legacy NodeKey-based approach (for backwards compatibility)
+            else if (stableCursor && stableCursor.anchorKey && typeof stableCursor.anchorOffset === 'number') {
+              console.log('👁️ Fallback to legacy NodeKey-based cursor data:', stableCursor);
               
               // ENHANCEMENT: Use cursor side information for better positioning
               // The stableCursor now includes anchorSide and focusSide following Loro Cursor patterns
@@ -1604,6 +1824,13 @@ export function LoroCollaborativePlugin({
     const removeEditorListener = editor.registerUpdateListener(({ editorState, tags }) => {
       // Skip if this is a local change from our plugin
       if (isLocalChange.current || tags.has('collaboration')) return;
+      
+      // =================================================================
+      // CRITICAL: Assign stable UUIDs to new nodes on local changes
+      // =================================================================
+      editor.update(() => {
+        $ensureAllNodesHaveStableIds();
+      }, { tag: 'uuid-assignment' });
       
       // Clear previous timeout
       if (updateTimeout) {
