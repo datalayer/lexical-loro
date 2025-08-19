@@ -10,6 +10,7 @@ import {
 import { $setBlocksType } from '@lexical/selection';
 import { $createHeadingNode } from '@lexical/rich-text';
 import { $createCodeNode } from '@lexical/code';
+import { $createCounterNode } from './CounterNode';
 import { INSERT_TABLE_COMMAND } from '@lexical/table';
 
 interface LexicalToolbarProps {
@@ -81,6 +82,17 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
         setBlockType('paragraph');
         return;
       }
+      if (blockType === 'counter') {
+        editor.update(() => {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            const node = $createCounterNode(0);
+            selection.insertNodes([node]);
+          }
+        });
+        setBlockType('paragraph');
+        return;
+      }
       
       if (blockType !== 'paragraph' && blockType !== 'h1' && blockType !== 'code') {
         return;
@@ -118,6 +130,7 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
           <option value="h1">Heading 1</option>
           <option value="code">Code</option>
           <option value="table">Table (5x5)</option>
+          <option value="counter">Counter</option>
         </select>
       </div>
       

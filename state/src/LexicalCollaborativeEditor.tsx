@@ -12,6 +12,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LoroCollaborativePlugin } from './LoroCollaborativePlugin';
 import { LexicalToolbar } from './LexicalToolbar';
+import { CounterNode } from './CounterNode';
 
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
@@ -130,6 +131,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       TableRowNode,
       AutoLinkNode,
       LinkNode,
+  CounterNode,
     ],
   };
 
