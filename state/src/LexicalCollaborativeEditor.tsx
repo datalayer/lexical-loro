@@ -11,6 +11,7 @@ import { ListItemNode, ListNode } from '@lexical/list';
 import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LoroCollaborativePlugin } from './LoroCollaborativePlugin';
+import { LoroCollaborativePlugin2 } from './LoroCollaborativePlugin2';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
 
@@ -101,6 +102,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [isConnected, setIsConnected] = useState(false);
   const [peerId, setPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
+  const [useNewPlugin, setUseNewPlugin] = useState(true);
   const disconnectRef = useRef<(() => void) | null>(null);
 
   const handleConnectionChange = useCallback((connected: boolean) => {
@@ -139,6 +141,26 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     <div className="lexical-collaborative-editor">
       <div className="lexical-editor-header">
         <h3>Lexical Rich Text Editor (Collaborative)</h3>
+        <div className="plugin-selector" style={{ margin: '10px 0', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '5px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <input
+              type="checkbox"
+              checked={useNewPlugin}
+              onChange={(e) => setUseNewPlugin(e.target.checked)}
+              disabled={isConnected}
+            />
+            <span>
+              Use New Clean Plugin (LoroCollaborativePlugin2)
+              {isConnected && <span style={{ color: '#888', fontSize: '12px' }}> - Cannot change while connected</span>}
+            </span>
+          </label>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+            {useNewPlugin 
+              ? "🆕 Using clean JSON-based plugin (no complex text diffing, no cursor hacks)"
+              : "🔄 Using original complex plugin (with text diffing and cursor management)"
+            }
+          </div>
+        </div>
         <div className="lexical-editor-info">
           <div className="connection-status">
             <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
@@ -149,7 +171,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                 Peer ID: {peerId}
               </span>
             )}
-            {awarenessData.length > 0 && (
+            {!useNewPlugin && awarenessData.length > 0 && (
               <div className="awareness-display" style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
                 <div style={{ marginBottom: '4px', fontWeight: 'bold' }}>Active Users:</div>
                 {awarenessData.map((peer) => (
@@ -184,7 +206,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
         </div>
       </div>
       
-      <LexicalComposer initialConfig={initialConfig}>
+      <LexicalComposer initialConfig={initialConfig} key={useNewPlugin ? 'new-plugin' : 'old-plugin'}>
         <LexicalToolbar />
         <div className="lexical-editor-container with-toolbar">
           <RichTextPlugin
@@ -200,22 +222,37 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           />
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
-          <LoroCollaborativePlugin 
-            websocketUrl={websocketUrl} 
-            docId="lexical-shared-doc" 
-            onConnectionChange={handleConnectionChange}
-            onPeerIdChange={setPeerId}
-            onAwarenessChange={setAwarenessData}
-            onDisconnectReady={(disconnectFn) => {
-              disconnectRef.current = disconnectFn;
-            }}
-          />
+          
+          {useNewPlugin ? (
+            <LoroCollaborativePlugin2 
+              websocketUrl={websocketUrl} 
+              docId="lexical-shared-doc-v2" 
+              onConnectionChange={handleConnectionChange}
+              onPeerIdChange={setPeerId}
+            />
+          ) : (
+            <LoroCollaborativePlugin 
+              websocketUrl={websocketUrl} 
+              docId="lexical-shared-doc" 
+              onConnectionChange={handleConnectionChange}
+              onPeerIdChange={setPeerId}
+              onAwarenessChange={setAwarenessData}
+              onDisconnectReady={(disconnectFn) => {
+                disconnectRef.current = disconnectFn;
+              }}
+            />
+          )}
         </div>
       </LexicalComposer>
       
       <div className="lexical-editor-footer">
-        <p>Document ID: lexical-shared-doc</p>
+        <p>Document ID: {useNewPlugin ? 'lexical-shared-doc-v2' : 'lexical-shared-doc'}</p>
         <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
+        {useNewPlugin && (
+          <p style={{ color: '#007acc', fontWeight: 'bold' }}>
+            🆕 Using clean plugin - simpler, more reliable, JSON-based synchronization
+          </p>
+        )}
       </div>
     </div>
   );

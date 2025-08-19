@@ -878,70 +878,131 @@ export function LoroCollaborativePlugin({
   const [clientColor, setClientColor] = useState<string>('');
   const peerIdRef = useRef<string>(''); // Changed from numericPeerIdRef to handle string IDs
   const isConnectingRef = useRef<boolean>(false);
-  // loro-update batching
-  const exportScheduledRef = useRef(false);
-  const exportTimerRef = useRef<number | null>(null);
+  // loro-update batching (defined later alongside scheduleExport)
   const [forceUpdate, setForceUpdate] = useState(0); // Force cursor re-render
   const cursorTimestamps = useRef<Record<string, number>>({});
+  // Track previous editor state for granular diffs
+  const prevEditorStateRef = useRef<EditorState | null>(null);
 
-  const updateLoroFromLexical = useCallback((editorState: EditorState) => {
+  // Throttled sync of full editorState JSON for structure changes and periodic refresh
+  const stateSyncTimerRef = useRef<number | null>(null);
+  const scheduleEditorStateSync = useCallback((editorState: EditorState) => {
     if (!mapRef.current) return;
-
-    let serialized: any = null;
-    editorState.read(() => {
-      serialized = editorState.toJSON();
-    });
-
-    // Avoid unnecessary writes when state is unchanged
-    try {
-      const current = mapRef.current.get('editorState');
-      const same = current && JSON.stringify(current) === JSON.stringify(serialized);
-      if (same) return;
-    } catch {
-      // ignore compare errors
+    if (stateSyncTimerRef.current !== null) {
+      clearTimeout(stateSyncTimerRef.current);
+      stateSyncTimerRef.current = null;
     }
+    stateSyncTimerRef.current = window.setTimeout(() => {
+      stateSyncTimerRef.current = null;
+      let serialized: any = null;
+      editorState.read(() => { serialized = editorState.toJSON(); });
+      isLocalChange.current = true;
+      try {
+        mapRef.current!.set('editorState', serialized);
+        try { (docRef.current as any).commit?.(); } catch { /* noop */ }
+      } catch (e) {
+        console.warn('Failed to set editorState in Loro Map:', e);
+      } finally {
+        setTimeout(() => { isLocalChange.current = false; }, 20);
+      }
+    }, 800) as unknown as number; // debounce full JSON sync on idle
+  }, []);
 
-    // Mark as local change and update structured JSON in a Map container
-    isLocalChange.current = true;
-    try {
-      // Only update JSON; skip rebuilding heavy 'editorTree' container on each keystroke
-      mapRef.current.set('editorState', serialized);
-      // Commit local mutations so exportFrom captures them reliably
-  try { (docRef.current as any).commit?.(); } catch { /* noop */ }
-    } catch (e) {
-      console.warn('Failed to set editorState in Loro Map:', e);
-      return;
-    }
+  // Compute and apply minimal text diffs per TextNode using LoroText containers
+  const applyGranularTextDiffs = useCallback((prevState: EditorState | null, nextState: EditorState) => {
+    const doc = docRef.current;
+    type TextSnapshot = Record<string, string>; // stableId -> text
 
-    // Debounced loro-update export to coalesce rapid edits
-    if (!exportScheduledRef.current) {
-      exportScheduledRef.current = true;
-      exportTimerRef.current = window.setTimeout(() => {
-        exportScheduledRef.current = false;
-        exportTimerRef.current = null;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          try {
-      // Ensure any pending ops are committed before exporting
-            try { (docRef.current as any).commit?.(); } catch { /* noop */ }
-            const update = docRef.current.exportFrom();
-            // Encode to hex to avoid massive JSON arrays
-            const updateHex = Array.from(update).map(b => b.toString(16).padStart(2, '0')).join('');
-            wsRef.current.send(JSON.stringify({
-              type: 'loro-update',
-              updateHex,
-              docId
-            }));
-          } catch (err) {
-            console.warn('Failed to export/send loro-update:', err);
-          }
+    const collect = (state: EditorState | null): TextSnapshot => {
+      const snap: TextSnapshot = {};
+      if (!state) return snap;
+      state.read(() => {
+        const textNodes = $getRoot().getAllTextNodes();
+        for (const n of textNodes) {
+          const id = $getStableNodeId(n);
+          snap[id] = n.getTextContent();
         }
-      }, 80) as unknown as number;
+      });
+      return snap;
+    };
+
+    const prev = collect(prevState);
+    const next: TextSnapshot = collect(nextState);
+
+    // Added or updated nodes
+    for (const [id, nextText] of Object.entries(next)) {
+      const prevText = prev[id] ?? '';
+      if (prevText === nextText) continue;
+
+      // Compute minimal diff (common prefix/suffix)
+      let start = 0;
+      const minLen = Math.min(prevText.length, nextText.length);
+      while (start < minLen && prevText[start] === nextText[start]) start++;
+      let endPrev = prevText.length - 1;
+      let endNext = nextText.length - 1;
+      while (endPrev >= start && endNext >= start && prevText[endPrev] === nextText[endNext]) {
+        endPrev--; endNext--;
+      }
+      const removed = prevText.slice(start, endPrev + 1);
+      const added = nextText.slice(start, endNext + 1);
+
+      const t = doc.getText(`${docId}:text:${id}`);
+      try {
+        if (removed.length > 0) {
+          t.delete(start, removed.length);
+        }
+        if (added.length > 0) {
+          t.insert(start, added);
+        }
+      } catch {
+        // Initialize fresh container by inserting full text
+        try {
+          if (nextText.length > 0) t.insert(0, nextText);
+        } catch (e2) {
+          console.warn('Failed to apply granular text diff for node', id, e2);
+        }
+      }
     }
 
-    setTimeout(() => {
-      isLocalChange.current = false;
-    }, 50);
+    // Optional: handle removed nodes by clearing their containers (skip for now)
+
+    // Commit text ops before export
+    try { (doc as any).commit?.(); } catch { /* noop */ }
   }, [docId]);
+
+  // Debounced export of accumulated CRDT ops
+  const exportScheduledRef = useRef(false);
+  const exportTimerRef = useRef<number | null>(null);
+  const scheduleExport = useCallback(() => {
+    if (exportScheduledRef.current) return;
+    exportScheduledRef.current = true;
+    exportTimerRef.current = window.setTimeout(() => {
+      exportScheduledRef.current = false;
+      exportTimerRef.current = null;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          try { (docRef.current as any).commit?.(); } catch { /* noop */ }
+          const update = docRef.current.exportFrom();
+          const updateHex = Array.from(update).map(b => b.toString(16).padStart(2, '0')).join('');
+          wsRef.current.send(JSON.stringify({ type: 'loro-update', updateHex, docId }));
+        } catch (err) {
+          console.warn('Failed to export/send loro-update:', err);
+        }
+      }
+    }, 60) as unknown as number;
+  }, [docId]);
+
+  // Pipeline for local Lexical changes: granular text diffs + JSON sync + export
+  const handleLexicalChange = useCallback((editorState: EditorState) => {
+    const prev = prevEditorStateRef.current;
+    try {
+      applyGranularTextDiffs(prev, editorState);
+      scheduleEditorStateSync(editorState);
+      scheduleExport();
+    } finally {
+      prevEditorStateRef.current = editorState;
+    }
+  }, [applyGranularTextDiffs, scheduleEditorStateSync, scheduleExport]);
 
   const updateLexicalFromLoro = useCallback((editor: LexicalEditor, incoming: string) => {
     if (isLocalChange.current) return; // Don't update if this is a local change
@@ -1862,7 +1923,7 @@ export function LoroCollaborativePlugin({
       setForceUpdate(prev => prev + 1);
     });
 
-    // Subscribe to Lexical editor changes with debouncing
+  // Subscribe to Lexical editor changes with debouncing
     let updateTimeout: NodeJS.Timeout | null = null;
     const removeEditorListener = editor.registerUpdateListener(({ editorState, tags }) => {
       // Skip if this is a local change from our plugin
@@ -1883,7 +1944,7 @@ export function LoroCollaborativePlugin({
       // Debounce updates to prevent rapid firing
       updateTimeout = setTimeout(() => {
         if (!isLocalChange.current) {
-          updateLoroFromLexical(editorState);
+      handleLexicalChange(editorState);
         }
       }, 25); // 25ms debounce for better responsiveness
     });
@@ -1899,7 +1960,7 @@ export function LoroCollaborativePlugin({
       unsubscribe();
       removeEditorListener();
     };
-  }, [editor, docId, updateLoroFromLexical, updateLexicalFromLoro, clientId]);
+  }, [editor, docId, handleLexicalChange, updateLexicalFromLoro, clientId]);
 
   // Connection retry state
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
