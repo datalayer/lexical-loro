@@ -324,6 +324,8 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
   editor
 }) => {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  // Keep last known good positions to avoid snapping to x=0 when mapping fails
+  const lastCursorStateRef = useRef<Record<string, { position: { top: number; left: number }, offset: number }>>({});
 
   useEffect(() => {
     // Create or get the cursor overlay container
@@ -376,6 +378,7 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
       try {
         // Get cursor position using standard positioning
         let position = getPositionFromLexicalPosition(anchor.key, anchor.offset);
+        const lastState = lastCursorStateRef.current[peerId];
         
         // Basic position validation
         const isPositionValid = (pos: { top: number; left: number } | null) => {
@@ -401,9 +404,36 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
           position = getPositionFromLexicalPosition(anchor.key, anchor.offset);
           console.log('🔄 Recalculated position:', position);
         }
-        
+
+        // Heuristic: if mapping still invalid, or we detect a suspicious jump to line start,
+        // keep the last known good position to avoid snapping to x=0.
+        const looksLikeLineStartFallback = () => {
+          if (!position || !lastState) return false;
+          // Consider a suspicious leftward jump on the same line while offset increased or stayed
+          const leftwardJump = position.left < (lastState.position.left - 20); // >20px jump left
+          const roughlySameLine = Math.abs(position.top - lastState.position.top) < 30; // within same line height
+          const offsetDidNotDecrease = anchor.offset >= (lastState.offset || 0);
+          return leftwardJump && roughlySameLine && offsetDidNotDecrease;
+        };
+
+        if (!isPositionValid(position) || looksLikeLineStartFallback()) {
+          if (!isPositionValid(position)) {
+            console.log('⚠️ Final position invalid; using last known good position for peer:', peerId, { last: lastState?.position });
+          } else {
+            console.log('⚠️ Suspicious leftward jump detected; keeping last position for peer:', peerId, {
+              current: position,
+              last: lastState?.position,
+              anchorOffset: anchor.offset,
+              lastOffset: lastState?.offset
+            });
+          }
+          if (lastState && isPositionValid(lastState.position)) {
+            position = lastState.position;
+          }
+        }
+
         if (!isPositionValid(position)) {
-          console.log('⚠️ Final position still invalid after recalculation for peer:', peerId, position);
+          console.log('⚠️ No valid position available for peer after fallback:', peerId, position);
           return null;
         }
 
@@ -476,6 +506,12 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
           isCurrentUser, 
           hasSelection: !!selection 
         });
+
+        // Store last known good position and offset for future fallbacks
+        lastCursorStateRef.current[peerId] = {
+          position: { top: position!.top, left: position!.left },
+          offset: anchor.offset
+        };
 
         return (
           <CursorComponent
