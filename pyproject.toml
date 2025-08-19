@@ -28,8 +28,8 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "websockets>=12.0",
-    "loro>=0.18.0",
     "click>=8.0.0",
+    # "loro>=0.18.0",  # TODO: Add when loro-py is available in PyPI
 ]
 
 [project.optional-dependencies]
@@ -57,11 +57,11 @@ Issues = "https://github.com/datalayer/lexical-loro/issues"
 lexical-loro-server = "lexical_loro.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["python_src/lexical_loro"]
+packages = ["lexical_loro"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "python_src/",
+    "lexical_loro/",
     "README.md",
     "LICENSE",
 ]
@@ -76,7 +76,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
-source = ["python_src/lexical_loro"]
+source = ["lexical_loro"]
 omit = [
     "tests/*",
     "venv/*",
