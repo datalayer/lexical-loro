@@ -106,7 +106,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [isConnected, setIsConnected] = useState(false);
   const [peerId, setPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
-  const [pluginVersion, setPluginVersion] = useState<'v0' | 'v1' | 'v2' | 'v3' | 'v4' | 'v5'>('v0'); // Add v0 option
+  const [pluginVersion, setPluginVersion] = useState<'v0' | 'v1' | 'v2' | 'v3' | 'v4' | 'v5'>('v0');
   const disconnectRef = useRef<(() => void) | null>(null);
 
   const handleConnectionChange = useCallback((connected: boolean) => {
