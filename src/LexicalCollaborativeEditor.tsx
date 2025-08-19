@@ -294,6 +294,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               websocketUrl={websocketUrl}
               docId="lexical-shared-doc-v0"
               onConnectionChange={handleConnectionChange}
+              debug
             />
           )}
           {pluginVersion === 'v1' && (
