@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Loro WebSocket server for real-time collaboration using loro-py
 """
@@ -43,8 +44,6 @@ class Client:
 
 
 class LoroWebSocketServer:
-    DOCUMENTS = ['shared-text', 'lexical-shared-doc-v0', 'lexical-shared-doc-v1', 'lexical-shared-doc-v2', 'lexical-shared-doc-v3', 'lexical-shared-doc-v4']
-
     def __init__(self, port: int = 8081):
         self.port = port
         self.clients: Dict[str, Client] = {}
@@ -55,98 +54,35 @@ class LoroWebSocketServer:
         
         # Initialize default documents and ephemeral stores
         self._initialize_documents()
-
+        
     def _initialize_documents(self):
         """Initialize default Loro documents and EphemeralStores"""
         # Create documents for the known doc types
-        for doc_id in self.DOCUMENTS:
+        for doc_id in ['shared-text', 'lexical-shared-doc']:
             doc = LoroDoc()
             ephemeral_store = EphemeralStore(300000)  # 5 minutes timeout
-
+            
             try:
                 # Always use the doc_id as the text container name to match JavaScript behavior
                 # JavaScript uses: doc.getText(docId) 
                 # Python uses: doc.get_text(doc_id)
-                # For structured JSON, use a Map container keyed by doc_id
-                map_container = doc.get_map(doc_id)
+                text_container = doc.get_text(doc_id)
                 
                 # Seed initial content for the Lexical document if it's empty
-                if doc_id in self.DOCUMENTS and doc_id.startswith('lexical-shared-doc'):
+                if doc_id == 'lexical-shared-doc':
                     try:
-                        # Check via deep value to avoid API mismatches
-                        deep = doc.get_deep_value()
-                        has_state = bool(deep.get(doc_id, {}).get('editorState'))
+                        existing = text_container.to_string()
                     except Exception:
-                        has_state = False
-                    if not has_state:
+                        existing = ''
+                    if not existing:
                         # Provided initial Lexical JSON content (server-owned initial state)
-                        initial_lexical_json = {
-                            "editorState": {
-                                "root": {
-                                    "children": [
-                                        {
-                                            "children": [
-                                                {
-                                                    "detail": 0,
-                                                    "format": 0,
-                                                    "mode": "normal",
-                                                    "style": "",
-                                                    "text": "Type something",
-                                                    "type": "text",
-                                                    "version": 1
-                                                }
-                                            ],
-                                            "direction": "ltr",
-                                            "format": "",
-                                            "indent": 0,
-                                            "type": "heading",
-                                            "version": 1,
-                                            "tag": "h1"
-                                        },
-                                        {
-                                            "children": [
-                                                {
-                                                    "detail": 0,
-                                                    "format": 2,
-                                                    "mode": "normal",
-                                                    "style": "",
-                                                    "text": "Rich Editor by Datalayer",
-                                                    "type": "text",
-                                                    "version": 1
-                                                }
-                                            ],
-                                            "direction": "ltr",
-                                            "format": "",
-                                            "indent": 0,
-                                            "type": "paragraph",
-                                            "version": 1,
-                                            "textFormat": 2,
-                                            "textStyle": ""
-                                        }
-                                    ],
-                                    "direction": "ltr",
-                                    "format": "",
-                                    "indent": 0,
-                                    "type": "root",
-                                    "version": 1,
-                                    "textFormat": 2
-                                }
-                            },
-                            "lastSaved": 1755582735687,
-                            "source": "Playground",
-                            "version": "0.34.0"
-                        }
-                        # Seed into Map under key 'editorState' using loro-py API
+                        initial_lexical_json = (
+                            '{"editorState":{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":2,"mode":"normal","style":"","text":"Rich Editor by Datalayer","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1,"textFormat":2,"textStyle":""}],"direction":"ltr","format":"","indent":0,"type":"root","version":1,"textFormat":2}},"lastSaved":1755582735687,"source":"Playground","version":"0.34.0"}'
+                        )
                         try:
-                            map_container.insert('editorState', initial_lexical_json["editorState"])
+                            text_container.insert(0, initial_lexical_json)
                             doc.commit()
-                            logger.info("🧩 Seeded initial Lexical JSON into Map('editorState') for 'lexical-shared-doc'")
-                            # Log deep value to confirm
-                            try:
-                                doc_state = doc.get_deep_value()
-                                logger.info(f"📋 Deep state after seed for {doc_id}: {json.dumps(doc_state, indent=2, default=str)}")
-                            except Exception:
-                                pass
+                            logger.info("🧩 Seeded initial Lexical JSON into 'lexical-shared-doc'")
                         except Exception as seed_error:
                             logger.error(f"❌ Failed to seed initial content for {doc_id}: {seed_error}")
                 
@@ -163,7 +99,7 @@ class LoroWebSocketServer:
                 self.ephemeral_subscriptions[doc_id] = subscription
                 
                 logger.info(f"📄 Initialized Loro document and EphemeralStore with event subscription: {doc_id}")
-                logger.info(f"📋 Containers for {doc_id}: text='{doc_id}', map='{doc_id}' (JS/py agree)")
+                logger.info(f"📋 Text container name for {doc_id}: '{doc_id}' (matches JavaScript docId)")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize document {doc_id}: {e}")
                 # Still create an empty document and ephemeral store as fallback
@@ -455,7 +391,7 @@ class LoroWebSocketServer:
                 if snapshot and len(snapshot) > 0:
                     await websocket.send(json.dumps({
                         "type": "initial-snapshot",
-                        "snapshotHex": snapshot.hex(),
+                        "snapshot": list(snapshot),  # Convert bytes to list of integers
                         "docId": doc_id
                     }))
                     logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot)} bytes) to client {client_id}")
@@ -474,26 +410,41 @@ class LoroWebSocketServer:
                 # Apply the update to our local Loro document and broadcast
                 doc_id = data.get("docId", "shared-text")
                 update_data = data.get("update", [])
-                update_hex = data.get("updateHex")
                 
-                if doc_id in self.loro_docs and (update_data or update_hex):
+                if doc_id in self.loro_docs and update_data:
                     try:
                         # Import the update into our Loro document
-                        update_bytes = bytes(update_data) if update_data else bytes.fromhex(update_hex)
+                        update_bytes = bytes(update_data)
                         self.loro_docs[doc_id].import_(update_bytes)
                         logger.info(f"📝 Applied Loro update for {doc_id} from client {client_id}")
                         
                         # Log the current document content to see what's stored
                         try:
-                            deep = self.loro_docs[doc_id].get_deep_value()
-                            m = deep.get(doc_id, {})
-                            editor_state = m.get('editorState')
-                            if isinstance(editor_state, dict):
-                                logger.info(f"📋 Current {doc_id} Map has editorState with root type: {editor_state.get('root', {}).get('type', 'unknown')}")
-                                root_children = editor_state.get('root', {}).get('children', [])
-                                logger.info(f"📋   Root children count: {len(root_children)}")
-                            else:
-                                logger.info(f"📋 No editorState present in Map for {doc_id}")
+                            text_container = self.loro_docs[doc_id].get_text(doc_id)
+                            current_content = text_container.to_string()  # Use to_string() method
+                            logger.info(f"📋 Current {doc_id} content after update: {json.dumps(current_content)} (length: {len(current_content)})")
+                            
+                            # Try to parse as JSON to see if it's Lexical EditorState
+                            try:
+                                if current_content.strip():
+                                    parsed_content = json.loads(current_content)
+                                    logger.info(f"📋 Parsed {doc_id} as JSON - Lexical EditorState structure:")
+                                    logger.info(f"📋   Root type: {parsed_content.get('root', {}).get('type', 'unknown')}")
+                                    
+                                    root_children = parsed_content.get('root', {}).get('children', [])
+                                    logger.info(f"📋   Root children count: {len(root_children)}")
+                                    
+                                    for i, child in enumerate(root_children[:3]):  # Show first 3 children
+                                        child_type = child.get('type', 'unknown')
+                                        child_text = child.get('text', '')
+                                        child_children = child.get('children', [])
+                                        logger.info(f"📋   Child {i}: type='{child_type}', text='{child_text[:50]}...', children={len(child_children)}")
+                                    
+                                    if len(root_children) > 3:
+                                        logger.info(f"📋   ... and {len(root_children) - 3} more children")
+                                        
+                            except json.JSONDecodeError:
+                                logger.info(f"📋 Content is not valid JSON - might be plain text or HTML")
                             
                             # Log the full document structure as JSON
                             try:
@@ -522,18 +473,22 @@ class LoroWebSocketServer:
                             except Exception as json_error:
                                 logger.info(f"📋 Could not export JSON structure: {json_error}")
                                 # Fallback to showing what we can
-                                # no fallback
+                                try:
+                                    doc_info = {
+                                        "text_containers": {doc_id: current_content},
+                                        "content_length": len(current_content),
+                                        "container_name": doc_id,
+                                        "content_type": "lexical_json" if current_content.strip().startswith('{') else "other"
+                                    }
+                                    logger.info(f"📋 {doc_id} basic structure: {json.dumps(doc_info, indent=2)}")
+                                except Exception as fallback_error:
+                                    logger.error(f"❌ Could not log document structure: {fallback_error}")
                                     
                         except Exception as content_error:
                             logger.error(f"❌ Error reading document content: {content_error}")
                         
                         # Broadcast the update to all other clients
-                        # Normalize broadcast to hex to reduce size
-                        await self.broadcast_to_others(client_id, {
-                            "type": "loro-update",
-                            "docId": doc_id,
-                            "updateHex": update_bytes.hex()
-                        })
+                        await self.broadcast_to_others(client_id, data)
                         logger.info(f"🔄 Broadcasting Loro update from client {client_id} to {len(self.clients) - 1} other clients")
                     except Exception as e:
                         logger.error(f"❌ Error applying Loro update for {doc_id}: {e}")
@@ -542,11 +497,10 @@ class LoroWebSocketServer:
                 # Update our Loro document with the snapshot
                 doc_id = data.get("docId", "shared-text")
                 snapshot_data = data.get("snapshot", [])
-                snapshot_hex = data.get("snapshotHex")
                 
-                if snapshot_data or snapshot_hex:
+                if snapshot_data:
                     try:
-                        snapshot_bytes = bytes(snapshot_data) if snapshot_data else bytes.fromhex(snapshot_hex)
+                        snapshot_bytes = bytes(snapshot_data)
                         if doc_id not in self.loro_docs:
                             self.loro_docs[doc_id] = LoroDoc()
                         
@@ -556,13 +510,9 @@ class LoroWebSocketServer:
                         
                         # Log the current document content after snapshot import
                         try:
-                            deep = self.loro_docs[doc_id].get_deep_value()
-                            m = deep.get(doc_id, {})
-                            editor_state = m.get('editorState')
-                            if isinstance(editor_state, dict):
-                                logger.info(f"📋 Current {doc_id} Map editorState after snapshot: root children={len(editor_state.get('root', {}).get('children', []))}")
-                            else:
-                                logger.info(f"📋 No editorState present in Map for {doc_id} after snapshot")
+                            text_container = self.loro_docs[doc_id].get_text(doc_id)
+                            current_content = text_container.to_string()  # Use to_string() method
+                            logger.info(f"📋 Current {doc_id} content after snapshot: {json.dumps(current_content)} (length: {len(current_content)})")
                             
                             # Log the full document structure as JSON after snapshot
                             try:
@@ -588,13 +538,9 @@ class LoroWebSocketServer:
                     try:
                         # Log the current document content before exporting
                         try:
-                            deep = self.loro_docs[doc_id].get_deep_value()
-                            m = deep.get(doc_id, {})
-                            editor_state = m.get('editorState')
-                            if isinstance(editor_state, dict):
-                                logger.info(f"📋 {doc_id} Map has editorState before export: root children={len(editor_state.get('root', {}).get('children', []))}")
-                            else:
-                                logger.info(f"📋 No editorState present in Map for {doc_id} before export")
+                            text_container = self.loro_docs[doc_id].get_text(doc_id)
+                            current_content = text_container.to_string()  # Use to_string() method
+                            logger.info(f"📋 {doc_id} content before export: {json.dumps(current_content)} (length: {len(current_content)})")
                             
                             # Log the full document structure before export
                             try:
@@ -612,7 +558,7 @@ class LoroWebSocketServer:
                         if snapshot and len(snapshot) > 0:
                             await client.websocket.send(json.dumps({
                                 "type": "initial-snapshot",
-                                "snapshotHex": snapshot.hex(),
+                                "snapshot": list(snapshot),
                                 "docId": doc_id
                             }))
                             logger.info(f"📄 Sent requested snapshot for {doc_id} ({len(snapshot)} bytes) to client {client_id}")
