@@ -13,6 +13,7 @@ import {
   $isTextNode,
   $isElementNode,
   $isLineBreakNode,
+  $createTextNode,
   createState,
   $getState,
   $setState
@@ -916,56 +917,98 @@ export function LoroCollaborativePlugin({
     }, 50);
   }, [docId]);
 
-  const updateLexicalFromLoro = useCallback((editor: LexicalEditor, editorStateJson: string) => {
+  const updateLexicalFromLoro = useCallback((editor: LexicalEditor, incoming: string) => {
     if (isLocalChange.current) return; // Don't update if this is a local change
-    
+
     isLocalChange.current = true;
-    
+  let applied = false;
+
     editor.update(() => {
       const root = $getRoot();
-      
-      // Get current EditorState JSON to compare
-      const currentStateJson = JSON.stringify(editor.getEditorState().toJSON());
-      
-      // Only update if the content is actually different
-      if (currentStateJson === editorStateJson) {
-        isLocalChange.current = false;
-        return;
-      }
-      
+
+      // Avoid unnecessary updates when the incoming JSON exactly matches current state
       try {
-        if (editorStateJson && editorStateJson.trim().length > 0) {
-          // Parse the Lexical EditorState JSON and restore it
-          const parsedState = JSON.parse(editorStateJson);
-          const newEditorState = editor.parseEditorState(parsedState);
-          editor.setEditorState(newEditorState);
+        const currentStateJson = JSON.stringify(editor.getEditorState().toJSON());
+        if (incoming === currentStateJson) {
+          isLocalChange.current = false;
+          return;
+        }
+      } catch {
+        // ignore JSON stringify/compare failure; not critical for update gating
+      }
+
+  try {
+        if (incoming && incoming.trim().length > 0) {
+          // Try to parse as Lexical EditorState JSON first
+          try {
+            const parsed = JSON.parse(incoming);
+            // Support both raw EditorState and wrapper { editorState: { ... } }
+            const stateLike = (parsed && typeof parsed === 'object' && parsed.editorState)
+              ? parsed.editorState
+              : parsed;
+            if (stateLike && typeof stateLike === 'object' && stateLike.root && stateLike.root.type === 'root') {
+              const newEditorState = editor.parseEditorState(stateLike);
+              editor.setEditorState(newEditorState);
+              applied = true;
+            }
+          } catch {
+            // Not JSON; will treat as plain text below
+          }
+
+          if (!applied) {
+            // Treat incoming as plain text (e.g., from Python server)
+            root.clear();
+            const lines = incoming.split(/\r?\n/);
+            if (lines.length === 0) {
+              const p = $createParagraphNode();
+              root.append(p);
+            } else {
+              for (const line of lines) {
+                const p = $createParagraphNode();
+                if (line.length > 0) {
+                  p.append($createTextNode(line));
+                }
+                root.append(p);
+              }
+            }
+            applied = true;
+          }
         } else {
-          // Ensure there's always at least one paragraph
+          // Empty content -> ensure there's one empty paragraph
           root.clear();
           const paragraph = $createParagraphNode();
           root.append(paragraph);
+          applied = true;
         }
-        
-        // =================================================================
-        // CRITICAL: Ensure all nodes have stable UUIDs after document update
-        // This maintains cursor stability across collaborative edits
-        // =================================================================
-        $ensureAllNodesHaveStableIds();
-        console.log('🆔 Assigned stable UUIDs to all nodes after document update');
-        
+
+        // Defer UUID assignment to a follow-up update to avoid frozen node map mutations
       } catch (error) {
-        console.error('Error parsing EditorState JSON:', error);
-        // Fallback: create empty paragraph
+        console.error('Error applying incoming content to Lexical editor:', error);
+        // Fallback: create a single empty paragraph
         root.clear();
         const paragraph = $createParagraphNode();
         root.append(paragraph);
       }
-    }, { tag: 'collaboration' }); // Add collaboration tag
+    }, { tag: 'collaboration' });
 
-    // Reset the flag after a delay
+    if (applied) {
+      // Ensure the previous update is committed before assigning UUIDs
+      setTimeout(() => {
+        editor.update(() => {
+          try {
+            $ensureAllNodesHaveStableIds();
+            console.log('🆔 Assigned stable UUIDs after applying incoming content');
+          } catch (e) {
+            console.warn('⚠️ Failed to assign stable UUIDs in deferred update:', e);
+          }
+        }, { tag: 'uuid-assignment' });
+      }, 0);
+    }
+
+    // Reset the flag after a short delay
     setTimeout(() => {
       isLocalChange.current = false;
-    }, 50); // Reduced delay
+    }, 50);
   }, []);
 
   // Send cursor position using Awareness
@@ -1895,11 +1938,18 @@ export function LoroCollaborativePlugin({
               const update = new Uint8Array(data.update!);
               docRef.current.import(update);
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
-              // Apply initial snapshot from server
+              // Apply initial snapshot from server and immediately sync to Lexical
               const snapshot = new Uint8Array(data.snapshot!);
               docRef.current.import(snapshot);
               hasReceivedInitialSnapshot.current = true;
               console.log('📄 Lexical editor received and applied initial snapshot');
+              // Immediately reflect the current Loro text into the editor after import
+              try {
+                const currentText = docRef.current.getText(docId).toString();
+                updateLexicalFromLoro(editor, currentText);
+              } catch (e) {
+                console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
+              }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore
               if (data.docId === docId && data.data) {
@@ -2086,7 +2136,7 @@ export function LoroCollaborativePlugin({
         wsRef.current.close();
       }
     };
-  }, [websocketUrl, docId, editor, onPeerIdChange]); // Include all dependencies
+  }, [websocketUrl, docId, editor, onPeerIdChange, updateLexicalFromLoro]); // Include all dependencies
 
   // Cleanup stale cursors periodically
   useEffect(() => {

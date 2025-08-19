@@ -68,6 +68,24 @@ class LoroWebSocketServer:
                 # Python uses: doc.get_text(doc_id)
                 text_container = doc.get_text(doc_id)
                 
+                # Seed initial content for the Lexical document if it's empty
+                if doc_id == 'lexical-shared-doc':
+                    try:
+                        existing = text_container.to_string()
+                    except Exception:
+                        existing = ''
+                    if not existing:
+                        # Provided initial Lexical JSON content (server-owned initial state)
+                        initial_lexical_json = (
+                            '{"editorState":{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":2,"mode":"normal","style":"","text":"Rich Editor by Datalayer","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1,"textFormat":2,"textStyle":""}],"direction":"ltr","format":"","indent":0,"type":"root","version":1,"textFormat":2}},"lastSaved":1755582735687,"source":"Playground","version":"0.34.0"}'
+                        )
+                        try:
+                            text_container.insert(0, initial_lexical_json)
+                            doc.commit()
+                            logger.info("🧩 Seeded initial Lexical JSON into 'lexical-shared-doc'")
+                        except Exception as seed_error:
+                            logger.error(f"❌ Failed to seed initial content for {doc_id}: {seed_error}")
+                
                 # Commit any changes to make the document valid
                 doc.commit()
                     
