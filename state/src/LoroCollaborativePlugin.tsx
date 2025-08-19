@@ -373,10 +373,10 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
       }
 
       try {
-        // CRITICAL Y-AXIS FIX: Use multiple attempts with fresh layout calculations
+        // Get cursor position using standard positioning
         let position = getPositionFromLexicalPosition(anchor.key, anchor.offset);
         
-        // Enhanced Y-axis validation: Check for common Y-axis positioning issues
+        // Basic position validation
         const isPositionValid = (pos: { top: number; left: number } | null) => {
           if (!pos) return false;
           
@@ -389,51 +389,16 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
           // Check for unreasonably large positions (likely positioning error)
           if (pos.top > window.innerHeight * 3 || pos.left > window.innerWidth * 3) return false;
           
-          // Y-AXIS SPECIFIC: Check if cursor is way outside the editor area
-          const editorEl = document.querySelector('[contenteditable="true"]') as HTMLElement;
-          if (editorEl) {
-            const editorRect = editorEl.getBoundingClientRect();
-            
-            // Allow some margin but detect major Y-axis positioning errors
-            const verticalMargin = 100; // 100px margin for scrolling, etc.
-            const isYAxisReasonable = pos.top >= (editorRect.top - verticalMargin) && 
-                                     pos.top <= (editorRect.bottom + verticalMargin);
-            
-            if (!isYAxisReasonable) {
-              console.warn('🚨 Y-axis positioning issue detected:', {
-                cursorTop: pos.top,
-                editorTop: editorRect.top,
-                editorBottom: editorRect.bottom,
-                marginUsed: verticalMargin
-              });
-              return false;
-            }
-          }
-          
           return true;
         };
         
-        // If position seems invalid or unreasonable, try to recalculate with forced layout
+        // If position seems invalid, try to recalculate
         if (!isPositionValid(position)) {
-          console.log('⚠️ Position validation failed, forcing layout update and recalculating...', position);
+          console.log('⚠️ Position validation failed, recalculating...', position);
           
-          // Force immediate DOM layout update
-          const editorEl = document.querySelector('[contenteditable="true"]') as HTMLElement;
-          if (editorEl) {
-            void editorEl.offsetHeight; // Force synchronous layout
-            void editorEl.offsetWidth;
-            void editorEl.scrollHeight; // Also force scroll layout
-          }
-          
-          // Small synchronous delay alternative to async
-          const startTime = Date.now();
-          while (Date.now() - startTime < 2) {
-            // Short busy wait to ensure layout completion
-          }
-          
-          // Try again with fresh layout
+          // Try again to get position
           position = getPositionFromLexicalPosition(anchor.key, anchor.offset);
-          console.log('🔄 Recalculated position after layout update:', position);
+          console.log('🔄 Recalculated position:', position);
         }
         
         if (!isPositionValid(position)) {
@@ -2260,27 +2225,10 @@ export function LoroCollaborativePlugin({
           textContent: $isTextNode(node) ? node.getTextContent() : 'N/A'
         });
 
-        // CRITICAL Y-AXIS FIX: Enhanced layout update before position calculation
-        // This ensures we get accurate Y-axis positions after typing changes
-        const forceLayoutUpdate = () => {
-          const editorEl = editor.getRootElement();
-          if (editorEl) {
-            // Force a synchronous layout by reading layout properties
-            void editorEl.offsetHeight; // Forces reflow
-            void editorEl.offsetWidth;  // Forces reflow
-            void editorEl.clientHeight; // Additional Y-axis layout forcing
-            void editorEl.scrollHeight; // Ensure scroll layout is updated
-          }
-        };
-        
-        forceLayoutUpdate();
-
         // Handle line break nodes specially (like Lexical does)
         if ($isLineBreakNode(node)) {
           const brElement = editor.getElementByKey(nodeKey) as HTMLElement;
           if (brElement) {
-            // Force fresh layout calculation for line breaks
-            void brElement.offsetHeight;
             const brRect = brElement.getBoundingClientRect();
             console.log('📏 Line break node position:', { top: brRect.top, left: brRect.left });
             return {
@@ -2384,7 +2332,7 @@ export function LoroCollaborativePlugin({
             // If target is a text node, use it directly
             if ($isTextNode(targetNode)) {
               try {
-                // FIX FOR Y-AXIS POSITIONING: Ensure proper range creation
+                // Create DOM range for position calculation
                 const range = createDOMRange(
                   editor,
                   targetNode,
@@ -2394,13 +2342,12 @@ export function LoroCollaborativePlugin({
                 );
 
                 if (range !== null) {
-                  // CRITICAL Y-AXIS FIX: Use more robust position calculation
-                  // First try createRectsFromDOMRange for accurate positioning
+                  // Use createRectsFromDOMRange for accurate positioning
                   const rects = createRectsFromDOMRange(editor, range);
                   if (rects.length > 0) {
                     const rect = rects[0];
                     
-                    // ADDITIONAL Y-AXIS VALIDATION: Ensure the rect has valid dimensions
+                    // Ensure the rect has valid dimensions
                     if (rect.height > 0 && rect.width >= 0) {
                       console.log('📐 Valid text node range position:', { 
                         top: rect.top, 
@@ -2420,7 +2367,7 @@ export function LoroCollaborativePlugin({
                     }
                   }
                   
-                  // FALLBACK Y-AXIS FIX: Use native DOM range if Lexical rects fail
+                  // Fallback: Use native DOM range if Lexical rects fail
                   const rangeBounds = range.getBoundingClientRect();
                   if (rangeBounds && rangeBounds.height > 0) {
                     console.log('📐 Fallback DOM range position:', { 
@@ -2437,7 +2384,7 @@ export function LoroCollaborativePlugin({
                   }
                 }
                 
-                // ULTIMATE Y-AXIS FALLBACK: Use direct DOM element positioning
+                // Ultimate fallback: Use direct DOM element positioning
                 const domElement = editor.getElementByKey(targetNode.getKey()) as HTMLElement;
                 if (domElement) {
                   const elementRect = domElement.getBoundingClientRect();
@@ -2500,7 +2447,7 @@ export function LoroCollaborativePlugin({
 
               if (firstTextNode) {
                 try {
-                  // Y-AXIS FIX: Improved range creation for element nodes
+                  // Improved range creation for element nodes
                   const range = createDOMRange(
                     editor,
                     firstTextNode,
@@ -2514,7 +2461,7 @@ export function LoroCollaborativePlugin({
                     if (rects.length > 0) {
                       const rect = rects[0];
                       
-                      // Y-AXIS VALIDATION: Ensure rect has valid height
+                      // Ensure rect has valid height
                       if (rect.height > 0) {
                         console.log('📐 Valid element->text range position:', { 
                           top: rect.top, 
@@ -2533,7 +2480,7 @@ export function LoroCollaborativePlugin({
                       }
                     }
                     
-                    // Y-AXIS FALLBACK: Try native DOM range
+                    // Try native DOM range fallback
                     const rangeBounds = range.getBoundingClientRect();
                     if (rangeBounds && rangeBounds.height > 0) {
                       console.log('📐 Element fallback DOM range position:', { 
@@ -2552,12 +2499,10 @@ export function LoroCollaborativePlugin({
                   console.warn('🚨 Error creating range for text within target element:', error);
                 }
               } else {
-                // No text nodes in element, use element position directly with Y-axis validation
+                // No text nodes in element, use element position directly
                 console.log('📦 No text in target element, using element position');
                 const domElement = editor.getElementByKey(targetNode.getKey());
                 if (domElement) {
-                  // Force layout update for accurate positioning
-                  void domElement.offsetHeight;
                   const elementRect = domElement.getBoundingClientRect();
                   
                   console.log('📐 Direct element position:', { 
@@ -2592,7 +2537,7 @@ export function LoroCollaborativePlugin({
         if ($isTextNode(node)) {
           console.log('📝 Text node, creating range at offset:', offset);
           try {
-            // Y-AXIS FIX: Enhanced range creation for text nodes
+            // Enhanced range creation for text nodes
             const range = createDOMRange(
               editor,
               node,
@@ -2602,18 +2547,11 @@ export function LoroCollaborativePlugin({
             );
 
             if (range !== null) {
-              // CRITICAL Y-AXIS FIX: Force fresh layout before measuring range
-              const domElement = editor.getElementByKey(nodeKey);
-              if (domElement) {
-                void domElement.offsetHeight; // Force layout refresh
-                void domElement.offsetWidth;  // Force layout refresh
-              }
-              
               const rects = createRectsFromDOMRange(editor, range);
               if (rects.length > 0) {
                 const rect = rects[0];
                 
-                // Y-AXIS VALIDATION: Check if rect has valid dimensions
+                // Validate rect dimensions
                 if (rect.height > 0 && !isNaN(rect.top) && !isNaN(rect.left)) {
                   console.log('📐 Valid text range position:', { 
                     top: rect.top, 
@@ -2631,7 +2569,7 @@ export function LoroCollaborativePlugin({
                 } else {
                   console.warn('🚨 Invalid text rect, trying DOM range fallback:', rect);
                   
-                  // Y-AXIS FALLBACK: Use native DOM range
+                  // Use native DOM range fallback
                   const rangeBounds = range.getBoundingClientRect();
                   if (rangeBounds && rangeBounds.height > 0) {
                     console.log('📐 Text DOM range fallback position:', { 
@@ -2648,7 +2586,7 @@ export function LoroCollaborativePlugin({
                 }
               }
               
-              // ADDITIONAL Y-AXIS FALLBACK: Use range getBoundingClientRect directly
+              // Additional fallback: Use range getBoundingClientRect directly
               const directRect = range.getBoundingClientRect();
               if (directRect && directRect.height > 0) {
                 console.log('📐 Direct range rect position:', { 
