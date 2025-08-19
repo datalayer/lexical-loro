@@ -819,7 +819,7 @@ interface RemoteCursor {
   };
 }
 
-interface LoroCollaborativePluginProps {
+interface LoroCollaborativePlugin1Props {
   websocketUrl: string;
   docId: string;
   onConnectionChange?: (connected: boolean) => void;
@@ -855,14 +855,14 @@ interface LoroMessage {
   };
 }
 
-export function LoroCollaborativePlugin({ 
+export function LoroCollaborativePlugin1({ 
   websocketUrl, 
   docId,
   onConnectionChange,
   onPeerIdChange,
   onDisconnectReady,
   onAwarenessChange
-}: LoroCollaborativePluginProps) {
+}: LoroCollaborativePlugin1Props) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
   const docRef = useRef<LoroDoc>(new LoroDoc());

@@ -10,8 +10,12 @@ import { TablePlugin } from '@lexical/react/LexicalTablePlugin';
 import { ListItemNode, ListNode } from '@lexical/list';
 import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
-import { LoroCollaborativePlugin } from './LoroCollaborativePlugin';
+import { LoroCollaborativePlugin0 } from './LoroCollaborativePlugin0';
+import { LoroCollaborativePlugin1 } from './LoroCollaborativePlugin1';
 import { LoroCollaborativePlugin2 } from './LoroCollaborativePlugin2';
+import { LoroCollaborativePlugin3 } from './LoroCollaborativePlugin3';
+import { LoroCollaborativePlugin4 } from './LoroCollaborativePlugin4';
+import { LoroCollaborativePlugin5 } from './LoroCollaborativePlugin5';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
 
@@ -102,7 +106,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [isConnected, setIsConnected] = useState(false);
   const [peerId, setPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
-  const [useNewPlugin, setUseNewPlugin] = useState(true);
+  const [pluginVersion, setPluginVersion] = useState<'v0' | 'v1' | 'v2' | 'v3' | 'v4' | 'v5'>('v0'); // Add v0 option
   const disconnectRef = useRef<(() => void) | null>(null);
 
   const handleConnectionChange = useCallback((connected: boolean) => {
@@ -142,23 +146,85 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       <div className="lexical-editor-header">
         <h3>Lexical Rich Text Editor (Collaborative)</h3>
         <div className="plugin-selector" style={{ margin: '10px 0', padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '5px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input
-              type="checkbox"
-              checked={useNewPlugin}
-              onChange={(e) => setUseNewPlugin(e.target.checked)}
-              disabled={isConnected}
-            />
-            <span>
-              Use New Clean Plugin (LoroCollaborativePlugin2)
-              {isConnected && <span style={{ color: '#888', fontSize: '12px' }}> - Cannot change while connected</span>}
-            </span>
-          </label>
-          <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-            {useNewPlugin 
-              ? "🆕 Using clean JSON-based plugin (no complex text diffing, no cursor hacks)"
-              : "🔄 Using original complex plugin (with text diffing and cursor management)"
-            }
+          <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>Plugin Version:</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="radio"
+                name="pluginVersion"
+                value="v0"
+                checked={pluginVersion === 'v0'}
+                onChange={(e) => setPluginVersion(e.target.value as 'v0' | 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
+                disabled={isConnected}
+              />
+              <span>v0 - 🧩 Minimal LoroMap + WebSocket (no editor sync, just logs)</span>
+            </label>
+            {/*
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="radio"
+                name="pluginVersion"
+                value="v1"
+                checked={pluginVersion === 'v1'}
+                onChange={(e) => setPluginVersion(e.target.value as 'v0' | 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
+                disabled={isConnected}
+              />
+              <span>v1 - Original Complex Plugin (2,938 lines, JSON + cursors)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="radio"
+                name="pluginVersion"
+                value="v2"
+                checked={pluginVersion === 'v2'}
+                onChange={(e) => setPluginVersion(e.target.value as 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
+                disabled={isConnected}
+              />
+              <span>v2 - Clean JSON Plugin (306 lines, still JSON-based)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="radio"
+                name="pluginVersion"
+                value="v3"
+                checked={pluginVersion === 'v3'}
+                onChange={(e) => setPluginVersion(e.target.value as 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
+                disabled={isConnected}
+              />
+              <span>v3 - ✨ Minimal Text Plugin (text-only, character-level diffs)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="radio"
+                name="pluginVersion"
+                value="v4"
+                checked={pluginVersion === 'v4'}
+                onChange={(e) => setPluginVersion(e.target.value as 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
+                disabled={isConnected}
+              />
+              <span>v4 - 🎯 Smart Hybrid Plugin (rich formatting + minimal updates)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="radio"
+                name="pluginVersion"
+                value="v5"
+                checked={pluginVersion === 'v5'}
+                onChange={(e) => setPluginVersion(e.target.value as 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
+                disabled={isConnected}
+              />
+              <span>v5 - 🚀 State-Based Plugin (Lexical update listener + Loro diffing)</span>
+            </label>
+            */}
+          </div>
+          {isConnected && <div style={{ color: '#888', fontSize: '12px', marginTop: '8px' }}>Cannot change while connected</div>}
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+            {pluginVersion === 'v0' && "🧩 Minimal LoroMap + WebSocket (no editor sync, just logs)"}
+            {pluginVersion === 'v1' && "🔄 Original complex plugin with text diffing and cursor management"}
+            {pluginVersion === 'v2' && "🆕 Clean JSON-based plugin (still stores full editor state)"}
+            {pluginVersion === 'v3' && "⚡ Text-only plugin with minimal character-level diffs (most efficient)"}
+            {pluginVersion === 'v4' && "🎯 Smart hybrid plugin with rich formatting preserved and minimal updates"}
+            {pluginVersion === 'v5' && "🚀 Content-agnostic state-based plugin using Lexical update listener and Loro diffing"}
           </div>
         </div>
         <div className="lexical-editor-info">
@@ -171,7 +237,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                 Peer ID: {peerId}
               </span>
             )}
-            {!useNewPlugin && awarenessData.length > 0 && (
+            {pluginVersion === 'v1' && awarenessData.length > 0 && (
               <div className="awareness-display" style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
                 <div style={{ marginBottom: '4px', fontWeight: 'bold' }}>Active Users:</div>
                 {awarenessData.map((peer) => (
@@ -206,7 +272,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
         </div>
       </div>
       
-      <LexicalComposer initialConfig={initialConfig} key={useNewPlugin ? 'new-plugin' : 'old-plugin'}>
+      <LexicalComposer initialConfig={initialConfig} key={pluginVersion}>
         <LexicalToolbar />
         <div className="lexical-editor-container with-toolbar">
           <RichTextPlugin
@@ -223,17 +289,17 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           
-          {useNewPlugin ? (
-            <LoroCollaborativePlugin2 
-              websocketUrl={websocketUrl} 
-              docId="lexical-shared-doc-v2" 
+          {pluginVersion === 'v0' && (
+            <LoroCollaborativePlugin0
+              websocketUrl={websocketUrl}
+              docId="lexical-shared-doc-v0"
               onConnectionChange={handleConnectionChange}
-              onPeerIdChange={setPeerId}
             />
-          ) : (
-            <LoroCollaborativePlugin 
+          )}
+          {pluginVersion === 'v1' && (
+            <LoroCollaborativePlugin1
               websocketUrl={websocketUrl} 
-              docId="lexical-shared-doc" 
+              docId="lexical-shared-doc-v1" 
               onConnectionChange={handleConnectionChange}
               onPeerIdChange={setPeerId}
               onAwarenessChange={setAwarenessData}
@@ -242,15 +308,68 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               }}
             />
           )}
+          
+          {pluginVersion === 'v2' && (
+            <LoroCollaborativePlugin2 
+              websocketUrl={websocketUrl} 
+              docId="lexical-shared-doc-v2" 
+              onConnectionChange={handleConnectionChange}
+              onPeerIdChange={setPeerId}
+            />
+          )}
+          
+          {pluginVersion === 'v3' && (
+            <LoroCollaborativePlugin3 
+              websocketUrl={websocketUrl} 
+              docId="lexical-shared-doc-v3" 
+              onConnectionChange={handleConnectionChange}
+              onPeerIdChange={setPeerId}
+            />
+          )}
+
+          {pluginVersion === 'v4' && (
+            <LoroCollaborativePlugin4 
+              websocketUrl={websocketUrl} 
+              docId="lexical-shared-doc-v4" 
+              onConnectionChange={handleConnectionChange}
+              onPeerIdChange={setPeerId}
+            />
+          )}
+
+          {pluginVersion === 'v5' && (
+            <LoroCollaborativePlugin5 
+              websocketUrl={websocketUrl} 
+              docId="lexical-shared-doc-v5" 
+              onConnectionChange={handleConnectionChange}
+              onPeerIdChange={setPeerId}
+            />
+          )}
         </div>
       </LexicalComposer>
       
       <div className="lexical-editor-footer">
-        <p>Document ID: {useNewPlugin ? 'lexical-shared-doc-v2' : 'lexical-shared-doc'}</p>
+        <p>Document ID: {
+          pluginVersion === 'v0' ? 'lexical-shared-doc-v0' :
+          pluginVersion === 'v1' ? 'lexical-shared-doc' :
+          pluginVersion === 'v2' ? 'lexical-shared-doc-v2' :
+          pluginVersion === 'v3' ? 'lexical-shared-doc-v3' :
+          pluginVersion === 'v4' ? 'lexical-shared-doc-v4' :
+          'lexical-shared-doc-v5'
+        }</p>
         <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
-        {useNewPlugin && (
+        {pluginVersion === 'v2' && (
           <p style={{ color: '#007acc', fontWeight: 'bold' }}>
-            🆕 Using clean plugin - simpler, more reliable, JSON-based synchronization
+            🆕 Using clean JSON plugin - simpler than v1, but still JSON-based
+          </p>
+        )}
+        {pluginVersion === 'v3' && (
+          <p style={{ color: '#00aa00', fontWeight: 'bold' }}>
+            ⚡ Using text-only plugin - minimal character-level diffs for maximum efficiency
+          </p>
+        )}
+        {pluginVersion === 'v4' && (
+          <p style={{ color: '#ff6600', fontWeight: 'bold' }}>
+            🎯 Using smart hybrid plugin - rich formatting preserved with intelligent minimal updates
           </p>
         )}
       </div>

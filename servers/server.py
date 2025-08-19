@@ -54,11 +54,13 @@ class LoroWebSocketServer:
         
         # Initialize default documents and ephemeral stores
         self._initialize_documents()
-        
+
+    DOCUMENTS = ['shared-text', 'lexical-shared-doc-v0', 'lexical-shared-doc-v1', 'lexical-shared-doc-v2', 'lexical-shared-doc-v3', 'lexical-shared-doc-v4']
+
     def _initialize_documents(self):
         """Initialize default Loro documents and EphemeralStores"""
         # Create documents for the known doc types
-        for doc_id in ['shared-text', 'lexical-shared-doc', 'lexical-shared-doc-v2']:
+        for doc_id in self.DOCUMENTS:
             doc = LoroDoc()
             ephemeral_store = EphemeralStore(300000)  # 5 minutes timeout
 
@@ -70,7 +72,7 @@ class LoroWebSocketServer:
                 map_container = doc.get_map(doc_id)
                 
                 # Seed initial content for the Lexical document if it's empty
-                if doc_id in ['lexical-shared-doc', 'lexical-shared-doc-v2']:
+                if doc_id in self.DOCUMENTS and doc_id.startswith('lexical-shared-doc'):
                     try:
                         # Check via deep value to avoid API mismatches
                         deep = doc.get_deep_value()

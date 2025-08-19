@@ -2,9 +2,12 @@ import { useEffect, useRef, useCallback } from 'react';
 import { 
   type LexicalEditor,
   type EditorState,
+  $getRoot,
+  $createParagraphNode,
+  $createTextNode
 } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { LoroDoc, type LoroEventBatch, type LoroMap } from 'loro-crdt';
+import { LoroDoc, type LoroEventBatch, type LoroText } from 'loro-crdt';
 
 /**
  * Annotation to mark updates coming from Loro to prevent infinite loops
@@ -12,17 +15,16 @@ import { LoroDoc, type LoroEventBatch, type LoroMap } from 'loro-crdt';
 const LORO_SYNC_ANNOTATION = 'loro-sync';
 
 /**
- * Clean LoroCollaborativePlugin2 inspired by CodeMirror integration
+ * Ultra-clean LoroCollaborativePlugin3 with minimal text-only approach
  * 
  * This plugin:
- * 1. Listens to Lexical editor state changes
- * 2. Stores the JSON representation in a Loro Map
- * 3. Listens to remote Loro updates and applies them to Lexical
- * 4. Sends updates via WebSocket
- * 5. Simple, no complex text diffing or cursor hacks
+ * 1. Extracts plain text from Lexical editor
+ * 2. Stores it in a Loro Text container for minimal diffs
+ * 3. Applies text changes back to Lexical
+ * 4. Sends only character-level diffs
  */
 
-interface LoroCollaborativePlugin2Props {
+interface LoroCollaborativePlugin3Props {
   docId: string;
   websocketUrl: string;
   onConnectionChange?: (connected: boolean) => void;
@@ -38,80 +40,106 @@ interface LoroMessage {
   color?: string;
 }
 
-export function LoroCollaborativePlugin2({
+export function LoroCollaborativePlugin3({
   docId,
   websocketUrl,
   onConnectionChange,
   onPeerIdChange
-}: LoroCollaborativePlugin2Props) {
+}: LoroCollaborativePlugin3Props) {
   const [editor] = useLexicalComposerContext();
   
   // Refs for persistent state
   const docRef = useRef<LoroDoc>(new LoroDoc());
-  const mapRef = useRef<LoroMap | null>(null);
+  const textRef = useRef<LoroText | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isRemoteUpdateRef = useRef(false);
   const hasReceivedInitialSnapshotRef = useRef(false);
-  const lastVersionRef = useRef<any>(null); // Store version vector
+  const lastVersionRef = useRef<any>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingChangesRef = useRef(false);
   
-  // Initialize Loro document and map
+  // Initialize Loro document and text
   useEffect(() => {
     const doc = docRef.current;
-    const map = doc.getMap(docId);
-    mapRef.current = map;
+    const text = doc.getText(docId);
+    textRef.current = text;
     
-    console.log('🚀 LoroCollaborativePlugin2 initialized for docId:', docId);
+    console.log('🚀 LoroCollaborativePlugin3 (text-based) initialized for docId:', docId);
   }, [docId]);
   
-  // Handle remote Loro updates
+  // Extract plain text from Lexical editor state
+  const extractPlainText = useCallback((editorState: EditorState): string => {
+    let text = '';
+    editorState.read(() => {
+      const root = $getRoot();
+      text = root.getTextContent();
+    });
+    return text;
+  }, []);
+  
+  // Apply plain text to Lexical editor
+  const applyPlainText = useCallback((text: string) => {
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+      
+      if (text.trim()) {
+        const lines = text.split('\n');
+        lines.forEach((line) => {
+          const paragraph = $createParagraphNode();
+          if (line.trim()) {
+            const textNode = $createTextNode(line);
+            paragraph.append(textNode);
+          }
+          root.append(paragraph);
+        });
+      } else {
+        // Empty content
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+      }
+    }, {
+      tag: LORO_SYNC_ANNOTATION
+    });
+  }, [editor]);
+  
+  // Handle remote Loro text updates
   const handleLoroUpdate = useCallback((batch: LoroEventBatch) => {
     // Skip local updates
     if (batch.by === 'local') {
       return;
     }
     
-    console.log('📥 Received Loro update:', batch.by, batch.events.length, 'events');
+    console.log('📥 Received Loro text update:', batch.by, batch.events.length, 'events');
     
-    // Check if any events affect our map
-    const hasMapUpdate = batch.events.some(event => 
-      event.target === mapRef.current?.id && event.diff.type === 'map'
+    // Check if any events affect our text
+    const hasTextUpdate = batch.events.some(event => 
+      event.target === textRef.current?.id && event.diff.type === 'text'
     );
     
-    if (!hasMapUpdate) {
+    if (!hasTextUpdate) {
       return;
     }
     
     try {
-      // Get the current editor state from the map
-      const editorStateJson = mapRef.current?.get('editorState');
+      // Get the current text from Loro
+      const currentText = textRef.current?.toString() || '';
       
-      if (editorStateJson && typeof editorStateJson === 'object') {
-        console.log('🔄 Applying remote editor state update');
-        
-        // Mark as remote update to prevent loop
-        isRemoteUpdateRef.current = true;
-        
-        editor.update(() => {
-          try {
-            // Parse and set the new editor state
-            const newEditorState = editor.parseEditorState(editorStateJson as any);
-            editor.setEditorState(newEditorState);
-            console.log('✅ Successfully applied remote editor state');
-          } catch (error) {
-            console.error('❌ Error parsing remote editor state:', error);
-          }
-        }, {
-          tag: LORO_SYNC_ANNOTATION
-        });
-        
-        isRemoteUpdateRef.current = false;
-      }
+      console.log('🔄 Applying remote text update:', currentText.length, 'chars');
+      
+      // Mark as remote update to prevent loop
+      isRemoteUpdateRef.current = true;
+      
+      // Apply the text to the editor
+      applyPlainText(currentText);
+      
+      isRemoteUpdateRef.current = false;
+      console.log('✅ Successfully applied remote text update');
     } catch (error) {
-      console.error('❌ Error handling Loro update:', error);
+      console.error('❌ Error handling Loro text update:', error);
       isRemoteUpdateRef.current = false;
     }
-  }, [editor]);
+  }, [applyPlainText]);
   
   // Subscribe to Loro document changes
   useEffect(() => {
@@ -123,7 +151,7 @@ export function LoroCollaborativePlugin2({
     };
   }, [handleLoroUpdate]);
   
-  // Send update to server with debouncing for rapid changes
+  // Send minimal text update to server
   const sendUpdate = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       return;
@@ -134,17 +162,30 @@ export function LoroCollaborativePlugin2({
       clearTimeout(updateTimeoutRef.current);
     }
     
+    // Mark that we have pending changes
+    pendingChangesRef.current = true;
+    
     // Debounce rapid changes
     updateTimeoutRef.current = setTimeout(() => {
+      if (!pendingChangesRef.current) {
+        return;
+      }
+      
       try {
-        // Get incremental update since last version
-        const update = lastVersionRef.current 
-          ? docRef.current.exportFrom(lastVersionRef.current)
-          : docRef.current.exportFrom();
+        let update: Uint8Array;
+        
+        if (lastVersionRef.current) {
+          // Export only changes since the last version (minimal diff)
+          update = docRef.current.exportFrom(lastVersionRef.current);
+        } else {
+          // First export
+          update = docRef.current.exportFrom();
+        }
         
         // Only send if there are actual changes
         if (update.length === 0) {
-          console.log('📡 No changes to send');
+          console.log('📡 No text changes to send');
+          pendingChangesRef.current = false;
           return;
         }
         
@@ -156,17 +197,63 @@ export function LoroCollaborativePlugin2({
           updateHex
         }));
         
-        // Update the last version to the current state
+        // Update the last version ONLY after successful send
         lastVersionRef.current = docRef.current.version();
+        pendingChangesRef.current = false;
         
-        console.log('📡 Sent incremental update to server:', update.length, 'bytes');
+        console.log('📡 Sent minimal text update to server:', update.length, 'bytes');
       } catch (error) {
-        console.error('❌ Error sending update:', error);
+        console.error('❌ Error sending text update:', error);
+        pendingChangesRef.current = false;
       }
     }, 50); // 50ms debounce
   }, [docId]);
   
-  // Handle local Lexical editor changes
+  // Calculate text diff and apply to Loro Text
+  const applyTextDiff = useCallback((oldText: string, newText: string) => {
+    if (!textRef.current) return;
+    
+    // Simple diff algorithm - find common prefix and suffix
+    let start = 0;
+    let oldEnd = oldText.length;
+    let newEnd = newText.length;
+    
+    // Find common prefix
+    while (start < oldEnd && start < newEnd && oldText[start] === newText[start]) {
+      start++;
+    }
+    
+    // Find common suffix
+    while (oldEnd > start && newEnd > start && oldText[oldEnd - 1] === newText[newEnd - 1]) {
+      oldEnd--;
+      newEnd--;
+    }
+    
+    // Apply the minimal diff to Loro Text
+    const deletedText = oldText.slice(start, oldEnd);
+    const insertedText = newText.slice(start, newEnd);
+    
+    console.log('📝 Text diff:', {
+      start,
+      deleted: deletedText.length,
+      inserted: insertedText.length,
+      deletedText: deletedText.slice(0, 50) + (deletedText.length > 50 ? '...' : ''),
+      insertedText: insertedText.slice(0, 50) + (insertedText.length > 50 ? '...' : '')
+    });
+    
+    // Apply changes to Loro Text
+    if (deletedText.length > 0) {
+      textRef.current.delete(start, deletedText.length);
+    }
+    if (insertedText.length > 0) {
+      textRef.current.insert(start, insertedText);
+    }
+    
+    // Commit the changes
+    docRef.current.commit();
+  }, []);
+  
+  // Handle local Lexical editor changes with text diffing
   const handleEditorChange = useCallback((editorState: EditorState, _editor: LexicalEditor, tags: Set<string>) => {
     // Skip if this update came from Loro (prevent infinite loop)
     if (tags.has(LORO_SYNC_ANNOTATION) || isRemoteUpdateRef.current) {
@@ -179,23 +266,27 @@ export function LoroCollaborativePlugin2({
     }
     
     try {
-      // Convert editor state to JSON
-      const editorStateJson = editorState.toJSON();
+      // Extract plain text from the new editor state
+      const newText = extractPlainText(editorState);
+      const oldText = textRef.current?.toString() || '';
       
-      console.log('📤 Local editor change, updating Loro map');
-      
-      // Update the Loro map with the new editor state
-      mapRef.current?.set('editorState', editorStateJson);
-      
-      // Commit the change
-      docRef.current.commit();
-      
-      // Send update to server
-      sendUpdate();
+      // Only update if the text actually changed
+      if (newText !== oldText) {
+        console.log('📤 Local text change detected:', {
+          oldLength: oldText.length,
+          newLength: newText.length
+        });
+        
+        // Apply minimal diff to Loro Text
+        applyTextDiff(oldText, newText);
+        
+        // Send update to server
+        sendUpdate();
+      }
     } catch (error) {
       console.error('❌ Error handling local editor change:', error);
     }
-  }, [sendUpdate]);
+  }, [extractPlainText, applyTextDiff, sendUpdate]);
   
   // Register editor change listener
   useEffect(() => {
@@ -244,7 +335,7 @@ export function LoroCollaborativePlugin2({
             }
             
             else if (data.type === 'initial-snapshot' && data.docId === docId) {
-              console.log('📄 Received initial snapshot');
+              console.log('📄 Received initial text snapshot');
               
               if (data.snapshotHex) {
                 const snapshot = new Uint8Array(
@@ -253,33 +344,21 @@ export function LoroCollaborativePlugin2({
                 
                 docRef.current.import(snapshot);
                 hasReceivedInitialSnapshotRef.current = true;
-                // Initialize the version tracking after receiving initial snapshot
                 lastVersionRef.current = docRef.current.version();
                 
-                // Apply the initial state to the editor
-                const editorStateJson = mapRef.current?.get('editorState');
-                if (editorStateJson && typeof editorStateJson === 'object') {
+                // Apply the initial text to the editor
+                const currentText = textRef.current?.toString() || '';
+                if (currentText) {
                   isRemoteUpdateRef.current = true;
-                  
-                  editor.update(() => {
-                    try {
-                      const newEditorState = editor.parseEditorState(editorStateJson as any);
-                      editor.setEditorState(newEditorState);
-                      console.log('✅ Applied initial editor state');
-                    } catch (error) {
-                      console.error('❌ Error applying initial state:', error);
-                    }
-                  }, {
-                    tag: LORO_SYNC_ANNOTATION
-                  });
-                  
+                  applyPlainText(currentText);
                   isRemoteUpdateRef.current = false;
+                  console.log('✅ Applied initial text state');
                 }
               }
             }
             
             else if (data.type === 'loro-update' && data.docId === docId) {
-              console.log('🔄 Received Loro update from remote');
+              console.log('🔄 Received Loro text update from remote');
               
               if (data.updateHex) {
                 const update = new Uint8Array(
@@ -287,7 +366,6 @@ export function LoroCollaborativePlugin2({
                 );
                 
                 docRef.current.import(update);
-                // Update version after receiving remote update
                 lastVersionRef.current = docRef.current.version();
               }
             }
@@ -329,7 +407,7 @@ export function LoroCollaborativePlugin2({
         clearTimeout(updateTimeoutRef.current);
       }
     };
-  }, [websocketUrl, docId, editor, onConnectionChange, onPeerIdChange]);
+  }, [websocketUrl, docId, onConnectionChange, onPeerIdChange, applyPlainText]);
   
   return null; // This is a headless plugin
 }
