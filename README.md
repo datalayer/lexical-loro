@@ -296,3 +296,216 @@ This project is open source and available under the [MIT License](LICENSE).
 - [Vite](https://vitejs.dev/) - Fast development build tool
 - [React](https://reactjs.org/) - UI library
 - [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
+
+# Lexical Loro Python Package
+
+A Python package for Lexical + Loro CRDT integration, providing a WebSocket server for real-time collaborative text editing.
+
+## Features
+
+- **Real-time collaboration**: WebSocket server for live document collaboration
+- **Loro CRDT integration**: Uses Loro CRDT for conflict-free replicated data types
+- **Lexical compatibility**: Designed to work with Lexical rich text editor
+- **Ephemeral data support**: Handles cursor positions and selections
+- **Multiple document support**: Manages multiple collaborative documents
+
+## Installation
+
+### From PyPI (when published)
+
+```bash
+pip install lexical-loro
+```
+
+### Local Development
+
+```bash
+# Install in development mode
+pip install -e "python_src/[dev]"
+```
+
+## Usage
+
+### Command Line
+
+Start the server using the command line interface:
+
+```bash
+# Start server on default port (8081)
+lexical-loro-server
+
+# Start server on custom port
+lexical-loro-server --port 8082
+
+# Start with debug logging
+lexical-loro-server --log-level DEBUG
+```
+
+### Programmatic Usage
+
+```python
+import asyncio
+from lexical_loro import LoroWebSocketServer
+
+async def main():
+    server = LoroWebSocketServer(port=8081)
+    await server.start()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Integration with Node.js/TypeScript Projects
+
+Update your `package.json` scripts:
+
+```json
+{
+  "scripts": {
+    "server:py": "lexical-loro-server",
+    "dev:py": "concurrently \"lexical-loro-server\" \"npm run dev\""
+  }
+}
+```
+
+## API Reference
+
+### LoroWebSocketServer
+
+Main server class for handling WebSocket connections and Loro document management.
+
+#### Constructor
+
+```python
+server = LoroWebSocketServer(port=8081)
+```
+
+#### Methods
+
+- `start()`: Start the WebSocket server
+- `shutdown()`: Gracefully shutdown the server
+- `handle_client(websocket)`: Handle new client connections
+- `handle_message(client_id, message)`: Process messages from clients
+
+### Client
+
+Represents a connected client with metadata.
+
+```python
+class Client:
+    def __init__(self, websocket, client_id):
+        self.websocket = websocket
+        self.id = client_id
+        self.color = self._generate_color()
+```
+
+## Development
+
+### Setup Development Environment
+
+```bash
+# Install development dependencies
+pip install -e "python_src/[dev]"
+
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=lexical_loro --cov-report=html
+
+# Format code
+black python_src/
+
+# Lint code
+ruff python_src/
+
+# Type checking
+mypy python_src/
+```
+
+### Testing
+
+The package includes comprehensive tests for:
+
+- WebSocket connection handling
+- Loro document operations
+- Message processing
+- Client management
+- Error handling
+
+Run tests:
+
+```bash
+pytest tests/ -v
+```
+
+### Building
+
+Build the package:
+
+```bash
+pip install build
+python -m build
+```
+
+## Protocol
+
+The server communicates with clients using a JSON-based WebSocket protocol:
+
+### Message Types
+
+- `loro-update`: Apply Loro CRDT updates
+- `snapshot`: Full document snapshots
+- `request-snapshot`: Request current document state
+- `ephemeral-update`: Cursor and selection updates
+- `awareness-update`: User presence information
+
+### Example Messages
+
+```json
+{
+  "type": "loro-update",
+  "docId": "lexical-shared-doc",
+  "updateHex": "deadbeef..."
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+- `LEXICAL_LORO_PORT`: Default server port (default: 8081)
+- `LEXICAL_LORO_HOST`: Host to bind to (default: localhost)
+- `LEXICAL_LORO_LOG_LEVEL`: Logging level (default: INFO)
+
+### Supported Documents
+
+The server pre-initializes several document types:
+
+- `shared-text`: Basic text document
+- `lexical-shared-doc-v0`: Minimal plugin document
+- `lexical-shared-doc-v1`: Full-featured plugin document
+- `lexical-shared-doc-v2`: Clean JSON plugin document
+- `lexical-shared-doc-v3`: Text-only plugin document
+- `lexical-shared-doc-v4`: Smart hybrid plugin document
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Run the test suite
+6. Submit a pull request
+
+## Support
+
+For issues and questions:
+
+- GitHub Issues: https://github.com/datalayer/lexical-loro/issues
+- Documentation: https://github.com/datalayer/lexical-loro#readme
+
