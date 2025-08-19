@@ -21,7 +21,10 @@ import {
 import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc, Cursor, EphemeralStore, LoroMap } from 'loro-crdt';
+import * as LoroAll from 'loro-crdt';
 import type { EphemeralStoreEvent, PeerID, LoroText } from 'loro-crdt';
+const LoroListCls: any = (LoroAll as any).LoroList;
+const LoroMovableListCls: any = (LoroAll as any).LoroMovableList;
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
@@ -886,6 +889,78 @@ export function LoroCollaborativePlugin({
     isLocalChange.current = true;
     try {
       mapRef.current.set('editorState', serialized);
+      // Also maintain a containerized structure for diff granularity if supported
+      if (LoroMap && (LoroMovableListCls || LoroListCls)) {
+        // Recreate the 'editorTree' container each update for now (simple, still granular)
+        const editorTree: any = new (LoroMap as any)();
+        (mapRef.current as any).setContainer('editorTree', editorTree);
+
+        // Meta
+  try { editorTree.set('version', serialized.version ?? null); } catch { /* no-op */ }
+  try { editorTree.set('source', serialized.source ?? null); } catch { /* no-op */ }
+  try { editorTree.set('lastSaved', serialized.lastSaved ?? null); } catch { /* no-op */ }
+
+        // Root map
+        const rootMap: any = new (LoroMap as any)();
+        (editorTree as any).setContainer('root', rootMap);
+
+        const root = serialized.root || {};
+  try { rootMap.set('type', root.type || 'root'); } catch { /* no-op */ }
+  try { rootMap.set('version', root.version ?? 1); } catch { /* no-op */ }
+  try { rootMap.set('direction', root.direction ?? 'ltr'); } catch { /* no-op */ }
+  try { rootMap.set('format', root.format ?? ''); } catch { /* no-op */ }
+  try { rootMap.set('indent', root.indent ?? 0); } catch { /* no-op */ }
+
+        // Children list
+        const childrenList: any = LoroMovableListCls ? new LoroMovableListCls() : (LoroListCls ? new LoroListCls() : null);
+        if (childrenList) {
+          (rootMap as any).setContainer('children', childrenList);
+          const rootChildren = Array.isArray(root.children) ? root.children : [];
+          for (let i = 0; i < rootChildren.length; i++) {
+            const node = rootChildren[i];
+            const nodeMap: any = new (LoroMap as any)();
+            try { nodeMap.set('type', node.type || 'paragraph'); } catch { /* no-op */ }
+            try { nodeMap.set('version', node.version ?? 1); } catch { /* no-op */ }
+            try { nodeMap.set('direction', node.direction ?? 'ltr'); } catch { /* no-op */ }
+            try { nodeMap.set('format', node.format ?? ''); } catch { /* no-op */ }
+            try { nodeMap.set('indent', node.indent ?? 0); } catch { /* no-op */ }
+            try { if (node.tag) nodeMap.set('tag', node.tag); } catch { /* no-op */ }
+            try { if (typeof node.textFormat !== 'undefined') nodeMap.set('textFormat', node.textFormat); } catch { /* no-op */ }
+            try { if (typeof node.textStyle !== 'undefined') nodeMap.set('textStyle', node.textStyle); } catch { /* no-op */ }
+
+            const childChildren = Array.isArray(node.children) ? node.children : [];
+            if (childChildren.length > 0 && (LoroMovableListCls || LoroListCls)) {
+              const innerList: any = LoroMovableListCls ? new LoroMovableListCls() : (LoroListCls ? new LoroListCls() : null);
+              if (innerList) {
+                (nodeMap as any).setContainer('children', innerList);
+                for (let j = 0; j < childChildren.length; j++) {
+                  const cnode = childChildren[j];
+                  const cMap: any = new (LoroMap as any)();
+                  try { cMap.set('type', cnode.type || 'text'); } catch { /* no-op */ }
+                  try { cMap.set('version', cnode.version ?? 1); } catch { /* no-op */ }
+                  try { cMap.set('detail', cnode.detail ?? 0); } catch { /* no-op */ }
+                  try { cMap.set('format', cnode.format ?? 0); } catch { /* no-op */ }
+                  try { cMap.set('mode', cnode.mode ?? 'normal'); } catch { /* no-op */ }
+                  try { cMap.set('style', cnode.style ?? ''); } catch { /* no-op */ }
+                  try { if (typeof cnode.text === 'string') cMap.set('text', cnode.text); } catch { /* no-op */ }
+                  // Prefer insertContainer with index, else pushContainer
+                  if (typeof (innerList as any).insertContainer === 'function') {
+                    (innerList as any).insertContainer(j, cMap);
+                  } else if (typeof (innerList as any).pushContainer === 'function') {
+                    (innerList as any).pushContainer(cMap);
+                  }
+                }
+              }
+            }
+
+            if (typeof (childrenList as any).insertContainer === 'function') {
+              (childrenList as any).insertContainer(i, nodeMap);
+            } else if (typeof (childrenList as any).pushContainer === 'function') {
+              (childrenList as any).pushContainer(nodeMap);
+            }
+          }
+        }
+      }
     } catch (e) {
       console.warn('Failed to set editorState in Loro Map:', e);
       return;
