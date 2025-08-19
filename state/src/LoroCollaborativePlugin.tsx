@@ -20,8 +20,8 @@ import {
 } from 'lexical';
 import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { LoroDoc, LoroText, Cursor, EphemeralStore } from 'loro-crdt';
-import type { EphemeralStoreEvent, PeerID } from 'loro-crdt';
+import { LoroDoc, Cursor, EphemeralStore, LoroMap } from 'loro-crdt';
+import type { EphemeralStoreEvent, PeerID, LoroText } from 'loro-crdt';
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
@@ -160,7 +160,9 @@ function $ensureAllNodesHaveStableIds(): void {
   }
   
   traverse(root);
-}/**
+}
+
+/**
  * LoroCollaborativePlugin - Enhanced Cursor Management
  * 
  * IMPROVEMENTS IMPLEMENTED based on Loro Cursor documentation and YJS SyncCursors patterns:
@@ -271,16 +273,16 @@ const CursorComponent: React.FC<CursorProps> = ({ peerId, position, color, name,
         
         {/* Caret line (mimics Lexical's caret) */}
         <span
-          style={{
-            position: 'absolute',
-            top: '0',
-            bottom: '0',
-            right: '-1px',
-            width: '1px',
-            backgroundColor: color,
-            zIndex: 10,
-            pointerEvents: 'none',
-          }}
+        style={{
+          position: 'absolute',
+          top: '0',
+          bottom: '0',
+          right: '-1px',
+          width: '1px',
+          backgroundColor: color,
+          zIndex: 10,
+          pointerEvents: 'none',
+        }}
         >
           {/* User name label (mimics Lexical's cursor name styling) */}
           <span
@@ -849,6 +851,7 @@ export function LoroCollaborativePlugin({
   const wsRef = useRef<WebSocket | null>(null);
   const docRef = useRef<LoroDoc>(new LoroDoc());
   const textRef = useRef<LoroText | null>(null);
+  const mapRef = useRef<LoroMap | null>(null);
   const isLocalChange = useRef(false);
   const hasReceivedInitialSnapshot = useRef(false);
   
@@ -863,91 +866,50 @@ export function LoroCollaborativePlugin({
   const cursorTimestamps = useRef<Record<string, number>>({});
 
   const updateLoroFromLexical = useCallback((editorState: EditorState) => {
-    if (!textRef.current) return;
-    
-    let editorStateJson = '';
-    editorState.read(() => {
-      // Store the raw Lexical EditorState JSON instead of HTML
-      const serialized = editorState.toJSON();
-      editorStateJson = JSON.stringify(serialized);
-    });
-    
-    const currentLoroText = textRef.current.toString();
-    if (currentLoroText === editorStateJson) return;
+    if (!mapRef.current) return;
 
-    // Mark this as a local change
-    isLocalChange.current = true;
-    
-    // FIXED: Use incremental text operations instead of wholesale replacement
-    // This prevents massive changes that can cause connection issues
+    let serialized: any = null;
+    editorState.read(() => {
+      serialized = editorState.toJSON();
+    });
+
+    // Avoid unnecessary writes when state is unchanged
     try {
-      // Calculate the difference between current and new content
-      const oldContent = currentLoroText;
-      const newContent = editorStateJson;
-      
-      // Find common prefix and suffix to minimize changes
-      let prefixEnd = 0;
-      const minLength = Math.min(oldContent.length, newContent.length);
-      
-      // Find common prefix
-      while (prefixEnd < minLength && oldContent[prefixEnd] === newContent[prefixEnd]) {
-        prefixEnd++;
-      }
-      
-      // Find common suffix
-      let suffixStart = oldContent.length;
-      let newSuffixStart = newContent.length;
-      while (suffixStart > prefixEnd && newSuffixStart > prefixEnd && 
-             oldContent[suffixStart - 1] === newContent[newSuffixStart - 1]) {
-        suffixStart--;
-        newSuffixStart--;
-      }
-      
-      // Apply incremental changes
-      if (prefixEnd < suffixStart) {
-        // Delete the changed portion
-        const deleteLength = suffixStart - prefixEnd;
-        if (deleteLength > 0) {
-          textRef.current.delete(prefixEnd, deleteLength);
-        }
-      }
-      
-      if (prefixEnd < newSuffixStart) {
-        // Insert the new content
-        const insertText = newContent.substring(prefixEnd, newSuffixStart);
-        if (insertText.length > 0) {
-          textRef.current.insert(prefixEnd, insertText);
-        }
-      }
-      
-    } catch (error) {
-      console.warn('Error with incremental update, falling back to full replacement:', error);
-      // Fallback to full replacement if incremental update fails
-      textRef.current.delete(0, currentLoroText.length);
-      textRef.current.insert(0, editorStateJson);
+      const current = mapRef.current.get('editorState');
+      const same = current && JSON.stringify(current) === JSON.stringify(serialized);
+      if (same) return;
+    } catch {
+      // ignore compare errors
     }
-    
+
+    // Mark as local change and update structured JSON in a Map container
+    isLocalChange.current = true;
+    try {
+      mapRef.current.set('editorState', serialized);
+    } catch (e) {
+      console.warn('Failed to set editorState in Loro Map:', e);
+      return;
+    }
+
     // Send update to WebSocket server
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const update = docRef.current.exportFrom();
       wsRef.current.send(JSON.stringify({
         type: 'loro-update',
         update: Array.from(update),
-        docId: docId
+        docId
       }));
 
-      // Also send a snapshot occasionally to keep server state updated
-      if (Math.random() < 0.1) { // 10% chance to send snapshot
+      if (Math.random() < 0.1) {
         const snapshot = docRef.current.exportSnapshot();
         wsRef.current.send(JSON.stringify({
           type: 'snapshot',
           snapshot: Array.from(snapshot),
-          docId: docId
+          docId
         }));
       }
     }
 
-    // Reset the flag after a delay to prevent infinite loops
     setTimeout(() => {
       isLocalChange.current = false;
     }, 50);
@@ -1153,7 +1115,10 @@ export function LoroCollaborativePlugin({
   useEffect(() => {
     // Initialize Loro document and text object
     const doc = docRef.current;
-    textRef.current = doc.getText(docId);
+  // Keep a text container only for cursor/awareness purposes (distinct id)
+  textRef.current = doc.getText(`${docId}:awareness`);
+  // Use a Map container to hold structured Lexical JSON state (must match server)
+  mapRef.current = doc.getMap(docId);
     
     // Only initialize awareness if it doesn't exist yet
     if (!awarenessRef.current) {
@@ -1653,7 +1618,7 @@ export function LoroCollaborativePlugin({
                   }
                   
                   // If exact node not found, we need to calculate the global position
-                  // that this cursor was at and find the equivalent position in the new tree
+                  // that this cursor should be at and find the equivalent position in the new tree
                   console.log('🔄 Exact node not found, calculating global position equivalent');
                   
                   // Instead of guessing, let's calculate where this cursor should be
@@ -1856,8 +1821,14 @@ export function LoroCollaborativePlugin({
     const unsubscribe = doc.subscribe(() => {
       if (!isLocalChange.current) {
         // This is a remote change, update Lexical editor
-        const currentText = textRef.current?.toString() || '';
-        updateLexicalFromLoro(editor, currentText);
+        try {
+          const obj = mapRef.current?.get('editorState');
+          if (obj) {
+            updateLexicalFromLoro(editor, JSON.stringify(obj));
+          }
+        } catch (e) {
+          console.warn('Failed to read editorState from Loro Map on subscribe:', e);
+        }
       }
       // Force cursor re-render when document changes (content affects cursor positioning)
       setForceUpdate(prev => prev + 1);
@@ -2010,12 +1981,14 @@ export function LoroCollaborativePlugin({
               docRef.current.import(snapshot);
               hasReceivedInitialSnapshot.current = true;
               console.log('📄 Lexical editor received and applied initial snapshot');
-              // Immediately reflect the current Loro text into the editor after import
+              // Immediately reflect the current Loro Map state into the editor after import
               try {
-                const currentText = docRef.current.getText(docId).toString();
-                updateLexicalFromLoro(editor, currentText);
+                const obj = docRef.current.getMap(docId).get('editorState');
+                if (obj) {
+                  updateLexicalFromLoro(editor, JSON.stringify(obj));
+                }
               } catch (e) {
-                console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
+                console.warn('⚠️ Could not immediately reflect snapshot to editor (map):', e);
               }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore
@@ -2113,18 +2086,17 @@ export function LoroCollaborativePlugin({
               }, 150); // Slightly different delay than text editor
             } else if (data.type === 'snapshot-request' && data.docId === docId) {
               // Another client is requesting a snapshot, send ours if we have content
-              editor.getEditorState().read(() => {
-                const currentText = $getRoot().getTextContent();
-                if (currentText.length > 0) {
-                  const snapshot = docRef.current.exportSnapshot();
-                  ws.send(JSON.stringify({
-                    type: 'snapshot',
-                    snapshot: Array.from(snapshot),
-                    docId: docId
-                  }));
-                  console.log('📄 Lexical editor sent snapshot in response to request');
-                }
-              });
+              try {
+                const snapshot = docRef.current.exportSnapshot();
+                ws.send(JSON.stringify({
+                  type: 'snapshot',
+                  snapshot: Array.from(snapshot),
+                  docId: docId
+                }));
+                console.log('📄 Lexical editor sent snapshot in response to request');
+              } catch (e) {
+                console.warn('⚠️ Failed to export snapshot:', e);
+              }
             } else if (data.type === 'client-disconnect') {
               // Handle explicit client disconnect notifications
               console.log('📢 Received client disconnect notification:', data);

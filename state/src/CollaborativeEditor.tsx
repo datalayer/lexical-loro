@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { LoroDoc, LoroText } from 'loro-crdt';
+import { LoroDoc, LoroMap } from 'loro-crdt';
 import './CollaborativeEditor.css';
 
 interface CollaborativeEditorProps {
@@ -17,22 +17,26 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
   
   const wsRef = useRef<WebSocket | null>(null);
   const docRef = useRef<LoroDoc>(new LoroDoc());
-  const textRef = useRef<LoroText | null>(null);
+  const mapRef = useRef<LoroMap | null>(null);
   const isLocalChange = useRef(false);
   const hasReceivedInitialSnapshot = useRef(false);
   const isConnectingRef = useRef(false);
 
   // Initialize Loro document and text object
   useEffect(() => {
-    const doc = docRef.current;
-    textRef.current = doc.getText('shared-text');
+  const doc = docRef.current;
+  mapRef.current = doc.getMap('shared-text');
     
     // Subscribe to document changes
     const unsubscribe = doc.subscribe(() => {
       if (!isLocalChange.current) {
         // This is a remote change, update the UI
-        const currentText = textRef.current?.toString() || '';
-        setText(currentText);
+        try {
+          const obj = mapRef.current?.get('text');
+          setText(typeof obj === 'string' ? obj : '');
+        } catch {
+          setText('');
+        }
       }
       isLocalChange.current = false;
     });
@@ -93,8 +97,8 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
               }, 100);
             } else if (data.type === 'snapshot-request') {
               // Another client is requesting a snapshot, send ours if we have content
-              const currentText = textRef.current?.toString() || '';
-              if (currentText.length > 0) {
+              const current = mapRef.current?.get('text');
+              if (typeof current === 'string' && current.length > 0) {
                 const snapshot = docRef.current.exportSnapshot();
                 ws.send(JSON.stringify({
                   type: 'snapshot',
@@ -140,33 +144,17 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
         wsRef.current.close();
       }
     };
-  }, [websocketUrl]); // Removed onConnectionChange from dependencies
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [websocketUrl]); // Intentionally exclude onConnectionChange to avoid reconnect loops
 
   const handleTextChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = event.target.value;
-    const currentText = text;
-    
-    // Mark this as a local change
     isLocalChange.current = true;
-    
-    // Find the difference and apply it to Loro document
-    if (newText.length > currentText.length) {
-      // Text was inserted
-      const insertPos = findInsertPosition(currentText, newText);
-      const insertedText = newText.slice(insertPos, insertPos + (newText.length - currentText.length));
-      textRef.current?.insert(insertPos, insertedText);
-    } else if (newText.length < currentText.length) {
-      // Text was deleted
-      const deletePos = findDeletePosition(currentText, newText);
-      const deleteLen = currentText.length - newText.length;
-      textRef.current?.delete(deletePos, deleteLen);
-    } else {
-      // Text was replaced
-      textRef.current?.delete(0, currentText.length);
-      textRef.current?.insert(0, newText);
+    try {
+      mapRef.current?.set('text', newText);
+    } catch (e) {
+      console.warn('Failed to set text in Map:', e);
     }
-    
-    // Update local state
     setText(newText);
     
     // Send update to WebSocket server
@@ -188,25 +176,9 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
         }));
       }
     }
-  }, [text]);
+  }, []);
 
-  // Helper function to find where text was inserted
-  const findInsertPosition = (oldText: string, newText: string): number => {
-    let pos = 0;
-    while (pos < oldText.length && pos < newText.length && oldText[pos] === newText[pos]) {
-      pos++;
-    }
-    return pos;
-  };
-
-  // Helper function to find where text was deleted
-  const findDeletePosition = (oldText: string, newText: string): number => {
-    let pos = 0;
-    while (pos < oldText.length && pos < newText.length && oldText[pos] === newText[pos]) {
-      pos++;
-    }
-    return pos;
-  };
+  // Diff helpers removed with Map-only syncing
 
   // Disconnect function
   const handleDisconnect = useCallback(() => {
