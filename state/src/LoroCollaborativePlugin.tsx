@@ -957,7 +957,7 @@ export function LoroCollaborativePlugin({
     if (isLocalChange.current) return; // Don't update if this is a local change
 
     isLocalChange.current = true;
-  let applied = false;
+    let applied = false;
 
     editor.update(() => {
       const root = $getRoot();
@@ -973,7 +973,7 @@ export function LoroCollaborativePlugin({
         // ignore JSON stringify/compare failure; not critical for update gating
       }
 
-  try {
+      try {
         if (incoming && incoming.trim().length > 0) {
           // Try to parse as Lexical EditorState JSON first
           try {
@@ -1939,6 +1939,35 @@ export function LoroCollaborativePlugin({
         const ws = new WebSocket(websocketUrl);
         wsRef.current = ws;
 
+        // Wrap send to log all outgoing messages with a clear, visible marker
+        try {
+          const originalSend = ws.send.bind(ws);
+          (ws as any).send = (data: any) => {
+            try {
+              if (typeof data === 'string') {
+                const len = data.length;
+                let parsed: any = null;
+                try { parsed = JSON.parse(data); } catch { /* ignore parse errors for preview */ }
+                const preview = data.slice(0, 300) + (len > 300 ? '…' : '');
+                console.log('🛰️📤 WS SEND →', {
+                  type: parsed?.type,
+                  docId: parsed?.docId,
+                  length: len,
+                  keys: parsed ? Object.keys(parsed) : ['<unparsed>'],
+                  preview
+                });
+              } else {
+                console.log('🛰️📤 WS SEND → (non-string payload)', { kind: typeof data });
+              }
+            } catch (logErr) {
+              console.warn('WS send log failed:', logErr);
+            }
+            return originalSend(data);
+          };
+        } catch (wrapErr) {
+          console.warn('Failed to wrap WebSocket.send for logging:', wrapErr);
+        }
+
         ws.onopen = () => {
           isConnectingRef.current = false;
           retryCountRef.current = 0; // Reset retry count on successful connection
@@ -1959,14 +1988,16 @@ export function LoroCollaborativePlugin({
           try {
             const data: LoroMessage = JSON.parse(event.data);
             
-            // Log ALL incoming messages for debugging
-            console.log('📥 Received WebSocket message:', {
+            // Prominent log for ALL incoming messages with safe preview
+            const preview = typeof event.data === 'string' ? (event.data as string).slice(0, 300) + ((event.data as string).length > 300 ? '…' : '') : '';
+            console.log('🛰️📥 WS RECV ←', {
               type: data.type,
               docId: data.docId,
               hasData: !!data.data,
               hasEvent: !!data.event,
               clientId: data.clientId,
-              messageSize: event.data.length
+              length: typeof event.data === 'string' ? (event.data as string).length : undefined,
+              preview
             });
             
             if (data.type === 'loro-update' && data.docId === docId) {
