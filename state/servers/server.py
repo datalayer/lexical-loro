@@ -454,7 +454,7 @@ class LoroWebSocketServer:
                 if snapshot and len(snapshot) > 0:
                     await websocket.send(json.dumps({
                         "type": "initial-snapshot",
-                        "snapshot": list(snapshot),  # Convert bytes to list of integers
+                        "snapshotHex": snapshot.hex(),
                         "docId": doc_id
                     }))
                     logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot)} bytes) to client {client_id}")
@@ -473,11 +473,12 @@ class LoroWebSocketServer:
                 # Apply the update to our local Loro document and broadcast
                 doc_id = data.get("docId", "shared-text")
                 update_data = data.get("update", [])
+                update_hex = data.get("updateHex")
                 
-                if doc_id in self.loro_docs and update_data:
+                if doc_id in self.loro_docs and (update_data or update_hex):
                     try:
                         # Import the update into our Loro document
-                        update_bytes = bytes(update_data)
+                        update_bytes = bytes(update_data) if update_data else bytes.fromhex(update_hex)
                         self.loro_docs[doc_id].import_(update_bytes)
                         logger.info(f"📝 Applied Loro update for {doc_id} from client {client_id}")
                         
@@ -526,7 +527,12 @@ class LoroWebSocketServer:
                             logger.error(f"❌ Error reading document content: {content_error}")
                         
                         # Broadcast the update to all other clients
-                        await self.broadcast_to_others(client_id, data)
+                        # Normalize broadcast to hex to reduce size
+                        await self.broadcast_to_others(client_id, {
+                            "type": "loro-update",
+                            "docId": doc_id,
+                            "updateHex": update_bytes.hex()
+                        })
                         logger.info(f"🔄 Broadcasting Loro update from client {client_id} to {len(self.clients) - 1} other clients")
                     except Exception as e:
                         logger.error(f"❌ Error applying Loro update for {doc_id}: {e}")
@@ -535,10 +541,11 @@ class LoroWebSocketServer:
                 # Update our Loro document with the snapshot
                 doc_id = data.get("docId", "shared-text")
                 snapshot_data = data.get("snapshot", [])
+                snapshot_hex = data.get("snapshotHex")
                 
-                if snapshot_data:
+                if snapshot_data or snapshot_hex:
                     try:
-                        snapshot_bytes = bytes(snapshot_data)
+                        snapshot_bytes = bytes(snapshot_data) if snapshot_data else bytes.fromhex(snapshot_hex)
                         if doc_id not in self.loro_docs:
                             self.loro_docs[doc_id] = LoroDoc()
                         
@@ -604,7 +611,7 @@ class LoroWebSocketServer:
                         if snapshot and len(snapshot) > 0:
                             await client.websocket.send(json.dumps({
                                 "type": "initial-snapshot",
-                                "snapshot": list(snapshot),
+                                "snapshotHex": snapshot.hex(),
                                 "docId": doc_id
                             }))
                             logger.info(f"📄 Sent requested snapshot for {doc_id} ({len(snapshot)} bytes) to client {client_id}")

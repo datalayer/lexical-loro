@@ -8,9 +8,11 @@ interface Client {
 interface LoroMessage {
   type: string;
   update?: number[];
+  updateHex?: string;
   clientId?: string;
   message?: string;
   snapshot?: number[];
+  snapshotHex?: string;
   requesterId?: string;
   docId?: string;
 }
@@ -50,18 +52,20 @@ class LoroWebSocketServer {
       const lexicalSnapshot = this.documentSnapshots.get('lexical-shared-doc');
       
       if (sharedTextSnapshot && sharedTextSnapshot.length > 0) {
+        const hex = Array.from(sharedTextSnapshot).map((b: number) => b.toString(16).padStart(2, '0')).join('');
         ws.send(JSON.stringify({
           type: 'initial-snapshot',
-          snapshot: Array.from(sharedTextSnapshot),
+          snapshotHex: hex,
           docId: 'shared-text'
         }));
         console.log(`📄 Sent shared-text snapshot to client ${clientId}`);
       }
       
       if (lexicalSnapshot && lexicalSnapshot.length > 0) {
+        const hex = Array.from(lexicalSnapshot).map((b: number) => b.toString(16).padStart(2, '0')).join('');
         ws.send(JSON.stringify({
           type: 'initial-snapshot',
-          snapshot: Array.from(lexicalSnapshot),
+          snapshotHex: hex,
           docId: 'lexical-shared-doc'
         }));
         console.log(`📄 Sent lexical snapshot to client ${clientId}`);
@@ -72,13 +76,29 @@ class LoroWebSocketServer {
           const message = JSON.parse(data.toString());
           
           if (message.type === 'loro-update') {
-            // Broadcast the Loro update to all other clients
-            this.broadcastToOthers(clientId, message);
+            // Normalize to hex for broadcast
+            const docId = message.docId || 'shared-text';
+            let updateHex = message.updateHex;
+            if (!updateHex && message.update) {
+              const arr = message.update as number[];
+              updateHex = arr.map((b: number) => b.toString(16).padStart(2, '0')).join('');
+            }
+            if (updateHex) {
+              this.broadcastToOthers(clientId, { type: 'loro-update', docId, updateHex });
+            }
             console.log(`🔄 Broadcasting Loro update from client ${clientId} to ${this.clients.size - 1} other clients`);
           } else if (message.type === 'snapshot') {
             // Store the current document snapshot for new clients
-            const docId = message.docId || 'shared-text'; // Default to shared-text for backward compatibility
-            this.documentSnapshots.set(docId, new Uint8Array(message.snapshot));
+            const docId = message.docId || 'shared-text';
+            if (message.snapshotHex) {
+              const hex = message.snapshotHex as string;
+              const len = hex.length / 2;
+              const buf = new Uint8Array(len);
+              for (let i = 0; i < len; i++) buf[i] = parseInt(hex.substr(i * 2, 2), 16);
+              this.documentSnapshots.set(docId, buf);
+            } else if (message.snapshot) {
+              this.documentSnapshots.set(docId, new Uint8Array(message.snapshot));
+            }
             console.log(`📄 Updated snapshot for document ${docId} from client ${clientId}`);
           } else if (message.type === 'request-snapshot') {
             // Client is requesting the current snapshot for a specific document
@@ -86,11 +106,8 @@ class LoroWebSocketServer {
             const snapshot = this.documentSnapshots.get(docId);
             
             if (snapshot && snapshot.length > 0) {
-              ws.send(JSON.stringify({
-                type: 'initial-snapshot',
-                snapshot: Array.from(snapshot),
-                docId: docId
-              }));
+              const hex = Array.from(snapshot as Uint8Array).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+              ws.send(JSON.stringify({ type: 'initial-snapshot', snapshotHex: hex, docId }));
               console.log(`📄 Sent requested snapshot for ${docId} to client ${clientId}`);
             } else {
               // No snapshot available, ask other clients to provide one

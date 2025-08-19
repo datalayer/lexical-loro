@@ -73,13 +73,35 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
             const data = JSON.parse(event.data);
             
             if (data.type === 'loro-update') {
-              // Apply remote update to local document
-              const update = new Uint8Array(data.update);
-              docRef.current.import(update);
+              // Apply remote update to local document (hex or array)
+              let update: Uint8Array | null = null;
+              if (data.updateHex) {
+                const hex: string = data.updateHex as string;
+                const len = hex.length / 2;
+                const buf = new Uint8Array(len);
+                for (let i = 0; i < len; i++) buf[i] = parseInt(hex.substr(i * 2, 2), 16);
+                update = buf;
+              } else if (data.update) {
+                update = new Uint8Array(data.update);
+              }
+              if (update) {
+                docRef.current.import(update);
+              }
             } else if (data.type === 'initial-snapshot') {
-              // Apply initial snapshot from server
-              const snapshot = new Uint8Array(data.snapshot);
-              docRef.current.import(snapshot);
+              // Apply initial snapshot from server (hex or array)
+              let snapshot: Uint8Array | null = null;
+              if (data.snapshotHex) {
+                const hex: string = data.snapshotHex as string;
+                const len = hex.length / 2;
+                const buf = new Uint8Array(len);
+                for (let i = 0; i < len; i++) buf[i] = parseInt(hex.substr(i * 2, 2), 16);
+                snapshot = buf;
+              } else if (data.snapshot) {
+                snapshot = new Uint8Array(data.snapshot);
+              }
+              if (snapshot) {
+                docRef.current.import(snapshot);
+              }
               hasReceivedInitialSnapshot.current = true;
               console.log('📄 Received and applied initial snapshot');
             } else if (data.type === 'welcome') {
@@ -160,18 +182,20 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
     // Send update to WebSocket server
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const update = docRef.current.exportFrom();
+      const updateHex = Array.from(update).map(b => b.toString(16).padStart(2, '0')).join('');
       wsRef.current.send(JSON.stringify({
         type: 'loro-update',
-        update: Array.from(update),
+        updateHex,
         docId: 'shared-text'
       }));
 
       // Also send a snapshot every 10 changes to keep server state updated
       if (Math.random() < 0.1) { // 10% chance to send snapshot
         const snapshot = docRef.current.exportSnapshot();
+        const snapshotHex = Array.from(snapshot).map(b => b.toString(16).padStart(2, '0')).join('');
         wsRef.current.send(JSON.stringify({
           type: 'snapshot',
-          snapshot: Array.from(snapshot),
+          snapshotHex,
           docId: 'shared-text'
         }));
       }

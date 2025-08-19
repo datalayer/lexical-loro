@@ -21,10 +21,7 @@ import {
 import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc, Cursor, EphemeralStore, LoroMap } from 'loro-crdt';
-import * as LoroAll from 'loro-crdt';
 import type { EphemeralStoreEvent, PeerID, LoroText } from 'loro-crdt';
-const LoroListCls: any = (LoroAll as any).LoroList;
-const LoroMovableListCls: any = (LoroAll as any).LoroMovableList;
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
@@ -371,9 +368,8 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
     remoteCursorsCount: Object.keys(remoteCursors).length,
     clientId
   });
-
   const cursors = Object.values(remoteCursors)
-    .map(remoteCursor => {
+    .map((remoteCursor) => {
       const { peerId, anchor, focus, user } = remoteCursor;
       if (!anchor) {
         console.log('⚠️ No anchor for peer:', peerId);
@@ -769,20 +765,35 @@ class CursorAwareness {
     }
   }
 
-  // Simplified position calculation (much simpler than YJS approach)
+  // Calculate global text position by traversing all text nodes in document order
   private calculateSimpleGlobalPosition(nodeKey: NodeKey, offset: number): number {
-    // For Loro, we don't need complex CollabNode mapping like YJS
-    // Just calculate the simple global text position
-    // This is much simpler because Loro handles container+character mapping internally
-    
-    // TODO: Implement simple document traversal
-    // For now, return a basic position - this would be implemented with:
-    // 1. Find the text node in the document
-    // 2. Calculate its start position 
-    // 3. Add the offset within that node
-    
-    console.log('🔄 Calculating simple position for Loro cursor:', { nodeKey, offset });
-    return 0; // Placeholder for simplified implementation
+    let position = 0;
+    let found = false;
+
+    $getRoot().getAllTextNodes().forEach((textNode) => {
+      if (found) {
+        return;
+      }
+      const key = textNode.getKey();
+      const text = textNode.getTextContent();
+      if (key === nodeKey) {
+        // Clamp offset within this node's length
+        const nodeLen = text.length;
+        const clamped = Math.max(0, Math.min(offset, nodeLen));
+        position += clamped;
+        found = true;
+      } else {
+        position += text.length;
+      }
+    });
+
+    if (!found) {
+      // If the node wasn't found (e.g., it was deleted), fall back to end of doc
+      const total = $getRoot().getAllTextNodes().reduce((acc, n) => acc + n.getTextContent().length, 0);
+      return Math.max(0, Math.min(position, total));
+    }
+
+    return position;
   }
 
   // Debug method to access raw ephemeral store data
@@ -820,7 +831,9 @@ interface LoroCollaborativePluginProps {
 interface LoroMessage {
   type: string;
   update?: number[];
+  updateHex?: string; // hex-encoded update payload
   snapshot?: number[];
+  snapshotHex?: string; // hex-encoded snapshot payload
   docId?: string;
   clientId?: string;
   color?: string;
@@ -865,6 +878,9 @@ export function LoroCollaborativePlugin({
   const [clientColor, setClientColor] = useState<string>('');
   const peerIdRef = useRef<string>(''); // Changed from numericPeerIdRef to handle string IDs
   const isConnectingRef = useRef<boolean>(false);
+  // loro-update batching
+  const exportScheduledRef = useRef(false);
+  const exportTimerRef = useRef<number | null>(null);
   const [forceUpdate, setForceUpdate] = useState(0); // Force cursor re-render
   const cursorTimestamps = useRef<Record<string, number>>({});
 
@@ -888,101 +904,38 @@ export function LoroCollaborativePlugin({
     // Mark as local change and update structured JSON in a Map container
     isLocalChange.current = true;
     try {
+      // Only update JSON; skip rebuilding heavy 'editorTree' container on each keystroke
       mapRef.current.set('editorState', serialized);
-      // Also maintain a containerized structure for diff granularity if supported
-      if (LoroMap && (LoroMovableListCls || LoroListCls)) {
-        // Recreate the 'editorTree' container each update for now (simple, still granular)
-        const editorTree: any = new (LoroMap as any)();
-        (mapRef.current as any).setContainer('editorTree', editorTree);
-
-        // Meta
-  try { editorTree.set('version', serialized.version ?? null); } catch { /* no-op */ }
-  try { editorTree.set('source', serialized.source ?? null); } catch { /* no-op */ }
-  try { editorTree.set('lastSaved', serialized.lastSaved ?? null); } catch { /* no-op */ }
-
-        // Root map
-        const rootMap: any = new (LoroMap as any)();
-        (editorTree as any).setContainer('root', rootMap);
-
-        const root = serialized.root || {};
-  try { rootMap.set('type', root.type || 'root'); } catch { /* no-op */ }
-  try { rootMap.set('version', root.version ?? 1); } catch { /* no-op */ }
-  try { rootMap.set('direction', root.direction ?? 'ltr'); } catch { /* no-op */ }
-  try { rootMap.set('format', root.format ?? ''); } catch { /* no-op */ }
-  try { rootMap.set('indent', root.indent ?? 0); } catch { /* no-op */ }
-
-        // Children list
-        const childrenList: any = LoroMovableListCls ? new LoroMovableListCls() : (LoroListCls ? new LoroListCls() : null);
-        if (childrenList) {
-          (rootMap as any).setContainer('children', childrenList);
-          const rootChildren = Array.isArray(root.children) ? root.children : [];
-          for (let i = 0; i < rootChildren.length; i++) {
-            const node = rootChildren[i];
-            const nodeMap: any = new (LoroMap as any)();
-            try { nodeMap.set('type', node.type || 'paragraph'); } catch { /* no-op */ }
-            try { nodeMap.set('version', node.version ?? 1); } catch { /* no-op */ }
-            try { nodeMap.set('direction', node.direction ?? 'ltr'); } catch { /* no-op */ }
-            try { nodeMap.set('format', node.format ?? ''); } catch { /* no-op */ }
-            try { nodeMap.set('indent', node.indent ?? 0); } catch { /* no-op */ }
-            try { if (node.tag) nodeMap.set('tag', node.tag); } catch { /* no-op */ }
-            try { if (typeof node.textFormat !== 'undefined') nodeMap.set('textFormat', node.textFormat); } catch { /* no-op */ }
-            try { if (typeof node.textStyle !== 'undefined') nodeMap.set('textStyle', node.textStyle); } catch { /* no-op */ }
-
-            const childChildren = Array.isArray(node.children) ? node.children : [];
-            if (childChildren.length > 0 && (LoroMovableListCls || LoroListCls)) {
-              const innerList: any = LoroMovableListCls ? new LoroMovableListCls() : (LoroListCls ? new LoroListCls() : null);
-              if (innerList) {
-                (nodeMap as any).setContainer('children', innerList);
-                for (let j = 0; j < childChildren.length; j++) {
-                  const cnode = childChildren[j];
-                  const cMap: any = new (LoroMap as any)();
-                  try { cMap.set('type', cnode.type || 'text'); } catch { /* no-op */ }
-                  try { cMap.set('version', cnode.version ?? 1); } catch { /* no-op */ }
-                  try { cMap.set('detail', cnode.detail ?? 0); } catch { /* no-op */ }
-                  try { cMap.set('format', cnode.format ?? 0); } catch { /* no-op */ }
-                  try { cMap.set('mode', cnode.mode ?? 'normal'); } catch { /* no-op */ }
-                  try { cMap.set('style', cnode.style ?? ''); } catch { /* no-op */ }
-                  try { if (typeof cnode.text === 'string') cMap.set('text', cnode.text); } catch { /* no-op */ }
-                  // Prefer insertContainer with index, else pushContainer
-                  if (typeof (innerList as any).insertContainer === 'function') {
-                    (innerList as any).insertContainer(j, cMap);
-                  } else if (typeof (innerList as any).pushContainer === 'function') {
-                    (innerList as any).pushContainer(cMap);
-                  }
-                }
-              }
-            }
-
-            if (typeof (childrenList as any).insertContainer === 'function') {
-              (childrenList as any).insertContainer(i, nodeMap);
-            } else if (typeof (childrenList as any).pushContainer === 'function') {
-              (childrenList as any).pushContainer(nodeMap);
-            }
-          }
-        }
-      }
+      // Commit local mutations so exportFrom captures them reliably
+  try { (docRef.current as any).commit?.(); } catch { /* noop */ }
     } catch (e) {
       console.warn('Failed to set editorState in Loro Map:', e);
       return;
     }
 
-    // Send update to WebSocket server
+    // Debounced loro-update export to coalesce rapid edits
+    if (!exportScheduledRef.current) {
+      exportScheduledRef.current = true;
+      exportTimerRef.current = window.setTimeout(() => {
+        exportScheduledRef.current = false;
+        exportTimerRef.current = null;
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const update = docRef.current.exportFrom();
-      wsRef.current.send(JSON.stringify({
-        type: 'loro-update',
-        update: Array.from(update),
-        docId
-      }));
-
-      if (Math.random() < 0.1) {
-        const snapshot = docRef.current.exportSnapshot();
-        wsRef.current.send(JSON.stringify({
-          type: 'snapshot',
-          snapshot: Array.from(snapshot),
-          docId
-        }));
-      }
+          try {
+      // Ensure any pending ops are committed before exporting
+            try { (docRef.current as any).commit?.(); } catch { /* noop */ }
+            const update = docRef.current.exportFrom();
+            // Encode to hex to avoid massive JSON arrays
+            const updateHex = Array.from(update).map(b => b.toString(16).padStart(2, '0')).join('');
+            wsRef.current.send(JSON.stringify({
+              type: 'loro-update',
+              updateHex,
+              docId
+            }));
+          } catch (err) {
+            console.warn('Failed to export/send loro-update:', err);
+          }
+        }
+      }, 80) as unknown as number;
     }
 
     setTimeout(() => {
@@ -2047,12 +2000,37 @@ export function LoroCollaborativePlugin({
             });
             
             if (data.type === 'loro-update' && data.docId === docId) {
-              // Apply remote update to local document
-              const update = new Uint8Array(data.update!);
-              docRef.current.import(update);
+              // Apply remote update to local document (hex or array)
+              let update: Uint8Array | null = null;
+              if (data.updateHex) {
+                const hex: string = data.updateHex as string;
+                const len = hex.length / 2;
+                const buf = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                  buf[i] = parseInt(hex.substr(i * 2, 2), 16);
+                }
+                update = buf;
+              } else if (data.update) {
+                update = new Uint8Array(data.update as number[]);
+              }
+              if (update) {
+                docRef.current.import(update);
+              }
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
               // Apply initial snapshot from server and immediately sync to Lexical
-              const snapshot = new Uint8Array(data.snapshot!);
+              let snapshot: Uint8Array | null = null;
+              if (data.snapshotHex) {
+                const hex: string = data.snapshotHex as string;
+                const len = hex.length / 2;
+                const buf = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                  buf[i] = parseInt(hex.substr(i * 2, 2), 16);
+                }
+                snapshot = buf;
+              } else if (data.snapshot) {
+                snapshot = new Uint8Array(data.snapshot as number[]);
+              }
+              if (!snapshot) return;
               docRef.current.import(snapshot);
               hasReceivedInitialSnapshot.current = true;
               console.log('📄 Lexical editor received and applied initial snapshot');
