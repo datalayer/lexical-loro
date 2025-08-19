@@ -43,6 +43,8 @@ class Client:
 
 
 class LoroWebSocketServer:
+    DOCUMENTS = ['shared-text', 'lexical-shared-doc-v0', 'lexical-shared-doc-v1', 'lexical-shared-doc-v2', 'lexical-shared-doc-v3', 'lexical-shared-doc-v4']
+
     def __init__(self, port: int = 8081):
         self.port = port
         self.clients: Dict[str, Client] = {}
@@ -53,8 +55,6 @@ class LoroWebSocketServer:
         
         # Initialize default documents and ephemeral stores
         self._initialize_documents()
-
-    DOCUMENTS = ['shared-text', 'lexical-shared-doc-v0', 'lexical-shared-doc-v1', 'lexical-shared-doc-v2', 'lexical-shared-doc-v3', 'lexical-shared-doc-v4']
 
     def _initialize_documents(self):
         """Initialize default Loro documents and EphemeralStores"""
