@@ -841,8 +841,8 @@ export function LoroCollaborativePlugin({
   websocketUrl, 
   docId,
   onConnectionChange,
-  onPeerIdChange,
   onDisconnectReady,
+  onPeerIdChange,
   onAwarenessChange
 }: LoroCollaborativePluginProps) {
   const [editor] = useLexicalComposerContext();
@@ -2849,3 +2849,5 @@ export function LoroCollaborativePlugin({
     />
   );
 }
+
+export default LoroCollaborativePlugin;

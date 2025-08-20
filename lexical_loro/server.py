@@ -14,6 +14,10 @@ from websockets.legacy.server import WebSocketServerProtocol
 from loro import LoroDoc, ExportMode, EphemeralStore, EphemeralStoreEvent
 
 
+INITIAL_LEXICAL_JSON = """
+{"editorState":{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Lexical with Loro","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something...","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"paragraph","version":1,"textFormat":0,"textStyle":""}],"direction":null,"format":"","indent":0,"type":"root","version":1}},"lastSaved":1755694807576,"source":"Playground","version":"0.34.0"}
+"""
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -76,9 +80,7 @@ class LoroWebSocketServer:
                         existing = ''
                     if not existing:
                         # Provided initial Lexical JSON content (server-owned initial state)
-                        initial_lexical_json = (
-                            '{"editorState":{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":2,"mode":"normal","style":"","text":"Rich Editor by Datalayer","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1,"textFormat":2,"textStyle":""}],"direction":"ltr","format":"","indent":0,"type":"root","version":1,"textFormat":2}},"lastSaved":1755582735687,"source":"Playground","version":"0.34.0"}'
-                        )
+                        initial_lexical_json = INITIAL_LEXICAL_JSON
                         try:
                             text_container.insert(0, initial_lexical_json)
                             doc.commit()
@@ -488,7 +490,7 @@ class LoroWebSocketServer:
                             logger.error(f"❌ Error reading document content: {content_error}")
                         
                         # Broadcast the update to all other clients
-                        await self.broadcast_to_others(client_id, data)
+                        await self.broadcast_to_other_clientss(client_id, data)
                         logger.info(f"🔄 Broadcasting Loro update from client {client_id} to {len(self.clients) - 1} other clients")
                     except Exception as e:
                         logger.error(f"❌ Error applying Loro update for {doc_id}: {e}")
@@ -568,7 +570,7 @@ class LoroWebSocketServer:
                         logger.error(f"❌ Error exporting snapshot for {doc_id}: {e}")
                 else:
                     # Document doesn't exist, ask other clients to provide one
-                    await self.broadcast_to_others(client_id, {
+                    await self.broadcast_to_other_clientss(client_id, {
                         "type": "snapshot-request",
                         "requesterId": client_id,
                         "docId": doc_id
@@ -652,7 +654,7 @@ class LoroWebSocketServer:
                         
                         # Broadcast ephemeral update
                         ephemeral_data = self.ephemeral_stores[doc_id].encode_all()
-                        await self.broadcast_to_others(client_id, {
+                        await self.broadcast_to_other_clientss(client_id, {
                             "type": "ephemeral-update",
                             "docId": doc_id,
                             "data": ephemeral_data.hex()
@@ -678,7 +680,7 @@ class LoroWebSocketServer:
                     
                     # Broadcast ephemeral update
                     ephemeral_data = self.ephemeral_stores[doc_id].encode_all()
-                    await self.broadcast_to_others(client_id, {
+                    await self.broadcast_to_other_clientss(client_id, {
                         "type": "ephemeral-update",
                         "docId": doc_id,
                         "data": ephemeral_data.hex()
@@ -696,7 +698,7 @@ class LoroWebSocketServer:
         except Exception as e:
             logger.error(f"❌ Error processing message from client {client_id}: {e}")
     
-    async def broadcast_to_others(self, sender_id: str, message: dict):
+    async def broadcast_to_other_clientss(self, sender_id: str, message: dict):
         """Broadcast a message to all clients except the sender"""
         if len(self.clients) <= 1:
             return
@@ -760,7 +762,7 @@ class LoroWebSocketServer:
                                     if client_state is not None:
                                         ephemeral_store.delete(client_id)
                                         # Broadcast removal
-                                        await self.broadcast_to_others(client_id, {
+                                        await self.broadcast_to_other_clientss(client_id, {
                                             "type": "ephemeral-update",
                                             "docId": doc_id,
                                             "data": ephemeral_store.encode_all().hex(),

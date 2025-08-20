@@ -4,7 +4,6 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -16,9 +15,10 @@
     "test:py:coverage": "python3 -m pytest lexical_loro/tests/ --cov=. --cov-report=html --cov-report=term",
     "test": "vitest",
     "test:js": "vitest run",
-    "dev:all": "concurrently \"npm run server\" \"npm run server:py\" \"npm run dev\"",
-    "dev:all:py": "concurrently \"npm run server:py\" \"npm run dev\"",
-    "dev:all:js": "concurrently \"npm run server\" \"npm run dev\""
+    "dev": "concurrently \"npm run server\" \"npm run server:py\" \"npm run dev:vite\"",
+    "dev:vite": "vite",
+    "dev:all:py": "concurrently \"npm run server:py\" \"npm run dev:vite\"",
+    "dev:all:js": "concurrently \"npm run server\" \"npm run dev:vite\""
   },
   "dependencies": {
     "@lexical/code": "^0.33.1",
