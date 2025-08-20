@@ -10,8 +10,11 @@ import { TablePlugin } from '@lexical/react/LexicalTablePlugin';
 import { ListItemNode, ListNode } from '@lexical/list';
 import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
-import { LoroCollaborativePlugin } from './LoroCollaborativePlugin';
 import { LexicalToolbar } from './LexicalToolbar';
+import { CounterNode } from './CounterNode';
+import LoroCollaborativePlugin from './LoroCollaborativePlugin0';
+
+import "./LexicalCollaborativeEditor.css";
 
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
@@ -98,7 +101,9 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   onConnectionChange
 }) => {
   const [isConnected, setIsConnected] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [peerId, setPeerId] = useState<string>('');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   const disconnectRef = useRef<(() => void) | null>(null);
 
@@ -130,6 +135,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       TableRowNode,
       AutoLinkNode,
       LinkNode,
+      CounterNode,
     ],
   };
 
@@ -198,15 +204,17 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           />
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
-          <LoroCollaborativePlugin 
+          <LoroCollaborativePlugin
             websocketUrl={websocketUrl} 
             docId="lexical-shared-doc" 
             onConnectionChange={handleConnectionChange}
+            /*
             onPeerIdChange={setPeerId}
             onAwarenessChange={setAwarenessData}
             onDisconnectReady={(disconnectFn) => {
               disconnectRef.current = disconnectFn;
             }}
+            */
           />
         </div>
       </LexicalComposer>

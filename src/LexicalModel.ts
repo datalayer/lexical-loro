@@ -18,8 +18,8 @@ export class LexicalModel {
       try {
         const s = state.editorState as LexicalEditorState;
         this.callbacks.forEach((cb) => cb(s));
-      } catch (e) {
-        // swallow
+      } catch (e: unknown) {
+        console.error(e)
       }
     });
   }

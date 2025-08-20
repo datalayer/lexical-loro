@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LoroDoc, LoroMap } from 'loro-crdt';
-import './CollaborativeEditor.css';
 
-interface CollaborativeEditorProps {
+import './TextAreaCollaborativeEditor.css';
+
+interface ITextAreaCollaborativeEditorProps {
   websocketUrl?: string;
   onConnectionChange?: (connected: boolean) => void;
 }
 
-export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
+export const TextAreaCollaborativeEditor: React.FC<ITextAreaCollaborativeEditorProps> = ({
   websocketUrl = 'ws://localhost:8081',
   onConnectionChange
 }) => {

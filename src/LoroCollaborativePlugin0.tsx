@@ -8,6 +8,7 @@ import {
   type Subscription,
 } from 'loro-crdt';
 import { $getNodeByKey, TextNode } from 'lexical';
+import { CounterNode } from './CounterNode';
 
 interface LoroCollaborativePlugin0Props {
   websocketUrl: string;
@@ -17,7 +18,7 @@ interface LoroCollaborativePlugin0Props {
   debug?: boolean;
 }
 
-export function LoroCollaborativePlugin0({ websocketUrl, docId, containerId, onConnectionChange, debug = false }: LoroCollaborativePlugin0Props) {
+export default function LoroCollaborativePlugin0({ websocketUrl, docId, containerId, onConnectionChange, debug = false }: LoroCollaborativePlugin0Props) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
   const docRef = useRef<LoroDoc>(new LoroDoc());
@@ -188,10 +189,17 @@ export function LoroCollaborativePlugin0({ websocketUrl, docId, containerId, onC
   }, [editor]);
 
   useEffect(() => {
-    const removeTransform = editor.registerNodeTransform(TextNode, (textNode) => {
-      if (textNode.getTextContent() === 'blue') {
-        textNode.setTextContent('green');
+    const removeTransform = editor.registerNodeTransform(TextNode, (node) => {
+      if (node.getTextContent() === 'blue') {
+        node.setTextContent('green');
       }
+    });
+    return removeTransform;
+  }, [editor]);
+
+  useEffect(() => {
+    const removeTransform = editor.registerNodeTransform(CounterNode, (node) => {
+      console.log('-----', node);
     });
     return removeTransform;
   }, [editor]);

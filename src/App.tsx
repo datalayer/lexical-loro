@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react'
-import './App.css'
-import './CollaborativeEditor.css'
-import './LexicalCollaborativeEditor.css'
-import { CollaborativeEditor } from './CollaborativeEditor'
+import { TextAreaCollaborativeEditor } from './TextAreaCollaborativeEditor'
 import { LexicalCollaborativeEditor } from './LexicalCollaborativeEditor'
 import { ServerSelector } from './ServerSelector'
 
+import './App.css'
+
 type TabType = 'textarea' | 'lexical';
+
 type ServerType = 'nodejs' | 'python';
 
 function App() {
@@ -59,8 +59,8 @@ function App() {
           
           <div className="tab-content">
             {activeTab === 'textarea' && (
-              <CollaborativeEditor 
-                websocketUrl={websocketUrl} 
+              <TextAreaCollaborativeEditor
+                websocketUrl={websocketUrl}
                 onConnectionChange={handleConnectionChange}
               />
             )}
