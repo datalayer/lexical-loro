@@ -3,6 +3,18 @@
   "private": false,
   "version": "0.0.1",
   "type": "module",
+  "files": [
+    "lib/**/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datalayer/lexical-loro.git",
+  },
+  "author": "Datalayer <info@datalayer.io>",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b && vite build",
     "lint": "eslint .",
