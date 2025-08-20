@@ -31,8 +31,6 @@
     "@lexical/selection": "^0.33.1",
     "@lexical/table": "^0.33.1",
     "@lexical/utils": "^0.33.1",
-    "@loro-mirror/core": "0.1.0",
-    "@loro-mirror/react": "0.1.0",
     "lexical": "^0.33.1",
     "loro-crdt": "^1.5.10",
     "react": "^19.1.0",

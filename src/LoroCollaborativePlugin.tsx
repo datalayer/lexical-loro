@@ -21,7 +21,7 @@ import {
 import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc, LoroText, Cursor, EphemeralStore } from 'loro-crdt';
-import type { EphemeralStoreEvent, PeerID } from 'loro-crdt';
+import type { EphemeralStoreEvent, PeerID, VersionVector } from 'loro-crdt';
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
@@ -858,6 +858,9 @@ export function LoroCollaborativePlugin({
   const [clientId, setClientId] = useState<string>('');
   const [clientColor, setClientColor] = useState<string>('');
   const peerIdRef = useRef<string>(''); // Changed from numericPeerIdRef to handle string IDs
+  
+  // Version vector state for optimized updates
+  const [lastSentVersionVector, setLastSentVersionVector] = useState<VersionVector | null>(null);
   const isConnectingRef = useRef<boolean>(false);
   const [forceUpdate, setForceUpdate] = useState(0); // Force cursor re-render
   const cursorTimestamps = useRef<Record<string, number>>({});
@@ -929,7 +932,16 @@ export function LoroCollaborativePlugin({
     
     // Send update to WebSocket server
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const update = docRef.current.exportFrom();
+      // Use the new export method with version vector optimization
+      const currentVersion = docRef.current.version();
+      const update = docRef.current.export({ 
+        mode: "update", 
+        from: lastSentVersionVector || undefined 
+      });
+      
+      // Update the last sent version vector
+      setLastSentVersionVector(currentVersion);
+      
       wsRef.current.send(JSON.stringify({
         type: 'loro-update',
         update: Array.from(update),
@@ -938,7 +950,7 @@ export function LoroCollaborativePlugin({
 
       // Also send a snapshot occasionally to keep server state updated
       if (Math.random() < 0.1) { // 10% chance to send snapshot
-        const snapshot = docRef.current.exportSnapshot();
+        const snapshot = docRef.current.export({ mode: "snapshot" });
         wsRef.current.send(JSON.stringify({
           type: 'snapshot',
           snapshot: Array.from(snapshot),
@@ -951,7 +963,7 @@ export function LoroCollaborativePlugin({
     setTimeout(() => {
       isLocalChange.current = false;
     }, 50);
-  }, [docId]);
+  }, [docId, lastSentVersionVector, setLastSentVersionVector]);
 
   const updateLexicalFromLoro = useCallback((editor: LexicalEditor, incoming: string) => {
     if (isLocalChange.current) return; // Don't update if this is a local change
@@ -1974,6 +1986,9 @@ export function LoroCollaborativePlugin({
           console.log('🔗 Lexical editor connected to WebSocket server');
           stableOnConnectionChange.current?.(true);
           
+          // Initialize version vector for optimized updates
+          setLastSentVersionVector(docRef.current.version());
+          
           // Provide disconnect function to parent component
           const disconnectFn = () => {
             if (wsRef.current) {
@@ -2116,7 +2131,7 @@ export function LoroCollaborativePlugin({
               editor.getEditorState().read(() => {
                 const currentText = $getRoot().getTextContent();
                 if (currentText.length > 0) {
-                  const snapshot = docRef.current.exportSnapshot();
+                  const snapshot = docRef.current.export({ mode: "snapshot" });
                   ws.send(JSON.stringify({
                     type: 'snapshot',
                     snapshot: Array.from(snapshot),
