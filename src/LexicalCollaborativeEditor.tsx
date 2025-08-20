@@ -208,13 +208,9 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             websocketUrl={websocketUrl} 
             docId="lexical-shared-doc" 
             onConnectionChange={handleConnectionChange}
-            /*
-            onPeerIdChange={setPeerId}
-            onAwarenessChange={setAwarenessData}
             onDisconnectReady={(disconnectFn) => {
               disconnectRef.current = disconnectFn;
             }}
-            */
           />
         </div>
       </LexicalComposer>

@@ -21,7 +21,7 @@ class LoroWebSocketServer {
   private wss: WebSocketServer;
   private clients: Map<string, Client> = new Map();
   private port: number;
-  private documentSnapshots: Map<string, Uint8Array> = new Map(); // Store snapshots per docId
+  private documents: Map<string, Uint8Array> = new Map(); // Store snapshots per docId
 
   constructor(port: number = 8080) {
     this.port = port;
@@ -48,8 +48,8 @@ class LoroWebSocketServer {
 
       // Send current document snapshot to the new client if available
       // For now, send snapshots for both known document types
-      const sharedTextSnapshot = this.documentSnapshots.get('shared-text');
-      const lexicalSnapshot = this.documentSnapshots.get('lexical-shared-doc');
+      const sharedTextSnapshot = this.documents.get('shared-text');
+      const lexicalSnapshot = this.documents.get('lexical-shared-doc');
       
       if (sharedTextSnapshot && sharedTextSnapshot.length > 0) {
         const hex = Array.from(sharedTextSnapshot).map((b: number) => b.toString(16).padStart(2, '0')).join('');
@@ -95,18 +95,18 @@ class LoroWebSocketServer {
               const len = hex.length / 2;
               const buf = new Uint8Array(len);
               for (let i = 0; i < len; i++) buf[i] = parseInt(hex.substr(i * 2, 2), 16);
-              this.documentSnapshots.set(docId, buf);
+              this.documents.set(docId, buf);
             } else if (message.snapshot) {
-              this.documentSnapshots.set(docId, new Uint8Array(message.snapshot));
+              this.documents.set(docId, new Uint8Array(message.snapshot));
             }
             console.log(`📄 Updated snapshot for document ${docId} from client ${clientId}`);
           } else if (message.type === 'request-snapshot') {
             // Client is requesting the current snapshot for a specific document
             const docId = message.docId || 'shared-text';
-            const snapshot = this.documentSnapshots.get(docId);
+            const document = this.documents.get(docId);
             
-            if (snapshot && snapshot.length > 0) {
-              const hex = Array.from(snapshot as Uint8Array).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+            if (document && document.length > 0) {
+              const hex = Array.from(document as Uint8Array).map((b: number) => b.toString(16).padStart(2, '0')).join('');
               ws.send(JSON.stringify({ type: 'initial-snapshot', snapshotHex: hex, docId }));
               console.log(`📄 Sent requested snapshot for ${docId} to client ${clientId}`);
             } else {

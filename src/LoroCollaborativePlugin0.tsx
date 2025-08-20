@@ -15,15 +15,32 @@ interface LoroCollaborativePlugin0Props {
   docId: string;
   containerId?: ContainerID;
   onConnectionChange?: (connected: boolean) => void;
+  onDisconnectReady?: (disconnectFn: () => void) => void;
   debug?: boolean;
 }
 
-export default function LoroCollaborativePlugin0({ websocketUrl, docId, containerId, onConnectionChange, debug = false }: LoroCollaborativePlugin0Props) {
+export default function LoroCollaborativePlugin0({ websocketUrl, docId, containerId, onConnectionChange, onDisconnectReady, debug = false }: LoroCollaborativePlugin0Props) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
   const docRef = useRef<LoroDoc>(new LoroDoc());
   const mapRef = useRef<LoroMap | null>(null);
   const unsubscribeRef = useRef<Subscription | null>(null);
+
+  // Disconnect function
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    onConnectionChange?.(false);
+  }, [onConnectionChange]);
+
+  // Expose disconnect function to parent
+  useEffect(() => {
+    onDisconnectReady?.(disconnect);
+  }, [onDisconnectReady, disconnect]);
 
   // Hex -> Uint8Array (browser-safe)
   const hexToBytes = (hex: string): Uint8Array => {
@@ -130,10 +147,9 @@ export default function LoroCollaborativePlugin0({ websocketUrl, docId, containe
     };
 
     return () => {
-      ws.close();
-      onConnectionChange?.(false);
+      disconnect();
     };
-  }, [websocketUrl, onConnectionChange, debug, docId]);
+  }, [websocketUrl, onConnectionChange, debug, docId, disconnect]);
 
   // Event-driven updates (ProseMirror sync-plugin style):
   // - subscribe to doc or container
