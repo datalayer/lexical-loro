@@ -1,0 +1,71 @@
+{
+  "name": "@datalayer/lexical-loro",
+  "private": false,
+  "version": "0.0.1",
+  "type": "module",
+  "files": [
+    "lib/**/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datalayer/lexical-loro.git",
+  },
+  "author": "Datalayer <info@datalayer.io>",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "server": "tsx servers/server.ts",
+    "server:py": "lexical-loro-server",
+    "server:py:dev": "python3 -m lexical_loro.cli",
+    "test:py": "python3 -m pytest lexical_loro/tests/ -v",
+    "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f",
+    "test:py:coverage": "python3 -m pytest lexical_loro/tests/ --cov=. --cov-report=html --cov-report=term",
+    "test": "vitest",
+    "test:js": "vitest run",
+    "dev": "concurrently \"npm run server\" \"npm run server:py\" \"npm run dev:vite\"",
+    "dev:vite": "vite",
+    "dev:all:py": "concurrently \"npm run server:py\" \"npm run dev:vite\"",
+    "dev:all:js": "concurrently \"npm run server\" \"npm run dev:vite\""
+  },
+  "dependencies": {
+    "@lexical/code": "^0.33.1",
+    "@lexical/history": "^0.33.1",
+    "@lexical/html": "^0.33.1",
+    "@lexical/list": "^0.33.1",
+    "@lexical/plain-text": "^0.33.1",
+    "@lexical/react": "^0.33.1",
+    "@lexical/rich-text": "^0.33.1",
+    "@lexical/selection": "^0.33.1",
+    "@lexical/table": "^0.33.1",
+    "@lexical/utils": "^0.33.1",
+    "lexical": "^0.33.1",
+    "loro-crdt": "^1.5.10",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^9.2.0",
+    "eslint": "^9.30.1",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+  "vitest": "^2.1.4",
+    "tsx": "^4.20.3",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vite": "^7.0.4",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
+  }
+}
