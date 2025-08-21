@@ -199,6 +199,46 @@ The application uses Loro CRDT to manage collaborative editing across two differ
 4. **Synchronization**: Changes are serialized and sent to other clients via WebSocket with document ID
 5. **Conflict Resolution**: Loro CRDT automatically merges changes without conflicts
 
+The Complete Flow Diagram
+
+
+Remote User Types
+       ↓
+WebSocket Message
+       ↓
+loro-update received
+       ↓ 
+loroDocRef.current.import(update)
+       ↓
+doc.subscribe() callback fires
+       ↓
+updateLexicalFromLoro(editor, newText)
+       ↓
+editor.update() with new content
+       ↓
+Lexical State Updated
+       ↓
+UI Re-renders with New Content
+
+Protection Against Infinite Loops
+
+The system uses several mechanisms to prevent loops:
+
+isLocalChange.current flag - Prevents local changes from triggering remote updates
+{ tag: 'collaboration' } on editor.update() - Allows the update listener to ignore these changes
+JSON comparison in updateLexicalFromLoro to avoid redundant updates
+
+When a Loro update is received, the Lexical state is updated through:
+
+WebSocket receives loro-update message
+
+loroDocRef.current.import(update) applies the change to Loro
+doc.subscribe() callback automatically fires
+updateLexicalFromLoro() converts Loro text to Lexical state
+editor.setEditorState() or DOM manipulation updates the editor
+
+The bridge is the doc.subscribe() callback on line 1901 - this is what makes Lexical automatically reflect any Loro document changes!
+
 ### Lexical Integration
 
 The Lexical editor integration includes:

@@ -878,8 +878,8 @@ export function LoroCollaborativePlugin({
 }: LoroCollaborativePluginProps) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
-  const docRef = useRef<LoroDoc>(new LoroDoc());
-  const textRef = useRef<LoroText | null>(null);
+  const loroDocRef = useRef<LoroDoc>(new LoroDoc());
+  const loroTextRef = useRef<LoroText | null>(null);
   const isLocalChange = useRef(false);
   const hasReceivedInitialSnapshot = useRef(false);
   
@@ -897,7 +897,7 @@ export function LoroCollaborativePlugin({
   const cursorTimestamps = useRef<Record<string, number>>({});
 
   const updateLoroFromLexical = useCallback((editorState: EditorState) => {
-    if (!textRef.current) return;
+    if (!loroTextRef.current) return;
     
     let editorStateJson = '';
     editorState.read(() => {
@@ -906,7 +906,7 @@ export function LoroCollaborativePlugin({
       editorStateJson = JSON.stringify(serialized);
     });
     
-    const currentLoroText = textRef.current.toString();
+    const currentLoroText = loroTextRef.current.toString();
     if (currentLoroText === editorStateJson) return;
 
     // Mark this as a local change
@@ -942,7 +942,7 @@ export function LoroCollaborativePlugin({
         // Delete the changed portion
         const deleteLength = suffixStart - prefixEnd;
         if (deleteLength > 0) {
-          textRef.current.delete(prefixEnd, deleteLength);
+          loroTextRef.current.delete(prefixEnd, deleteLength);
         }
       }
       
@@ -950,22 +950,22 @@ export function LoroCollaborativePlugin({
         // Insert the new content
         const insertText = newContent.substring(prefixEnd, newSuffixStart);
         if (insertText.length > 0) {
-          textRef.current.insert(prefixEnd, insertText);
+          loroTextRef.current.insert(prefixEnd, insertText);
         }
       }
       
     } catch (error) {
       console.warn('Error with incremental update, falling back to full replacement:', error);
       // Fallback to full replacement if incremental update fails
-      textRef.current.delete(0, currentLoroText.length);
-      textRef.current.insert(0, editorStateJson);
+      loroTextRef.current.delete(0, currentLoroText.length);
+      loroTextRef.current.insert(0, editorStateJson);
     }
     
     // Send update to WebSocket server
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       // Use the new export method with version vector optimization
-      const currentVersion = docRef.current.version();
-      const update = docRef.current.export({ 
+      const currentVersion = loroDocRef.current.version();
+      const update = loroDocRef.current.export({ 
         mode: "update", 
         from: lastSentVersionVector || undefined 
       });
@@ -981,7 +981,7 @@ export function LoroCollaborativePlugin({
 
       // Also send a snapshot occasionally to keep server state updated
       if (Math.random() < 0.1) { // 10% chance to send snapshot
-        const snapshot = docRef.current.export({ mode: "snapshot" });
+        const snapshot = loroDocRef.current.export({ mode: "snapshot" });
         wsRef.current.send(JSON.stringify({
           type: 'snapshot',
           snapshot: Array.from(snapshot),
@@ -1092,7 +1092,7 @@ export function LoroCollaborativePlugin({
 
   // Send cursor position using Awareness
   const updateCursorAwareness = useCallback(() => {
-    if (!awarenessRef.current || !textRef.current) return;
+    if (!awarenessRef.current || !loroTextRef.current) return;
     
     editor.getEditorState().read(() => {
       const selection = $getSelection();
@@ -1130,8 +1130,8 @@ export function LoroCollaborativePlugin({
           const focusKey = selection.focus.key;
           const focusOffset = selection.focus.offset;
           
-          const anchor = awarenessRef.current!.createLoroPosition(anchorKey, anchorOffset, textRef.current!);
-          const focus = awarenessRef.current!.createLoroPosition(focusKey, focusOffset, textRef.current!);
+          const anchor = awarenessRef.current!.createLoroPosition(anchorKey, anchorOffset, loroTextRef.current!);
+          const focus = awarenessRef.current!.createLoroPosition(focusKey, focusOffset, loroTextRef.current!);
           
           if (!anchor || !focus) {
             console.warn('❌ Failed to create Loro cursors');
@@ -1195,8 +1195,7 @@ export function LoroCollaborativePlugin({
 
   useEffect(() => {
     // Initialize Loro document and text object
-    const doc = docRef.current;
-    textRef.current = doc.getText(docId);
+    loroTextRef.current = loroDocRef.current.getText(docId);
     
     // Only initialize awareness if it doesn't exist yet
     if (!awarenessRef.current) {
@@ -1204,7 +1203,7 @@ export function LoroCollaborativePlugin({
       // We'll update this with the actual client ID when we receive the welcome message
       const tempNumericId = Date.now(); // Temporary ID until we get the real client ID
       peerIdRef.current = tempNumericId.toString();
-      awarenessRef.current = new CursorAwareness(tempNumericId.toString() as PeerID, doc);
+      awarenessRef.current = new CursorAwareness(tempNumericId.toString() as PeerID, loroDocRef.current);
       
       console.log('🎯 Initializing awareness with temporary numeric ID:', tempNumericId, '(will be updated with client ID)');
     } else {
@@ -1898,10 +1897,10 @@ export function LoroCollaborativePlugin({
     });
     
     // Subscribe to Loro document changes
-    const unsubscribe = doc.subscribe(() => {
+    const unsubscribe = loroDocRef.current.subscribe(() => {
       if (!isLocalChange.current) {
         // This is a remote change, update Lexical editor
-        const currentText = textRef.current?.toString() || '';
+        const currentText = loroTextRef.current?.toString() || '';
         updateLexicalFromLoro(editor, currentText);
       }
       // Force cursor re-render when document changes (content affects cursor positioning)
@@ -2020,7 +2019,7 @@ export function LoroCollaborativePlugin({
           stableOnConnectionChange.current?.(true);
           
           // Initialize version vector for optimized updates
-          setLastSentVersionVector(docRef.current.version());
+          setLastSentVersionVector(loroDocRef.current.version());
           
           // Provide disconnect function to parent component
           const disconnectFn = () => {
@@ -2051,16 +2050,16 @@ export function LoroCollaborativePlugin({
             if (data.type === 'loro-update' && data.docId === docId) {
               // Apply remote update to local document
               const update = new Uint8Array(data.update!);
-              docRef.current.import(update);
+              loroDocRef.current.import(update);
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
               // Apply initial snapshot from server and immediately sync to Lexical
               const snapshot = new Uint8Array(data.snapshot!);
-              docRef.current.import(snapshot);
+              loroDocRef.current.import(snapshot);
               hasReceivedInitialSnapshot.current = true;
               console.log('📄 Lexical editor received and applied initial snapshot');
               // Immediately reflect the current Loro text into the editor after import
               try {
-                const currentText = docRef.current.getText(docId).toString();
+                const currentText = loroDocRef.current.getText(docId).toString();
                 updateLexicalFromLoro(editor, currentText);
               } catch (e) {
                 console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
@@ -2129,7 +2128,7 @@ export function LoroCollaborativePlugin({
                   peerIdRef.current = data.clientId;
                   
                   // Create a new CursorAwareness instance with the client ID as peer ID
-                  awarenessRef.current = new CursorAwareness(data.clientId as PeerID, docRef.current);
+                  awarenessRef.current = new CursorAwareness(data.clientId as PeerID, loroDocRef.current);
                   
                   console.log('🎯 Updated awareness to use client ID as peer ID:', data.clientId);
                   
@@ -2164,7 +2163,7 @@ export function LoroCollaborativePlugin({
               editor.getEditorState().read(() => {
                 const currentText = $getRoot().getTextContent();
                 if (currentText.length > 0) {
-                  const snapshot = docRef.current.export({ mode: "snapshot" });
+                  const snapshot = loroDocRef.current.export({ mode: "snapshot" });
                   ws.send(JSON.stringify({
                     type: 'snapshot',
                     snapshot: Array.from(snapshot),
