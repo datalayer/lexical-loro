@@ -8,7 +8,7 @@ import {
   type Subscription,
 } from 'loro-crdt';
 import { $getNodeByKey, TextNode } from 'lexical';
-import { CounterNode } from '../CounterNode';
+import { CounterNode } from '../examples/CounterNode';
 
 interface LoroCollaborativePlugin0Props {
   websocketUrl: string;

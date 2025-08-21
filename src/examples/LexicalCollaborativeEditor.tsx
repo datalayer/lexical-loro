@@ -12,7 +12,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import LoroCollaborativePlugin from './LoroCollaborativePlugin';
+import LoroCollaborativePlugin from '../LoroCollaborativePlugin';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
