@@ -35,6 +35,16 @@ export function CounterComponent({ editor, nodeKey }: { editor: LexicalEditor; n
     [editor, nodeKey]
   );
 
+  const reset = useCallback(() => {
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey) as CounterNode | null;
+      if (!node) return;
+      node.setCount(0);
+      $setState(node, counterValueState, 0);
+      setValue(0);
+    });
+  }, [editor, nodeKey]);
+
   const styles = useMemo(
     () => ({
       wrapper: { display: 'flex', alignItems: 'center', gap: '8px' },
@@ -46,11 +56,32 @@ export function CounterComponent({ editor, nodeKey }: { editor: LexicalEditor; n
         border: '1px solid #ddd',
         borderRadius: '4px',
       },
-      btn: {
+      minus: {
+        padding: '2px 8px',
+        borderRadius: '4px',
+        border: '1px solid #d32f2f',
+        background: 'linear-gradient(90deg, #ffebee 60%, #ffcdd2 100%)',
+        color: '#b71c1c',
+        fontWeight: 'bold',
+        boxShadow: '0 0 4px #d32f2f44',
+        cursor: 'pointer',
+      },
+      plus: {
+        padding: '2px 8px',
+        borderRadius: '4px',
+        border: '1px solid #388e3c',
+        background: 'linear-gradient(90deg, #e8f5e9 60%, #a5d6a7 100%)',
+        color: '#1b5e20',
+        fontWeight: 'bold',
+        boxShadow: '0 0 4px #388e3c44',
+        cursor: 'pointer',
+      },
+      reset: {
         padding: '2px 8px',
         borderRadius: '4px',
         border: '1px solid #ccc',
-        background: '#f5f5f5',
+        background: '#e3e3e3',
+        color: '#333',
         cursor: 'pointer',
       },
     }),
@@ -59,12 +90,15 @@ export function CounterComponent({ editor, nodeKey }: { editor: LexicalEditor; n
 
   return (
     <div style={styles.wrapper as React.CSSProperties}>
-      <span style={styles.label as React.CSSProperties}>Counter: {value}</span>
-      <button type="button" style={styles.btn as React.CSSProperties} onClick={() => update(+1)}>
-        +1
+      <button type="button" style={styles.minus as React.CSSProperties} onClick={() => update(-1)}>
+        -
       </button>
-      <button type="button" style={styles.btn as React.CSSProperties} onClick={() => update(-1)}>
-        -1
+      <span style={styles.label as React.CSSProperties}>Counter: {value}</span>
+      <button type="button" style={styles.plus as React.CSSProperties} onClick={() => update(+1)}>
+        +
+      </button>
+      <button type="button" style={styles.reset as React.CSSProperties} onClick={reset}>
+        R
       </button>
     </div>
   );
