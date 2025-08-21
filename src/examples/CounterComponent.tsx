@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { $getNodeByKey, $getState, $setState, type LexicalEditor, type NodeKey } from 'lexical';
 import { CounterNode } from './CounterNode';

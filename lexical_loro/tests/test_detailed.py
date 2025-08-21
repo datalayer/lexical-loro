@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2023-2025 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
 from loro import LoroDoc
 
 print("=== Testing Loro Python API ===")
