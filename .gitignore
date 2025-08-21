@@ -21,6 +21,7 @@ htmlcov
 dist
 
 __pycache__
+lexical_loro/__version__.py
 
 # Editor directories and files
 .vscode/*

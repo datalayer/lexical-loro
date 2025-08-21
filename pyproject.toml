@@ -1,16 +1,11 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-nodejs-version"]
 build-backend = "hatchling.build"
 
 [project]
 name = "lexical-loro"
-version = "0.1.0"
-description = "Python package for Lexical + Loro CRDT integration"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [
-    { name = "Datalayer", email = "eric@datalayer.io" },
-]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -31,6 +26,7 @@ dependencies = [
     "click>=8.0.0",
     "loro>=0.18.0",
 ]
+dynamic = ["version", "description", "authors", "keywords"]
 
 [project.optional-dependencies]
 dev = [
@@ -55,6 +51,12 @@ Issues = "https://github.com/datalayer/lexical-loro/issues"
 
 [project.scripts]
 lexical-loro-server = "lexical_loro.cli:main"
+
+[tool.hatch.version]
+source = "nodejs"
+
+[tool.hatch.build.hooks.version]
+path = "lexical_loro/__version__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lexical_loro"]
