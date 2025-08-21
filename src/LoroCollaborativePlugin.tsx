@@ -129,8 +129,39 @@ function $findNodeByStableId(stableNodeId: string): LexicalNode | null {
 function $resolveStablePosition(stablePos: StablePosition): {key: NodeKey, offset: number} | null {
   const node = $findNodeByStableId(stablePos.stableNodeId);
   if (!node) {
-    console.warn('❌ Could not find node for stable ID:', stablePos.stableNodeId);
-    return null;
+    console.warn('❌ Could not find node for stable ID:', stablePos.stableNodeId, '- using document end fallback');
+    
+    // ROBUST FALLBACK: When stable UUID can't be resolved (node doesn't exist yet),
+    // position cursor at end of document instead of failing
+    const root = $getRoot();
+    const children = root.getChildren();
+    
+    // Find the last text node in the document
+    for (let i = children.length - 1; i >= 0; i--) {
+      const child = children[i];
+      if ($isElementNode(child)) {
+        const textChildren = child.getChildren().filter($isTextNode);
+        if (textChildren.length > 0) {
+          const lastText = textChildren[textChildren.length - 1];
+          console.log('✅ Fallback: Using end of last text node:', {
+            nodeKey: lastText.getKey(),
+            textLength: lastText.getTextContentSize(),
+            stableIdThatFailed: stablePos.stableNodeId
+          });
+          return {
+            key: lastText.getKey(),
+            offset: lastText.getTextContentSize()
+          };
+        }
+      }
+    }
+    
+    // If no text nodes found, use root
+    console.log('✅ Fallback: Using root node (no text nodes found)');
+    return {
+      key: root.getKey(),
+      offset: 0
+    };
   }
   
   return {
@@ -1400,12 +1431,14 @@ export function LoroCollaborativePlugin({
                   type: 'text' as const
                 };
               } else {
-                console.warn('❌ Failed to resolve stable UUID positions:', {
+                console.log('🔄 STABLE UUID RESOLUTION FAILED - positions will use document fallback:', {
                   anchorStableId: stableCursor.anchorStableId,
                   focusStableId: stableCursor.focusStableId,
                   anchorResolved: !!anchorResolved,
-                  focusResolved: !!focusResolved
+                  focusResolved: !!focusResolved,
+                  note: 'Fallback positioning will be used - this prevents (0,0) cursor jumps'
                 });
+                // anchorPos and focusPos will remain undefined, triggering legacy fallback
               }
             }
             // FALLBACK: Legacy NodeKey-based approach (for backwards compatibility)
