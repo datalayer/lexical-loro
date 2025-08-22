@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 /**
  * Lexical editor theme configuration
  * Defines CSS class names for different editor elements
