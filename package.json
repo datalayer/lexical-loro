@@ -31,38 +31,34 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "clean": "rimraf dist lib",
+    "dev": "npm run example",
+    "dev:all:js": "npm run example:js",
+    "dev:all:py": "npm run example:py",
+    "dev:vite": "npm run example:vite",
+    "example": "concurrently \"npm run server\" \"npm run server:py\" \"npm run example:vite\"",
+    "example:js": "concurrently \"npm run server\" \"npm run example:vite\"",    
+    "example:py": "concurrently \"npm run server:py\" \"npm run example:vite\"",
+    "example:vite": "vite",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:js": "vitest run",
-    
     "server": "tsx servers/server.ts",
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
-    
+    "test": "vitest",
+    "test:js": "vitest run",
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",
-    "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f",
     "test:py:coverage": "python3 -m pytest lexical_loro/tests/ --cov=. --cov-report=html --cov-report=term",
-    
-    "example": "concurrently \"npm run server\" \"npm run server:py\" \"npm run example:vite\"",
-    "example:vite": "vite",
-    "example:py": "concurrently \"npm run server:py\" \"npm run example:vite\"",
-    "example:js": "concurrently \"npm run server\" \"npm run example:vite\"",
-    
-    "dev": "npm run example",
-    "dev:vite": "npm run example:vite",
-    "dev:all:py": "npm run example:py",
-    "dev:all:js": "npm run example:js"
+    "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f"
   },
-  "peerDependencies": {
+  "dependencies": {
+    "loro-crdt": "^1.5.10",
     "react": "^18 || ^19.1.0",
     "react-dom": "^18 || ^19.1.0",
     "lexical": "^0.33.1",
     "@lexical/react": "^0.33.1",
     "@lexical/selection": "^0.33.1"
   },
-  "dependencies": {
-    "loro-crdt": "^1.5.10"
+  "peerDependencies": {
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

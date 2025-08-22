@@ -2,9 +2,9 @@
 
 [![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)
 
-# Lexical Loro - Collaborative Plugin for Lexical based on Loro CRDT
+# ✍️ 🦜 Lexical Loro - Collaborative Plugin for Lexical based on Loro CRDT
 
-A collaborative editing plugin for [Lexical](https://github.com/facebook/lexical) built with [Loro CRDT](https://github.com/loro-dev), providing real-time collaborative editing capabilities with conflict-free synchronization.
+A collaborative editing plugin for [Lexical](https://github.com/facebook/lexical) rich editor built with [Loro](https://github.com/loro-dev) CRDT, providing real-time collaborative editing capabilities with conflict-free synchronization.
 
 ## Core Components
 
@@ -496,6 +496,3 @@ This project is open source and available under the [MIT License](LICENSE).
 - [Lexical](https://lexical.dev/) - Facebook's extensible text editor framework  
 - [React](https://reactjs.org/) - UI library for plugin hooks
 - [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) - Real-time communication
-
-
-

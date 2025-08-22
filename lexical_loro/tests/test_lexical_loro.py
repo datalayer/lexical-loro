@@ -41,16 +41,16 @@ def test_server_documents_initialization():
     # Check that default documents are created
     expected_docs = [
         'shared-text', 
-        'lexical-shared-doc-v0', 
-        'lexical-shared-doc-v1', 
-        'lexical-shared-doc-v2', 
-        'lexical-shared-doc-v3', 
-        'lexical-shared-doc-v4'
+        'lexical-shared-doc'
     ]
     
     for doc_id in expected_docs:
         assert doc_id in server.loro_docs
         assert doc_id in server.ephemeral_stores
+    
+    # Verify the documents are properly initialized LoroDoc instances
+    assert len(server.loro_docs) == len(expected_docs)
+    assert len(server.ephemeral_stores) == len(expected_docs)
 
 
 def test_client_id_generation():
