@@ -3,8 +3,12 @@
   "private": false,
   "version": "0.0.1",
   "type": "module",
+  "description": "Collaborative editing plugin for Lexical based on Loro CRDT",
+  "main": "lib/LoroCollaborativePlugin.js",
+  "types": "lib/LoroCollaborativePlugin.d.ts",
   "files": [
-    "lib/**/*"
+    "lib/**/*",
+    "src/LoroCollaborativePlugin.tsx"
   ],
   "repository": {
     "type": "git",
@@ -15,31 +19,50 @@
   "publishConfig": {
     "access": "public"
   },
+  "keywords": [
+    "lexical",
+    "loro",
+    "crdt",
+    "collaborative",
+    "editor",
+    "plugin",
+    "react"
+  ],
   "scripts": {
     "build": "tsc -b && vite build",
     "clean": "rimraf dist lib",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:js": "vitest run",
+    
     "server": "tsx servers/server.ts",
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
+    
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",
     "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f",
     "test:py:coverage": "python3 -m pytest lexical_loro/tests/ --cov=. --cov-report=html --cov-report=term",
-    "test": "vitest",
-    "test:js": "vitest run",
-    "dev": "concurrently \"npm run server\" \"npm run server:py\" \"npm run dev:vite\"",
-    "dev:vite": "vite",
-    "dev:all:py": "concurrently \"npm run server:py\" \"npm run dev:vite\"",
-    "dev:all:js": "concurrently \"npm run server\" \"npm run dev:vite\""
+    
+    "example": "concurrently \"npm run server\" \"npm run server:py\" \"npm run example:vite\"",
+    "example:vite": "vite",
+    "example:py": "concurrently \"npm run server:py\" \"npm run example:vite\"",
+    "example:js": "concurrently \"npm run server\" \"npm run example:vite\"",
+    
+    "dev": "npm run example",
+    "dev:vite": "npm run example:vite",
+    "dev:all:py": "npm run example:py",
+    "dev:all:js": "npm run example:js"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19.1.0",
+    "react-dom": "^18 || ^19.1.0",
+    "lexical": "^0.33.1",
+    "@lexical/react": "^0.33.1",
+    "@lexical/selection": "^0.33.1"
   },
   "dependencies": {
-    "@lexical/react": "^0.33.1",
-    "@lexical/selection": "^0.33.1",
-    "lexical": "^0.33.1",
-    "loro-crdt": "^1.5.10",
-    "react": "^18 || ^19.1.0",
-    "react-dom": "^18 || ^19.1.0"
+    "loro-crdt": "^1.5.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

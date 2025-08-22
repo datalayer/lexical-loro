@@ -2,242 +2,342 @@
 
 [![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)
 
-# Collaborative Plugin for Lexical based on Loro CRDT
+# Lexical Loro - Collaborative Plugin for Lexical based on Loro CRDT
 
-A real-time collaborative editing application for [Lexical](https://github.com/facebook/lexical) built with [Loro CRDT](https://github.com/loro-dev), React, TypeScript, Vite with a Python WebSocket server using [loro-py](https://github.com/loro-dev/loro-py) to maintain the Lexical JSON model sever-side
+A collaborative editing plugin for [Lexical](https://github.com/facebook/lexical) built with [Loro CRDT](https://github.com/loro-dev), providing real-time collaborative editing capabilities with conflict-free synchronization.
 
-Features both simple text editing and rich text editing with Lexical. Multiple users can edit the same documents simultaneously with conflict-free collaborative editing powered by Conflict-free Replicated Data Types (CRDTs).
+## Core Components
+
+This package provides two main components for building collaborative text editors:
+
+1. **`LoroCollaborativePlugin.tsx`** - A Lexical plugin that integrates Loro CRDT for real-time collaborative editing
+2. **`lexical-loro` Python package** - A WebSocket server using [loro-py](https://github.com/loro-dev/loro-py) for maintaining document state server-side
+
+## Quick Start
+
+### Using the Lexical Plugin
+
+```tsx
+import { LoroCollaborativePlugin } from './src/LoroCollaborativePlugin';
+
+function MyEditor() {
+  return (
+    <LexicalComposer initialConfig={editorConfig}>
+      <RichTextPlugin />
+      <LoroCollaborativePlugin 
+        websocketUrl="ws://localhost:8081"
+        docId="my-document"
+        username="user1"
+      />
+    </LexicalComposer>
+  );
+}
+```
+
+### Using the Python Server
+
+```bash
+# Install the Python package
+pip install -e .
+
+# Start the server
+lexical-loro-server --port 8081
+```
+
+## Examples
+
+For complete working examples, see the `src/examples/` directory which contains:
+- Full React application with dual editor support
+- Server selection interface
+- Connection status indicators
+- Rich text formatting examples
 
 **DISCLAIMER** Collaborative Cursors still need fixes, see [this issue](https://github.com/datalayer/lexical-loro/issues/1).
-
-**NEW** Now supports both Node.js and Python WebSocket servers!
 
 <div align="center" style="text-align: center">
   <img alt="" src="https://assets.datalayer.tech/lexical-loro.gif" />
 </div>
 
-## Features
+## Core Features
 
 - 🔄 **Real-time Collaboration**: Multiple users can edit the same document simultaneously
-- 🚀 **Conflict-free**: Uses Loro CRDT to automatically resolve conflicts
-- 📝 **Dual Editor Support**: Choose between simple text area or rich text Lexical editor
-- 🌐 **Multi-server Support**: Choose between Node.js and Python WebSocket servers
-- ⚡ **Fast Development**: Built with Vite for lightning-fast development
-- 🎨 **Responsive Design**: Works on desktop and mobile devices
-- 📡 **Connection Status**: Visual indicators for connection state
-- ✨ **Rich Text Features**: Bold, italic, underline with real-time formatting sync
-- 🔧 **Server Selection**: Switch between Node.js and Python backends
+- 🚀 **Conflict-free**: Uses Loro CRDT to automatically resolve conflicts  
+- 📝 **Lexical Integration**: Seamless integration with Lexical rich text editor
+- 🌐 **WebSocket Server**: Python server for maintaining document state
+- 📡 **Connection Management**: Robust WebSocket connection handling
+- ✨ **Rich Text Support**: Preserves formatting during collaborative editing
+- 🔧 **Extensible**: Plugin-based architecture for easy customization
 
 ## Technology Stack
 
-- **Frontend**: React 19 + TypeScript + Vite
-- **CRDT Library**: Loro CRDT
-- **Rich Text Editor**: Lexical (Facebook's extensible text editor)
-- **Backend Options**: 
-  - Node.js + TypeScript + ws library
-  - Python + loro-py + websockets library
-- **Real-time Communication**: WebSockets (ws)
-- **Styling**: CSS3 with responsive design
-- **Development Tools**: ESLint, tsx, concurrently
+**Core Dependencies:**
+- **Lexical**: v0.33.1 (Facebook's extensible text editor framework)
+- **Loro CRDT**: v1.5.10 (Conflict-free replicated data types)
+- **React**: 18/19 (for plugin hooks and components)
+- **Python**: 3.8+ with loro-py and websockets
 
-## Getting Started
+**Development Dependencies:**
+- **TypeScript**: For type safety
+- **Vite**: For building and development (examples only)
+- **pytest**: Python testing
+- **ESLint**: Code linting
 
-### Prerequisites
+## Installation
 
-- Node.js (v16 or higher)
-- npm or yarn
-- Python 3.8+ (for Python server option)
-- pip3 (for Python dependencies)
+### Core Plugin
 
-### Installation
+The Lexical plugin is a single TypeScript/React component that you can copy into your project:
 
-1. Install Node.js dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Install Python dependencies (optional - for Python server):
-   ```bash
-   pip3 install -r requirements.txt
-   # or run the setup script
-   ./setup-python.sh
-   ```
-
-### Running the Application
-
-#### Option 1: All Servers (Recommended)
 ```bash
-npm run dev:all
-```
-This starts **both** WebSocket servers (Node.js on port 8080 and Python on port 8081) plus the React development server (port 5173). You can then switch between servers using the UI.
-
-#### Option 2: Python Server Only
-```bash
-npm run dev:all:py
-```
-This starts only the Python WebSocket server (port 8081) and React development server.
-
-#### Option 3: Node.js Server Only
-```bash
-npm run dev:all:js
-```
-This starts only the Node.js WebSocket server (port 8080) and React development server.
-
-#### Option 4: Run servers separately
-
-**All servers manually:**
-```bash
-# Terminal 1: Start Node.js WebSocket server
-npm run server
-
-# Terminal 2: Start Python WebSocket server
-npm run server:py
-
-# Terminal 3: Start React development server
-npm run dev
+# Copy the plugin file
+cp src/LoroCollaborativePlugin.tsx your-project/src/
 ```
 
-**Node.js Server only:**
+**Dependencies required:**
 ```bash
-# Terminal 1: Start Node.js WebSocket server
-npm run server
-
-# Terminal 2: Start React development server
-npm run dev
+npm install lexical @lexical/react @lexical/selection loro-crdt react react-dom
 ```
 
-**Python Server only:**
-```bash
-# Terminal 1: Start Python WebSocket server
-npm run server:py
-# or directly: python3 server.py
+### Python Server
 
-# Terminal 2: Start React development server
-npm run dev
+Install the Python WebSocket server:
+
+```bash
+# Install from this repository
+pip install -e .
+
+# Or install specific dependencies
+pip install websockets click loro
 ```
 
-2. In another terminal, start the React development server:
-   ```bash
-   npm run dev
-   ```
+## Usage
 
-### Usage
+### 1. Lexical Plugin Integration
 
-1. Open your browser and navigate to the development server URL (typically `http://localhost:5173`)
-2. **Select Server Type**: Use the server selection radio buttons to choose:
-   - **Node.js Server**: `ws://localhost:8080` (TypeScript implementation)
-   - **Python Server**: `ws://localhost:8081` (Python + loro-py implementation)
-   
-   💡 **Tip**: When using `npm run dev:all`, both servers are running simultaneously, so you can switch between them in real-time!
+Add the plugin to your Lexical editor:
 
-3. **Choose Editor Type**: Click the tabs to select:
-   - **Simple Text Editor**: A basic textarea for plain text collaboration
-   - **Rich Text Editor (Lexical)**: A full-featured rich text editor with Bold/Italic/Underline formatting
-4. Start typing in either editor
-5. Open another browser window/tab or share the URL with others
-6. All users will see real-time updates as they type in the same editor type
-7. Each editor maintains its own document state (they are separate collaborative spaces)
+```tsx
+import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
+import { ContentEditable } from '@lexical/react/LexicalContentEditable';
+import { LoroCollaborativePlugin } from './LoroCollaborativePlugin';
 
-**Note**: You must disconnect from the current server before switching to a different server type.
+const editorConfig = {
+  namespace: 'MyEditor',
+  theme: {},
+  onError: console.error,
+};
 
-### Testing Collaboration
+function CollaborativeEditor() {
+  return (
+    <LexicalComposer initialConfig={editorConfig}>
+      <div className="editor-container">
+        <RichTextPlugin
+          contentEditable={<ContentEditable className="editor-input" />}
+          placeholder={<div className="editor-placeholder">Start typing...</div>}
+          ErrorBoundary={() => <div>Error occurred</div>}
+        />
+        <LoroCollaborativePlugin 
+          websocketUrl="ws://localhost:8081"
+          docId="shared-document"
+          username="user123"
+        />
+      </div>
+    </LexicalComposer>
+  );
+}
+```
 
-To test the real-time collaboration:
+### 2. Python Server Setup
 
-1. Open multiple browser tabs/windows to the development server URL
-2. **Select the same server** in all tabs (Node.js or Python)
-3. **Test Simple Text Editor**:
-   - Keep all tabs on the "Simple Text Editor" tab
-   - Start typing in one window - you'll see the changes appear in other windows instantly
-4. **Test Lexical Rich Text Editor**:
-   - Switch all tabs to the "Rich Text Editor (Lexical)" tab
-   - Try formatting text with the toolbar buttons (Bold, Italic, Underline)
-   - Changes and formatting will sync in real-time across all tabs
-5. **Test Cross-Server Compatibility**: 
-   - Verify that documents are properly synchronized between Node.js and Python servers
-   - Each server maintains its own document state
-6. **Test Independent Documents**:
-   - Have some tabs on "Simple Text Editor" and others on "Lexical Editor"
-   - Notice that each editor type maintains its own separate document
-5. **New collaborators will automatically receive the current document content** when they join
+Start the WebSocket server:
 
-**Note**: The application now properly synchronizes initial content:
-- When a new collaborator joins, they automatically receive the current document state for both editors
-- If no snapshot is available on the server, existing clients will provide their current state
-- The first client to join with content will automatically share their document state
-- Each editor type (simple text vs Lexical) maintains separate collaborative documents
+```bash
+# Default port (8081)
+lexical-loro-server
+
+# Custom port
+lexical-loro-server --port 8082
+
+# With debug logging
+lexical-loro-server --port 8081 --log-level DEBUG
+```
+
+### 3. Programmatic Server Usage
+
+```python
+import asyncio
+from lexical_loro import LoroWebSocketServer
+
+async def main():
+    server = LoroWebSocketServer(port=8081)
+    await server.start()
+    print("Server running on ws://localhost:8081")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Plugin API
+
+### LoroCollaborativePlugin Props
+
+```tsx
+interface LoroCollaborativePluginProps {
+  websocketUrl: string;          // WebSocket server URL
+  docId: string;                 // Unique document identifier
+  username: string;              // User identifier
+  userColor?: string;            // User cursor color (optional)
+  debug?: boolean;               // Enable debug logging (optional)
+}
+```
+
+### Plugin Features
+
+- **Real-time Sync**: Automatically syncs all text changes via Loro CRDT
+- **Cursor Tracking**: Shows other users' cursor positions (experimental)
+- **Connection Management**: Handles reconnection and error states
+- **Rich Text Preservation**: Maintains formatting during collaborative edits
+- **Conflict Resolution**: Automatic conflict-free merging via CRDT
+
+## Server API
+
+### LoroWebSocketServer Class
+
+```python
+from lexical_loro import LoroWebSocketServer
+
+# Create server instance
+server = LoroWebSocketServer(
+    port=8081,           # Server port
+    host="localhost"     # Server host
+)
+
+# Start server
+await server.start()
+
+# Shutdown server
+await server.shutdown()
+```
+
+### Supported Message Types
+
+The server handles these WebSocket message types:
+
+- `loro-update`: Apply CRDT document updates
+- `snapshot`: Full document state snapshots  
+- `request-snapshot`: Request current document state
+- `ephemeral-update`: Cursor and selection updates
+- `awareness-update`: User presence information
+
+## Examples
+
+For complete working examples and demonstrations, see the `src/examples/` directory:
+
+```bash
+# Run the example application
+npm install
+npm run example
+
+# This starts both Node.js and Python servers plus a React demo app
+# Open http://localhost:5173 to see dual editor interface
+```
+
+The examples include:
+- **Complete React App**: Full collaborative editor with UI
+- **Server Selection**: Switch between Node.js and Python backends  
+- **Dual Editors**: Simple text area and rich Lexical editor
+- **Real-time Demo**: Multi-user collaboration testing
+
+See `src/examples/README.md` for detailed example documentation.
 
 ## Project Structure
 
+### Core Components
+
 ```
 src/
-├── App.tsx                         # Main application component with tabbed interface
-├── App.css                         # Application styles
-├── CollaborativeEditor.tsx         # Simple text editor component with Loro CRDT integration
-├── CollaborativeEditor.css         # Simple editor styles
-├── LexicalCollaborativeEditor.tsx  # Lexical rich text editor component
-├── LexicalCollaborativeEditor.css  # Lexical editor styles
-├── LoroCollaborativePlugin.tsx     # Lexical plugin for Loro CRDT integration
-├── main.tsx                        # React application entry point
-└── vite-env.d.ts                   # Vite type definitions
+├── LoroCollaborativePlugin.tsx         # Main Lexical plugin for collaboration
+└── vite-env.d.ts                       # TypeScript definitions
 
-server.ts                           # WebSocket server for real-time communication
-package.json                        # Dependencies and scripts
+lexical_loro/                           # Python WebSocket server package
+├── __init__.py                         # Package exports
+├── server.py                           # WebSocket server implementation  
+├── cli.py                              # Command line interface
+└── tests/                              # Python test suite
+
+pyproject.toml                          # Python package configuration
+```
+
+### Examples Directory
+
+```
+src/examples/                           # Complete demo application
+├── App.tsx                             # Demo app with dual editors
+├── LexicalCollaborativeEditor.tsx      # Rich text editor example
+├── TextAreaCollaborativeEditor.tsx     # Simple text editor example
+├── ServerSelector.tsx                  # Server selection UI
+├── LexicalToolbar.tsx                  # Rich text toolbar
+├── main.tsx                            # Demo app entry point
+└── *.css                               # Styling for examples
+
+servers/
+└── server.ts                           # Node.js server (for comparison)
+```
+
+### Archive
+
+```
+src/archive/                            # Historical plugin implementations
+├── LoroCollaborativePlugin0.tsx        # Previous versions for reference
+├── LoroCollaborativePlugin1.tsx
+├── LoroCollaborativePlugin2.tsx
+├── LoroCollaborativePlugin3.tsx
+├── LoroCollaborativePlugin4.tsx
+└── LoroCollaborativePlugin5.tsx
 ```
 
 ## How It Works
 
-### Loro CRDT Integration
+### Architecture Overview
 
-The application uses Loro CRDT to manage collaborative editing across two different editor types:
+The collaboration system consists of two main components:
 
-1. **Document Creation**: Each editor type creates its own Loro document with a unique identifier:
-   - Simple Text Editor: `shared-text`
-   - Lexical Editor: `lexical-shared-doc`
-2. **Local Changes**: When a user types, changes are applied to the corresponding local Loro document
-3. **Change Detection**: The application detects insertions, deletions, and replacements
-4. **Synchronization**: Changes are serialized and sent to other clients via WebSocket with document ID
-5. **Conflict Resolution**: Loro CRDT automatically merges changes without conflicts
+1. **LoroCollaborativePlugin** (Client-side)
+   - Integrates with Lexical editor as a React plugin
+   - Captures text changes and applies them to Loro CRDT document
+   - Sends/receives updates via WebSocket connection
+   - Handles cursor positioning and user awareness
 
-The Complete Flow Diagram
+2. **LoroWebSocketServer** (Server-side)  
+   - Python WebSocket server using loro-py
+   - Maintains authoritative document state
+   - Broadcasts updates to all connected clients
+   - Handles client connections and disconnections
 
+### Data Flow
 
-Remote User Types
-       ↓
-WebSocket Message
-       ↓
-loro-update received
-       ↓ 
-loroDocRef.current.import(update)
-       ↓
-doc.subscribe() callback fires
-       ↓
-updateLexicalFromLoro(editor, newText)
-       ↓
-editor.update() with new content
-       ↓
-Lexical State Updated
-       ↓
-UI Re-renders with New Content
+```
+User Types → Lexical Editor → Plugin → Loro CRDT → WebSocket
+                                                        ↓
+WebSocket ← Loro CRDT ← Plugin ← Lexical Editor ← Other Users
+```
 
-Protection Against Infinite Loops
+### CRDT Integration Process
 
-The system uses several mechanisms to prevent loops:
+1. **Document Creation**: Plugin creates a Loro document with unique identifier
+2. **Local Changes**: User edits trigger Lexical change events  
+3. **CRDT Application**: Changes are applied to local Loro document
+4. **Synchronization**: Updates are serialized and sent via WebSocket
+5. **Remote Application**: Other clients receive and apply updates
+6. **Conflict Resolution**: Loro CRDT automatically merges changes without conflicts
 
-isLocalChange.current flag - Prevents local changes from triggering remote updates
-{ tag: 'collaboration' } on editor.update() - Allows the update listener to ignore these changes
-JSON comparison in updateLexicalFromLoro to avoid redundant updates
+### Connection Management
 
-When a Loro update is received, the Lexical state is updated through:
-
-WebSocket receives loro-update message
-
-loroDocRef.current.import(update) applies the change to Loro
-doc.subscribe() callback automatically fires
-updateLexicalFromLoro() converts Loro text to Lexical state
-editor.setEditorState() or DOM manipulation updates the editor
-
-The bridge is the doc.subscribe() callback on line 1901 - this is what makes Lexical automatically reflect any Loro document changes!
+- **Auto-reconnection**: Plugin handles connection drops gracefully
+- **State Synchronization**: New clients receive full document snapshot
+- **Error Handling**: Connection errors are logged and displayed
+- **User Awareness**: Track online users and cursor positions
 
 ### Lexical Integration
 
@@ -280,51 +380,111 @@ The server maintains the latest document snapshot to ensure new collaborators al
 
 ## Configuration
 
-### WebSocket Server URL
+### Plugin Configuration
 
-You can configure the WebSocket server URL in the UI or by modifying the default in `CollaborativeEditor.tsx`:
-
-```typescript
-const [websocketUrl, setWebsocketUrl] = useState('ws://localhost:8080')
+```tsx
+<LoroCollaborativePlugin 
+  websocketUrl="ws://localhost:8081"    // Server URL
+  docId="my-document"                   // Document identifier  
+  username="user123"                    // User identifier
+  userColor="#ff0000"                   // Cursor color (optional)
+  debug={true}                          // Enable debug logs (optional)
+/>
 ```
 
-### Server Port
+### Server Configuration
 
-To change the server port, modify `server.ts`:
+```python
+# Via command line
+lexical-loro-server --port 8081 --host localhost --log-level DEBUG
 
-```typescript
-const server = new LoroWebSocketServer(8080); // Change port here
+# Via environment variables
+export LEXICAL_LORO_PORT=8081
+export LEXICAL_LORO_HOST=localhost
+export LEXICAL_LORO_LOG_LEVEL=DEBUG
+lexical-loro-server
+
+# Programmatically
+server = LoroWebSocketServer(port=8081, host="localhost")
 ```
 
-## Development Scripts
+### Supported Document Types
 
-- `npm run dev` - Start React development server
-- `npm run server` - Start WebSocket server
-- `npm run dev:all` - Start both server and client
-- `npm run build` - Build for production
-- `npm run lint` - Run ESLint
-- `npm run preview` - Preview production build
+The server supports multiple document types with different IDs:
+- `shared-text`: Basic text collaboration
+- `lexical-shared-doc`: Rich text with Lexical  
+- Custom document IDs for multiple simultaneous documents
 
-## Production Deployment
+## Development
 
-1. Build the application:
-   ```bash
-   npm run build
-   ```
+### Core Components Development
 
-2. Deploy the `dist` folder to your web server
+**Plugin Development:**
+```bash
+# The plugin is a single TypeScript file
+src/LoroCollaborativePlugin.tsx
 
-3. Deploy the WebSocket server to your backend infrastructure
+# Dependencies for plugin development
+npm install lexical @lexical/react @lexical/selection loro-crdt
+```
 
-4. Update the WebSocket URL in the application to point to your production server
+**Server Development:**  
+```bash
+# Install Python package in development mode
+pip install -e ".[dev]"
+
+# Run tests
+pytest lexical_loro/tests/ -v
+
+# Start server in development mode  
+python3 -m lexical_loro.cli --port 8081 --log-level DEBUG
+```
+
+### Testing
+
+**Plugin Testing:**
+```bash
+npm run test              # Run Vitest tests
+npm run test:js          # Run tests once
+```
+
+**Server Testing:**
+```bash
+npm run test:py          # Run Python tests
+npm run test:py:watch    # Run in watch mode
+npm run test:py:coverage # Run with coverage
+```
+
+### Example Development
+
+To work on the examples:
+```bash
+npm install                    # Install all dependencies
+npm run example               # Start example app with both servers  
+npm run example:py            # Start with Python server only
+npm run example:js            # Start with Node.js server only
+npm run example:vite          # Start example app only (no servers)
+```
 
 ## Contributing
 
+We welcome contributions to both the Lexical plugin and Python server:
+
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+2. Create a feature branch  
+3. Focus changes on core components:
+   - `src/LoroCollaborativePlugin.tsx` for plugin improvements
+   - `lexical_loro/` for server enhancements
+4. Add tests for new functionality
+5. Update documentation as needed
+6. Submit a pull request
+
+### Development Guidelines
+
+- **Plugin**: Keep the plugin self-contained and dependency-light
+- **Server**: Maintain compatibility with loro-py and WebSocket standards  
+- **Examples**: Use examples to demonstrate new features
+- **Tests**: Ensure both JavaScript and Python tests pass
 
 ## License
 
@@ -333,219 +493,9 @@ This project is open source and available under the [MIT License](LICENSE).
 ## Acknowledgments
 
 - [Loro CRDT](https://loro.dev/) - The CRDT library powering collaborative editing
-- [Vite](https://vitejs.dev/) - Fast development build tool
-- [React](https://reactjs.org/) - UI library
-- [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
+- [Lexical](https://lexical.dev/) - Facebook's extensible text editor framework  
+- [React](https://reactjs.org/) - UI library for plugin hooks
+- [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) - Real-time communication
 
-# Lexical Loro Python Package
 
-A Python package for Lexical + Loro CRDT integration, providing a WebSocket server for real-time collaborative text editing.
-
-## Features
-
-- **Real-time collaboration**: WebSocket server for live document collaboration
-- **Loro CRDT integration**: Uses Loro CRDT for conflict-free replicated data types
-- **Lexical compatibility**: Designed to work with Lexical rich text editor
-- **Ephemeral data support**: Handles cursor positions and selections
-- **Multiple document support**: Manages multiple collaborative documents
-
-## Installation
-
-### From PyPI (when published)
-
-```bash
-pip install lexical-loro
-```
-
-### Local Development
-
-```bash
-# Install in development mode
-pip install -e "python_src/[dev]"
-```
-
-## Usage
-
-### Command Line
-
-Start the server using the command line interface:
-
-```bash
-# Start server on default port (8081)
-lexical-loro-server
-
-# Start server on custom port
-lexical-loro-server --port 8082
-
-# Start with debug logging
-lexical-loro-server --log-level DEBUG
-```
-
-### Programmatic Usage
-
-```python
-import asyncio
-from lexical_loro import LoroWebSocketServer
-
-async def main():
-    server = LoroWebSocketServer(port=8081)
-    await server.start()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### Integration with Node.js/TypeScript Projects
-
-Update your `package.json` scripts:
-
-```json
-{
-  "scripts": {
-    "server:py": "lexical-loro-server",
-    "dev:py": "concurrently \"lexical-loro-server\" \"npm run dev\""
-  }
-}
-```
-
-## API Reference
-
-### LoroWebSocketServer
-
-Main server class for handling WebSocket connections and Loro document management.
-
-#### Constructor
-
-```python
-server = LoroWebSocketServer(port=8081)
-```
-
-#### Methods
-
-- `start()`: Start the WebSocket server
-- `shutdown()`: Gracefully shutdown the server
-- `handle_client(websocket)`: Handle new client connections
-- `handle_message(client_id, message)`: Process messages from clients
-
-### Client
-
-Represents a connected client with metadata.
-
-```python
-class Client:
-    def __init__(self, websocket, client_id):
-        self.websocket = websocket
-        self.id = client_id
-        self.color = self._generate_color()
-```
-
-## Development
-
-### Setup Development Environment
-
-```bash
-# Install development dependencies
-pip install -e "python_src/[dev]"
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=lexical_loro --cov-report=html
-
-# Format code
-black python_src/
-
-# Lint code
-ruff python_src/
-
-# Type checking
-mypy python_src/
-```
-
-### Testing
-
-The package includes comprehensive tests for:
-
-- WebSocket connection handling
-- Loro document operations
-- Message processing
-- Client management
-- Error handling
-
-Run tests:
-
-```bash
-pytest tests/ -v
-```
-
-### Building
-
-Build the package:
-
-```bash
-pip install build
-python -m build
-```
-
-## Protocol
-
-The server communicates with clients using a JSON-based WebSocket protocol:
-
-### Message Types
-
-- `loro-update`: Apply Loro CRDT updates
-- `snapshot`: Full document snapshots
-- `request-snapshot`: Request current document state
-- `ephemeral-update`: Cursor and selection updates
-- `awareness-update`: User presence information
-
-### Example Messages
-
-```json
-{
-  "type": "loro-update",
-  "docId": "lexical-shared-doc",
-  "updateHex": "deadbeef..."
-}
-```
-
-## Configuration
-
-### Environment Variables
-
-- `LEXICAL_LORO_PORT`: Default server port (default: 8081)
-- `LEXICAL_LORO_HOST`: Host to bind to (default: localhost)
-- `LEXICAL_LORO_LOG_LEVEL`: Logging level (default: INFO)
-
-### Supported Documents
-
-The server pre-initializes several document types:
-
-- `shared-text`: Basic text document
-- `lexical-shared-doc-v0`: Minimal plugin document
-- `lexical-shared-doc-v1`: Full-featured plugin document
-- `lexical-shared-doc-v2`: Clean JSON plugin document
-- `lexical-shared-doc-v3`: Text-only plugin document
-- `lexical-shared-doc-v4`: Smart hybrid plugin document
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run the test suite
-6. Submit a pull request
-
-## Support
-
-For issues and questions:
-
-- GitHub Issues: https://github.com/datalayer/lexical-loro/issues
-- Documentation: https://github.com/datalayer/lexical-loro#readme
 
