@@ -149,8 +149,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin
-            websocketUrl={websocketUrl} 
-            docId="lexical-shared-doc" 
+            websocketUrl={websocketUrl}
+            docId="lexical-shared-doc"
             onConnectionChange={handleConnectionChange}
             onPeerIdChange={handlePeerIdChange}
             onAwarenessChange={handleAwarenessChange}
