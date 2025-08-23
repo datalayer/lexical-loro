@@ -1,14 +1,22 @@
 {
   "name": "@datalayer/lexical-loro",
   "private": false,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "Collaborative editing plugin for Lexical based on Loro CRDT",
-  "main": "lib/LoroCollaborativePlugin.js",
-  "types": "lib/LoroCollaborativePlugin.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "files": [
-    "lib/**/*",
-    "src/LoroCollaborativePlugin.tsx"
+    "lib/**/*.*"
+  ],
+  "keywords": [
+    "lexical",
+    "loro",
+    "crdt",
+    "collaborative",
+    "editor",
+    "plugin",
+    "react"
   ],
   "repository": {
     "type": "git",
@@ -19,15 +27,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "keywords": [
-    "lexical",
-    "loro",
-    "crdt",
-    "collaborative",
-    "editor",
-    "plugin",
-    "react"
-  ],
   "scripts": {
     "build": "tsc -b && vite build",
     "clean": "rimraf dist lib",

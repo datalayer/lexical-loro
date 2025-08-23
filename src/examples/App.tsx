@@ -70,8 +70,8 @@ function App() {
               />
             )}
             {activeTab === 'lexical' && (
-              <LexicalCollaborativeEditor 
-                websocketUrl={websocketUrl} 
+              <LexicalCollaborativeEditor
+                websocketUrl={websocketUrl}
                 onConnectionChange={handleConnectionChange}
               />
             )}
