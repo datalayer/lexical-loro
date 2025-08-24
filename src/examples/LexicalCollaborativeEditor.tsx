@@ -25,6 +25,7 @@ import "./LexicalCollaborativeEditor.css";
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
   onConnectionChange?: (connected: boolean) => void;
+  onInitialization?: (success: boolean) => void;
 }
 
 // Catch any errors that occur during Lexical updates and log them
@@ -35,9 +36,11 @@ function onError(error: Error) {
 
 export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProps> = ({
   websocketUrl,
-  onConnectionChange
+  onConnectionChange,
+  onInitialization
 }) => {
   const [isConnected, setIsConnected] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [peerId, setPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   const disconnectRef = useRef<(() => void) | null>(null);
@@ -62,6 +65,11 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const handleAwarenessChange = useCallback((awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => {
     setAwarenessData(awareness);
   }, []);
+
+  const handleInitialization = useCallback((success: boolean) => {
+    setIsInitialized(success);
+    onInitialization?.(success);
+  }, [onInitialization]);
 
   const initialConfig = {
     namespace: 'LexicalCollaborativeEditor',
@@ -91,6 +99,9 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           <div className="connection-status">
             <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
               {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+            </span>
+            <span className={`status-indicator ${isInitialized ? 'initialized' : 'initializing'}`} style={{ marginLeft: '10px' }}>
+              {isInitialized ? '✅ Initialized' : '⏳ Initializing...'}
             </span>
             {peerId && (
               <span className="peer-id-display" style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
@@ -149,11 +160,13 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin
-            websocketUrl={websocketUrl}
+//            websocketUrl={websocketUrl}
+            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/lexical-shared-doc"
             docId="lexical-shared-doc"
             onConnectionChange={handleConnectionChange}
             onPeerIdChange={handlePeerIdChange}
             onAwarenessChange={handleAwarenessChange}
+            onInitialization={handleInitialization}
             onDisconnectReady={(disconnectFn) => {
               disconnectRef.current = disconnectFn;
             }}

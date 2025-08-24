@@ -18,6 +18,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('lexical')
   const [selectedServer, setSelectedServer] = useState<ServerType>('python')
   const [isConnected, setIsConnected] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
   
   // Determine WebSocket URL based on selected server
   const websocketUrl = selectedServer === 'nodejs' ? 'ws://localhost:8080' : 'ws://localhost:8081'
@@ -25,6 +26,7 @@ function App() {
   const handleServerChange = (server: ServerType) => {
     if (!isConnected) {
       setSelectedServer(server)
+      setIsInitialized(false) // Reset initialization when changing servers
     }
   }
 
@@ -32,10 +34,25 @@ function App() {
     setIsConnected(connected)
   }, [])
 
+  const handleInitializationChange = useCallback((initialized: boolean) => {
+    setIsInitialized(initialized)
+  }, [])
+
   return (
     <div className="App">
       <header className="app-header">
-        <h1>Loro CRDT Real-time Collaborative Editors</h1>
+        <h1>
+          Loro CRDT Real-time Collaborative Editors
+          {isInitialized ? (
+            <span style={{ marginLeft: '10px', fontSize: '0.7em' }} title="Initial content loaded successfully">
+              ✅
+            </span>
+          ) : (
+            <span style={{ marginLeft: '10px', fontSize: '0.7em' }} title="Loading initial content...">
+              ⏳
+            </span>
+          )}
+        </h1>
         <p>Choose between Node.js or Python servers, and simple text area or rich text Lexical editor - all powered by Loro CRDT</p>
       </header>
       
@@ -50,13 +67,19 @@ function App() {
           <div className="tab-buttons">
             <button 
               className={`tab-button ${activeTab === 'textarea' ? 'active' : ''}`}
-              onClick={() => setActiveTab('textarea')}
+              onClick={() => {
+                setActiveTab('textarea')
+                setIsInitialized(false) // Reset initialization when changing tabs
+              }}
             >
               📝 Simple Text Editor
             </button>
             <button 
               className={`tab-button ${activeTab === 'lexical' ? 'active' : ''}`}
-              onClick={() => setActiveTab('lexical')}
+              onClick={() => {
+                setActiveTab('lexical')
+                setIsInitialized(false) // Reset initialization when changing tabs
+              }}
             >
               ✨ Rich Text Editor (Lexical)
             </button>
@@ -67,12 +90,14 @@ function App() {
               <TextAreaCollaborativeEditor
                 websocketUrl={websocketUrl}
                 onConnectionChange={handleConnectionChange}
+                onInitialization={handleInitializationChange}
               />
             )}
             {activeTab === 'lexical' && (
               <LexicalCollaborativeEditor
                 websocketUrl={websocketUrl}
                 onConnectionChange={handleConnectionChange}
+                onInitialization={handleInitializationChange}
               />
             )}
           </div>

@@ -11,11 +11,13 @@ import './TextAreaCollaborativeEditor.css';
 interface ITextAreaCollaborativeEditorProps {
   websocketUrl?: string;
   onConnectionChange?: (connected: boolean) => void;
+  onInitialization?: (success: boolean) => void;
 }
 
 export const TextAreaCollaborativeEditor: React.FC<ITextAreaCollaborativeEditorProps> = ({
   websocketUrl = 'ws://localhost:8081',
-  onConnectionChange
+  onConnectionChange,
+  onInitialization
 }) => {
   const [text, setText] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -107,9 +109,19 @@ export const TextAreaCollaborativeEditor: React.FC<ITextAreaCollaborativeEditorP
               }
               if (snapshot) {
                 docRef.current.import(snapshot);
+                hasReceivedInitialSnapshot.current = true;
+                console.log('📄 Received and applied initial snapshot');
+                
+                // Notify parent component about successful initialization
+                if (onInitialization) {
+                  onInitialization(true);
+                }
+              } else {
+                // Notify initialization failure if snapshot is invalid
+                if (onInitialization) {
+                  onInitialization(false);
+                }
               }
-              hasReceivedInitialSnapshot.current = true;
-              console.log('📄 Received and applied initial snapshot');
             } else if (data.type === 'welcome') {
               console.log('👋 Welcome message received:', data.message);
               
@@ -155,6 +167,11 @@ export const TextAreaCollaborativeEditor: React.FC<ITextAreaCollaborativeEditorP
           isConnectingRef.current = false;
           setError('WebSocket connection error');
           console.error('WebSocket error:', err);
+          
+          // Notify initialization failure if we haven't received initial content yet
+          if (!hasReceivedInitialSnapshot.current && onInitialization) {
+            onInitialization(false);
+          }
         };
 
       } catch (err) {

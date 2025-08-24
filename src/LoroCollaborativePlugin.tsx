@@ -846,6 +846,7 @@ interface LoroCollaborativePluginProps {
   onPeerIdChange?: (peerId: string) => void;
   onDisconnectReady?: (disconnectFn: () => void) => void;
   onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
+  onInitialization?: (success: boolean) => void;
 }
 
 interface LoroMessage {
@@ -879,7 +880,8 @@ export function LoroCollaborativePlugin({
   onConnectionChange,
   onDisconnectReady,
   onPeerIdChange,
-  onAwarenessChange
+  onAwarenessChange,
+  onInitialization
 }: LoroCollaborativePluginProps) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
@@ -2062,12 +2064,22 @@ export function LoroCollaborativePlugin({
               loroDocRef.current.import(snapshot);
               hasReceivedInitialSnapshot.current = true;
               console.log('📄 Lexical editor received and applied initial snapshot');
+              
+              // Notify parent component about successful initialization
+              if (onInitialization) {
+                onInitialization(true);
+              }
+              
               // Immediately reflect the current Loro text into the editor after import
               try {
                 const currentText = loroDocRef.current.getText(docId).toString();
                 updateLexicalFromLoro(editor, currentText);
               } catch (e) {
                 console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
+                // Notify parent component about failed initialization
+                if (onInitialization) {
+                  onInitialization(false);
+                }
               }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore
@@ -2235,6 +2247,11 @@ export function LoroCollaborativePlugin({
         ws.onerror = (err) => {
           isConnectingRef.current = false;
           console.error('WebSocket error in Lexical plugin:', err);
+          
+          // Notify initialization failure if we haven't received initial content yet
+          if (!hasReceivedInitialSnapshot.current && onInitialization) {
+            onInitialization(false);
+          }
         };
 
       } catch (err) {
