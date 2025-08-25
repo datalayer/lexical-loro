@@ -3,15 +3,13 @@
 Demo script showcasing LoroModel usage for building collaborative documents
 """
 
-import sys
-import os
 import json
 import time
 import loro
 from typing import List, Dict, Any, Optional
 
 class LoroModel:
-    """Mock version of LoroModel for demonstration purposes"""
+    """LoroModel implementation using real Loro library"""
     
     def __init__(self):
         self.text_doc = loro.LoroDoc()
@@ -30,6 +28,32 @@ class LoroModel:
             "source": "Lexical Loro",
             "version": "0.34.0"
         }
+        
+        # Initialize Loro documents with the base structure
+        self._sync_to_loro()
+    
+    def _sync_to_loro(self):
+        """Sync the current lexical_data to both Loro documents"""
+        # Update text document with serialized JSON
+        text_data = self.text_doc.get_text("content")
+        current_length = text_data.len_unicode
+        if current_length > 0:
+            text_data.delete(0, current_length)
+        text_data.insert(0, json.dumps(self.lexical_data))
+        
+        # Update structured document with basic metadata
+        root_map = self.structured_doc.get_map("root")
+        
+        # Clear existing data
+        for key in list(root_map.keys()):
+            root_map.delete(key)
+            
+        # Set basic properties using insert method
+        root_map.insert("lastSaved", self.lexical_data["lastSaved"])
+        root_map.insert("source", self.lexical_data["source"])
+        root_map.insert("version", self.lexical_data["version"])
+        root_map.insert("blockCount", len(self.lexical_data["root"]["children"]))
+    
     
     def add_block(self, block_detail: Dict[str, Any], block_type: str):
         type_mapping = {
@@ -78,6 +102,9 @@ class LoroModel:
         
         self.lexical_data["root"]["children"].append(new_block)
         self.lexical_data["lastSaved"] = int(time.time() * 1000)
+        
+        # Sync to Loro documents
+        self._sync_to_loro()
     
     def get_blocks(self) -> List[Dict[str, Any]]:
         return self.lexical_data["root"]["children"]
@@ -106,17 +133,20 @@ class LoroModel:
                         current_block[key] = value
                 
                 self.lexical_data["lastSaved"] = int(time.time() * 1000)
+                self._sync_to_loro()
     
     def remove_block(self, index: int):
         if 0 <= index < len(self.lexical_data["root"]["children"]):
             self.lexical_data["root"]["children"].pop(index)
             self.lexical_data["lastSaved"] = int(time.time() * 1000)
+            self._sync_to_loro()
     
     def export_as_json(self) -> str:
         return json.dumps(self.lexical_data, indent=2)
     
     def import_from_json(self, json_data: str):
         self.lexical_data = json.loads(json_data)
+        self._sync_to_loro()
 
 
 class DocumentBuilder:
