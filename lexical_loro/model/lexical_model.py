@@ -31,6 +31,9 @@ class LoroModel:
         self.text_doc = text_doc if text_doc is not None else loro.LoroDoc()
         self.structured_doc = structured_doc if structured_doc is not None else loro.LoroDoc()
         
+        # Track if we need to subscribe to existing document changes
+        self._text_doc_subscription = None
+        
         # Initialize the lexical model structure
         self.lexical_data = {
             "root": {
@@ -46,8 +49,211 @@ class LoroModel:
             "version": "0.34.0"
         }
         
-        # Initialize Loro documents with the base structure
-        self._sync_to_loro()
+        # If we were given an existing text_doc, sync from it first
+        if text_doc is not None:
+            self._sync_from_loro()
+            # Set up subscription to listen for changes
+            self._setup_text_doc_subscription()
+        else:
+            # Initialize Loro documents with the base structure
+            self._sync_to_loro()
+    
+    def _setup_text_doc_subscription(self):
+        """Set up subscription to listen for changes in the text document"""
+        try:
+            # Subscribe to document changes - try different subscription patterns
+            try:
+                # Try the most common pattern first
+                self._text_doc_subscription = self.text_doc.subscribe(
+                    self._handle_text_doc_change
+                )
+            except TypeError:
+                # Try with additional parameters that might be required
+                try:
+                    self._text_doc_subscription = self.text_doc.subscribe(
+                        "content", self._handle_text_doc_change
+                    )
+                except TypeError:
+                    # Try the observer pattern with container-specific subscription
+                    text_container = self.text_doc.get_text("content")
+                    self._text_doc_subscription = text_container.subscribe(
+                        self._handle_text_doc_change
+                    )
+                    
+        except Exception as e:
+            # If subscription fails, we'll fall back to manual syncing
+            print(f"Warning: Could not set up text_doc subscription: {e}")
+            self._text_doc_subscription = None
+    
+    def _handle_text_doc_change(self, diff_event):
+        """Handle changes to the text document using fine-grained diffs"""
+        try:
+            # Process each container diff in the event
+            for container_diff in diff_event.events:
+                # We're interested in changes to the "content" text container
+                if hasattr(container_diff, 'target') and hasattr(container_diff, 'diff'):
+                    # Check if this is the content container we care about
+                    target_str = str(container_diff.target) if hasattr(container_diff.target, '__str__') else repr(container_diff.target)
+                    
+                    if 'content' in target_str:
+                        self._apply_text_diff(container_diff.diff)
+                        
+        except Exception as e:
+            print(f"Warning: Error handling text document change event: {e}")
+            # Fallback to full sync
+            self._sync_from_loro_fallback()
+    
+    def _apply_text_diff(self, diff):
+        """Apply text diff to update lexical_data incrementally"""
+        try:
+            if hasattr(diff, '__class__') and diff.__class__.__name__ == 'Text':
+                # Get current content to work with
+                current_content = self._get_current_text_content()
+                
+                # Apply text deltas to reconstruct the new content
+                new_content = self._apply_text_deltas(current_content, diff.diff)
+                
+                if new_content and new_content != current_content:
+                    # Parse the new content as JSON
+                    try:
+                        new_lexical_data = json.loads(new_content)
+                        
+                        # Compare and update blocks incrementally
+                        self._update_lexical_data_incrementally(new_lexical_data)
+                        
+                        # Sync to structured document
+                        self._sync_structured_doc_only()
+                        
+                    except json.JSONDecodeError as e:
+                        print(f"Warning: Could not parse updated content as JSON: {e}")
+                        
+        except Exception as e:
+            print(f"Warning: Error applying text diff: {e}")
+    
+    def _get_current_text_content(self) -> str:
+        """Get current text content from the document"""
+        try:
+            text_data = self.text_doc.get_text("content")
+            return text_data.to_string()
+        except Exception:
+            return ""
+    
+    def _apply_text_deltas(self, content: str, deltas) -> str:
+        """Apply a sequence of text deltas to content"""
+        result = content
+        position = 0
+        
+        try:
+            for delta in deltas:
+                delta_class = delta.__class__.__name__
+                
+                if delta_class == 'Retain':
+                    # Move position forward
+                    position += delta.retain
+                    
+                elif delta_class == 'Insert':
+                    # Insert text at current position
+                    result = result[:position] + delta.insert + result[position:]
+                    position += len(delta.insert)
+                    
+                elif delta_class == 'Delete':
+                    # Delete text at current position
+                    result = result[:position] + result[position + delta.delete:]
+                    # Position stays the same after deletion
+                    
+        except Exception as e:
+            print(f"Warning: Error applying text deltas: {e}")
+            return content
+            
+        return result
+    
+    def _update_lexical_data_incrementally(self, new_lexical_data: Dict[str, Any]):
+        """Update lexical_data incrementally by comparing with new data"""
+        try:
+            old_blocks = self.lexical_data.get("root", {}).get("children", [])
+            new_blocks = new_lexical_data.get("root", {}).get("children", [])
+            
+            # Update metadata
+            self.lexical_data["lastSaved"] = new_lexical_data.get("lastSaved", self.lexical_data["lastSaved"])
+            self.lexical_data["source"] = new_lexical_data.get("source", self.lexical_data["source"])
+            self.lexical_data["version"] = new_lexical_data.get("version", self.lexical_data["version"])
+            
+            # Compare blocks for fine-grained updates
+            if len(old_blocks) != len(new_blocks):
+                # Block count changed - update entire children array
+                self.lexical_data["root"]["children"] = new_blocks
+                print(f"LoroModel: Block count changed - {len(old_blocks)} -> {len(new_blocks)}")
+            else:
+                # Same number of blocks - check for content changes
+                blocks_changed = False
+                for i, (old_block, new_block) in enumerate(zip(old_blocks, new_blocks)):
+                    if old_block != new_block:
+                        self.lexical_data["root"]["children"][i] = new_block
+                        blocks_changed = True
+                        
+                        # Log specific block changes
+                        old_type = old_block.get('type', 'unknown')
+                        new_type = new_block.get('type', 'unknown')
+                        if old_type != new_type:
+                            print(f"LoroModel: Block {i} type changed - {old_type} -> {new_type}")
+                        
+                        # Check for text content changes
+                        old_text = self._extract_block_text(old_block)
+                        new_text = self._extract_block_text(new_block)
+                        if old_text != new_text:
+                            print(f"LoroModel: Block {i} text changed - '{old_text[:50]}...' -> '{new_text[:50]}...'")
+                
+                if blocks_changed:
+                    print(f"LoroModel: {sum(1 for i in range(len(old_blocks)) if old_blocks[i] != new_blocks[i])} blocks updated")
+                    
+        except Exception as e:
+            print(f"Warning: Error in incremental update: {e}")
+            # Fallback to replacing entire structure
+            self.lexical_data = new_lexical_data
+    
+    def _extract_block_text(self, block: Dict[str, Any]) -> str:
+        """Extract text content from a block"""
+        text_parts = []
+        for child in block.get('children', []):
+            if child.get('type') == 'text':
+                text_parts.append(child.get('text', ''))
+        return ''.join(text_parts)
+    
+    def _sync_from_loro_fallback(self):
+        """Fallback method for full synchronization when diff processing fails"""
+        try:
+            text_data = self.text_doc.get_text("content")
+            content = text_data.to_string()
+            if content:
+                old_lexical_data = self.lexical_data.copy()
+                self.lexical_data = json.loads(content)
+                
+                # Log fallback sync
+                old_blocks = old_lexical_data.get("root", {}).get("children", [])
+                new_blocks = self.lexical_data.get("root", {}).get("children", [])
+                print(f"LoroModel: Fallback sync - blocks: {len(old_blocks)} -> {len(new_blocks)}")
+                
+        except Exception as e:
+            print(f"Warning: Fallback sync failed: {e}")
+            # Keep current data if sync fails
+    
+    def _sync_structured_doc_only(self):
+        """Sync only to the structured document (used when text_doc changes externally)"""
+        try:
+            # Update structured document with basic metadata only
+            root_map = self.structured_doc.get_map("root")
+            
+            # Clear existing data
+            for key in list(root_map.keys()):
+                root_map.delete(key)
+                
+            # Set basic properties using insert method
+            root_map.insert("lastSaved", self.lexical_data["lastSaved"])
+            root_map.insert("source", self.lexical_data["source"])
+            root_map.insert("version", self.lexical_data["version"])
+            root_map.insert("blockCount", len(self.lexical_data["root"]["children"]))
+        except Exception as e:
+            print(f"Warning: Could not sync to structured document: {e}")
     
     def _sync_to_loro(self):
         """Sync the current lexical_data to both Loro documents"""
@@ -221,21 +427,74 @@ class LoroModel:
         self.lexical_data = json.loads(json_data)
         self._sync_to_loro()
     
+    def force_sync_from_text_doc(self):
+        """Manually force synchronization from the text document"""
+        self._sync_from_loro()
+        self._sync_structured_doc_only()
+    
+    def get_block_summary(self) -> Dict[str, Any]:
+        """Get a summary of the current blocks structure"""
+        blocks = self.get_blocks()
+        block_types = {}
+        total_text_length = 0
+        
+        for block in blocks:
+            block_type = block.get('type', 'unknown')
+            block_types[block_type] = block_types.get(block_type, 0) + 1
+            
+            # Calculate text content length
+            for child in block.get('children', []):
+                if child.get('type') == 'text':
+                    total_text_length += len(child.get('text', ''))
+        
+        return {
+            "total_blocks": len(blocks),
+            "block_types": block_types,
+            "total_text_length": total_text_length,
+            "has_subscription": self._text_doc_subscription is not None
+        }
+    
     def __str__(self) -> str:
         """String representation for user-friendly display"""
         blocks = self.get_blocks()
+        subscription_status = "subscribed" if self._text_doc_subscription else "standalone"
         return (f"LoroModel(blocks={len(blocks)}, "
                 f"source='{self.lexical_data.get('source', 'unknown')}', "
-                f"version='{self.lexical_data.get('version', 'unknown')}')")
+                f"version='{self.lexical_data.get('version', 'unknown')}', "
+                f"mode={subscription_status})")
     
     def __repr__(self) -> str:
         """Detailed representation for debugging"""
         blocks = self.get_blocks()
         block_types = [block.get('type', 'unknown') for block in blocks]
         last_saved = self.lexical_data.get('lastSaved', 'unknown')
+        subscription_status = "subscribed" if self._text_doc_subscription else "standalone"
         
         return (f"LoroModel(blocks={len(blocks)}, "
                 f"block_types={block_types}, "
                 f"source='{self.lexical_data.get('source', 'unknown')}', "
                 f"version='{self.lexical_data.get('version', 'unknown')}', "
-                f"lastSaved={last_saved})")
+                f"lastSaved={last_saved}, "
+                f"mode={subscription_status})")
+    
+    def cleanup(self):
+        """Clean up subscriptions and resources"""
+        if self._text_doc_subscription is not None:
+            try:
+                # Try different unsubscribe patterns
+                if hasattr(self._text_doc_subscription, 'unsubscribe'):
+                    self._text_doc_subscription.unsubscribe()
+                elif hasattr(self._text_doc_subscription, 'close'):
+                    self._text_doc_subscription.close()
+                elif callable(self._text_doc_subscription):
+                    # If it's a callable (like a cleanup function)
+                    self._text_doc_subscription()
+                
+                self._text_doc_subscription = None
+            except Exception as e:
+                print(f"Warning: Could not unsubscribe from text document: {e}")
+                self._text_doc_subscription = None
+    
+    def __del__(self):
+        """Cleanup when object is destroyed"""
+        self.cleanup()
