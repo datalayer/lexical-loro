@@ -749,6 +749,56 @@ class LoroWebSocketServer:
                         "data": ephemeral_data.hex()
                     })
                     logger.info(f"📝 Updated text selection for client {client_id} in {doc_id}: {selection}")
+            
+            elif message_type == "append-paragraph":
+                # Handle append-paragraph command - add a new paragraph to the LoroModel
+                doc_id = data.get("docId", "lexical-shared-doc")
+                message_text = data.get("message", "Hello")
+                
+                logger.info(f"➕ Received append-paragraph command for {doc_id} from client {client_id}: '{message_text}'")
+                
+                # Get the LoroModel for this document
+                if doc_id in self.loro_models:
+                    loro_model = self.loro_models[doc_id]
+                    
+                    # Create a new paragraph block
+                    new_paragraph = {
+                        "children": [{
+                            "detail": 0,
+                            "format": 0,
+                            "mode": "normal",
+                            "style": "",
+                            "text": message_text,
+                            "type": "text",
+                            "version": 1
+                        }],
+                        "direction": "ltr",
+                        "format": "",
+                        "indent": 0,
+                        "type": "paragraph",
+                        "version": 1,
+                        "textFormat": 0,
+                        "textStyle": ""
+                    }
+                    
+                    # Add the paragraph using LoroModel's method
+                    loro_model.add_block(new_paragraph, "paragraph")
+                    
+                    # Sync to Loro document
+                    loro_model._sync_to_loro()
+                    
+                    logger.info(f"✅ Added paragraph to {doc_id}: '{message_text}'")
+                    logger.info(f"🧠 LoroModel after append: {repr(loro_model)}")
+                    
+                    # Broadcast the update to all clients
+                    await self.broadcast_to_all_clients({
+                        "type": "paragraph-added",
+                        "docId": doc_id,
+                        "message": message_text,
+                        "addedBy": client_id
+                    })
+                else:
+                    logger.warning(f"⚠️ No LoroModel found for document {doc_id}")
                     
         except json.JSONDecodeError:
             logger.error(f"❌ Invalid JSON from client {client_id}")
@@ -776,6 +826,26 @@ class LoroWebSocketServer:
                 except (websockets.exceptions.ConnectionClosed, Exception) as e:
                     logger.error(f"❌ Error sending message to client {client_id}: {e}")
                     failed_clients.append(client_id)
+        
+        # Remove failed clients
+        for client_id in failed_clients:
+            if client_id in self.clients:
+                del self.clients[client_id]
+    
+    async def broadcast_to_all_clients(self, message: dict):
+        """Broadcast a message to all connected clients"""
+        if len(self.clients) == 0:
+            return
+            
+        message_str = json.dumps(message)
+        failed_clients = []
+        
+        for client_id, client in self.clients.items():
+            try:
+                await client.websocket.send(message_str)
+            except (websockets.exceptions.ConnectionClosed, Exception) as e:
+                logger.error(f"❌ Error sending message to client {client_id}: {e}")
+                failed_clients.append(client_id)
         
         # Remove failed clients
         for client_id in failed_clients:

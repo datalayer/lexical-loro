@@ -44,6 +44,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [peerId, setPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   const disconnectRef = useRef<(() => void) | null>(null);
+  const sendMessageRef = useRef<((message: any) => void) | null>(null);
 
   const handleConnectionChange = useCallback((connected: boolean) => {
     setIsConnected(connected);
@@ -130,13 +131,33 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               </div>
             )}
             {isConnected && (
-              <button 
-                onClick={handleDisconnect}
-                className="disconnect-button"
-                title="Disconnect from server"
-              >
-                🔌 Disconnect
-              </button>
+              <>
+                <button 
+                  onClick={handleDisconnect}
+                  className="disconnect-button"
+                  title="Disconnect from server"
+                >
+                  🔌 Disconnect
+                </button>
+                <button 
+                  onClick={() => {
+                    // Send append-paragraph command via websocket
+                    if (sendMessageRef.current) {
+                      const command = {
+                        type: "append-paragraph",
+                        docId: "lexical-shared-doc",
+                        message: "Hello"
+                      };
+                      sendMessageRef.current(command);
+                    }
+                  }}
+                  className="append-paragraph-button"
+                  title="Add paragraph with 'Hello' message"
+                  style={{ marginLeft: '8px' }}
+                >
+                  ➕ Add Paragraph
+                </button>
+              </>
             )}
           </div>
           <span>Powered by Lexical + Loro CRDT</span>
@@ -169,6 +190,9 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             onInitialization={handleInitialization}
             onDisconnectReady={(disconnectFn) => {
               disconnectRef.current = disconnectFn;
+            }}
+            onSendMessageReady={(sendMessageFn) => {
+              sendMessageRef.current = sendMessageFn;
             }}
           />
         </div>
