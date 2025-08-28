@@ -99,7 +99,7 @@ class LoroWebSocketServer:
                 self.loro_docs[doc_id] = doc
                 
                 # Create LoroModel from the loro_doc for lexical documents
-                loro_model = LoroModel(text_doc=doc)
+                loro_model = LoroModel(text_doc=doc, container_id=doc_id)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for: {doc_id}")
                 
@@ -121,7 +121,7 @@ class LoroWebSocketServer:
                 
                 # Create LoroModel for lexical documents even in fallback
                 if doc_id == 'lexical-shared-doc':
-                    loro_model = LoroModel(text_doc=fallback_doc)
+                    loro_model = LoroModel(text_doc=fallback_doc, container_id=doc_id)
                     self.loro_models[doc_id] = loro_model
                     logger.info(f"🧠 Created fallback LoroModel for: {doc_id}")
                 
@@ -763,15 +763,15 @@ class LoroWebSocketServer:
         """Get LoroModel for a document ID, creating one if it doesn't exist"""
         if doc_id not in self.loro_models:
             if doc_id in self.loro_docs:
-                # Create model from existing document
-                loro_model = LoroModel(text_doc=self.loro_docs[doc_id])
+                # Create model from existing document, passing the doc_id as container_id
+                loro_model = LoroModel(text_doc=self.loro_docs[doc_id], container_id=doc_id)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for existing document: {doc_id}")
             else:
                 # Create new document and model
                 new_doc = LoroDoc()
                 self.loro_docs[doc_id] = new_doc
-                loro_model = LoroModel(text_doc=new_doc)
+                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created new LoroDoc and LoroModel for: {doc_id}")
         

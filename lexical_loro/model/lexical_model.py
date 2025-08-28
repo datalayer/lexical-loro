@@ -23,13 +23,16 @@ class LoroModel:
     2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
     """
     
-    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
         # Initialize two Loro documents (use provided ones or create new)
         self.text_doc = text_doc if text_doc is not None else loro.LoroDoc()
         self.structured_doc = structured_doc if structured_doc is not None else loro.LoroDoc()
+        
+        # Store the container ID hint for syncing
+        self.container_id = container_id
         
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
@@ -51,34 +54,131 @@ class LoroModel:
         
         # If we were given an existing text_doc, sync from it first
         if text_doc is not None:
-            self._sync_from_loro()
+            self._sync_from_existing_doc()
             # Set up subscription to listen for changes
             self._setup_text_doc_subscription()
         else:
             # Initialize Loro documents with the base structure
             self._sync_to_loro()
     
+    def _sync_from_existing_doc(self):
+        """Sync from existing document content using the document's container ID"""
+        try:
+            # First, try to find what text containers exist in the document
+            doc_state = self.text_doc.get_deep_value()
+            
+            # Look for text containers in the document state
+            content_found = False
+            potential_containers = []
+            
+            if isinstance(doc_state, dict):
+                for key, value in doc_state.items():
+                    if isinstance(value, str) and value.strip().startswith('{'):
+                        potential_containers.append((key, value))
+                        
+            # Try to find content in preferred order: container_id first, then common names
+            container_names_to_try = []
+            if self.container_id:
+                container_names_to_try.append(self.container_id)
+            container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+            
+            # Add any containers we found in the document state
+            container_names_to_try.extend([name for name, _ in potential_containers if name not in container_names_to_try])
+            
+            for container_name in container_names_to_try:
+                try:
+                    text_container = self.text_doc.get_text(container_name)
+                    content = text_container.to_string()
+                    
+                    if content and content.strip():
+                        # Try to parse as JSON
+                        try:
+                            parsed_data = json.loads(content)
+                            
+                            # Handle both direct lexical format and editorState wrapper
+                            if isinstance(parsed_data, dict):
+                                if "root" in parsed_data:
+                                    # Direct lexical format
+                                    self.lexical_data = parsed_data
+                                    content_found = True
+                                    block_count = len(parsed_data.get("root", {}).get("children", []))
+                                    print(f"LoroModel: Synced from existing container '{container_name}' - {block_count} blocks")
+                                    break
+                                elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict) and "root" in parsed_data["editorState"]:
+                                    # editorState wrapper format
+                                    editor_state = parsed_data["editorState"]
+                                    # Build lexical_data with metadata from outer level
+                                    self.lexical_data = {
+                                        "root": editor_state["root"],
+                                        "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
+                                        "source": parsed_data.get("source", "Lexical Loro"),
+                                        "version": parsed_data.get("version", "0.34.0")
+                                    }
+                                    content_found = True
+                                    block_count = len(editor_state.get("root", {}).get("children", []))
+                                    print(f"LoroModel: Synced from existing container '{container_name}' (editorState format) - {block_count} blocks")
+                                    break
+                        except json.JSONDecodeError:
+                            continue
+                            
+                except Exception:
+                    continue
+            
+            if not content_found:
+                print("LoroModel: No valid lexical content found in existing document, using default structure")
+                
+            # Always sync to structured document after loading
+            self._sync_structured_doc_only()
+            
+        except Exception as e:
+            print(f"Warning: Could not sync from existing document: {e}")
+            # Keep default structure if sync fails
+    
     def _setup_text_doc_subscription(self):
         """Set up subscription to listen for changes in the text document"""
         try:
+            # Find which container actually has content - try container_id first
+            active_container = None
+            container_names_to_try = []
+            if self.container_id:
+                container_names_to_try.append(self.container_id)
+            container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+            
+            for container_name in container_names_to_try:
+                try:
+                    text_data = self.text_doc.get_text(container_name)
+                    content = text_data.to_string()
+                    if content and content.strip():
+                        active_container = container_name
+                        break
+                except Exception:
+                    continue
+            
+            # If no container has content, default to container_id or "content"
+            if active_container is None:
+                active_container = self.container_id or "content"
+            
             # Subscribe to document changes - try different subscription patterns
             try:
                 # Try the most common pattern first
                 self._text_doc_subscription = self.text_doc.subscribe(
                     self._handle_text_doc_change
                 )
+                print(f"LoroModel: Set up document subscription (monitoring '{active_container}' container)")
             except TypeError:
                 # Try with additional parameters that might be required
                 try:
                     self._text_doc_subscription = self.text_doc.subscribe(
-                        "content", self._handle_text_doc_change
+                        active_container, self._handle_text_doc_change
                     )
+                    print(f"LoroModel: Set up container subscription for '{active_container}'")
                 except TypeError:
                     # Try the observer pattern with container-specific subscription
-                    text_container = self.text_doc.get_text("content")
+                    text_container = self.text_doc.get_text(active_container)
                     self._text_doc_subscription = text_container.subscribe(
                         self._handle_text_doc_change
                     )
+                    print(f"LoroModel: Set up text container subscription for '{active_container}'")
                     
         except Exception as e:
             # If subscription fails, we'll fall back to manual syncing
@@ -132,11 +232,22 @@ class LoroModel:
     
     def _get_current_text_content(self) -> str:
         """Get current text content from the document"""
-        try:
-            text_data = self.text_doc.get_text("content")
-            return text_data.to_string()
-        except Exception:
-            return ""
+        # Try different container names - prioritize container_id if provided
+        container_names_to_try = []
+        if self.container_id:
+            container_names_to_try.append(self.container_id)
+        container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+        
+        for container_name in container_names_to_try:
+            try:
+                text_data = self.text_doc.get_text(container_name)
+                content = text_data.to_string()
+                if content and content.strip():
+                    return content
+            except Exception:
+                continue
+        
+        return ""
     
     def _apply_text_deltas(self, content: str, deltas) -> str:
         """Apply a sequence of text deltas to content"""
@@ -279,15 +390,43 @@ class LoroModel:
     
     def _sync_from_loro(self):
         """Sync data from Loro documents back to lexical_data"""
-        # For now, sync from text document since it's simpler and more reliable
-        try:
-            text_data = self.text_doc.get_text("content")
-            content = text_data.to_string()
-            if content:
-                self.lexical_data = json.loads(content)
-        except Exception:
-            # If sync fails, keep current data
-            pass
+        # Try different container names - prioritize container_id if provided
+        container_names_to_try = []
+        if self.container_id:
+            container_names_to_try.append(self.container_id)
+        container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+        
+        for container_name in container_names_to_try:
+            try:
+                text_data = self.text_doc.get_text(container_name)
+                content = text_data.to_string()
+                if content and content.strip():
+                    try:
+                        parsed_data = json.loads(content)
+                        
+                        # Handle both direct lexical format and editorState wrapper
+                        if isinstance(parsed_data, dict):
+                            if "root" in parsed_data:
+                                # Direct lexical format
+                                self.lexical_data = parsed_data
+                                return  # Successfully synced
+                            elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict) and "root" in parsed_data["editorState"]:
+                                # editorState wrapper format
+                                editor_state = parsed_data["editorState"]
+                                self.lexical_data = {
+                                    "root": editor_state["root"],
+                                    "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
+                                    "source": parsed_data.get("source", "Lexical Loro"),
+                                    "version": parsed_data.get("version", "0.34.0")
+                                }
+                                return  # Successfully synced
+                    except json.JSONDecodeError:
+                        continue
+            except Exception:
+                continue
+        
+        # If no valid content found, keep current data
+        print("LoroModel: No valid content found in any text container during sync")
     
     
     def add_block(self, block_detail: Dict[str, Any], block_type: str):
@@ -456,16 +595,18 @@ class LoroModel:
     
     def __str__(self) -> str:
         """String representation for user-friendly display"""
-        blocks = self.get_blocks()
+        # Get block count directly from lexical_data to avoid sync during logging
+        block_count = len(self.lexical_data.get("root", {}).get("children", []))
         subscription_status = "subscribed" if self._text_doc_subscription else "standalone"
-        return (f"LoroModel(blocks={len(blocks)}, "
+        return (f"LoroModel(blocks={block_count}, "
                 f"source='{self.lexical_data.get('source', 'unknown')}', "
                 f"version='{self.lexical_data.get('version', 'unknown')}', "
                 f"mode={subscription_status})")
     
     def __repr__(self) -> str:
         """Detailed representation for debugging"""
-        blocks = self.get_blocks()
+        # Get block info directly from lexical_data to avoid sync during logging
+        blocks = self.lexical_data.get("root", {}).get("children", [])
         block_types = [block.get('type', 'unknown') for block in blocks]
         last_saved = self.lexical_data.get('lastSaved', 'unknown')
         subscription_status = "subscribed" if self._text_doc_subscription else "standalone"

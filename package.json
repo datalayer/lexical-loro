@@ -59,6 +59,9 @@
   },
   "peerDependencies": {
   },
+  "optionalDependencies": {
+    "@loro-mirror/core": "^0.1.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
     "@types/react": "^19.1.8",
