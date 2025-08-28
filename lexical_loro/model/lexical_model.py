@@ -3,12 +3,15 @@
 
 import json
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 try:
     import loro
 except ImportError:
     # Fallback for when loro is not available
     loro = None
+
+if TYPE_CHECKING and loro is not None:
+    from loro import LoroDoc
 
 
 class LoroModel:
@@ -20,13 +23,13 @@ class LoroModel:
     2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
     """
     
-    def __init__(self):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
-        # Initialize two Loro documents
-        self.text_doc = loro.LoroDoc()
-        self.structured_doc = loro.LoroDoc()
+        # Initialize two Loro documents (use provided ones or create new)
+        self.text_doc = text_doc if text_doc is not None else loro.LoroDoc()
+        self.structured_doc = structured_doc if structured_doc is not None else loro.LoroDoc()
         
         # Initialize the lexical model structure
         self.lexical_data = {
@@ -92,12 +95,12 @@ class LoroModel:
         # Map block types to lexical types
         type_mapping = {
             "paragraph": "paragraph",
-            "heading1": "heading",
-            "heading2": "heading",
-            "heading3": "heading",
-            "heading4": "heading",
-            "heading5": "heading",
-            "heading6": "heading",
+            "heading1": "heading1",
+            "heading2": "heading2",
+            "heading3": "heading3",
+            "heading4": "heading4",
+            "heading5": "heading5",
+            "heading6": "heading6",
         }
         
         lexical_type = type_mapping.get(block_type, "paragraph")
