@@ -188,20 +188,37 @@ class LoroModel:
     def _handle_text_doc_change(self, diff_event):
         """Handle changes to the text document using fine-grained diffs"""
         try:
+            print(f"LoroModel: Received text doc change event")
             # Process each container diff in the event
             for container_diff in diff_event.events:
-                # We're interested in changes to the "content" text container
+                # We're interested in changes to our text container
                 if hasattr(container_diff, 'target') and hasattr(container_diff, 'diff'):
-                    # Check if this is the content container we care about
+                    # Check if this is the container we care about
                     target_str = str(container_diff.target) if hasattr(container_diff.target, '__str__') else repr(container_diff.target)
+                    print(f"LoroModel: Processing diff for target: {target_str}")
                     
-                    if 'content' in target_str:
+                    # Check for our container_id or common container names
+                    target_matches = False
+                    if self.container_id and self.container_id in target_str:
+                        target_matches = True
+                    elif any(name in target_str for name in ['content', 'lexical-shared-doc', 'shared-text']):
+                        target_matches = True
+                    
+                    if target_matches:
+                        print(f"LoroModel: Applying text diff for {target_str}")
                         self._apply_text_diff(container_diff.diff)
+                    else:
+                        print(f"LoroModel: Ignoring diff for {target_str} (not our container)")
                         
         except Exception as e:
             print(f"Warning: Error handling text document change event: {e}")
             # Fallback to full sync
             self._sync_from_loro_fallback()
+    
+    def _sync_from_loro_fallback(self):
+        """Fallback sync method when diff processing fails"""
+        print("LoroModel: Using fallback sync")
+        self._sync_from_loro()
     
     def _apply_text_diff(self, diff):
         """Apply text diff to update lexical_data incrementally"""
@@ -390,16 +407,23 @@ class LoroModel:
     
     def _sync_from_loro(self):
         """Sync data from Loro documents back to lexical_data"""
+        print(f"LoroModel: Starting _sync_from_loro() with container_id='{self.container_id}'")
+        
         # Try different container names - prioritize container_id if provided
         container_names_to_try = []
         if self.container_id:
             container_names_to_try.append(self.container_id)
         container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
         
+        print(f"LoroModel: Will try containers: {container_names_to_try}")
+        
         for container_name in container_names_to_try:
             try:
+                print(f"LoroModel: Trying container '{container_name}'")
                 text_data = self.text_doc.get_text(container_name)
                 content = text_data.to_string()
+                print(f"LoroModel: Container '{container_name}' content length: {len(content) if content else 0}")
+                
                 if content and content.strip():
                     try:
                         parsed_data = json.loads(content)
@@ -408,21 +432,33 @@ class LoroModel:
                         if isinstance(parsed_data, dict):
                             if "root" in parsed_data:
                                 # Direct lexical format
+                                old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                                new_block_count = len(parsed_data.get("root", {}).get("children", []))
                                 self.lexical_data = parsed_data
+                                print(f"LoroModel: Successfully synced from '{container_name}' - blocks {old_block_count} -> {new_block_count}")
                                 return  # Successfully synced
                             elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict) and "root" in parsed_data["editorState"]:
                                 # editorState wrapper format
                                 editor_state = parsed_data["editorState"]
+                                old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                                new_block_count = len(editor_state.get("root", {}).get("children", []))
                                 self.lexical_data = {
                                     "root": editor_state["root"],
                                     "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
                                     "source": parsed_data.get("source", "Lexical Loro"),
                                     "version": parsed_data.get("version", "0.34.0")
                                 }
+                                print(f"LoroModel: Successfully synced from '{container_name}' (editorState format) - blocks {old_block_count} -> {new_block_count}")
                                 return  # Successfully synced
-                    except json.JSONDecodeError:
+                        else:
+                            print(f"LoroModel: Container '{container_name}' data is not a dict: {type(parsed_data)}")
+                    except json.JSONDecodeError as e:
+                        print(f"LoroModel: Container '{container_name}' has invalid JSON: {e}")
                         continue
-            except Exception:
+                else:
+                    print(f"LoroModel: Container '{container_name}' is empty or whitespace")
+            except Exception as e:
+                print(f"LoroModel: Error accessing container '{container_name}': {e}")
                 continue
         
         # If no valid content found, keep current data

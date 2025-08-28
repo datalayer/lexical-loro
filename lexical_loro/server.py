@@ -156,6 +156,14 @@ class LoroWebSocketServer:
                        f"added={len(event_data['added'])}, updated={len(event_data['updated'])}, "
                        f"removed={len(event_data['removed'])}")
             
+            # Log LoroModel state for lexical documents during ephemeral events
+            if doc_id in self.loro_models:
+                loro_model = self.loro_models[doc_id]
+                logger.info(f"👁️  Using LoroModel instance {id(loro_model)} for {doc_id}")
+                # Force sync before logging to get current state
+                loro_model._sync_from_loro()
+                logger.info(f"👁️  LoroModel state during ephemeral event: {repr(loro_model)}")
+            
             # Only broadcast if there are actual changes
             if event_data['added'] or event_data['updated'] or event_data['removed']:
                 # Create broadcast message with event info
@@ -448,6 +456,15 @@ class LoroWebSocketServer:
                             # Log the lexical_model structure for lexical documents
                             if doc_id in self.loro_models:
                                 loro_model = self.loro_models[doc_id]
+                                
+                                logger.info(f"🧠 Using LoroModel instance {id(loro_model)} for {doc_id}")
+                                # Debug: Check if LoroModel is using the same LoroDoc reference
+                                logger.info(f"🔍 Debug: server LoroDoc id: {id(self.loro_docs[doc_id])}")
+                                logger.info(f"🔍 Debug: LoroModel LoroDoc id: {id(loro_model.text_doc)}")
+                                logger.info(f"🔍 Debug: LoroDoc references match: {self.loro_docs[doc_id] is loro_model.text_doc}")
+                                
+                                # Force sync to get current state after document update
+                                loro_model._sync_from_loro()
                                 logger.info(f"🧠 LoroModel for {doc_id}: {loro_model}")
                                 logger.info(f"🧠 LoroModel detailed: {repr(loro_model)}")
                             
@@ -534,7 +551,7 @@ class LoroWebSocketServer:
                             
                             # Create LoroModel for lexical documents
                             if 'lexical' in doc_id.lower():
-                                loro_model = LoroModel(text_doc=new_doc)
+                                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id)
                                 self.loro_models[doc_id] = loro_model
                                 logger.info(f"🧠 Created LoroModel for new document: {doc_id}")
                         
@@ -625,6 +642,13 @@ class LoroWebSocketServer:
                         
                         # Note: No manual broadcasting needed - the subscription will handle it
                         logger.info(f"👁️  Applied ephemeral update from client {client_id}")
+                        
+                        # Log LoroModel state after ephemeral update for lexical documents
+                        if doc_id in self.loro_models:
+                            loro_model = self.loro_models[doc_id]
+                            # Force sync to get current state after ephemeral update
+                            loro_model._sync_from_loro()
+                            logger.info(f"👁️  LoroModel after ephemeral update: {repr(loro_model)}")
                     except Exception as e:
                         logger.error(f"❌ Error processing ephemeral update for {doc_id}: {e}")
             
@@ -647,6 +671,13 @@ class LoroWebSocketServer:
                         self.ephemeral_stores[doc_id].apply(ephemeral_bytes)
                         
                         logger.info(f"👁️  Applied ephemeral data from client {client_id}")
+                        
+                        # Log LoroModel state after ephemeral update for lexical documents
+                        if doc_id in self.loro_models:
+                            loro_model = self.loro_models[doc_id]
+                            # Force sync to get current state after ephemeral data
+                            loro_model._sync_from_loro()
+                            logger.info(f"👁️  LoroModel after ephemeral data: {repr(loro_model)}")
                     except Exception as e:
                         logger.error(f"❌ Error processing ephemeral data for {doc_id}: {e}")
             
