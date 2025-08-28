@@ -15,6 +15,7 @@ from typing import Dict, Any
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
 from loro import LoroDoc, ExportMode, EphemeralStore, EphemeralStoreEvent
+from .model.lexical_model import LoroModel
 
 
 INITIAL_LEXICAL_JSON = """
@@ -55,6 +56,7 @@ class LoroWebSocketServer:
         self.port = port
         self.clients: Dict[str, Client] = {}
         self.loro_docs: Dict[str, LoroDoc] = {}  # Store Loro documents by docId
+        self.loro_models: Dict[str, LoroModel] = {}  # Store LoroModel instances by docId
         self.ephemeral_stores: Dict[str, EphemeralStore] = {}  # Store EphemeralStore instances by docId
         self.ephemeral_subscriptions: Dict[str, Any] = {}  # Store ephemeral subscriptions by docId
         self.running = False
@@ -95,6 +97,12 @@ class LoroWebSocketServer:
                 doc.commit()
                     
                 self.loro_docs[doc_id] = doc
+                
+                # Create LoroModel from the loro_doc for lexical documents
+                loro_model = LoroModel(text_doc=doc)
+                self.loro_models[doc_id] = loro_model
+                logger.info(f"🧠 Created LoroModel for: {doc_id}")
+                
                 self.ephemeral_stores[doc_id] = ephemeral_store
                 
                 # Subscribe to ephemeral store events for this document
@@ -108,7 +116,15 @@ class LoroWebSocketServer:
             except Exception as e:
                 logger.error(f"❌ Failed to initialize document {doc_id}: {e}")
                 # Still create an empty document and ephemeral store as fallback
-                self.loro_docs[doc_id] = LoroDoc()
+                fallback_doc = LoroDoc()
+                self.loro_docs[doc_id] = fallback_doc
+                
+                # Create LoroModel for lexical documents even in fallback
+                if doc_id == 'lexical-shared-doc':
+                    loro_model = LoroModel(text_doc=fallback_doc)
+                    self.loro_models[doc_id] = loro_model
+                    logger.info(f"🧠 Created fallback LoroModel for: {doc_id}")
+                
                 self.ephemeral_stores[doc_id] = EphemeralStore(300000)  # 5 minutes timeout
     
     def _extract_event_data(self, event: EphemeralStoreEvent) -> dict:
@@ -429,6 +445,12 @@ class LoroWebSocketServer:
                             current_content = text_container.to_string()  # Use to_string() method
                             logger.info(f"📋 Current {doc_id} content after update: {json.dumps(current_content)} (length: {len(current_content)})")
                             
+                            # Log the lexical_model structure for lexical documents
+                            if doc_id in self.loro_models:
+                                loro_model = self.loro_models[doc_id]
+                                logger.info(f"🧠 LoroModel for {doc_id}: {loro_model}")
+                                logger.info(f"🧠 LoroModel detailed: {repr(loro_model)}")
+                            
                             # Try to parse as JSON to see if it's Lexical EditorState
                             try:
                                 if current_content.strip():
@@ -507,7 +529,14 @@ class LoroWebSocketServer:
                     try:
                         snapshot_bytes = bytes(snapshot_data)
                         if doc_id not in self.loro_docs:
-                            self.loro_docs[doc_id] = LoroDoc()
+                            new_doc = LoroDoc()
+                            self.loro_docs[doc_id] = new_doc
+                            
+                            # Create LoroModel for lexical documents
+                            if 'lexical' in doc_id.lower():
+                                loro_model = LoroModel(text_doc=new_doc)
+                                self.loro_models[doc_id] = loro_model
+                                logger.info(f"🧠 Created LoroModel for new document: {doc_id}")
                         
                         # Import the snapshot
                         self.loro_docs[doc_id].import_(snapshot_bytes)
@@ -730,6 +759,24 @@ class LoroWebSocketServer:
         suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=9))
         return f"py_client_{timestamp}_{suffix}"
     
+    def get_loro_model(self, doc_id: str) -> LoroModel:
+        """Get LoroModel for a document ID, creating one if it doesn't exist"""
+        if doc_id not in self.loro_models:
+            if doc_id in self.loro_docs:
+                # Create model from existing document
+                loro_model = LoroModel(text_doc=self.loro_docs[doc_id])
+                self.loro_models[doc_id] = loro_model
+                logger.info(f"🧠 Created LoroModel for existing document: {doc_id}")
+            else:
+                # Create new document and model
+                new_doc = LoroDoc()
+                self.loro_docs[doc_id] = new_doc
+                loro_model = LoroModel(text_doc=new_doc)
+                self.loro_models[doc_id] = loro_model
+                logger.info(f"🧠 Created new LoroDoc and LoroModel for: {doc_id}")
+        
+        return self.loro_models[doc_id]
+    
     async def log_stats(self):
         """Log server statistics periodically and clean up stale connections"""
         while self.running:
@@ -786,11 +833,12 @@ class LoroWebSocketServer:
                             # Get snapshot size using the correct API
                             snapshot = doc.export(ExportMode.Snapshot())
                             snapshot_size = len(snapshot) if snapshot else 0
-                            doc_stats.append(f"{doc_id}({snapshot_size}b)")
+                            model_suffix = "+model" if doc_id in self.loro_models else ""
+                            doc_stats.append(f"{doc_id}({snapshot_size}b{model_suffix})")
                         except Exception as e:
                             doc_stats.append(f"{doc_id}(error: {str(e)})")
                     
-                    logger.info(f"📊 Server stats: {len(self.clients)} clients, Documents: {', '.join(doc_stats)}")
+                    logger.info(f"📊 Server stats: {len(self.clients)} clients, Documents: {', '.join(doc_stats)}, Models: {len(self.loro_models)}")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -811,6 +859,7 @@ class LoroWebSocketServer:
         
         self.clients.clear()
         self.loro_docs.clear()
+        self.loro_models.clear()
         self.ephemeral_stores.clear()
         logger.info("✅ Server shutdown complete")
 

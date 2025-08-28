@@ -220,3 +220,22 @@ class LoroModel:
         """Import lexical data from JSON string"""
         self.lexical_data = json.loads(json_data)
         self._sync_to_loro()
+    
+    def __str__(self) -> str:
+        """String representation for user-friendly display"""
+        blocks = self.get_blocks()
+        return (f"LoroModel(blocks={len(blocks)}, "
+                f"source='{self.lexical_data.get('source', 'unknown')}', "
+                f"version='{self.lexical_data.get('version', 'unknown')}')")
+    
+    def __repr__(self) -> str:
+        """Detailed representation for debugging"""
+        blocks = self.get_blocks()
+        block_types = [block.get('type', 'unknown') for block in blocks]
+        last_saved = self.lexical_data.get('lastSaved', 'unknown')
+        
+        return (f"LoroModel(blocks={len(blocks)}, "
+                f"block_types={block_types}, "
+                f"source='{self.lexical_data.get('source', 'unknown')}', "
+                f"version='{self.lexical_data.get('version', 'unknown')}', "
+                f"lastSaved={last_saved})")

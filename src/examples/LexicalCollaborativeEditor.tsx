@@ -160,8 +160,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin
-//            websocketUrl={websocketUrl}
-            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/lexical-shared-doc"
+            websocketUrl={websocketUrl}
+//            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/lexical-shared-doc"
             docId="lexical-shared-doc"
             onConnectionChange={handleConnectionChange}
             onPeerIdChange={handlePeerIdChange}
