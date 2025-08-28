@@ -2,7 +2,6 @@
 """Test script to verify LoroModel syncs correctly from existing content"""
 
 import json
-import time
 from lexical_loro.model.lexical_model import LoroModel
 from loro import LoroDoc
 

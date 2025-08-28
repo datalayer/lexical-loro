@@ -77,12 +77,15 @@ class LoroModel:
                         potential_containers.append((key, value))
                         
             # Try to find content in preferred order: container_id first, then common names
-            container_names_to_try = []
             if self.container_id:
-                container_names_to_try.append(self.container_id)
-            container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+                container_names_to_try = [self.container_id]
+                # Only add fallbacks if container_id is not one of the common names
+                if self.container_id not in ["content", "lexical-shared-doc", "shared-text"]:
+                    container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+            else:
+                container_names_to_try = ["content", "lexical-shared-doc", "shared-text"]
             
-            # Add any containers we found in the document state
+            # Add any containers we found in the document state that aren't already in the list
             container_names_to_try.extend([name for name, _ in potential_containers if name not in container_names_to_try])
             
             for container_name in container_names_to_try:
@@ -139,10 +142,10 @@ class LoroModel:
         try:
             # Find which container actually has content - try container_id first
             active_container = None
-            container_names_to_try = []
             if self.container_id:
-                container_names_to_try.append(self.container_id)
-            container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+                container_names_to_try = [self.container_id]
+            else:
+                container_names_to_try = ["content", "lexical-shared-doc", "shared-text"]
             
             for container_name in container_names_to_try:
                 try:
@@ -409,11 +412,12 @@ class LoroModel:
         """Sync data from Loro documents back to lexical_data"""
         print(f"LoroModel: Starting _sync_from_loro() with container_id='{self.container_id}'")
         
-        # Try different container names - prioritize container_id if provided
-        container_names_to_try = []
+        # If we have a specific container_id, only try that one
+        # Otherwise fall back to common container names
         if self.container_id:
-            container_names_to_try.append(self.container_id)
-        container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
+            container_names_to_try = [self.container_id]
+        else:
+            container_names_to_try = ["content", "lexical-shared-doc", "shared-text"]
         
         print(f"LoroModel: Will try containers: {container_names_to_try}")
         
