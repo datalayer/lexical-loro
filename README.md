@@ -8,10 +8,11 @@ A collaborative editing plugin for [Lexical](https://github.com/facebook/lexical
 
 ## Core Components
 
-This package provides two main components for building collaborative text editors:
+This package provides three main components for building collaborative text editors:
 
 1. **`LoroCollaborativePlugin.tsx`** - A Lexical plugin that integrates Loro CRDT for real-time collaborative editing
-2. **`lexical-loro` Python package** - A WebSocket server using [loro-py](https://github.com/loro-dev/loro-py) for maintaining document state server-side
+2. **`LexicalModel` Python Library** - A standalone document model for Lexical content with CRDT capabilities
+3. **`lexical-loro` WebSocket Server** - A Python server using [loro-py](https://github.com/loro-dev/loro-py) for real-time collaboration
 
 ## Quick Start
 
@@ -32,6 +33,34 @@ function MyEditor() {
     </LexicalComposer>
   );
 }
+```
+
+### Using the LexicalModel Library
+
+```python
+from lexical_loro import LexicalModel
+
+# Create a new document
+model = LexicalModel.create_document("my-document")
+
+# Add content
+model.add_block({
+    "text": "My Document",
+    "format": 0,
+    "style": ""
+}, "heading1")
+
+model.add_block({
+    "text": "This is a paragraph.",
+    "format": 0,
+    "style": ""
+}, "paragraph")
+
+# Save to file
+model.save_to_file("document.json")
+
+# Load from file
+loaded_model = LexicalModel.load_from_file("document.json")
 ```
 
 ### Using the Python Server
@@ -63,9 +92,11 @@ For complete working examples, see the `src/examples/` directory which contains:
 - 🔄 **Real-time Collaboration**: Multiple users can edit the same document simultaneously
 - 🚀 **Conflict-free**: Uses Loro CRDT to automatically resolve conflicts  
 - 📝 **Lexical Integration**: Seamless integration with Lexical rich text editor
+- 📚 **Standalone Library**: Use LexicalModel independently for document management
 - 🌐 **WebSocket Server**: Python server for maintaining document state
 - 📡 **Connection Management**: Robust WebSocket connection handling
 - ✨ **Rich Text Support**: Preserves formatting during collaborative editing
+- 💾 **Serialization**: JSON export/import and file persistence
 - 🔧 **Extensible**: Plugin-based architecture for easy customization
 
 ## Technology Stack
@@ -148,7 +179,56 @@ function CollaborativeEditor() {
 }
 ```
 
-### 2. Python Server Setup
+### 2. Standalone LexicalModel Library
+
+Use the LexicalModel library independently for document management:
+
+```python
+from lexical_loro import LexicalModel
+
+# Create a new document
+model = LexicalModel.create_document("my-document")
+
+# Add different types of content
+model.add_block({
+    "text": "My Document",
+    "format": 0,
+    "style": ""
+}, "heading1")
+
+model.add_block({
+    "text": "This is a paragraph with **bold** text.",
+    "format": 0,
+    "style": ""
+}, "paragraph")
+
+model.add_block({
+    "text": "",
+    "format": 0,
+    "style": ""
+}, "list")
+
+# Serialize to JSON
+json_data = model.to_json()
+
+# Save to file
+model.save_to_file("document.json")
+
+# Load from file
+loaded_model = LexicalModel.load_from_file("document.json")
+
+# Access blocks
+for block in loaded_model.get_blocks():
+    print(f"{block['type']}: {block.get('text', '')}")
+```
+
+For more examples, see:
+- `examples/memory_only_example.py` - Basic document creation and manipulation
+- `examples/file_sync_example.py` - File persistence and batch operations  
+- `examples/collaboration_example.py` - Simulating collaborative editing
+- `docs/LEXICAL_MODEL_GUIDE.md` - Comprehensive documentation
+
+### 3. Python Server Setup
 
 Start the WebSocket server:
 
@@ -163,7 +243,7 @@ lexical-loro-server --port 8082
 lexical-loro-server --port 8081 --log-level DEBUG
 ```
 
-### 3. Programmatic Server Usage
+### 4. Programmatic Server Usage
 
 ```python
 import asyncio
@@ -434,7 +514,18 @@ lexical_loro/                           # Python WebSocket server package
 ├── __init__.py                         # Package exports
 ├── server.py                           # WebSocket server implementation  
 ├── cli.py                              # Command line interface
+├── model/
+│   └── lexical_model.py                # Standalone LexicalModel library
 └── tests/                              # Python test suite
+
+docs/
+└── LEXICAL_MODEL_GUIDE.md              # Comprehensive library documentation
+
+examples/
+├── memory_only_example.py              # Basic LexicalModel usage
+├── file_sync_example.py                # File persistence example
+├── collaboration_example.py            # Collaborative editing simulation
+└── README.md                           # Examples documentation
 
 pyproject.toml                          # Python package configuration
 ```

@@ -1247,6 +1247,150 @@ class LexicalModel:
                 "error": str(e)
             }
     
+    # ==========================================
+    # STEP 7: SERIALIZATION METHODS
+    # ==========================================
+    
+    def to_json(self, include_metadata: bool = True) -> str:
+        """
+        Export the current lexical data as a JSON string.
+        
+        Args:
+            include_metadata: Whether to include metadata (lastSaved, source, version)
+            
+        Returns:
+            JSON string representation of the lexical data
+        """
+        self._sync_from_loro()
+        
+        if include_metadata:
+            return json.dumps(self.lexical_data, indent=2)
+        else:
+            # Return only the core lexical structure
+            core_data = {
+                "root": self.lexical_data.get("root", {})
+            }
+            return json.dumps(core_data, indent=2)
+    
+    @classmethod
+    def from_json(cls, json_data: str, container_id: Optional[str] = None, 
+                  event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+                  ephemeral_timeout: int = 300000) -> 'LexicalModel':
+        """
+        Create a LexicalModel instance from JSON data.
+        
+        Args:
+            json_data: JSON string containing lexical data
+            container_id: Optional container ID for the model
+            event_callback: Optional callback for structured event communication
+            ephemeral_timeout: Timeout for ephemeral data in milliseconds
+            
+        Returns:
+            New LexicalModel instance with the imported data
+        """
+        try:
+            parsed_data = json.loads(json_data)
+            
+            # Create a new model
+            model = cls(container_id=container_id, 
+                       event_callback=event_callback,
+                       ephemeral_timeout=ephemeral_timeout)
+            
+            # Import the data
+            if isinstance(parsed_data, dict):
+                if "root" in parsed_data:
+                    # Direct lexical format
+                    model.lexical_data = parsed_data
+                elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict):
+                    # Handle editorState wrapper format
+                    editor_state = parsed_data["editorState"]
+                    model.lexical_data = {
+                        "root": editor_state["root"],
+                        "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
+                        "source": parsed_data.get("source", "Lexical Loro"),
+                        "version": parsed_data.get("version", "0.34.0")
+                    }
+                else:
+                    raise ValueError("Invalid JSON structure: missing 'root' or 'editorState'")
+                    
+                # Sync to Loro documents
+                model._sync_to_loro()
+                
+                print(f"✅ Created LexicalModel from JSON: {len(model.lexical_data.get('root', {}).get('children', []))} blocks")
+                return model
+            else:
+                raise ValueError("JSON data must be an object")
+                
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+        except Exception as e:
+            raise ValueError(f"Error creating model from JSON: {e}")
+    
+    def save_to_file(self, file_path: str, include_metadata: bool = True) -> bool:
+        """
+        Save the current lexical data to a JSON file.
+        
+        Args:
+            file_path: Path to save the JSON file
+            include_metadata: Whether to include metadata in the saved file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import os
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Get JSON data
+            json_data = self.to_json(include_metadata=include_metadata)
+            
+            # Write to file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(json_data)
+            
+            print(f"✅ Saved LexicalModel to {file_path}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error saving to file {file_path}: {e}")
+            return False
+    
+    @classmethod
+    def load_from_file(cls, file_path: str, container_id: Optional[str] = None,
+                       event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+                       ephemeral_timeout: int = 300000) -> Optional['LexicalModel']:
+        """
+        Load a LexicalModel from a JSON file.
+        
+        Args:
+            file_path: Path to the JSON file
+            container_id: Optional container ID for the model
+            event_callback: Optional callback for structured event communication
+            ephemeral_timeout: Timeout for ephemeral data in milliseconds
+            
+        Returns:
+            LexicalModel instance if successful, None otherwise
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                json_data = f.read()
+            
+            model = cls.from_json(json_data, container_id=container_id, 
+                                 event_callback=event_callback,
+                                 ephemeral_timeout=ephemeral_timeout)
+            
+            print(f"✅ Loaded LexicalModel from {file_path}")
+            return model
+            
+        except FileNotFoundError:
+            print(f"❌ File not found: {file_path}")
+            return None
+        except Exception as e:
+            print(f"❌ Error loading from file {file_path}: {e}")
+            return None
+    
     # Message Handling Methods (Step 2)
     
     def handle_message(self, message_type: str, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:

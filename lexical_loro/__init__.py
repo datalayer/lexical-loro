@@ -10,5 +10,6 @@ __author__ = "Datalayer"
 __email__ = "eric@datalayer.io"
 
 from .server import LoroWebSocketServer, Client
+from .model.lexical_model import LexicalModel
 
-__all__ = ["LoroWebSocketServer", "Client"]
+__all__ = ["LoroWebSocketServer", "Client", "LexicalModel"]
