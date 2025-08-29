@@ -388,12 +388,31 @@ class LoroModel:
     
     def _sync_to_loro(self):
         """Sync the current lexical_data to both Loro documents"""
+        # Determine which container to write to (use container_id if available)
+        target_container = self.container_id if self.container_id else "content"
+        
+        print(f"LoroModel: Syncing TO container '{target_container}'")
+        
         # Update text document with serialized JSON
-        text_data = self.text_doc.get_text("content")
+        text_data = self.text_doc.get_text(target_container)
         current_length = text_data.len_unicode
         if current_length > 0:
             text_data.delete(0, current_length)
-        text_data.insert(0, json.dumps(self.lexical_data))
+        
+        # For lexical-shared-doc, wrap in editorState format to match expected structure
+        if target_container == "lexical-shared-doc":
+            wrapped_data = {
+                "editorState": self.lexical_data,
+                "lastSaved": self.lexical_data["lastSaved"],
+                "source": self.lexical_data["source"],
+                "version": self.lexical_data["version"]
+            }
+            text_data.insert(0, json.dumps(wrapped_data))
+            print(f"LoroModel: Wrote wrapped editorState format to '{target_container}'")
+        else:
+            # For content container, use direct format
+            text_data.insert(0, json.dumps(self.lexical_data))
+            print(f"LoroModel: Wrote direct format to '{target_container}'")
         
         # Update structured document with basic metadata only
         root_map = self.structured_doc.get_map("root")
@@ -477,6 +496,44 @@ class LoroModel:
             block_detail: Dictionary containing block details (text, formatting, etc.)
             block_type: Type of block (paragraph, heading1, heading2, etc.)
         """
+        try:
+            # Sync from Loro to get the latest state
+            self._sync_from_loro()
+            
+            # Ensure we have a valid lexical_data structure
+            if not isinstance(self.lexical_data, dict):
+                print(f"❌ Resetting invalid lexical_data type: {type(self.lexical_data)}")
+                self.lexical_data = self._create_default_lexical_structure()
+            
+            if "root" not in self.lexical_data:
+                print(f"❌ Missing 'root', creating default structure")
+                self.lexical_data["root"] = {"children": [], "direction": None, "format": "", "indent": 0, "type": "root", "version": 1}
+                
+            if not isinstance(self.lexical_data["root"], dict):
+                print(f"❌ Invalid root type: {type(self.lexical_data['root'])}, resetting")
+                self.lexical_data["root"] = {"children": [], "direction": None, "format": "", "indent": 0, "type": "root", "version": 1}
+                
+            if "children" not in self.lexical_data["root"]:
+                print(f"❌ Missing 'children' in root, adding")
+                self.lexical_data["root"]["children"] = []
+                
+            if not isinstance(self.lexical_data["root"]["children"], list):
+                print(f"❌ Invalid children type: {type(self.lexical_data['root']['children'])}, resetting")
+                self.lexical_data["root"]["children"] = []
+            
+            # Ensure we have required metadata
+            if "source" not in self.lexical_data:
+                self.lexical_data["source"] = "Lexical Loro"
+            if "version" not in self.lexical_data:
+                self.lexical_data["version"] = "0.34.0"
+            if "lastSaved" not in self.lexical_data:
+                self.lexical_data["lastSaved"] = int(time.time() * 1000)
+                
+        except Exception as e:
+            print(f"❌ Error during add_block preparation: {e}")
+            print(f"❌ Creating fresh structure")
+            self.lexical_data = self._create_default_lexical_structure()
+        
         # Map block types to lexical types
         type_mapping = {
             "paragraph": "paragraph",
@@ -526,12 +583,23 @@ class LoroModel:
             if key not in ["text", "detail", "format", "mode", "style"]:
                 new_block[key] = value
         
-        # Add block to the lexical data
-        self.lexical_data["root"]["children"].append(new_block)
-        self.lexical_data["lastSaved"] = int(time.time() * 1000)
-        
-        # Sync to Loro documents
-        self._sync_to_loro()
+        try:
+            # Add block to the lexical data
+            old_count = len(self.lexical_data["root"]["children"])
+            self.lexical_data["root"]["children"].append(new_block)
+            self.lexical_data["lastSaved"] = int(time.time() * 1000)
+            new_count = len(self.lexical_data["root"]["children"])
+            
+            print(f"✅ Block added to lexical_data: {old_count} -> {new_count} blocks")
+            
+            # Sync to Loro documents
+            self._sync_to_loro()
+            print(f"✅ Synced to Loro documents successfully")
+            
+        except Exception as e:
+            print(f"❌ Error adding block to lexical data: {e}")
+            print(f"❌ Lexical data structure: {self.lexical_data}")
+            raise e
     
     def get_blocks(self) -> List[Dict[str, Any]]:
         """Get all blocks from the lexical model"""
@@ -657,6 +725,42 @@ class LoroModel:
                 f"version='{self.lexical_data.get('version', 'unknown')}', "
                 f"lastSaved={last_saved}, "
                 f"mode={subscription_status})")
+    
+    def _create_default_lexical_structure(self) -> Dict[str, Any]:
+        """Create a default lexical data structure"""
+        return {
+            "root": {
+                "children": [
+                    {
+                        "children": [
+                            {
+                                "detail": 0,
+                                "format": 0,
+                                "mode": "normal",
+                                "style": "",
+                                "text": "Document",
+                                "type": "text",
+                                "version": 1
+                            }
+                        ],
+                        "direction": None,
+                        "format": "",
+                        "indent": 0,
+                        "type": "heading",
+                        "version": 1,
+                        "tag": "h1"
+                    }
+                ],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": "root",
+                "version": 1
+            },
+            "lastSaved": int(time.time() * 1000),
+            "source": "Lexical Loro",
+            "version": "0.34.0"
+        }
     
     def cleanup(self):
         """Clean up subscriptions and resources"""

@@ -781,22 +781,45 @@ class LoroWebSocketServer:
                         "textStyle": ""
                     }
                     
+                    # Ensure the LoroModel is synced before adding a block
+                    try:
+                        # Force sync from Loro to get the latest state
+                        logger.info(f"🔄 Syncing LoroModel before append: {repr(loro_model)}")
+                        loro_model._sync_from_loro()
+                        logger.info(f"🔄 LoroModel after sync: {repr(loro_model)}")
+                    except Exception as sync_error:
+                        logger.warning(f"⚠️ Could not sync from Loro before append: {sync_error}")
+                    
                     # Add the paragraph using LoroModel's method
-                    loro_model.add_block(new_paragraph, "paragraph")
-                    
-                    # Sync to Loro document
-                    loro_model._sync_to_loro()
-                    
-                    logger.info(f"✅ Added paragraph to {doc_id}: '{message_text}'")
-                    logger.info(f"🧠 LoroModel after append: {repr(loro_model)}")
-                    
-                    # Broadcast the update to all clients
-                    await self.broadcast_to_all_clients({
-                        "type": "paragraph-added",
-                        "docId": doc_id,
-                        "message": message_text,
-                        "addedBy": client_id
-                    })
+                    try:
+                        logger.info(f"➕ Adding paragraph '{message_text}' to LoroModel with {len(loro_model.lexical_data.get('root', {}).get('children', []))} existing blocks")
+                        loro_model.add_block(new_paragraph, "paragraph")
+                        logger.info(f"✅ Added paragraph to {doc_id}: '{message_text}'")
+                        logger.info(f"🧠 LoroModel after append: {repr(loro_model)}")
+                        
+                        # Force another sync to ensure consistency
+                        try:
+                            loro_model._sync_from_loro()
+                            logger.info(f"🔄 Final LoroModel state after sync: {repr(loro_model)}")
+                        except Exception as final_sync_error:
+                            logger.warning(f"⚠️ Could not perform final sync: {final_sync_error}")
+                        
+                        # Broadcast the update to all clients
+                        await self.broadcast_to_all_clients({
+                            "type": "paragraph-added",
+                            "docId": doc_id,
+                            "message": message_text,
+                            "addedBy": client_id
+                        })
+                    except Exception as add_error:
+                        logger.error(f"❌ Failed to add paragraph to {doc_id}: {add_error}")
+                        logger.error(f"❌ LoroModel state: {repr(loro_model)}")
+                        # Try to recover by forcing a complete resync
+                        try:
+                            loro_model.force_sync_from_text_doc()
+                            logger.info(f"🔄 Forced resync completed for {doc_id}")
+                        except Exception as resync_error:
+                            logger.error(f"❌ Failed to resync LoroModel: {resync_error}")
                 else:
                     logger.warning(f"⚠️ No LoroModel found for document {doc_id}")
                     
