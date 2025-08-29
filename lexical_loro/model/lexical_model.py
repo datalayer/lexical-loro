@@ -52,6 +52,9 @@ class LexicalModel:
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
         
+        # Flag to prevent recursive operations during import/update
+        self._import_in_progress = False
+        
         # Step 3: Initialize EphemeralStore for cursor/selection data
         self.ephemeral_timeout = ephemeral_timeout
         self.ephemeral_store = EphemeralStore(ephemeral_timeout) if EphemeralStore else None
@@ -309,6 +312,11 @@ class LexicalModel:
     def _auto_sync_on_change(self):
         """Automatically sync and notify about changes"""
         try:
+            # Prevent recursive operations during import/update
+            if self._import_in_progress:
+                print("LoroModel: Skipping auto-sync (import in progress)")
+                return
+                
             # Sync from Loro to update our internal state
             self._sync_from_loro()
             
@@ -981,18 +989,27 @@ class LexicalModel:
                 print("Warning: Empty snapshot provided")
                 return False
             
-            # Import the snapshot into our text document
-            self.text_doc.import_(snapshot)
+            # Set flag to prevent recursive operations during import
+            self._import_in_progress = True
             
-            # After import, look for content in any available container
-            # since the snapshot may have created new containers
-            self._sync_from_any_available_container()
-            
-            print(f"✅ Successfully imported snapshot ({len(snapshot)} bytes)")
-            return True
+            try:
+                # Import the snapshot into our text document
+                self.text_doc.import_(snapshot)
+                
+                # After import, look for content in any available container
+                # since the snapshot may have created new containers
+                self._sync_from_any_available_container()
+                
+                print(f"✅ Successfully imported snapshot ({len(snapshot)} bytes)")
+                return True
+                
+            finally:
+                # Always clear the flag, even if an error occurs
+                self._import_in_progress = False
             
         except Exception as e:
             print(f"❌ Error importing snapshot: {e}")
+            self._import_in_progress = False  # Make sure flag is cleared on error
             return False
     
     def apply_update(self, update_bytes: bytes) -> bool:
@@ -1010,18 +1027,27 @@ class LexicalModel:
                 print("Warning: Empty update provided")
                 return False
             
-            # Apply the update to our text document
-            self.text_doc.import_(update_bytes)
+            # Set flag to prevent recursive operations during import
+            self._import_in_progress = True
             
-            # After applying update, look for content in any available container
-            # since the update may have created new containers or updated existing ones
-            self._sync_from_any_available_container()
-            
-            print(f"✅ Successfully applied update ({len(update_bytes)} bytes)")
-            return True
+            try:
+                # Apply the update to our text document
+                self.text_doc.import_(update_bytes)
+                
+                # After applying update, look for content in any available container
+                # since the update may have created new containers or updated existing ones
+                self._sync_from_any_available_container()
+                
+                print(f"✅ Successfully applied update ({len(update_bytes)} bytes)")
+                return True
+                
+            finally:
+                # Always clear the flag, even if an error occurs
+                self._import_in_progress = False
             
         except Exception as e:
             print(f"❌ Error applying update: {e}")
+            self._import_in_progress = False  # Make sure flag is cleared on error
             return False
     
     def export_update(self) -> Optional[bytes]:

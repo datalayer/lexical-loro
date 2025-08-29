@@ -31,8 +31,7 @@ def main(port: int, host: str, log_level: str):
     )
     
     # Create and start the server
-    server = LoroWebSocketServer(port)
-    server.host = host  # Add host attribute if needed
+    server = LoroWebSocketServer(port=port, host=host)
     
     click.echo(f"🚀 Starting Lexical Loro server on {host}:{port}")
     click.echo(f"📋 Log level: {log_level}")
