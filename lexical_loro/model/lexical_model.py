@@ -23,7 +23,7 @@ class LoroModel:
     2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
     """
     
-    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, change_callback: Optional[callable] = None):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
@@ -33,6 +33,9 @@ class LoroModel:
         
         # Store the container ID hint for syncing
         self.container_id = container_id
+        
+        # Store callback for notifying about changes
+        self._change_callback = change_callback
         
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
@@ -210,6 +213,8 @@ class LoroModel:
                     if target_matches:
                         print(f"LoroModel: Applying text diff for {target_str}")
                         self._apply_text_diff(container_diff.diff)
+                        # Auto-sync after receiving changes
+                        self._auto_sync_on_change()
                     else:
                         print(f"LoroModel: Ignoring diff for {target_str} (not our container)")
                         
@@ -218,10 +223,25 @@ class LoroModel:
             # Fallback to full sync
             self._sync_from_loro_fallback()
     
+    def _auto_sync_on_change(self):
+        """Automatically sync and notify about changes"""
+        try:
+            # Sync from Loro to update our internal state
+            self._sync_from_loro()
+            
+            # Notify the server/callback about the change if callback is set
+            if self._change_callback:
+                try:
+                    self._change_callback(self)
+                except Exception as e:
+                    print(f"Warning: Error in change callback: {e}")
+        except Exception as e:
+            print(f"Warning: Error in auto-sync: {e}")
+    
     def _sync_from_loro_fallback(self):
         """Fallback sync method when diff processing fails"""
         print("LoroModel: Using fallback sync")
-        self._sync_from_loro()
+        self._auto_sync_on_change()
     
     def _apply_text_diff(self, diff):
         """Apply text diff to update lexical_data incrementally"""

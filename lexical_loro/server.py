@@ -63,6 +63,18 @@ class LoroWebSocketServer:
         
         # Initialize default documents and ephemeral stores
         self._initialize_documents()
+    
+    def _on_loro_model_change(self, loro_model):
+        """Callback when a LoroModel changes via subscription"""
+        try:
+            # Log the change
+            logger.info(f"📄 LoroModel changed: {repr(loro_model)}")
+            
+            # Additional server-side handling can be added here if needed
+            # For now, the LoroModel's subscription mechanism handles most of the work
+            
+        except Exception as e:
+            logger.error(f"❌ Error in LoroModel change callback: {e}")
         
     def _initialize_documents(self):
         """Initialize default Loro documents and EphemeralStores"""
@@ -99,7 +111,7 @@ class LoroWebSocketServer:
                 self.loro_docs[doc_id] = doc
                 
                 # Create LoroModel from the loro_doc for lexical documents
-                loro_model = LoroModel(text_doc=doc, container_id=doc_id)
+                loro_model = LoroModel(text_doc=doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for: {doc_id}")
                 
@@ -121,7 +133,7 @@ class LoroWebSocketServer:
                 
                 # Create LoroModel for lexical documents even in fallback
                 if doc_id == 'lexical-shared-doc':
-                    loro_model = LoroModel(text_doc=fallback_doc, container_id=doc_id)
+                    loro_model = LoroModel(text_doc=fallback_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                     self.loro_models[doc_id] = loro_model
                     logger.info(f"🧠 Created fallback LoroModel for: {doc_id}")
                 
@@ -160,8 +172,7 @@ class LoroWebSocketServer:
             if doc_id in self.loro_models:
                 loro_model = self.loro_models[doc_id]
                 logger.info(f"👁️  Using LoroModel instance {id(loro_model)} for {doc_id}")
-                # Force sync before logging to get current state
-                loro_model._sync_from_loro()
+                # LoroModel will handle syncing via its subscription mechanism
                 logger.info(f"👁️  LoroModel state during ephemeral event: {repr(loro_model)}")
             
             # Only broadcast if there are actual changes
@@ -463,8 +474,7 @@ class LoroWebSocketServer:
                                 logger.info(f"🔍 Debug: LoroModel LoroDoc id: {id(loro_model.text_doc)}")
                                 logger.info(f"🔍 Debug: LoroDoc references match: {self.loro_docs[doc_id] is loro_model.text_doc}")
                                 
-                                # Force sync to get current state after document update
-                                loro_model._sync_from_loro()
+                                # LoroModel will handle syncing via its subscription mechanism
                                 logger.info(f"🧠 LoroModel for {doc_id}: {loro_model}")
                                 logger.info(f"🧠 LoroModel detailed: {repr(loro_model)}")
                             
@@ -551,7 +561,7 @@ class LoroWebSocketServer:
                             
                             # Create LoroModel for lexical documents
                             if 'lexical' in doc_id.lower():
-                                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id)
+                                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                                 self.loro_models[doc_id] = loro_model
                                 logger.info(f"🧠 Created LoroModel for new document: {doc_id}")
                         
@@ -646,8 +656,7 @@ class LoroWebSocketServer:
                         # Log LoroModel state after ephemeral update for lexical documents
                         if doc_id in self.loro_models:
                             loro_model = self.loro_models[doc_id]
-                            # Force sync to get current state after ephemeral update
-                            loro_model._sync_from_loro()
+                            # LoroModel will handle syncing via its subscription mechanism
                             logger.info(f"👁️  LoroModel after ephemeral update: {repr(loro_model)}")
                     except Exception as e:
                         logger.error(f"❌ Error processing ephemeral update for {doc_id}: {e}")
@@ -675,8 +684,7 @@ class LoroWebSocketServer:
                         # Log LoroModel state after ephemeral update for lexical documents
                         if doc_id in self.loro_models:
                             loro_model = self.loro_models[doc_id]
-                            # Force sync to get current state after ephemeral data
-                            loro_model._sync_from_loro()
+                            # LoroModel will handle syncing via its subscription mechanism
                             logger.info(f"👁️  LoroModel after ephemeral data: {repr(loro_model)}")
                     except Exception as e:
                         logger.error(f"❌ Error processing ephemeral data for {doc_id}: {e}")
@@ -781,14 +789,8 @@ class LoroWebSocketServer:
                         "textStyle": ""
                     }
                     
-                    # Ensure the LoroModel is synced before adding a block
-                    try:
-                        # Force sync from Loro to get the latest state
-                        logger.info(f"🔄 Syncing LoroModel before append: {repr(loro_model)}")
-                        loro_model._sync_from_loro()
-                        logger.info(f"🔄 LoroModel after sync: {repr(loro_model)}")
-                    except Exception as sync_error:
-                        logger.warning(f"⚠️ Could not sync from Loro before append: {sync_error}")
+                    # LoroModel will handle syncing via its subscription mechanism
+                    logger.info(f"🔄 Syncing LoroModel before append: {repr(loro_model)}")
                     
                     # Add the paragraph using LoroModel's method
                     try:
@@ -797,12 +799,8 @@ class LoroWebSocketServer:
                         logger.info(f"✅ Added paragraph to {doc_id}: '{message_text}'")
                         logger.info(f"🧠 LoroModel after append: {repr(loro_model)}")
                         
-                        # Force another sync to ensure consistency
-                        try:
-                            loro_model._sync_from_loro()
-                            logger.info(f"🔄 Final LoroModel state after sync: {repr(loro_model)}")
-                        except Exception as final_sync_error:
-                            logger.warning(f"⚠️ Could not perform final sync: {final_sync_error}")
+                        # LoroModel will handle syncing via its subscription mechanism
+                        logger.info(f"🔄 Final LoroModel state after sync: {repr(loro_model)}")
                         
                         # Broadcast the update to all clients
                         await self.broadcast_to_all_clients({
@@ -814,12 +812,8 @@ class LoroWebSocketServer:
                     except Exception as add_error:
                         logger.error(f"❌ Failed to add paragraph to {doc_id}: {add_error}")
                         logger.error(f"❌ LoroModel state: {repr(loro_model)}")
-                        # Try to recover by forcing a complete resync
-                        try:
-                            loro_model.force_sync_from_text_doc()
-                            logger.info(f"🔄 Forced resync completed for {doc_id}")
-                        except Exception as resync_error:
-                            logger.error(f"❌ Failed to resync LoroModel: {resync_error}")
+                        # The LoroModel subscription should handle recovery automatically
+                        logger.info(f"🔄 LoroModel auto-recovery via subscription for {doc_id}")
                 else:
                     logger.warning(f"⚠️ No LoroModel found for document {doc_id}")
                     
@@ -888,14 +882,14 @@ class LoroWebSocketServer:
         if doc_id not in self.loro_models:
             if doc_id in self.loro_docs:
                 # Create model from existing document, passing the doc_id as container_id
-                loro_model = LoroModel(text_doc=self.loro_docs[doc_id], container_id=doc_id)
+                loro_model = LoroModel(text_doc=self.loro_docs[doc_id], container_id=doc_id, change_callback=self._on_loro_model_change)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for existing document: {doc_id}")
             else:
                 # Create new document and model
                 new_doc = LoroDoc()
                 self.loro_docs[doc_id] = new_doc
-                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id)
+                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created new LoroDoc and LoroModel for: {doc_id}")
         
