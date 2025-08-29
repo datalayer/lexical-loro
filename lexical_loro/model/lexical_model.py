@@ -912,12 +912,47 @@ class LexicalModel:
         last_saved = self.lexical_data.get('lastSaved', 'unknown')
         subscription_status = "subscribed" if self._text_doc_subscription else "standalone"
         
+        # Create summaries for each block
+        block_summaries = []
+        for i, block in enumerate(blocks):
+            block_type = block.get('type', 'unknown')
+            text_content = self._extract_block_text(block)
+            # Truncate long text for readability
+            if len(text_content) > 50:
+                text_content = text_content[:47] + "..."
+            block_summaries.append(f"{i+1}.{block_type}:'{text_content}'")
+        
+        summaries_str = "[" + ", ".join(block_summaries) + "]" if block_summaries else "[]"
+        
         return (f"LoroModel(blocks={len(blocks)}, "
                 f"block_types={block_types}, "
+                f"summaries={summaries_str}, "
                 f"source='{self.lexical_data.get('source', 'unknown')}', "
                 f"version='{self.lexical_data.get('version', 'unknown')}', "
                 f"lastSaved={last_saved}, "
                 f"mode={subscription_status})")
+    
+    def _extract_block_text(self, block: Dict[str, Any]) -> str:
+        """Extract text content from a block for summary purposes"""
+        if not isinstance(block, dict):
+            return ""
+        
+        # If the block has direct text
+        if block.get('type') == 'text':
+            return block.get('text', '')
+        
+        # If the block has children, recursively extract text
+        children = block.get('children', [])
+        if children:
+            text_parts = []
+            for child in children:
+                if isinstance(child, dict):
+                    child_text = self._extract_block_text(child)
+                    if child_text:
+                        text_parts.append(child_text)
+            return " ".join(text_parts)
+        
+        return ""
     
     def _create_default_lexical_structure(self) -> Dict[str, Any]:
         """Create a default lexical data structure"""
