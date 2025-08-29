@@ -6,11 +6,13 @@ import time
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 try:
     import loro
-    from loro import ExportMode
+    from loro import ExportMode, EphemeralStore, EphemeralStoreEvent
 except ImportError:
     # Fallback for when loro is not available
     loro = None
     ExportMode = None
+    EphemeralStore = None
+    EphemeralStoreEvent = None
 
 if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
@@ -25,7 +27,7 @@ class LexicalModel:
     2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
     """
     
-    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, change_callback: Optional[callable] = None):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, change_callback: Optional[callable] = None, ephemeral_timeout: int = 300000):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
@@ -41,6 +43,11 @@ class LexicalModel:
         
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
+        
+        # Step 3: Initialize EphemeralStore for cursor/selection data
+        self.ephemeral_timeout = ephemeral_timeout
+        self.ephemeral_store = EphemeralStore(ephemeral_timeout) if EphemeralStore else None
+        self._ephemeral_subscription = None
         
         # Initialize the lexical model structure
         self.lexical_data = {
@@ -67,7 +74,7 @@ class LexicalModel:
             self._sync_to_loro()
     
     @classmethod
-    def create_document(cls, doc_id: str, initial_content: Optional[str] = None, change_callback: Optional[callable] = None) -> 'LexicalModel':
+    def create_document(cls, doc_id: str, initial_content: Optional[str] = None, change_callback: Optional[callable] = None, ephemeral_timeout: int = 300000, loro_doc: Optional['LoroDoc'] = None) -> 'LexicalModel':
         """
         Create a new LexicalModel with a Loro document initialized for the given doc_id.
         
@@ -75,6 +82,8 @@ class LexicalModel:
             doc_id: The container ID for the text content
             initial_content: Optional initial JSON content to seed the document
             change_callback: Optional callback for when the document changes
+            ephemeral_timeout: Timeout for ephemeral data (cursor/selection) in milliseconds
+            loro_doc: Optional existing LoroDoc to use instead of creating new one
             
         Returns:
             A new LexicalModel instance with initialized Loro documents
@@ -82,8 +91,8 @@ class LexicalModel:
         if loro is None:
             raise ImportError("loro package is required for LexicalModel")
         
-        # Create new Loro document
-        doc = loro.LoroDoc()
+        # Use provided document or create new one
+        doc = loro_doc if loro_doc is not None else loro.LoroDoc()
         
         # Get text container using doc_id as container name
         text_container = doc.get_text(doc_id)
@@ -106,8 +115,8 @@ class LexicalModel:
             except (json.JSONDecodeError, ValueError) as e:
                 raise ValueError(f"Invalid initial_content: {e}")
         
-        # Create LexicalModel instance with the initialized document
-        model = cls(text_doc=doc, container_id=doc_id, change_callback=change_callback)
+        # Create LexicalModel instance with the initialized document and ephemeral timeout
+        model = cls(text_doc=doc, container_id=doc_id, change_callback=change_callback, ephemeral_timeout=ephemeral_timeout)
         
         return model
     
@@ -1280,8 +1289,271 @@ class LexicalModel:
                 "message_type": "append-paragraph"
             }
     
+    # ==========================================
+    # STEP 3: EPHEMERAL MESSAGE HANDLING
+    # ==========================================
+    
+    def handle_ephemeral_message(self, message_type: str, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """
+        Handle ephemeral messages (cursor positions, selections, awareness)
+        
+        Args:
+            message_type: Type of ephemeral message
+            data: Message data containing ephemeral information
+            client_id: ID of the client sending the message
+            
+        Returns:
+            Dict with success status and broadcast data if needed
+        """
+        if not self.ephemeral_store:
+            return {
+                "success": False,
+                "error": "EphemeralStore not available",
+                "message_type": message_type
+            }
+        
+        try:
+            if message_type == "ephemeral-update":
+                return self._handle_ephemeral_update(data, client_id)
+            elif message_type == "ephemeral":
+                return self._handle_ephemeral_data(data, client_id)
+            elif message_type == "awareness-update":
+                return self._handle_awareness_update(data, client_id)
+            elif message_type == "cursor-position":
+                return self._handle_cursor_position(data, client_id)
+            elif message_type == "text-selection":
+                return self._handle_text_selection(data, client_id)
+            else:
+                return {
+                    "success": False,
+                    "error": f"Unknown ephemeral message type: {message_type}",
+                    "message_type": message_type
+                }
+                
+        except Exception as e:
+            print(f"❌ Error in handle_ephemeral_message: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": message_type
+            }
+    
+    def _handle_ephemeral_update(self, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """Handle ephemeral-update message type"""
+        try:
+            ephemeral_data = data.get("data")
+            
+            if not ephemeral_data:
+                return {
+                    "success": False,
+                    "error": "No ephemeral data provided",
+                    "message_type": "ephemeral-update"
+                }
+            
+            # Convert hex string back to bytes
+            ephemeral_bytes = bytes.fromhex(ephemeral_data)
+            
+            # Apply the ephemeral data to our store
+            self.ephemeral_store.apply(ephemeral_bytes)
+            
+            return {
+                "success": True,
+                "message_type": "ephemeral-update",
+                "broadcast_needed": False,  # Server handles broadcasting for ephemeral updates
+                "client_id": client_id
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in _handle_ephemeral_update: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "ephemeral-update"
+            }
+    
+    def _handle_ephemeral_data(self, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """Handle direct ephemeral data message type"""
+        try:
+            ephemeral_data = data.get("data")
+            
+            if not ephemeral_data:
+                return {
+                    "success": False,
+                    "error": "No ephemeral data provided",
+                    "message_type": "ephemeral"
+                }
+            
+            # Convert data to bytes (support both array and hex format)
+            if isinstance(ephemeral_data, list):
+                ephemeral_bytes = bytes(ephemeral_data)
+            else:
+                ephemeral_bytes = bytes.fromhex(ephemeral_data)
+            
+            # Apply the ephemeral data to our store
+            self.ephemeral_store.apply(ephemeral_bytes)
+            
+            return {
+                "success": True,
+                "message_type": "ephemeral",
+                "broadcast_needed": False,  # Server handles broadcasting for ephemeral data
+                "client_id": client_id
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in _handle_ephemeral_data: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "ephemeral"
+            }
+    
+    def _handle_awareness_update(self, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """Handle awareness-update message type"""
+        try:
+            awareness_state = data.get("awarenessState")
+            peer_id = data.get("peerId", client_id)
+            
+            if awareness_state is None:
+                return {
+                    "success": False,
+                    "error": "No awareness state provided",
+                    "message_type": "awareness-update"
+                }
+            
+            # Store the awareness state in the ephemeral store
+            self.ephemeral_store.set(peer_id, awareness_state)
+            
+            # Get encoded ephemeral data for broadcasting
+            ephemeral_data = self.ephemeral_store.encode_all()
+            
+            return {
+                "success": True,
+                "message_type": "awareness-update",
+                "broadcast_needed": True,
+                "broadcast_data": {
+                    "type": "ephemeral-update",
+                    "docId": self.container_id,
+                    "data": ephemeral_data.hex()
+                },
+                "client_id": client_id,
+                "peer_id": peer_id
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in _handle_awareness_update: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "awareness-update"
+            }
+    
+    def _handle_cursor_position(self, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """Handle cursor-position message type"""
+        try:
+            position = data.get("position")
+            
+            if position is None:
+                return {
+                    "success": False,
+                    "error": "No cursor position provided",
+                    "message_type": "cursor-position"
+                }
+            
+            # Create cursor data structure
+            cursor_data = {
+                "clientId": client_id,
+                "position": position,
+                "color": data.get("color", "#000000"),  # Default color if not provided
+                "timestamp": time.time()
+            }
+            
+            # Store in ephemeral store
+            self.ephemeral_store.set(f"cursor_{client_id}", cursor_data)
+            
+            # Get encoded ephemeral data for broadcasting
+            ephemeral_data = self.ephemeral_store.encode_all()
+            
+            return {
+                "success": True,
+                "message_type": "cursor-position",
+                "broadcast_needed": True,
+                "broadcast_data": {
+                    "type": "ephemeral-update",
+                    "docId": self.container_id,
+                    "data": ephemeral_data.hex()
+                },
+                "client_id": client_id,
+                "position": position
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in _handle_cursor_position: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "cursor-position"
+            }
+    
+    def _handle_text_selection(self, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """Handle text-selection message type"""
+        try:
+            selection = data.get("selection")
+            
+            if selection is None:
+                return {
+                    "success": False,
+                    "error": "No text selection provided",
+                    "message_type": "text-selection"
+                }
+            
+            # Create selection data structure
+            selection_data = {
+                "clientId": client_id,
+                "selection": selection,
+                "color": data.get("color", "#000000"),  # Default color if not provided
+                "timestamp": time.time()
+            }
+            
+            # Store in ephemeral store
+            self.ephemeral_store.set(f"selection_{client_id}", selection_data)
+            
+            # Get encoded ephemeral data for broadcasting
+            ephemeral_data = self.ephemeral_store.encode_all()
+            
+            return {
+                "success": True,
+                "message_type": "text-selection",
+                "broadcast_needed": True,
+                "broadcast_data": {
+                    "type": "ephemeral-update",
+                    "docId": self.container_id,
+                    "data": ephemeral_data.hex()
+                },
+                "client_id": client_id,
+                "selection": selection
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in _handle_text_selection: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "text-selection"
+            }
+    
+    def get_ephemeral_data(self) -> Optional[bytes]:
+        """Get current ephemeral data for broadcasting"""
+        if not self.ephemeral_store:
+            return None
+        try:
+            return self.ephemeral_store.encode_all()
+        except Exception as e:
+            print(f"❌ Error getting ephemeral data: {e}")
+            return None
+    
     def cleanup(self):
         """Clean up subscriptions and resources"""
+        # Clean up text document subscription
         if self._text_doc_subscription is not None:
             try:
                 # Try different unsubscribe patterns
@@ -1297,6 +1569,23 @@ class LexicalModel:
             except Exception as e:
                 print(f"Warning: Could not unsubscribe from text document: {e}")
                 self._text_doc_subscription = None
+        
+        # Clean up ephemeral store subscription
+        if self._ephemeral_subscription is not None:
+            try:
+                # Try different unsubscribe patterns
+                if hasattr(self._ephemeral_subscription, 'unsubscribe'):
+                    self._ephemeral_subscription.unsubscribe()
+                elif hasattr(self._ephemeral_subscription, 'close'):
+                    self._ephemeral_subscription.close()
+                elif callable(self._ephemeral_subscription):
+                    # If it's a callable (like a cleanup function)
+                    self._ephemeral_subscription()
+                
+                self._ephemeral_subscription = None
+            except Exception as e:
+                print(f"Warning: Could not unsubscribe from ephemeral store: {e}")
+                self._ephemeral_subscription = None
     
     def __del__(self):
         """Cleanup when object is destroyed"""
