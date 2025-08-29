@@ -4,7 +4,6 @@
 
 """
 Loro WebSocket server for real-time collaboration using loro-py
-Step 5: Pure WebSocket relay that delegates to LexicalModel
 
 The server is now a thin WebSocket relay that only manages:
 - Client connections
