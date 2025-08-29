@@ -540,7 +540,7 @@ class LoroWebSocketServer:
         # Handle broadcast needs
         if response.get("broadcast_needed"):
             broadcast_data = response.get("broadcast_data", {})
-            await self.broadcast_to_other_clientss(client_id, broadcast_data)
+            await self.broadcast_to_other_clients(client_id, broadcast_data)
             logger.info(f"📡 Broadcasted {message_type} to {len(self.clients) - 1} other clients")
         
         # Handle direct response needs
@@ -677,7 +677,7 @@ class LoroWebSocketServer:
                             logger.error(f"❌ Error reading document content: {content_error}")
                         
                         # Broadcast the update to all other clients
-                        await self.broadcast_to_other_clientss(client_id, data)
+                        await self.broadcast_to_other_clients(client_id, data)
                         logger.info(f"🔄 Broadcasting Loro update from client {client_id} to {len(self.clients) - 1} other clients")
                     except Exception as e:
                         logger.error(f"❌ Error applying Loro update for {doc_id}: {e}")
@@ -764,7 +764,7 @@ class LoroWebSocketServer:
                         logger.error(f"❌ Error exporting snapshot for {doc_id}: {e}")
                 else:
                     # Document doesn't exist, ask other clients to provide one
-                    await self.broadcast_to_other_clientss(client_id, {
+                    await self.broadcast_to_other_clients(client_id, {
                         "type": "snapshot-request",
                         "requesterId": client_id,
                         "docId": doc_id
@@ -860,7 +860,7 @@ class LoroWebSocketServer:
                         
                         # Broadcast ephemeral update
                         ephemeral_data = self.ephemeral_stores[doc_id].encode_all()
-                        await self.broadcast_to_other_clientss(client_id, {
+                        await self.broadcast_to_other_clients(client_id, {
                             "type": "ephemeral-update",
                             "docId": doc_id,
                             "data": ephemeral_data.hex()
@@ -886,7 +886,7 @@ class LoroWebSocketServer:
                     
                     # Broadcast ephemeral update
                     ephemeral_data = self.ephemeral_stores[doc_id].encode_all()
-                    await self.broadcast_to_other_clientss(client_id, {
+                    await self.broadcast_to_other_clients(client_id, {
                         "type": "ephemeral-update",
                         "docId": doc_id,
                         "data": ephemeral_data.hex()
@@ -963,7 +963,7 @@ class LoroWebSocketServer:
         except Exception as e:
             logger.error(f"❌ Error processing message from client {client_id}: {e}")
     
-    async def broadcast_to_other_clientss(self, sender_id: str, message: dict):
+    async def broadcast_to_other_clients(self, sender_id: str, message: dict):
         """Broadcast a message to all clients except the sender"""
         if len(self.clients) <= 1:
             return
@@ -1065,7 +1065,7 @@ class LoroWebSocketServer:
                                     if client_state is not None:
                                         ephemeral_store.delete(client_id)
                                         # Broadcast removal
-                                        await self.broadcast_to_other_clientss(client_id, {
+                                        await self.broadcast_to_other_clients(client_id, {
                                             "type": "ephemeral-update",
                                             "docId": doc_id,
                                             "data": ephemeral_store.encode_all().hex(),

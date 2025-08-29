@@ -1356,10 +1356,18 @@ class LexicalModel:
             # Apply the ephemeral data to our store
             self.ephemeral_store.apply(ephemeral_bytes)
             
+            # Get encoded ephemeral data for broadcasting
+            ephemeral_data_for_broadcast = self.ephemeral_store.encode_all()
+            
             return {
                 "success": True,
                 "message_type": "ephemeral-update",
-                "broadcast_needed": False,  # Server handles broadcasting for ephemeral updates
+                "broadcast_needed": True,
+                "broadcast_data": {
+                    "type": "ephemeral-update",
+                    "docId": self.container_id,
+                    "data": ephemeral_data_for_broadcast.hex()
+                },
                 "client_id": client_id
             }
             
@@ -1392,10 +1400,18 @@ class LexicalModel:
             # Apply the ephemeral data to our store
             self.ephemeral_store.apply(ephemeral_bytes)
             
+            # Get encoded ephemeral data for broadcasting
+            ephemeral_data_for_broadcast = self.ephemeral_store.encode_all()
+            
             return {
                 "success": True,
                 "message_type": "ephemeral",
-                "broadcast_needed": False,  # Server handles broadcasting for ephemeral data
+                "broadcast_needed": True,
+                "broadcast_data": {
+                    "type": "ephemeral-update",
+                    "docId": self.container_id,
+                    "data": ephemeral_data_for_broadcast.hex()
+                },
                 "client_id": client_id
             }
             

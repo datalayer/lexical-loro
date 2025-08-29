@@ -128,8 +128,10 @@ def test_ephemeral_update():
         
         assert response["success"] == True, f"Expected success=True, got {response}"
         assert response["message_type"] == "ephemeral-update", f"Expected ephemeral-update, got {response['message_type']}"
-        assert response["broadcast_needed"] == False, "Ephemeral updates are handled by server"
+        assert response["broadcast_needed"] == True, "Ephemeral updates should be broadcasted for collaboration"
         assert response["client_id"] == "client-999", f"Expected client-999, got {response['client_id']}"
+        assert "broadcast_data" in response, "Should include broadcast_data for sharing ephemeral updates"
+        assert response["broadcast_data"]["type"] == "ephemeral-update", "Broadcast should be ephemeral-update type"
         print("✅ Ephemeral update message handling working")
     else:
         print("⚠️  Skipping ephemeral-update test - no ephemeral data available")
@@ -162,7 +164,8 @@ def test_ephemeral_direct():
         
         assert response["success"] == True, f"Expected success=True, got {response}"
         assert response["message_type"] == "ephemeral", f"Expected ephemeral, got {response['message_type']}"
-        assert response["broadcast_needed"] == False, "Ephemeral data is handled by server"
+        assert response["broadcast_needed"] == True, "Ephemeral data should be broadcasted for collaboration"
+        assert "broadcast_data" in response, "Should include broadcast_data for sharing ephemeral updates"
         print("✅ Direct ephemeral message (array format) working")
         
         # Test with hex format
@@ -176,7 +179,8 @@ def test_ephemeral_direct():
         
         assert response["success"] == True, f"Expected success=True, got {response}"
         assert response["message_type"] == "ephemeral", f"Expected ephemeral, got {response['message_type']}"
-        assert response["broadcast_needed"] == False, "Ephemeral data is handled by server"
+        assert response["broadcast_needed"] == True, "Ephemeral data should be broadcasted for collaboration"
+        assert "broadcast_data" in response, "Should include broadcast_data for sharing ephemeral updates"
         print("✅ Direct ephemeral message (hex format) working")
     else:
         print("⚠️  Skipping ephemeral direct test - no ephemeral data available")
