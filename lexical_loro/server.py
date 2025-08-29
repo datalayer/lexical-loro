@@ -326,126 +326,37 @@ class LoroWebSocketServer:
         except Exception as e:
             logger.error(f"❌ Error handling client {client_id}: {e}")
         finally:
-            # Clean up ephemeral data for this client and notify others
-            cleanup_messages = []
-            
+            # Step 3 Simplified Cleanup: Delegate to LexicalModel for each document
             logger.info(f"🧹 Starting cleanup for disconnected client {client_id}")
             
-            # Always send disconnect notifications, even if no ephemeral data exists
-            should_notify_disconnect = True
-            
-            for doc_id in self.ephemeral_stores:
-                ephemeral_store = self.ephemeral_stores[doc_id]
-                
-                # Check if client exists in ephemeral store before deletion
+            # Use LexicalModel delegation for cleanup (Step 3 approach)
+            for doc_id in self.loro_models:
                 try:
-                    # Try to get the client's state to check if it exists
-                    client_state = ephemeral_store.get(client_id)
-                    if client_state is not None:
-                        logger.info(f"🧹 Found ephemeral data for client {client_id} in {doc_id}, removing...")
+                    model = self.loro_models[doc_id]
+                    response = model.handle_client_disconnect(client_id)
+                    
+                    # Handle the structured response from LexicalModel
+                    if response.get("success"):
+                        logger.info(f"✅ Client cleanup succeeded for {doc_id}")
+                        had_data = response.get("had_data", False)
+                        if had_data:
+                            logger.info(f"🧹 Removed ephemeral data for client {client_id} in {doc_id}")
+                        else:
+                            logger.info(f"🔍 No ephemeral data found for client {client_id} in {doc_id}")
                         
-                        # Remove client data from ephemeral store
-                        ephemeral_store.delete(client_id)
-                        
-                        # Prepare cleanup message with explicit removal event
-                        ephemeral_data = ephemeral_store.encode_all()
-                        cleanup_message = {
-                            "type": "ephemeral-update",
-                            "docId": doc_id,
-                            "data": ephemeral_data.hex(),
-                            "event": {
-                                "by": "server-disconnect",
-                                "added": [],
-                                "updated": [],
-                                "removed": [client_id]
-                            }
-                        }
-                        cleanup_messages.append(cleanup_message)
-                        
-                        logger.info(f"📤 Prepared cleanup message for {doc_id}: removed=[{client_id}]")
+                        # Handle broadcast if needed
+                        if response.get("broadcast_needed"):
+                            broadcast_data = response.get("broadcast_data", {})
+                            await self.broadcast_to_other_clients(client_id, broadcast_data)
+                            logger.info(f"📡 Broadcasted client removal for {client_id} in {doc_id}")
                     else:
-                        logger.info(f"🔍 No ephemeral data found for client {client_id} in {doc_id}")
-                        # Still create a removal notification even if no ephemeral data exists
-                        if should_notify_disconnect:
-                            ephemeral_data = ephemeral_store.encode_all()
-                            cleanup_message = {
-                                "type": "ephemeral-update",
-                                "docId": doc_id,
-                                "data": ephemeral_data.hex(),
-                                "event": {
-                                    "by": "server-disconnect-no-data",
-                                    "added": [],
-                                    "updated": [],
-                                    "removed": [client_id]
-                                }
-                            }
-                            cleanup_messages.append(cleanup_message)
-                            logger.info(f"📤 Prepared no-data cleanup message for {doc_id}")
-                            should_notify_disconnect = False  # Only send once across all docs
+                        error_msg = response.get("error", "Unknown error")
+                        logger.error(f"❌ Client cleanup failed for {doc_id}: {error_msg}")
+                        
                 except Exception as e:
-                    logger.error(f"❌ Error during ephemeral cleanup for {client_id}: {e}")
-                    # Try to delete anyway and send removal notification
-                    try:
-                        ephemeral_store.delete(client_id)
-                        ephemeral_data = ephemeral_store.encode_all()
-                        cleanup_message = {
-                            "type": "ephemeral-update", 
-                            "docId": doc_id,
-                            "data": ephemeral_data.hex(),
-                            "event": {
-                                "by": "server-disconnect-fallback",
-                                "added": [],
-                                "updated": [],
-                                "removed": [client_id]
-                            }
-                        }
-                        cleanup_messages.append(cleanup_message)
-                        logger.info(f"📤 Prepared fallback cleanup message for {doc_id}")
-                    except Exception as fallback_error:
-                        logger.error(f"❌ Fallback cleanup also failed: {fallback_error}")
+                    logger.error(f"❌ Error during model cleanup for {client_id} in {doc_id}: {e}")
             
-            # Broadcast cleanup to all remaining clients BEFORE removing this client
-            remaining_clients = [cid for cid in self.clients.keys() if cid != client_id]
-            logger.info(f"📡 Broadcasting removal of {client_id} to {len(remaining_clients)} remaining clients")
-            
-            for message in cleanup_messages:
-                try:
-                    # Send to all clients except the one being removed
-                    message_str = json.dumps(message)
-                    successful_broadcasts = 0
-                    failed_broadcasts = 0
-                    
-                    for other_client_id, other_client in self.clients.items():
-                        if other_client_id != client_id:  # Don't send to the disconnected client
-                            try:
-                                await other_client.websocket.send(message_str)
-                                successful_broadcasts += 1
-                            except Exception as send_error:
-                                logger.error(f"❌ Failed to send removal notification to {other_client_id}: {send_error}")
-                                failed_broadcasts += 1
-                    
-                    logger.info(f"📡 Removal broadcast results: {successful_broadcasts} successful, {failed_broadcasts} failed")
-                except Exception as e:
-                    logger.error(f"❌ Error broadcasting client removal: {e}")
-            
-            # Also send a specific client-disconnect message for better debugging
-            if cleanup_messages:
-                disconnect_message = {
-                    "type": "client-disconnect",
-                    "clientId": client_id,
-                    "message": f"Client {client_id} has disconnected"
-                }
-                
-                disconnect_str = json.dumps(disconnect_message)
-                for other_client_id, other_client in self.clients.items():
-                    if other_client_id != client_id:
-                        try:
-                            await other_client.websocket.send(disconnect_str)
-                            logger.info(f"📢 Sent disconnect notification for {client_id} to {other_client_id}")
-                        except Exception as send_error:
-                            logger.error(f"❌ Failed to send disconnect notification to {other_client_id}: {send_error}")
-            
-            # Clean up client from main client list
+            # Remove client from main client list
             if client_id in self.clients:
                 del self.clients[client_id]
             

@@ -1567,6 +1567,87 @@ class LexicalModel:
             print(f"❌ Error getting ephemeral data: {e}")
             return None
     
+    def handle_client_disconnect(self, client_id: str) -> Dict[str, Any]:
+        """
+        Handle client disconnection by removing ephemeral data and preparing cleanup message
+        
+        Args:
+            client_id: ID of the disconnected client
+            
+        Returns:
+            Dict with success status and broadcast data for removal notification
+        """
+        if not self.ephemeral_store:
+            return {
+                "success": False,
+                "error": "EphemeralStore not available",
+                "message_type": "client-disconnect"
+            }
+        
+        try:
+            # Check for all possible keys that the client might have used
+            # Different ephemeral message types use different key patterns:
+            # - awareness-update: uses peer_id (often same as client_id)
+            # - cursor-position: uses f"cursor_{client_id}"
+            # - text-selection: uses f"selection_{client_id}"
+            possible_keys = [
+                client_id,                    # Direct client_id (awareness data)
+                f"cursor_{client_id}",       # Cursor position data
+                f"selection_{client_id}",    # Text selection data
+            ]
+            
+            client_had_data = False
+            removed_keys = []
+            
+            for key in possible_keys:
+                try:
+                    client_state = self.ephemeral_store.get(key)
+                    if client_state is not None:
+                        self.ephemeral_store.delete(key)
+                        client_had_data = True
+                        removed_keys.append(key)
+                        print(f"🧹 Removed ephemeral data for key '{key}' (client {client_id})")
+                except Exception as key_error:
+                    # Some keys might not exist, that's fine
+                    pass
+            
+            if not client_had_data:
+                print(f"🔍 No ephemeral data found for client {client_id}")
+            else:
+                print(f"🧹 Removed ephemeral data for client {client_id}: {removed_keys}")
+            
+            # Always create a removal notification for consistency
+            ephemeral_data = self.ephemeral_store.encode_all()
+            
+            return {
+                "success": True,
+                "message_type": "client-disconnect",
+                "broadcast_needed": True,
+                "broadcast_data": {
+                    "type": "ephemeral-update",
+                    "docId": self.container_id,
+                    "data": ephemeral_data.hex(),
+                    "event": {
+                        "by": "server-disconnect",
+                        "added": [],
+                        "updated": [],
+                        "removed": [client_id]
+                    }
+                },
+                "client_id": client_id,
+                "had_data": client_had_data,
+                "removed_keys": removed_keys
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in handle_client_disconnect: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "client-disconnect",
+                "client_id": client_id
+            }
+    
     def cleanup(self):
         """Clean up subscriptions and resources"""
         # Clean up text document subscription
