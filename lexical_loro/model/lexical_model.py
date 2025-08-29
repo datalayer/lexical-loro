@@ -1062,6 +1062,224 @@ class LexicalModel:
                 "error": str(e)
             }
     
+    # Message Handling Methods (Step 2)
+    
+    def handle_message(self, message_type: str, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Handle Loro-related message types directly within LexicalModel.
+        
+        Args:
+            message_type: The type of message ("loro-update", "snapshot", "append-paragraph", etc.)
+            data: The message data dictionary
+            client_id: Optional client ID for logging/tracking
+            
+        Returns:
+            Dict with response information including any broadcast data needed
+        """
+        try:
+            if message_type == "loro-update":
+                return self._handle_loro_update(data, client_id)
+            elif message_type == "snapshot":
+                return self._handle_snapshot_import(data, client_id)
+            elif message_type == "request-snapshot":
+                return self._handle_snapshot_request(data, client_id)
+            elif message_type == "append-paragraph":
+                return self._handle_append_paragraph(data, client_id)
+            else:
+                return {
+                    "success": False,
+                    "error": f"Unsupported message type: {message_type}",
+                    "message_type": message_type
+                }
+                
+        except Exception as e:
+            print(f"❌ Error handling message type '{message_type}': {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": message_type
+            }
+    
+    def _handle_loro_update(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """Handle loro-update message type"""
+        try:
+            update_data = data.get("update", [])
+            
+            if not update_data:
+                return {
+                    "success": False,
+                    "error": "No update data provided",
+                    "message_type": "loro-update"
+                }
+            
+            # Convert update data to bytes
+            update_bytes = bytes(update_data)
+            
+            # Apply the update using our apply_update method
+            success = self.apply_update(update_bytes)
+            
+            if success:
+                # Get current document info for response
+                doc_info = self.get_document_info()
+                
+                print(f"📝 Applied Loro update from client {client_id or 'unknown'}")
+                print(f"📋 Current content length: {doc_info.get('content_length', 0)}")
+                print(f"📋 Current blocks: {doc_info.get('lexical_blocks', 0)}")
+                
+                return {
+                    "success": True,
+                    "message_type": "loro-update",
+                    "broadcast_needed": True,
+                    "broadcast_data": data,  # Relay the original update to other clients
+                    "document_info": doc_info,
+                    "applied_update_size": len(update_bytes)
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to apply update",
+                    "message_type": "loro-update"
+                }
+                
+        except Exception as e:
+            print(f"❌ Error in _handle_loro_update: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "loro-update"
+            }
+    
+    def _handle_snapshot_import(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """Handle snapshot import message type"""
+        try:
+            snapshot_data = data.get("snapshot", [])
+            
+            if not snapshot_data:
+                return {
+                    "success": False,
+                    "error": "No snapshot data provided",
+                    "message_type": "snapshot"
+                }
+            
+            # Convert snapshot data to bytes
+            snapshot_bytes = bytes(snapshot_data)
+            
+            # Import the snapshot using our import_snapshot method
+            success = self.import_snapshot(snapshot_bytes)
+            
+            if success:
+                # Get current document info for response
+                doc_info = self.get_document_info()
+                
+                print(f"📄 Imported snapshot from client {client_id or 'unknown'}")
+                print(f"📋 Content length: {doc_info.get('content_length', 0)}")
+                print(f"📋 Blocks: {doc_info.get('lexical_blocks', 0)}")
+                
+                return {
+                    "success": True,
+                    "message_type": "snapshot",
+                    "document_info": doc_info,
+                    "imported_snapshot_size": len(snapshot_bytes)
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to import snapshot",
+                    "message_type": "snapshot"
+                }
+                
+        except Exception as e:
+            print(f"❌ Error in _handle_snapshot_import: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "snapshot"
+            }
+    
+    def _handle_snapshot_request(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """Handle snapshot request message type"""
+        try:
+            # Get current snapshot
+            snapshot = self.get_snapshot()
+            
+            if snapshot:
+                print(f"📞 Providing snapshot to client {client_id or 'unknown'}")
+                
+                return {
+                    "success": True,
+                    "message_type": "request-snapshot",
+                    "response_needed": True,
+                    "response_data": {
+                        "type": "initial-snapshot",
+                        "snapshot": list(snapshot),
+                        "docId": self.container_id
+                    },
+                    "snapshot_size": len(snapshot)
+                }
+            else:
+                # No content available, ask other clients
+                return {
+                    "success": True,
+                    "message_type": "request-snapshot",
+                    "broadcast_needed": True,
+                    "broadcast_data": {
+                        "type": "snapshot-request",
+                        "requesterId": client_id,
+                        "docId": self.container_id
+                    }
+                }
+                
+        except Exception as e:
+            print(f"❌ Error in _handle_snapshot_request: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "request-snapshot"
+            }
+    
+    def _handle_append_paragraph(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """Handle append-paragraph message type"""
+        try:
+            message_text = data.get("message", "Hello")
+            
+            print(f"➕ Received append-paragraph command from client {client_id or 'unknown'}: '{message_text}'")
+            
+            # Create the paragraph structure
+            new_paragraph = {
+                "text": message_text
+            }
+            
+            # Get blocks before adding
+            blocks_before = len(self.lexical_data.get("root", {}).get("children", []))
+            
+            # Add the paragraph using our add_block method
+            self.add_block(new_paragraph, "paragraph")
+            
+            # Get blocks after adding
+            blocks_after = len(self.lexical_data.get("root", {}).get("children", []))
+            
+            print(f"✅ Added paragraph to document: '{message_text}' (blocks: {blocks_before} -> {blocks_after})")
+            
+            # Get current document info
+            doc_info = self.get_document_info()
+            
+            return {
+                "success": True,
+                "message_type": "append-paragraph",
+                "blocks_before": blocks_before,
+                "blocks_after": blocks_after,
+                "added_text": message_text,
+                "document_info": doc_info
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in _handle_append_paragraph: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "append-paragraph"
+            }
+    
     def cleanup(self):
         """Clean up subscriptions and resources"""
         if self._text_doc_subscription is not None:

@@ -11,7 +11,7 @@ import json
 import logging
 import sys
 import time
-from typing import Dict, Any
+from typing import Dict, Set, Any
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
 from loro import LoroDoc, ExportMode, EphemeralStore, EphemeralStoreEvent
@@ -64,6 +64,30 @@ class LoroWebSocketServer:
         # Initialize default documents and ephemeral stores
         self._initialize_documents()
     
+    def get_loro_model(self, doc_id: str) -> LexicalModel:
+        """
+        Get or create a LexicalModel for the given document ID.
+        This method enables server simplification by providing a unified interface.
+        """
+        if doc_id not in self.loro_models:
+            # Get or create the underlying LoroDoc
+            if doc_id not in self.loro_docs:
+                new_doc = LoroDoc()
+                text_container = new_doc.get_text(doc_id)
+                self.loro_docs[doc_id] = new_doc
+                logger.info(f"📄 Created new LoroDoc for {doc_id}")
+            
+            # Create LexicalModel using Step 1 methods
+            model = LexicalModel.create_document(
+                container_id=doc_id,
+                change_callback=self._on_loro_model_change,
+                loro_doc=self.loro_docs[doc_id]  # Use existing LoroDoc
+            )
+            self.loro_models[doc_id] = model
+            logger.info(f"🧠 Created LexicalModel for {doc_id}")
+        
+        return self.loro_models[doc_id]
+
     def _on_loro_model_change(self, loro_model):
         """Callback when a LoroModel changes via subscription"""
         try:
@@ -980,6 +1004,198 @@ class LoroWebSocketServer:
         self.loro_models.clear()
         self.ephemeral_stores.clear()
         logger.info("✅ Server shutdown complete")
+
+    # ==========================================
+    # SIMPLIFIED MESSAGE HANDLING (Using Steps 1&2)
+    # ==========================================
+    
+    async def handle_message_simplified(self, client_id: str, message: str):
+        """
+        Simplified message handling using LexicalModel.handle_message()
+        
+        BEFORE Steps 1&2: 200+ lines of complex Loro-specific logic
+        AFTER Steps 1&2: Delegate to LexicalModel and handle responses
+        """
+        try:
+            data = json.loads(message)
+            message_type = data.get("type")
+            doc_id = data.get("docId", "shared-text")
+            
+            logger.info(f"📨 {message_type} for {doc_id} from {client_id}")
+            
+            # Define Loro-related message types that LexicalModel can handle
+            loro_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
+            
+            if message_type in loro_message_types:
+                # Use LexicalModel.handle_message() - Step 2 feature!
+                model = self.get_loro_model(doc_id)
+                response = model.handle_message(message_type, data, client_id)
+                
+                # Handle the structured response from LexicalModel
+                await self._handle_model_response(response, client_id, doc_id)
+                
+            elif message_type == "ephemeral-update":
+                # Handle ephemeral updates (cursor positions, selections) using EphemeralStore
+                ephemeral_doc_id = data.get("docId", "shared-text")
+                ephemeral_data = data.get("data")
+                
+                if ephemeral_doc_id in self.ephemeral_stores and ephemeral_data:
+                    try:
+                        # Convert hex string back to bytes
+                        ephemeral_bytes = bytes.fromhex(ephemeral_data)
+                        
+                        # Apply the ephemeral data to our store
+                        # This will trigger the subscription callback automatically
+                        self.ephemeral_stores[ephemeral_doc_id].apply(ephemeral_bytes)
+                        
+                        logger.info(f"👁️  Applied ephemeral update from client {client_id}")
+                    except Exception as e:
+                        logger.error(f"❌ Error processing ephemeral update for {ephemeral_doc_id}: {e}")
+            
+            elif message_type == "ephemeral":
+                # Handle direct ephemeral data from Loro client (new format)
+                ephemeral_doc_id = data.get("docId", "lexical-shared-doc")
+                ephemeral_data = data.get("data")
+                
+                if ephemeral_doc_id in self.ephemeral_stores and ephemeral_data:
+                    try:
+                        # Convert hex string back to bytes
+                        ephemeral_bytes = bytes.fromhex(ephemeral_data)
+                        
+                        # Apply the ephemeral data to our store
+                        self.ephemeral_stores[ephemeral_doc_id].apply(ephemeral_bytes)
+                        
+                        logger.info(f"👁️  Applied ephemeral data from client {client_id}")
+                    except Exception as e:
+                        logger.error(f"❌ Error processing ephemeral data for {ephemeral_doc_id}: {e}")
+            
+            elif message_type == "awareness-update":
+                # Handle legacy awareness updates by converting to ephemeral store
+                awareness_doc_id = data.get("docId", "shared-text")
+                awareness_state = data.get("awarenessState")
+                peer_id = data.get("peerId", client_id)
+                
+                if awareness_doc_id in self.ephemeral_stores and awareness_state:
+                    try:
+                        # Store the awareness state in the ephemeral store
+                        # This will trigger the subscription callback automatically
+                        self.ephemeral_stores[awareness_doc_id].set(peer_id, awareness_state)
+                        
+                        logger.info(f"👁️  Applied awareness state from client {client_id}")
+                    except Exception as e:
+                        logger.error(f"❌ Error processing awareness update for {awareness_doc_id}: {e}")
+            
+            elif message_type == "cursor-position":
+                # Handle cursor position updates using EphemeralStore
+                cursor_doc_id = data.get("docId", "shared-text")
+                position = data.get("position")
+                
+                if cursor_doc_id in self.ephemeral_stores and position is not None:
+                    client = self.clients.get(client_id)
+                    if client:
+                        cursor_data = {
+                            "clientId": client_id,
+                            "position": position,
+                            "color": client.color,
+                            "timestamp": time.time()
+                        }
+                        
+                        # Store in ephemeral store
+                        self.ephemeral_stores[cursor_doc_id].set(f"cursor_{client_id}", cursor_data)
+                        
+                        # Broadcast ephemeral update
+                        ephemeral_data = self.ephemeral_stores[cursor_doc_id].encode_all()
+                        await self.broadcast_to_other_clientss(client_id, {
+                            "type": "ephemeral-update",
+                            "docId": cursor_doc_id,
+                            "data": ephemeral_data.hex()
+                        })
+                        logger.info(f"🖱️ Updated cursor position for client {client_id} in {cursor_doc_id}: {position}")
+            
+            elif message_type == "text-selection":
+                # Handle text selection updates using EphemeralStore
+                selection_doc_id = data.get("docId", "shared-text")
+                selection = data.get("selection")
+                
+                client = self.clients.get(client_id)
+                if client and selection_doc_id in self.ephemeral_stores:
+                    selection_data = {
+                        "clientId": client_id,
+                        "selection": selection,
+                        "color": client.color,
+                        "timestamp": time.time()
+                    }
+                    
+                    # Store in ephemeral store
+                    self.ephemeral_stores[selection_doc_id].set(f"selection_{client_id}", selection_data)
+                    
+                    # Broadcast ephemeral update
+                    ephemeral_data = self.ephemeral_stores[selection_doc_id].encode_all()
+                    await self.broadcast_to_other_clientss(client_id, {
+                        "type": "ephemeral-update",
+                        "docId": selection_doc_id,
+                        "data": ephemeral_data.hex()
+                    })
+                    logger.info(f"📝 Updated text selection for client {client_id} in {selection_doc_id}: {selection}")
+            
+            else:
+                logger.warning(f"❓ Unknown message type: {message_type}")
+                await self._send_error_to_client(client_id, f"Unknown message type: {message_type}")
+                
+        except json.JSONDecodeError:
+            logger.error(f"❌ Invalid JSON from client {client_id}")
+            await self._send_error_to_client(client_id, "Invalid message format")
+        except Exception as e:
+            logger.error(f"❌ Error processing message from client {client_id}: {e}")
+            await self._send_error_to_client(client_id, f"Server error: {str(e)}")
+    
+    async def _handle_model_response(self, response: Dict[str, Any], client_id: str, doc_id: str):
+        """Handle structured response from LexicalModel.handle_message()"""
+        message_type = response.get("message_type", "unknown")
+        
+        if not response.get("success"):
+            # Handle error response
+            error_msg = response.get("error", "Unknown error")
+            logger.error(f"❌ {message_type} failed: {error_msg}")
+            await self._send_error_to_client(client_id, f"{message_type} failed: {error_msg}")
+            return
+        
+        # Handle successful response
+        logger.info(f"✅ {message_type} succeeded for {doc_id}")
+        
+        # Handle broadcast needs
+        if response.get("broadcast_needed"):
+            broadcast_data = response.get("broadcast_data", {})
+            await self.broadcast_to_other_clientss(client_id, broadcast_data)
+            logger.info(f"📡 Broadcasted {message_type} to {len(self.clients) - 1} other clients")
+        
+        # Handle direct response needs
+        if response.get("response_needed"):
+            response_data = response.get("response_data", {})
+            client = self.clients.get(client_id)
+            if client:
+                try:
+                    await client.websocket.send(json.dumps(response_data))
+                    logger.info(f"📤 Sent {response_data.get('type', 'response')} to {client_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to send response to {client_id}: {e}")
+        
+        # Log document state changes
+        if response.get("document_info"):
+            doc_info = response["document_info"]
+            logger.info(f"📋 {doc_id}: {doc_info.get('lexical_blocks', 0)} blocks, {doc_info.get('content_length', 0)} chars")
+    
+    async def _send_error_to_client(self, client_id: str, error_message: str):
+        """Send error message to client"""
+        client = self.clients.get(client_id)
+        if client:
+            try:
+                await client.websocket.send(json.dumps({
+                    "type": "error",
+                    "message": error_message
+                }))
+            except Exception as e:
+                logger.error(f"❌ Failed to send error to {client_id}: {e}")
 
 
 async def main():
