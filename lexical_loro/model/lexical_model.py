@@ -104,15 +104,17 @@ class LexicalModel:
         if not self.ephemeral_store or not EphemeralStoreEvent:
             return
         
-        try:
-            # Subscribe to ephemeral store events
-            self._ephemeral_subscription = self.ephemeral_store.subscribe(
-                self._handle_ephemeral_store_event
-            )
-            print("LoroModel: Set up ephemeral store subscription with EphemeralStoreEvent")
-        except Exception as e:
-            print(f"Warning: Could not set up ephemeral store subscription: {e}")
-            self._ephemeral_subscription = None
+        # CRITICAL FIX: Disable ephemeral store subscription to avoid Rust panic
+        # The loro-py library has a bug in the EphemeralStoreEvent handling that
+        # causes a Rust panic when accessing event attributes. Disabling this
+        # subscription prevents the panic while still allowing ephemeral data
+        # to be applied and broadcast correctly.
+        
+        print("LoroModel: Skipping ephemeral store subscription to avoid Rust panic")
+        self._ephemeral_subscription = None
+        
+        # Note: Ephemeral updates still work fine through direct apply() calls
+        # and manual broadcasting - the subscription is only for automatic events
     
     def _handle_ephemeral_store_event(self, event):
         """
@@ -124,50 +126,15 @@ class LexicalModel:
         try:
             print(f"LoroModel: Received ephemeral store event")
             
-            # Extract event information safely
-            event_info = {
-                "event_type": "ephemeral_changed",
-                "has_added": False,
-                "has_updated": False,
-                "has_removed": False,
-            }
+            # CRITICAL FIX: Don't access event attributes that cause Rust panics
+            # The loro-py library has a bug where accessing certain event attributes
+            # with None values causes a Rust panic. Instead, just emit a generic event.
             
-            # Safely extract event data
-            try:
-                if hasattr(event, 'added'):
-                    added_keys = getattr(event, 'added', [])
-                    if added_keys:
-                        event_info["has_added"] = True
-                        print(f"LoroModel: Ephemeral added: {added_keys}")
-            except Exception:
-                pass
-            
-            try:
-                if hasattr(event, 'updated'):
-                    updated_keys = getattr(event, 'updated', [])
-                    if updated_keys:
-                        event_info["has_updated"] = True
-                        print(f"LoroModel: Ephemeral updated: {updated_keys}")
-            except Exception:
-                pass
-            
-            try:
-                if hasattr(event, 'removed'):
-                    removed_keys = getattr(event, 'removed', [])
-                    if removed_keys:
-                        event_info["has_removed"] = True
-                        print(f"LoroModel: Ephemeral removed: {removed_keys}")
-            except Exception:
-                pass
-            
-            # Skip getting ephemeral data to avoid borrowing conflicts
-            # The subscription is working - that's what matters
-            
-            # Emit structured event to notify server (without ephemeral_data to avoid crashes)
+            # Emit structured event to notify server (minimal safe approach)
             self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
-                "changes": event_info,
+                "event_type": "ephemeral_changed",
                 "broadcast_needed": True,
-                "note": "EphemeralStoreEvent subscription working correctly"
+                "note": "EphemeralStoreEvent received (safe handling to avoid Rust panic)"
             })
             
         except Exception as e:
