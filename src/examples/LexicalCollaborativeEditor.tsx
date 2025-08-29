@@ -152,10 +152,10 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                     }
                   }}
                   className="append-paragraph-button"
-                  title="Add paragraph with 'Hello' message"
+                  title="Append paragraph with 'Hello' message"
                   style={{ marginLeft: '8px' }}
                 >
-                  ➕ Add Paragraph
+                  ➕ Append Paragraph
                 </button>
               </>
             )}

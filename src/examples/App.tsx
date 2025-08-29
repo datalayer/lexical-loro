@@ -12,7 +12,7 @@ import './App.css'
 
 type TabType = 'textarea' | 'lexical';
 
-type ServerType = 'nodejs' | 'python';
+type ServerType = 'nodejs' | 'python' | 'python-minimal';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('lexical')
@@ -21,7 +21,11 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false)
   
   // Determine WebSocket URL based on selected server
-  const websocketUrl = selectedServer === 'nodejs' ? 'ws://localhost:8080' : 'ws://localhost:8081'
+  const websocketUrl = selectedServer === 'nodejs' 
+    ? 'ws://localhost:8080' 
+    : selectedServer === 'python-minimal'
+    ? 'ws://localhost:8082'
+    : 'ws://localhost:8081'
   
   const handleServerChange = (server: ServerType) => {
     if (!isConnected) {
