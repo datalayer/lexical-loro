@@ -1269,12 +1269,29 @@ class LexicalModel:
             
             print(f"✅ Added paragraph to document: '{message_text}' (blocks: {blocks_before} -> {blocks_after})")
             
+            # Export the current state to create broadcast data
+            loro_snapshot_bytes = self.get_snapshot()
+            if loro_snapshot_bytes:
+                # Create broadcast data as loro-update for other clients
+                # Using snapshot in the loro-update format that other clients expect
+                broadcast_data = {
+                    "type": "loro-update",
+                    "docId": self.container_id,
+                    "update": list(loro_snapshot_bytes),  # Convert bytes to list for JSON serialization
+                    "hasData": True,
+                    "hasEvent": False
+                }
+            else:
+                broadcast_data = None
+            
             # Get current document info
             doc_info = self.get_document_info()
             
             return {
                 "success": True,
                 "message_type": "append-paragraph",
+                "broadcast_needed": broadcast_data is not None,
+                "broadcast_data": broadcast_data,
                 "blocks_before": blocks_before,
                 "blocks_after": blocks_after,
                 "added_text": message_text,
