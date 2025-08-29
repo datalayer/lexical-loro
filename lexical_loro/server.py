@@ -28,6 +28,9 @@ from websockets.legacy.server import WebSocketServerProtocol
 from .model.lexical_model import LexicalModel
 
 
+INITIAL_LEXICAL_JSON = """
+{"editorState":{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Lexical with Loro","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something...","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"paragraph","version":1,"textFormat":0,"textStyle":""}],"direction":null,"format":"","indent":0,"type":"root","version":1}},"lastSaved":1755694807576,"source":"Lexical Loro","version":"0.34.0"}
+"""
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -79,9 +82,15 @@ class LoroWebSocketServer:
         Step 5: Pure delegation - server doesn't manage documents anymore.
         """
         if doc_id not in self.models:
+            # Provide initial content for lexical documents
+            initial_content = None
+            if doc_id == 'lexical-shared-doc':
+                initial_content = INITIAL_LEXICAL_JSON
+            
             # Let LexicalModel handle all document creation and initialization
             model = LexicalModel.create_document(
                 doc_id=doc_id,
+                initial_content=initial_content,
                 event_callback=self._on_model_event,
                 ephemeral_timeout=300000  # 5 minutes ephemeral timeout
             )
@@ -220,16 +229,19 @@ class LoroWebSocketServer:
         for doc_id in ['shared-text', 'lexical-shared-doc']:
             try:
                 model = self.get_model(doc_id)
-                snapshot_response = model.get_snapshot()
+                snapshot_bytes = model.get_snapshot()
                 
-                if snapshot_response.get("success") and snapshot_response.get("snapshot"):
-                    snapshot_data = snapshot_response["snapshot"]
+                if snapshot_bytes and len(snapshot_bytes) > 0:
+                    # Convert bytes to list of integers for JSON serialization
+                    snapshot_data = list(snapshot_bytes)
                     await websocket.send(json.dumps({
                         "type": "initial-snapshot",
                         "snapshot": snapshot_data,
                         "docId": doc_id
                     }))
-                    logger.info(f"📄 Sent {doc_id} snapshot to client {client_id}")
+                    logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot_bytes)} bytes) to client {client_id}")
+                else:
+                    logger.info(f"📄 No content in {doc_id} to send to client {client_id}")
                     
             except Exception as e:
                 logger.error(f"❌ Error sending snapshot for {doc_id} to {client_id}: {e}")
@@ -263,6 +275,8 @@ class LoroWebSocketServer:
                 response = model.handle_message(message_type, data, client_id)
             elif message_type in ephemeral_message_types:
                 response = model.handle_ephemeral_message(message_type, data, client_id)
+                # Log the repr of LexicalModel after ephemeral updates
+                logger.info(f"🔄 LexicalModel after ephemeral update: {repr(model)}")
             else:
                 logger.warning(f"❓ Unknown message type: {message_type}")
                 await self._send_error_to_client(client_id, f"Unknown message type: {message_type}")
