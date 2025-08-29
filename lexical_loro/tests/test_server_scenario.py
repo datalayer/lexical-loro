@@ -8,7 +8,7 @@ import json
 import sys
 sys.path.append('.')
 
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 import loro
 
 
@@ -32,7 +32,7 @@ def test_server_scenario():
     print(f"   Document content length: {len(text_container.to_string())}")
     
     # Create LoroModel exactly like server does
-    loro_model = LoroModel(text_doc=loro_doc, container_id="lexical-shared-doc")
+    loro_model = LexicalModel(text_doc=loro_doc, container_id="lexical-shared-doc")
     print(f"   LoroModel after creation: {repr(loro_model)}")
     
     # Now simulate what happens when the server receives updates

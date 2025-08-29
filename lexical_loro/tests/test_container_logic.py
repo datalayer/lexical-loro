@@ -8,7 +8,7 @@ import json
 import sys
 sys.path.append('.')
 
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 import loro
 
 
@@ -29,7 +29,7 @@ def test_container_logic():
     
     print("1. Testing with specific container_id='lexical-shared-doc'")
     # Create LoroModel with specific container_id
-    loro_model = LoroModel(text_doc=loro_doc, container_id="lexical-shared-doc")
+    loro_model = LexicalModel(text_doc=loro_doc, container_id="lexical-shared-doc")
     print(f"   LoroModel created: {repr(loro_model)}")
     
     print("\n2. Testing sync to see container list")
@@ -38,7 +38,7 @@ def test_container_logic():
     
     print("\n3. Testing with no container_id")
     # Create LoroModel without container_id
-    loro_model2 = LoroModel(text_doc=loro_doc)
+    loro_model2 = LexicalModel(text_doc=loro_doc)
     print(f"   LoroModel created: {repr(loro_model2)}")
     
     print("\n4. Testing sync with no container_id")

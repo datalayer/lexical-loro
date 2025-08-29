@@ -10,7 +10,7 @@ import time
 import sys
 sys.path.append('.')
 
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 import loro
 
 
@@ -79,7 +79,7 @@ def test_concurrent_changes():
     print("1. Initial shared document setup complete")
     
     # Create LoroModel using the shared doc (simulates server's get_loro_model())
-    model = LoroModel(text_doc=shared_doc, container_id="lexical-shared-doc")
+    model = LexicalModel(text_doc=shared_doc, container_id="lexical-shared-doc")
     print(f"   Model after creation: blocks={len(model.lexical_data.get('root', {}).get('children', []))}")
     print(f"   Model repr: {repr(model)}")
     

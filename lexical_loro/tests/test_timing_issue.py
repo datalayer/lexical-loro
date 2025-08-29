@@ -6,7 +6,7 @@ Test timing issue - model created before content is added
 
 import json
 import loro
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 
 def test_timing_issue():
     print("=== Testing Timing Issue ===\n")
@@ -18,7 +18,7 @@ def test_timing_issue():
     doc = loro.LoroDoc()
     
     print("2. Creating LoroModel with empty doc...")
-    model = LoroModel(text_doc=doc, container_id=doc_id)
+    model = LexicalModel(text_doc=doc, container_id=doc_id)
     print(f"   Model blocks after creation: {len(model.get_blocks())}")
     
     print("3. Adding content to document (simulating server receiving updates)...")

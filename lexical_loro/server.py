@@ -15,7 +15,7 @@ from typing import Dict, Any
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
 from loro import LoroDoc, ExportMode, EphemeralStore, EphemeralStoreEvent
-from .model.lexical_model import LoroModel
+from .model.lexical_model import LexicalModel
 
 
 INITIAL_LEXICAL_JSON = """
@@ -56,7 +56,7 @@ class LoroWebSocketServer:
         self.port = port
         self.clients: Dict[str, Client] = {}
         self.loro_docs: Dict[str, LoroDoc] = {}  # Store Loro documents by docId
-        self.loro_models: Dict[str, LoroModel] = {}  # Store LoroModel instances by docId
+        self.loro_models: Dict[str, LexicalModel] = {}  # Store LoroModel instances by docId
         self.ephemeral_stores: Dict[str, EphemeralStore] = {}  # Store EphemeralStore instances by docId
         self.ephemeral_subscriptions: Dict[str, Any] = {}  # Store ephemeral subscriptions by docId
         self.running = False
@@ -111,7 +111,7 @@ class LoroWebSocketServer:
                 self.loro_docs[doc_id] = doc
                 
                 # Create LoroModel from the loro_doc for lexical documents
-                loro_model = LoroModel(text_doc=doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                loro_model = LexicalModel(text_doc=doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for: {doc_id}")
                 
@@ -133,7 +133,7 @@ class LoroWebSocketServer:
                 
                 # Create LoroModel for lexical documents even in fallback
                 if doc_id == 'lexical-shared-doc':
-                    loro_model = LoroModel(text_doc=fallback_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                    loro_model = LexicalModel(text_doc=fallback_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                     self.loro_models[doc_id] = loro_model
                     logger.info(f"🧠 Created fallback LoroModel for: {doc_id}")
                 
@@ -561,7 +561,7 @@ class LoroWebSocketServer:
                             
                             # Create LoroModel for lexical documents
                             if 'lexical' in doc_id.lower():
-                                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                                loro_model = LexicalModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                                 self.loro_models[doc_id] = loro_model
                                 logger.info(f"🧠 Created LoroModel for new document: {doc_id}")
                         
@@ -877,19 +877,19 @@ class LoroWebSocketServer:
         suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=9))
         return f"py_client_{timestamp}_{suffix}"
     
-    def get_loro_model(self, doc_id: str) -> LoroModel:
+    def get_loro_model(self, doc_id: str) -> LexicalModel:
         """Get LoroModel for a document ID, creating one if it doesn't exist"""
         if doc_id not in self.loro_models:
             if doc_id in self.loro_docs:
                 # Create model from existing document, passing the doc_id as container_id
-                loro_model = LoroModel(text_doc=self.loro_docs[doc_id], container_id=doc_id, change_callback=self._on_loro_model_change)
+                loro_model = LexicalModel(text_doc=self.loro_docs[doc_id], container_id=doc_id, change_callback=self._on_loro_model_change)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for existing document: {doc_id}")
             else:
                 # Create new document and model
                 new_doc = LoroDoc()
                 self.loro_docs[doc_id] = new_doc
-                loro_model = LoroModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                loro_model = LexicalModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created new LoroDoc and LoroModel for: {doc_id}")
         

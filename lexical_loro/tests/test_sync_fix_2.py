@@ -2,7 +2,7 @@
 """Test script to verify LoroModel syncs correctly from existing content"""
 
 import json
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 from loro import LoroDoc
 
 
@@ -78,7 +78,7 @@ def test_sync_from_existing_content():
         print(f"📝 Added content to '{container_name}' container ({len(content_json)} chars)")
         
         # Create LoroModel with existing document
-        model = LoroModel(text_doc=doc)
+        model = LexicalModel(text_doc=doc)
         
         # Check if it synced correctly
         blocks = model.get_blocks()
@@ -132,7 +132,7 @@ def test_server_like_scenario():
     print(f"📝 Created document with server-like content")
     
     # Create model like the server does
-    model = LoroModel(text_doc=doc)
+    model = LexicalModel(text_doc=doc)
     
     blocks = model.get_blocks()
     print(f"🧠 LoroModel: {model}")

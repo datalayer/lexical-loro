@@ -6,15 +6,17 @@ import time
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 try:
     import loro
+    from loro import ExportMode
 except ImportError:
     # Fallback for when loro is not available
     loro = None
+    ExportMode = None
 
 if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
 
 
-class LoroModel:
+class LexicalModel:
     """
     A class that implements two-way binding between Lexical data structure and Loro documents.
     
@@ -63,6 +65,51 @@ class LoroModel:
         else:
             # Initialize Loro documents with the base structure
             self._sync_to_loro()
+    
+    @classmethod
+    def create_document(cls, doc_id: str, initial_content: Optional[str] = None, change_callback: Optional[callable] = None) -> 'LexicalModel':
+        """
+        Create a new LexicalModel with a Loro document initialized for the given doc_id.
+        
+        Args:
+            doc_id: The container ID for the text content
+            initial_content: Optional initial JSON content to seed the document
+            change_callback: Optional callback for when the document changes
+            
+        Returns:
+            A new LexicalModel instance with initialized Loro documents
+        """
+        if loro is None:
+            raise ImportError("loro package is required for LexicalModel")
+        
+        # Create new Loro document
+        doc = loro.LoroDoc()
+        
+        # Get text container using doc_id as container name
+        text_container = doc.get_text(doc_id)
+        
+        # Seed with initial content if provided
+        if initial_content:
+            try:
+                # Validate that initial_content is valid JSON
+                if isinstance(initial_content, str):
+                    json.loads(initial_content)  # Validate JSON
+                    text_container.insert(0, initial_content)
+                elif isinstance(initial_content, dict):
+                    text_container.insert(0, json.dumps(initial_content))
+                else:
+                    raise ValueError("initial_content must be a JSON string or dictionary")
+                
+                # Commit the changes
+                doc.commit()
+                
+            except (json.JSONDecodeError, ValueError) as e:
+                raise ValueError(f"Invalid initial_content: {e}")
+        
+        # Create LexicalModel instance with the initialized document
+        model = cls(text_doc=doc, container_id=doc_id, change_callback=change_callback)
+        
+        return model
     
     def _sync_from_existing_doc(self):
         """Sync from existing document content using the document's container ID"""
@@ -507,6 +554,89 @@ class LoroModel:
         # If no valid content found, keep current data
         print("LoroModel: No valid content found in any text container during sync")
     
+    def _sync_from_any_available_container(self):
+        """
+        Sync from any available container that has content after import/update operations.
+        This is useful when importing snapshots or applying updates that may create new containers.
+        """
+        try:
+            # Get all available containers from the document
+            doc_state = self.text_doc.get_deep_value()
+            available_containers = []
+            
+            if isinstance(doc_state, dict):
+                for key, value in doc_state.items():
+                    if isinstance(value, str) and value.strip():
+                        available_containers.append((key, len(value.strip())))
+            
+            print(f"LoroModel: Found {len(available_containers)} containers with content after import/update")
+            
+            # Try containers in order of content length (longest first, likely the main content)
+            available_containers.sort(key=lambda x: x[1], reverse=True)
+            
+            for container_name, content_length in available_containers:
+                try:
+                    print(f"LoroModel: Trying container '{container_name}' with {content_length} chars")
+                    text_container = self.text_doc.get_text(container_name)
+                    content = text_container.to_string()
+                    
+                    if content and content.strip():
+                        try:
+                            parsed_data = json.loads(content.strip())
+                            
+                            if isinstance(parsed_data, dict):
+                                # Check for direct Lexical format
+                                if "root" in parsed_data and isinstance(parsed_data["root"], dict):
+                                    # Direct lexical format
+                                    old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                                    self.lexical_data = parsed_data
+                                    new_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                                    print(f"LoroModel: Successfully synced from '{container_name}' (direct format) - blocks {old_block_count} -> {new_block_count}")
+                                    
+                                    # Update our container_id to the one that actually has content
+                                    self.container_id = container_name
+                                    print(f"LoroModel: Updated container_id to '{container_name}'")
+                                    
+                                    # Sync to structured document
+                                    self._sync_structured_doc_only()
+                                    return True
+                                    
+                                elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict):
+                                    # editorState wrapper format
+                                    editor_state = parsed_data["editorState"]
+                                    old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                                    self.lexical_data = {
+                                        "root": editor_state["root"],
+                                        "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
+                                        "source": parsed_data.get("source", "Lexical Loro"),
+                                        "version": parsed_data.get("version", "0.34.0")
+                                    }
+                                    new_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                                    print(f"LoroModel: Successfully synced from '{container_name}' (editorState format) - blocks {old_block_count} -> {new_block_count}")
+                                    
+                                    # Update our container_id to the one that actually has content
+                                    self.container_id = container_name
+                                    print(f"LoroModel: Updated container_id to '{container_name}'")
+                                    
+                                    # Sync to structured document
+                                    self._sync_structured_doc_only()
+                                    return True
+                                    
+                        except json.JSONDecodeError:
+                            print(f"LoroModel: Container '{container_name}' has invalid JSON")
+                            continue
+                            
+                except Exception as e:
+                    print(f"LoroModel: Error processing container '{container_name}': {e}")
+                    continue
+            
+            print("LoroModel: No valid lexical content found in any container after import/update")
+            return False
+            
+        except Exception as e:
+            print(f"LoroModel: Error during _sync_from_any_available_container: {e}")
+            return False
+    
     
     def add_block(self, block_detail: Dict[str, Any], block_type: str):
         """
@@ -781,6 +911,156 @@ class LoroModel:
             "source": "Lexical Loro",
             "version": "0.34.0"
         }
+    
+    # Document Management Methods (Step 1)
+    
+    def get_snapshot(self) -> bytes:
+        """
+        Export the current document state as a snapshot.
+        
+        Returns:
+            bytes: The document snapshot that can be sent to clients
+        """
+        if ExportMode is None:
+            raise ImportError("ExportMode not available - loro package required")
+        
+        try:
+            snapshot = self.text_doc.export(ExportMode.Snapshot())
+            return snapshot
+        except Exception as e:
+            print(f"Warning: Error exporting snapshot: {e}")
+            return b""
+    
+    def import_snapshot(self, snapshot: bytes) -> bool:
+        """
+        Import a snapshot into this document, replacing current content.
+        
+        Args:
+            snapshot: The snapshot bytes to import
+            
+        Returns:
+            bool: True if import was successful, False otherwise
+        """
+        try:
+            if not snapshot:
+                print("Warning: Empty snapshot provided")
+                return False
+            
+            # Import the snapshot into our text document
+            self.text_doc.import_(snapshot)
+            
+            # After import, look for content in any available container
+            # since the snapshot may have created new containers
+            self._sync_from_any_available_container()
+            
+            print(f"✅ Successfully imported snapshot ({len(snapshot)} bytes)")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error importing snapshot: {e}")
+            return False
+    
+    def apply_update(self, update_bytes: bytes) -> bool:
+        """
+        Apply a Loro update to this document.
+        
+        Args:
+            update_bytes: The update bytes to apply
+            
+        Returns:
+            bool: True if update was applied successfully, False otherwise
+        """
+        try:
+            if not update_bytes:
+                print("Warning: Empty update provided")
+                return False
+            
+            # Apply the update to our text document
+            self.text_doc.import_(update_bytes)
+            
+            # After applying update, look for content in any available container
+            # since the update may have created new containers or updated existing ones
+            self._sync_from_any_available_container()
+            
+            print(f"✅ Successfully applied update ({len(update_bytes)} bytes)")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error applying update: {e}")
+            return False
+    
+    def export_update(self) -> Optional[bytes]:
+        """
+        Export any pending changes as an update that can be broadcast to other clients.
+        
+        Note: In Loro, updates are generated automatically when changes are made.
+        This method is provided for consistency but may return None if no changes 
+        are pending or if the update mechanism works differently.
+        
+        Returns:
+            Optional[bytes]: Update bytes if available, None otherwise
+        """
+        try:
+            if ExportMode is None:
+                print("Warning: ExportMode not available")
+                return None
+            
+            # Try to export updates - this may not be the standard Loro pattern
+            # as updates are typically generated automatically during changes
+            
+            # For now, we'll return None and rely on the subscription mechanism
+            # to handle broadcasting via the change_callback
+            
+            # In a full implementation, this might track changes and export deltas
+            print("ℹ️ export_update called - relying on subscription mechanism for updates")
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error exporting update: {e}")
+            return None
+    
+    def get_document_info(self) -> Dict[str, Any]:
+        """
+        Get information about the current document state.
+        
+        Returns:
+            Dict with document information including content length, container info, etc.
+        """
+        try:
+            # Get current content
+            container_name = self.container_id or "content"
+            try:
+                text_container = self.text_doc.get_text(container_name)
+                content = text_container.to_string()
+                content_length = len(content) if content else 0
+            except Exception:
+                content = ""
+                content_length = 0
+            
+            # Get document structure info
+            try:
+                doc_state = self.text_doc.get_deep_value()
+                containers = list(doc_state.keys()) if isinstance(doc_state, dict) else []
+            except Exception:
+                containers = [container_name]
+            
+            return {
+                "container_id": self.container_id,
+                "content_length": content_length,
+                "containers": containers,
+                "has_subscription": self._text_doc_subscription is not None,
+                "lexical_blocks": len(self.lexical_data.get("root", {}).get("children", [])),
+                "last_saved": self.lexical_data.get("lastSaved"),
+                "source": self.lexical_data.get("source"),
+                "version": self.lexical_data.get("version")
+            }
+            
+        except Exception as e:
+            print(f"❌ Error getting document info: {e}")
+            return {
+                "container_id": self.container_id,
+                "error": str(e)
+            }
     
     def cleanup(self):
         """Clean up subscriptions and resources"""

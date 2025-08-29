@@ -6,7 +6,7 @@ Debug test to identify container naming issue
 
 import json
 import loro
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 
 def test_container_issue():
     print("=== Testing Container Issue ===\n")
@@ -72,7 +72,7 @@ def test_container_issue():
     
     # Now create a LoroModel with this document
     print(f"\n4. Creating LoroModel with existing document...")
-    model = LoroModel(text_doc=doc)
+    model = LexicalModel(text_doc=doc)
     
     print(f"   Model blocks: {len(model.get_blocks())}")
     print(f"   Model lexical_data: {model.lexical_data}")

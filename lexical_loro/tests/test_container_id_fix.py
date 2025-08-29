@@ -6,7 +6,7 @@ Test the container_id fix - simulate server behavior exactly
 
 import json
 import loro
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 
 def test_container_id_fix():
     print("=== Testing Container ID Fix ===\n")
@@ -77,12 +77,12 @@ def test_container_id_fix():
     
     # Test OLD behavior (without container_id)
     print(f"\n2. Testing OLD behavior (without container_id)...")
-    old_model = LoroModel(text_doc=doc)
+    old_model = LexicalModel(text_doc=doc)
     print(f"   OLD Model blocks: {len(old_model.get_blocks())}")
     
     # Test NEW behavior (with container_id)
     print(f"\n3. Testing NEW behavior (with container_id='{doc_id}')...")
-    new_model = LoroModel(text_doc=doc, container_id=doc_id)
+    new_model = LexicalModel(text_doc=doc, container_id=doc_id)
     print(f"   NEW Model blocks: {len(new_model.get_blocks())}")
     
     # Verify the content is correct

@@ -3,7 +3,7 @@
 
 import json
 import time
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 from loro import LoroDoc
 
 
@@ -58,7 +58,7 @@ def test_fine_grained_diff_handling():
     print("📝 Created text_doc with initial content")
     
     # Create LoroModel with existing text_doc (should set up subscription)
-    model = LoroModel(text_doc=text_doc)
+    model = LexicalModel(text_doc=text_doc)
     
     print(f"🧠 Created LoroModel: {model}")
     

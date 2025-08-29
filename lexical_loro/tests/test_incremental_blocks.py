@@ -6,7 +6,7 @@ Test incremental block count changes
 
 import json
 import loro
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 
 def test_incremental_blocks():
     print("=== Testing Incremental Block Count ===\n")
@@ -15,7 +15,7 @@ def test_incremental_blocks():
     doc = loro.LoroDoc()
     
     # Create model with container_id
-    model = LoroModel(text_doc=doc, container_id=doc_id)
+    model = LexicalModel(text_doc=doc, container_id=doc_id)
     print(f"1. Initial model blocks: {len(model.get_blocks())}")
     
     # Add first paragraph

@@ -3,7 +3,7 @@
 
 import json
 import time
-from lexical_loro.model.lexical_model import LoroModel
+from lexical_loro.model.lexical_model import LexicalModel
 from loro import LoroDoc
 
 
@@ -58,7 +58,7 @@ def test_fine_grained_diff_handling():
     print("📝 Created text_doc with initial content")
     
     # Create LoroModel with existing text_doc (should set up subscription)
-    model = LoroModel(text_doc=text_doc)
+    model = LexicalModel(text_doc=text_doc)
     
     print(f"🧠 Created LoroModel: {model}")
     
@@ -173,7 +173,7 @@ def test_diff_subscription_lifecycle():
     text_container.insert(0, '{"root":{"children":[],"type":"root"},"source":"Test","version":"1.0"}')
     text_doc.commit()
     
-    model = LoroModel(text_doc=text_doc)
+    model = LexicalModel(text_doc=text_doc)
     assert model._text_doc_subscription is not None, "Should have subscription"
     print("✅ Subscription created")
     
@@ -183,7 +183,7 @@ def test_diff_subscription_lifecycle():
     print("✅ Subscription cleaned up")
     
     # Test creating model without existing doc (standalone mode)
-    standalone_model = LoroModel()
+    standalone_model = LexicalModel()
     assert standalone_model._text_doc_subscription is None, "Standalone model should not have subscription"
     print("✅ Standalone model works correctly")
     
