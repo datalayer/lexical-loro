@@ -1841,3 +1841,218 @@ class LexicalModel:
     def __del__(self):
         """Cleanup when object is destroyed"""
         self.cleanup()
+
+
+class LexicalDocumentManager:
+    """
+    Step 6: Multi-Document Support
+    
+    Manages multiple LexicalModel instances, providing a single interface
+    for the server to interact with multiple documents.
+    """
+    
+    def __init__(self, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
+        """
+        Initialize the document manager.
+        
+        Args:
+            event_callback: Callback function for events from any managed document
+            ephemeral_timeout: Default ephemeral timeout for all documents
+        """
+        self.models: Dict[str, LexicalModel] = {}
+        self.event_callback = event_callback
+        self.ephemeral_timeout = ephemeral_timeout
+    
+    def get_or_create_document(self, doc_id: str, initial_content: Optional[str] = None) -> LexicalModel:
+        """
+        Get an existing document or create a new one.
+        
+        Args:
+            doc_id: Unique identifier for the document
+            initial_content: Optional initial content for new documents
+            
+        Returns:
+            LexicalModel instance for the document
+        """
+        if doc_id not in self.models:
+            # Create new document with manager's settings
+            model = LexicalModel.create_document(
+                doc_id=doc_id,
+                initial_content=initial_content,
+                event_callback=self._wrap_event_callback(doc_id),
+                ephemeral_timeout=self.ephemeral_timeout
+            )
+            self.models[doc_id] = model
+            
+            # Notify about new document creation
+            if self.event_callback:
+                self.event_callback("document_created", {
+                    "doc_id": doc_id,
+                    "model": model
+                })
+        
+        return self.models[doc_id]
+    
+    def _wrap_event_callback(self, doc_id: str) -> Optional[Callable[[str, Dict[str, Any]], None]]:
+        """
+        Wrap the event callback to include document ID information.
+        
+        Args:
+            doc_id: Document ID to include in events
+            
+        Returns:
+            Wrapped callback function that includes doc_id
+        """
+        if not self.event_callback:
+            return None
+            
+        def wrapped_callback(event_type: str, event_data: Dict[str, Any]):
+            # Add document ID to event data
+            enhanced_data = event_data.copy()
+            enhanced_data["doc_id"] = doc_id
+            
+            # Call the original callback with enhanced data
+            self.event_callback(event_type, enhanced_data)
+        
+        return wrapped_callback
+    
+    def handle_message(self, doc_id: str, message_type: str, data: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
+        """
+        Handle a message for a specific document.
+        
+        Args:
+            doc_id: Document ID to send message to
+            message_type: Type of message to handle
+            data: Message data
+            client_id: Optional client ID for ephemeral messages
+            
+        Returns:
+            Response from the document's message handler
+        """
+        model = self.get_or_create_document(doc_id)
+        
+        # Route to appropriate handler based on message type
+        document_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
+        ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
+        
+        if message_type in document_message_types:
+            return model.handle_message(message_type, data, client_id)
+        elif message_type in ephemeral_message_types:
+            if client_id is None:
+                return {
+                    "success": False,
+                    "error": f"client_id required for ephemeral message type: {message_type}",
+                    "message_type": message_type
+                }
+            return model.handle_ephemeral_message(message_type, data, client_id)
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown message type: {message_type}",
+                "message_type": message_type
+            }
+    
+    def handle_ephemeral_message(self, doc_id: str, message_type: str, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
+        """
+        Handle an ephemeral message for a specific document.
+        
+        Args:
+            doc_id: Document ID to send message to
+            message_type: Type of ephemeral message
+            data: Message data
+            client_id: Client ID for ephemeral tracking
+            
+        Returns:
+            Response from the document's ephemeral message handler
+        """
+        model = self.get_or_create_document(doc_id)
+        return model.handle_ephemeral_message(message_type, data, client_id)
+    
+    def get_snapshot(self, doc_id: str) -> Optional[bytes]:
+        """
+        Get snapshot for a specific document.
+        
+        Args:
+            doc_id: Document ID to get snapshot for
+            
+        Returns:
+            Document snapshot as bytes, or None if document doesn't exist
+        """
+        if doc_id not in self.models:
+            return None
+        return self.models[doc_id].get_snapshot()
+    
+    def list_documents(self) -> List[str]:
+        """
+        Get list of all managed document IDs.
+        
+        Returns:
+            List of document IDs
+        """
+        return list(self.models.keys())
+    
+    def get_document_info(self, doc_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get information about a specific document.
+        
+        Args:
+            doc_id: Document ID to get info for
+            
+        Returns:
+            Document information dict, or None if document doesn't exist
+        """
+        if doc_id not in self.models:
+            return None
+            
+        model = self.models[doc_id]
+        return {
+            "doc_id": doc_id,
+            "content_length": len(str(model.lexical_data)),
+            "block_count": len(model.lexical_data.get("root", {}).get("children", [])),
+            "source": model.lexical_data.get("source", "unknown"),
+            "version": model.lexical_data.get("version", "unknown"),
+            "last_saved": model.lexical_data.get("lastSaved", "unknown")
+        }
+    
+    def cleanup_document(self, doc_id: str) -> bool:
+        """
+        Clean up and remove a document.
+        
+        Args:
+            doc_id: Document ID to clean up
+            
+        Returns:
+            True if document was cleaned up, False if it didn't exist
+        """
+        if doc_id not in self.models:
+            return False
+        
+        # Clean up the model
+        self.models[doc_id].cleanup()
+        
+        # Remove from our tracking
+        del self.models[doc_id]
+        
+        # Notify about document removal
+        if self.event_callback:
+            self.event_callback("document_removed", {
+                "doc_id": doc_id
+            })
+        
+        return True
+    
+    def cleanup(self):
+        """Clean up all managed documents"""
+        doc_ids = list(self.models.keys())
+        for doc_id in doc_ids:
+            self.cleanup_document(doc_id)
+    
+    def __repr__(self) -> str:
+        """String representation showing managed documents"""
+        doc_count = len(self.models)
+        doc_list = list(self.models.keys())
+        return f"LexicalDocumentManager(documents={doc_count}, doc_ids={doc_list})"
+    
+    def __del__(self):
+        """Cleanup when manager is destroyed"""
+        self.cleanup()

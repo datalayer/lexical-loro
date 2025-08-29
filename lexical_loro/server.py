@@ -25,7 +25,7 @@ import time
 from typing import Dict, Any
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
-from .model.lexical_model import LexicalModel
+from .model.lexical_model import LexicalModel, LexicalDocumentManager
 
 
 INITIAL_LEXICAL_JSON = """
@@ -59,50 +59,42 @@ class Client:
 
 class LoroWebSocketServer:
     """
-    Step 5: Pure WebSocket Relay Server
+    Step 6: Pure WebSocket Relay Server with Multi-Document Support
     
     This server is a thin relay that only handles:
     - WebSocket client connections
-    - Message routing to LexicalModel
-    - Broadcasting responses from LexicalModel
+    - Message routing to LexicalDocumentManager
+    - Broadcasting responses from documents
     
-    All document and ephemeral data management is delegated to LexicalModel.
+    All document and ephemeral data management is delegated to LexicalDocumentManager.
     """
     
     def __init__(self, port: int = 8081, host: str = "localhost"):
         self.port = port
         self.host = host
         self.clients: Dict[str, Client] = {}
-        self.models: Dict[str, LexicalModel] = {}  # Store LexicalModel instances by docId
+        self.document_manager = LexicalDocumentManager(
+            event_callback=self._on_document_event,
+            ephemeral_timeout=300000  # 5 minutes ephemeral timeout
+        )
         self.running = False
     
-    def get_model(self, doc_id: str) -> LexicalModel:
+    def get_document(self, doc_id: str) -> LexicalModel:
         """
-        Get or create a LexicalModel for the given document ID.
-        Step 5: Pure delegation - server doesn't manage documents anymore.
+        Get or create a document through the document manager.
+        Step 6: Delegate to LexicalDocumentManager.
         """
-        if doc_id not in self.models:
-            # Provide initial content for lexical documents
-            initial_content = None
-            if doc_id == 'lexical-shared-doc':
-                initial_content = INITIAL_LEXICAL_JSON
-            
-            # Let LexicalModel handle all document creation and initialization
-            model = LexicalModel.create_document(
-                doc_id=doc_id,
-                initial_content=initial_content,
-                event_callback=self._on_model_event,
-                ephemeral_timeout=300000  # 5 minutes ephemeral timeout
-            )
-            self.models[doc_id] = model
-            logger.info(f"🧠 Created LexicalModel for {doc_id}")
+        # Provide initial content for lexical documents
+        initial_content = None
+        if doc_id == 'lexical-shared-doc':
+            initial_content = INITIAL_LEXICAL_JSON
         
-        return self.models[doc_id]
+        return self.document_manager.get_or_create_document(doc_id, initial_content)
 
-    def _on_model_event(self, event_type: str, event_data: dict):
+    def _on_document_event(self, event_type: str, event_data: dict):
         """
-        Handle events from LexicalModel.
-        Step 5: Server only handles broadcasting, no document logic.
+        Handle events from LexicalDocumentManager.
+        Step 6: Server only handles broadcasting, no document logic.
         """
         try:
             if event_type in ["ephemeral_changed", "broadcast_needed"]:
@@ -111,8 +103,19 @@ class LoroWebSocketServer:
                 
             elif event_type == "document_changed":
                 # Just log document changes, no server action needed
+                doc_id = event_data.get('doc_id', 'unknown')
                 container_id = event_data.get('container_id', 'unknown')
-                logger.info(f"📄 Document changed: {container_id}")
+                logger.info(f"📄 Document changed: {doc_id} ({container_id})")
+                
+            elif event_type == "document_created":
+                # Log new document creation
+                doc_id = event_data.get('doc_id', 'unknown')
+                logger.info(f"🧠 Created document: {doc_id}")
+                
+            elif event_type == "document_removed":
+                # Log document removal
+                doc_id = event_data.get('doc_id', 'unknown')
+                logger.info(f"🗑️ Removed document: {doc_id}")
                 
         except Exception as e:
             logger.error(f"❌ Error in event processing: {e}")
@@ -200,12 +203,13 @@ class LoroWebSocketServer:
         except Exception as e:
             logger.error(f"❌ Error handling client {client_id}: {e}")
         finally:
-            # Step 5: Pure delegation for client cleanup
+            # Step 6: Delegate client cleanup to DocumentManager
             logger.info(f"🧹 Cleaning up client {client_id}")
             
-            # Let each model handle its own cleanup
-            for doc_id, model in self.models.items():
+            # Clean up client data in all managed documents
+            for doc_id in self.document_manager.list_documents():
                 try:
+                    model = self.document_manager.get_or_create_document(doc_id)
                     response = model.handle_client_disconnect(client_id)
                     if response.get("success"):
                         removed_keys = response.get("removed_keys", [])
@@ -223,13 +227,16 @@ class LoroWebSocketServer:
     async def send_initial_snapshots(self, websocket: WebSocketServerProtocol, client_id: str):
         """
         Send initial snapshots for known documents.
-        Step 5: Delegate to models for snapshot data.
+        Step 6: Create documents with initial content and send snapshots.
         """
-        # For known document types, request snapshots from models
+        # For known document types, create documents with initial content and send snapshots
         for doc_id in ['shared-text', 'lexical-shared-doc']:
             try:
-                model = self.get_model(doc_id)
-                snapshot_bytes = model.get_snapshot()
+                # Ensure document exists with initial content
+                self.get_document(doc_id)  # This will create with initial content if needed
+                
+                # Now get the snapshot
+                snapshot_bytes = self.document_manager.get_snapshot(doc_id)
                 
                 if snapshot_bytes and len(snapshot_bytes) > 0:
                     # Convert bytes to list of integers for JSON serialization
@@ -258,31 +265,21 @@ class LoroWebSocketServer:
             
             logger.info(f"📨 {message_type} for {doc_id} from {client_id}")
             
-            # Get the model for this document
-            model = self.get_model(doc_id)
-            
             # Add client color to data for better UX
             client = self.clients.get(client_id)
             if client and "color" not in data:
                 data["color"] = client.color
             
-            # Define message types that are document-related vs ephemeral
-            document_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
+            # Step 6: Delegate message handling to DocumentManager
+            response = self.document_manager.handle_message(doc_id, message_type, data, client_id)
+            
+            # Log LexicalModel state after ephemeral updates
             ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
-            
-            # Pure delegation based on message type
-            if message_type in document_message_types:
-                response = model.handle_message(message_type, data, client_id)
-            elif message_type in ephemeral_message_types:
-                response = model.handle_ephemeral_message(message_type, data, client_id)
-                # Log the repr of LexicalModel after ephemeral updates
+            if message_type in ephemeral_message_types:
+                model = self.get_document(doc_id)
                 logger.info(f"🔄 LexicalModel after ephemeral update: {repr(model)}")
-            else:
-                logger.warning(f"❓ Unknown message type: {message_type}")
-                await self._send_error_to_client(client_id, f"Unknown message type: {message_type}")
-                return
             
-            # Handle the model's response
+            # Handle the response
             await self._handle_model_response(response, client_id, doc_id)
                 
         except json.JSONDecodeError:
@@ -393,8 +390,9 @@ class LoroWebSocketServer:
                                 pass
                             del self.clients[client_id]
                     
-                    # Log basic stats - no document details since server doesn't manage them
-                    logger.info(f"📊 Relay stats: {len(self.clients)} clients, {len(self.models)} models")
+                    # Log basic stats - Step 6: Use document manager
+                    doc_count = len(self.document_manager.list_documents())
+                    logger.info(f"📊 Relay stats: {len(self.clients)} clients, {doc_count} documents")
                     
             except asyncio.CancelledError:
                 break
@@ -415,7 +413,10 @@ class LoroWebSocketServer:
                 pass
         
         self.clients.clear()
-        self.models.clear()
+        
+        # Step 6: Clean up document manager
+        self.document_manager.cleanup()
+        
         logger.info("✅ Relay shutdown complete")
 
 
