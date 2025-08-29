@@ -3,7 +3,8 @@
 
 import json
 import time
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, TYPE_CHECKING, Callable
+from enum import Enum
 try:
     import loro
     from loro import ExportMode, EphemeralStore, EphemeralStoreEvent
@@ -18,6 +19,13 @@ if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
 
 
+class LexicalEventType(Enum):
+    """Event types for LexicalModel communication with server"""
+    DOCUMENT_CHANGED = "document_changed"
+    EPHEMERAL_CHANGED = "ephemeral_changed"
+    BROADCAST_NEEDED = "broadcast_needed"
+
+
 class LexicalModel:
     """
     A class that implements two-way binding between Lexical data structure and Loro documents.
@@ -27,7 +35,7 @@ class LexicalModel:
     2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
     """
     
-    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, change_callback: Optional[callable] = None, ephemeral_timeout: int = 300000):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
@@ -38,8 +46,8 @@ class LexicalModel:
         # Store the container ID hint for syncing
         self.container_id = container_id
         
-        # Store callback for notifying about changes
-        self._change_callback = change_callback
+        # Store event callback for structured communication with server
+        self._event_callback = event_callback
         
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
@@ -73,15 +81,34 @@ class LexicalModel:
             # Initialize Loro documents with the base structure
             self._sync_to_loro()
     
+    def _emit_event(self, event_type: LexicalEventType, event_data: Dict[str, Any]) -> None:
+        """
+        Emit a structured event to the server via the event callback.
+        
+        Args:
+            event_type: The type of event being emitted
+            event_data: Additional data associated with the event
+        """
+        if self._event_callback:
+            try:
+                self._event_callback(event_type.value, {
+                    "model": self,
+                    "container_id": self.container_id,
+                    **event_data
+                })
+            except Exception as e:
+                # Log error but don't break the model operation
+                print(f"Error in event callback: {e}")
+    
     @classmethod
-    def create_document(cls, doc_id: str, initial_content: Optional[str] = None, change_callback: Optional[callable] = None, ephemeral_timeout: int = 300000, loro_doc: Optional['LoroDoc'] = None) -> 'LexicalModel':
+    def create_document(cls, doc_id: str, initial_content: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000, loro_doc: Optional['LoroDoc'] = None) -> 'LexicalModel':
         """
         Create a new LexicalModel with a Loro document initialized for the given doc_id.
         
         Args:
             doc_id: The container ID for the text content
             initial_content: Optional initial JSON content to seed the document
-            change_callback: Optional callback for when the document changes
+            event_callback: Optional callback for structured event communication with server
             ephemeral_timeout: Timeout for ephemeral data (cursor/selection) in milliseconds
             loro_doc: Optional existing LoroDoc to use instead of creating new one
             
@@ -116,7 +143,7 @@ class LexicalModel:
                 raise ValueError(f"Invalid initial_content: {e}")
         
         # Create LexicalModel instance with the initialized document and ephemeral timeout
-        model = cls(text_doc=doc, container_id=doc_id, change_callback=change_callback, ephemeral_timeout=ephemeral_timeout)
+        model = cls(text_doc=doc, container_id=doc_id, event_callback=event_callback, ephemeral_timeout=ephemeral_timeout)
         
         return model
     
@@ -285,12 +312,11 @@ class LexicalModel:
             # Sync from Loro to update our internal state
             self._sync_from_loro()
             
-            # Notify the server/callback about the change if callback is set
-            if self._change_callback:
-                try:
-                    self._change_callback(self)
-                except Exception as e:
-                    print(f"Warning: Error in change callback: {e}")
+            # Emit document_changed event to notify server
+            self._emit_event(LexicalEventType.DOCUMENT_CHANGED, {
+                "snapshot": self.get_snapshot(),
+                "update": self.export_update() if hasattr(self, 'export_update') else None
+            })
         except Exception as e:
             print(f"Warning: Error in auto-sync: {e}")
     
@@ -1135,11 +1161,16 @@ class LexicalModel:
                 print(f"📋 Current content length: {doc_info.get('content_length', 0)}")
                 print(f"📋 Current blocks: {doc_info.get('lexical_blocks', 0)}")
                 
+                # Emit broadcast_needed event
+                self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                    "message_type": "loro-update",
+                    "broadcast_data": data,  # Relay the original update to other clients
+                    "client_id": client_id
+                })
+                
                 return {
                     "success": True,
                     "message_type": "loro-update",
-                    "broadcast_needed": True,
-                    "broadcast_data": data,  # Relay the original update to other clients
                     "document_info": doc_info,
                     "applied_update_size": len(update_bytes)
                 }
@@ -1227,15 +1258,19 @@ class LexicalModel:
                 }
             else:
                 # No content available, ask other clients
-                return {
-                    "success": True,
+                self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
                     "message_type": "request-snapshot",
-                    "broadcast_needed": True,
                     "broadcast_data": {
                         "type": "snapshot-request",
                         "requesterId": client_id,
                         "docId": self.container_id
-                    }
+                    },
+                    "client_id": client_id
+                })
+                
+                return {
+                    "success": True,
+                    "message_type": "request-snapshot"
                 }
                 
         except Exception as e:
@@ -1287,11 +1322,17 @@ class LexicalModel:
             # Get current document info
             doc_info = self.get_document_info()
             
+            # Emit broadcast_needed and response_needed events if we have updates
+            if broadcast_data:
+                self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                    "message_type": "append-paragraph",
+                    "broadcast_data": broadcast_data,
+                    "client_id": client_id
+                })
+            
             return {
                 "success": True,
                 "message_type": "append-paragraph",
-                "broadcast_needed": broadcast_data is not None,
-                "broadcast_data": broadcast_data,
                 "response_needed": broadcast_data is not None,  # Send update back to sender too
                 "response_data": broadcast_data,  # Same data as broadcast
                 "blocks_before": blocks_before,
@@ -1378,15 +1419,20 @@ class LexicalModel:
             # Get encoded ephemeral data for broadcasting
             ephemeral_data_for_broadcast = self.ephemeral_store.encode_all()
             
-            return {
-                "success": True,
+            # Emit ephemeral_changed event
+            self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
                 "message_type": "ephemeral-update",
-                "broadcast_needed": True,
                 "broadcast_data": {
                     "type": "ephemeral-update",
                     "docId": self.container_id,
                     "data": ephemeral_data_for_broadcast.hex()
                 },
+                "client_id": client_id
+            })
+            
+            return {
+                "success": True,
+                "message_type": "ephemeral-update",
                 "client_id": client_id
             }
             
@@ -1422,15 +1468,20 @@ class LexicalModel:
             # Get encoded ephemeral data for broadcasting
             ephemeral_data_for_broadcast = self.ephemeral_store.encode_all()
             
-            return {
-                "success": True,
+            # Emit ephemeral_changed event
+            self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
                 "message_type": "ephemeral",
-                "broadcast_needed": True,
                 "broadcast_data": {
                     "type": "ephemeral-update",
                     "docId": self.container_id,
                     "data": ephemeral_data_for_broadcast.hex()
                 },
+                "client_id": client_id
+            })
+            
+            return {
+                "success": True,
+                "message_type": "ephemeral",
                 "client_id": client_id
             }
             
@@ -1461,15 +1512,21 @@ class LexicalModel:
             # Get encoded ephemeral data for broadcasting
             ephemeral_data = self.ephemeral_store.encode_all()
             
-            return {
-                "success": True,
+            # Emit ephemeral_changed event
+            self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
                 "message_type": "awareness-update",
-                "broadcast_needed": True,
                 "broadcast_data": {
                     "type": "ephemeral-update",
                     "docId": self.container_id,
                     "data": ephemeral_data.hex()
                 },
+                "client_id": client_id,
+                "peer_id": peer_id
+            })
+            
+            return {
+                "success": True,
+                "message_type": "awareness-update",
                 "client_id": client_id,
                 "peer_id": peer_id
             }
@@ -1508,15 +1565,21 @@ class LexicalModel:
             # Get encoded ephemeral data for broadcasting
             ephemeral_data = self.ephemeral_store.encode_all()
             
-            return {
-                "success": True,
+            # Emit ephemeral_changed event
+            self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
                 "message_type": "cursor-position",
-                "broadcast_needed": True,
                 "broadcast_data": {
                     "type": "ephemeral-update",
                     "docId": self.container_id,
                     "data": ephemeral_data.hex()
                 },
+                "client_id": client_id,
+                "position": position
+            })
+            
+            return {
+                "success": True,
+                "message_type": "cursor-position",
                 "client_id": client_id,
                 "position": position
             }
@@ -1555,15 +1618,21 @@ class LexicalModel:
             # Get encoded ephemeral data for broadcasting
             ephemeral_data = self.ephemeral_store.encode_all()
             
-            return {
-                "success": True,
+            # Emit ephemeral_changed event
+            self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
                 "message_type": "text-selection",
-                "broadcast_needed": True,
                 "broadcast_data": {
                     "type": "ephemeral-update",
                     "docId": self.container_id,
                     "data": ephemeral_data.hex()
                 },
+                "client_id": client_id,
+                "selection": selection
+            })
+            
+            return {
+                "success": True,
+                "message_type": "text-selection",
                 "client_id": client_id,
                 "selection": selection
             }
@@ -1638,10 +1707,9 @@ class LexicalModel:
             # Always create a removal notification for consistency
             ephemeral_data = self.ephemeral_store.encode_all()
             
-            return {
-                "success": True,
+            # Emit ephemeral_changed event for client disconnect
+            self._emit_event(LexicalEventType.EPHEMERAL_CHANGED, {
                 "message_type": "client-disconnect",
-                "broadcast_needed": True,
                 "broadcast_data": {
                     "type": "ephemeral-update",
                     "docId": self.container_id,
@@ -1649,13 +1717,19 @@ class LexicalModel:
                     "event": {
                         "by": "server-disconnect",
                         "added": [],
+                        "removed": list(removed_keys),
                         "updated": [],
-                        "removed": [client_id]
+                        "clients": {}
                     }
                 },
                 "client_id": client_id,
-                "had_data": client_had_data,
-                "removed_keys": removed_keys
+                "removed_keys": list(removed_keys)
+            })
+            
+            return {
+                "success": True,
+                "message_type": "client-disconnect",
+                "removed_keys": list(removed_keys)
             }
             
         except Exception as e:

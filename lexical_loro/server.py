@@ -85,7 +85,7 @@ class LoroWebSocketServer:
             # Create LexicalModel using Step 1 methods with Step 3 ephemeral support
             model = LexicalModel.create_document(
                 doc_id=doc_id,
-                change_callback=self._on_loro_model_change,
+                event_callback=self._on_lexical_model_event,
                 ephemeral_timeout=300000,  # Step 3: 5 minutes ephemeral timeout
                 loro_doc=self.loro_docs[doc_id]  # Use existing LoroDoc
             )
@@ -94,17 +94,62 @@ class LoroWebSocketServer:
         
         return self.loro_models[doc_id]
 
-    def _on_loro_model_change(self, loro_model):
-        """Callback when a LoroModel changes via subscription"""
+    def _on_lexical_model_event(self, event_type: str, event_data: dict):
+        """Handle structured events from LexicalModel via the new event system"""
         try:
-            # Log the change
-            logger.info(f"📄 LoroModel changed: {repr(loro_model)}")
-            
-            # Additional server-side handling can be added here if needed
-            # For now, the LoroModel's subscription mechanism handles most of the work
-            
+            # Schedule async processing in the event loop
+            import asyncio
+            asyncio.create_task(self._process_lexical_model_event(event_type, event_data))
         except Exception as e:
-            logger.error(f"❌ Error in LoroModel change callback: {e}")
+            logger.error(f"❌ Error scheduling event processing: {e}")
+    
+    async def _process_lexical_model_event(self, event_type: str, event_data: dict):
+        """Process LexicalModel events asynchronously"""
+        try:
+            model = event_data.get("model")
+            container_id = event_data.get("container_id", "unknown")
+            
+            logger.info(f"📡 LexicalModel event: {event_type} for {container_id}")
+            
+            if event_type == "document_changed":
+                # Handle document change events
+                logger.info(f"📄 Document changed: {container_id}")
+                # Additional document change handling can be added here if needed
+                
+            elif event_type == "ephemeral_changed":
+                # Handle ephemeral data changes (cursors, selections)
+                message_type = event_data.get("message_type", "unknown")
+                broadcast_data = event_data.get("broadcast_data")
+                client_id = event_data.get("client_id")
+                
+                logger.info(f"👁️ Ephemeral changed: {message_type} from client {client_id}")
+                
+                if broadcast_data:
+                    # Broadcast ephemeral update to all other clients
+                    await self.broadcast_to_other_clients(client_id, broadcast_data)
+                    
+            elif event_type == "broadcast_needed":
+                # Handle broadcast requirements (loro updates, append paragraph, etc.)
+                message_type = event_data.get("message_type", "unknown")
+                broadcast_data = event_data.get("broadcast_data")
+                client_id = event_data.get("client_id")
+                
+                logger.info(f"📢 Broadcast needed: {message_type} from client {client_id}")
+                
+                if broadcast_data:
+                    # Broadcast to all other clients
+                    await self.broadcast_to_other_clients(client_id, broadcast_data)
+                    
+            else:
+                logger.warning(f"⚠️ Unknown event type: {event_type}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error in event processing: {e}")
+
+    def _on_loro_model_change(self, loro_model):
+        """Legacy callback - deprecated, replaced by event system"""
+        logger.warning("⚠️ Legacy change callback called - should be replaced by event system")
+        # Keeping for backward compatibility during transition
         
     def _initialize_documents(self):
         """Initialize default Loro documents and EphemeralStores"""
@@ -141,7 +186,7 @@ class LoroWebSocketServer:
                 self.loro_docs[doc_id] = doc
                 
                 # Create LoroModel from the loro_doc for lexical documents with Step 3 ephemeral support
-                loro_model = LexicalModel(text_doc=doc, container_id=doc_id, change_callback=self._on_loro_model_change, ephemeral_timeout=300000)
+                loro_model = LexicalModel(text_doc=doc, container_id=doc_id, event_callback=self._on_lexical_model_event, ephemeral_timeout=300000)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel with integrated EphemeralStore for: {doc_id}")
                 
@@ -163,7 +208,7 @@ class LoroWebSocketServer:
                 
                 # Create LoroModel for lexical documents even in fallback
                 if doc_id == 'lexical-shared-doc':
-                    loro_model = LexicalModel(text_doc=fallback_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                    loro_model = LexicalModel(text_doc=fallback_doc, container_id=doc_id, event_callback=self._on_lexical_model_event)
                     self.loro_models[doc_id] = loro_model
                     logger.info(f"🧠 Created fallback LoroModel for: {doc_id}")
                 
@@ -435,7 +480,7 @@ class LoroWebSocketServer:
             await self._send_error_to_client(client_id, f"Server error: {str(e)}")
     
     async def _handle_model_response(self, response: Dict[str, Any], client_id: str, doc_id: str):
-        """Handle structured response from LexicalModel methods"""
+        """Handle structured response from LexicalModel methods - Step 4 Event System"""
         message_type = response.get("message_type", "unknown")
         
         if not response.get("success"):
@@ -448,13 +493,10 @@ class LoroWebSocketServer:
         # Handle successful response
         logger.info(f"✅ {message_type} succeeded for {doc_id}")
         
-        # Handle broadcast needs
-        if response.get("broadcast_needed"):
-            broadcast_data = response.get("broadcast_data", {})
-            await self.broadcast_to_other_clients(client_id, broadcast_data)
-            logger.info(f"📡 Broadcasted {message_type} to {len(self.clients) - 1} other clients")
+        # NOTE: Broadcasting is now handled by the event system via _on_lexical_model_event
+        # No need to check broadcast_needed flags here anymore
         
-        # Handle direct response needs
+        # Handle direct response needs (for operations that need to send data back to sender)
         if response.get("response_needed"):
             response_data = response.get("response_data", {})
             client = self.clients.get(client_id)
@@ -607,7 +649,7 @@ class LoroWebSocketServer:
                             
                             # Create LoroModel for lexical documents
                             if 'lexical' in doc_id.lower():
-                                loro_model = LexicalModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                                loro_model = LexicalModel(text_doc=new_doc, container_id=doc_id, event_callback=self._on_lexical_model_event)
                                 self.loro_models[doc_id] = loro_model
                                 logger.info(f"🧠 Created LoroModel for new document: {doc_id}")
                         
@@ -928,14 +970,14 @@ class LoroWebSocketServer:
         if doc_id not in self.loro_models:
             if doc_id in self.loro_docs:
                 # Create model from existing document, passing the doc_id as container_id
-                loro_model = LexicalModel(text_doc=self.loro_docs[doc_id], container_id=doc_id, change_callback=self._on_loro_model_change)
+                loro_model = LexicalModel(text_doc=self.loro_docs[doc_id], container_id=doc_id, event_callback=self._on_lexical_model_event)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created LoroModel for existing document: {doc_id}")
             else:
                 # Create new document and model
                 new_doc = LoroDoc()
                 self.loro_docs[doc_id] = new_doc
-                loro_model = LexicalModel(text_doc=new_doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                loro_model = LexicalModel(text_doc=new_doc, container_id=doc_id, event_callback=self._on_lexical_model_event)
                 self.loro_models[doc_id] = loro_model
                 logger.info(f"🧠 Created new LoroDoc and LoroModel for: {doc_id}")
         
