@@ -1189,14 +1189,33 @@ export function LoroCollaborativePlugin({
 
           // Send ephemeral update to other clients via WebSocket
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && awarenessRef.current) {
-            const ephemeralData = awarenessRef.current.encode();
-            const hexData = Array.from(ephemeralData).map(b => b.toString(16).padStart(2, '0')).join('');
-            
-            wsRef.current.send(JSON.stringify({
-              type: 'ephemeral-update',
-              docId: docId,
-              data: hexData  // Convert to hex string
-            }));
+            try {
+              const ephemeralData = awarenessRef.current.encode();
+              
+              // Validate ephemeral data before sending
+              if (!ephemeralData || ephemeralData.length === 0) {
+                console.warn('⚠️ Empty ephemeral data, skipping send');
+                return;
+              }
+              
+              const hexData = Array.from(ephemeralData).map(b => b.toString(16).padStart(2, '0')).join('');
+              
+              // Validate hex data
+              if (!hexData || hexData.length === 0) {
+                console.warn('⚠️ Empty hex data, skipping send');
+                return;
+              }
+              
+              wsRef.current.send(JSON.stringify({
+                type: 'ephemeral-update',
+                docId: docId,
+                data: hexData  // Convert to hex string
+              }));
+              
+              console.log('📤 Sent ephemeral update:', { docId, dataLength: hexData.length });
+            } catch (error) {
+              console.error('❌ Error encoding/sending ephemeral data:', error);
+            }
           }
         } catch (error) {
           console.warn('Error creating cursor:', error);
