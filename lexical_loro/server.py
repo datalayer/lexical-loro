@@ -7,10 +7,14 @@ Loro WebSocket server for real-time collaboration using loro-py
 """
 
 import asyncio
+import hashlib
 import json
 import logging
+import random
+import string
 import sys
 import time
+import traceback
 from typing import Dict, Set, Any
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
@@ -68,6 +72,7 @@ class LoroWebSocketServer:
         """
         Get or create a LexicalModel for the given document ID.
         This method enables server simplification by providing a unified interface.
+        Step 3: Now includes ephemeral_timeout parameter for integrated ephemeral management.
         """
         if doc_id not in self.loro_models:
             # Get or create the underlying LoroDoc
@@ -77,14 +82,15 @@ class LoroWebSocketServer:
                 self.loro_docs[doc_id] = new_doc
                 logger.info(f"📄 Created new LoroDoc for {doc_id}")
             
-            # Create LexicalModel using Step 1 methods
+            # Create LexicalModel using Step 1 methods with Step 3 ephemeral support
             model = LexicalModel.create_document(
-                container_id=doc_id,
+                doc_id=doc_id,
                 change_callback=self._on_loro_model_change,
+                ephemeral_timeout=300000,  # Step 3: 5 minutes ephemeral timeout
                 loro_doc=self.loro_docs[doc_id]  # Use existing LoroDoc
             )
             self.loro_models[doc_id] = model
-            logger.info(f"🧠 Created LexicalModel for {doc_id}")
+            logger.info(f"🧠 Created LexicalModel with integrated EphemeralStore for {doc_id}")
         
         return self.loro_models[doc_id]
 
@@ -134,10 +140,10 @@ class LoroWebSocketServer:
                     
                 self.loro_docs[doc_id] = doc
                 
-                # Create LoroModel from the loro_doc for lexical documents
-                loro_model = LexicalModel(text_doc=doc, container_id=doc_id, change_callback=self._on_loro_model_change)
+                # Create LoroModel from the loro_doc for lexical documents with Step 3 ephemeral support
+                loro_model = LexicalModel(text_doc=doc, container_id=doc_id, change_callback=self._on_loro_model_change, ephemeral_timeout=300000)
                 self.loro_models[doc_id] = loro_model
-                logger.info(f"🧠 Created LoroModel for: {doc_id}")
+                logger.info(f"🧠 Created LoroModel with integrated EphemeralStore for: {doc_id}")
                 
                 self.ephemeral_stores[doc_id] = ephemeral_store
                 
@@ -465,6 +471,111 @@ class LoroWebSocketServer:
                 logger.error(f"❌ Error sending snapshot for {doc_id} to {client_id}: {e}")
     
     async def handle_message(self, client_id: str, message: str):
+        """
+        Handle a message from a client - NOW USING STEP 3 SIMPLIFIED APPROACH
+        
+        This method now delegates to LexicalModel for both document and ephemeral operations.
+        The complex manual Loro handling has been replaced with clean delegation.
+        """
+        try:
+            data = json.loads(message)
+            message_type = data.get("type")
+            doc_id = data.get("docId", "shared-text")
+            
+            logger.info(f"📨 {message_type} for {doc_id} from {client_id}")
+            
+            # Define Loro-related message types that LexicalModel can handle (Steps 1&2)
+            loro_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
+            
+            # Define ephemeral message types that LexicalModel can handle (Step 3)
+            ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
+            
+            if message_type in loro_message_types:
+                # Use LexicalModel.handle_message() - Steps 1&2 feature!
+                model = self.get_loro_model(doc_id)
+                response = model.handle_message(message_type, data, client_id)
+                
+                # Handle the structured response from LexicalModel
+                await self._handle_model_response(response, client_id, doc_id)
+                
+            elif message_type in ephemeral_message_types:
+                # Use LexicalModel.handle_ephemeral_message() - Step 3 feature!
+                model = self.get_loro_model(doc_id)
+                
+                # Add client color to data for ephemeral messages
+                client = self.clients.get(client_id)
+                if client and "color" not in data:
+                    data["color"] = client.color
+                
+                response = model.handle_ephemeral_message(message_type, data, client_id)
+                
+                # Handle the structured response from LexicalModel
+                await self._handle_model_response(response, client_id, doc_id)
+                
+            else:
+                logger.warning(f"❓ Unknown message type: {message_type}")
+                await self._send_error_to_client(client_id, f"Unknown message type: {message_type}")
+                
+        except json.JSONDecodeError:
+            logger.error(f"❌ Invalid JSON from client {client_id}")
+            await self._send_error_to_client(client_id, "Invalid message format")
+        except Exception as e:
+            logger.error(f"❌ Error processing message from client {client_id}: {e}")
+            await self._send_error_to_client(client_id, f"Server error: {str(e)}")
+    
+    async def _handle_model_response(self, response: Dict[str, Any], client_id: str, doc_id: str):
+        """Handle structured response from LexicalModel methods"""
+        message_type = response.get("message_type", "unknown")
+        
+        if not response.get("success"):
+            # Handle error response
+            error_msg = response.get("error", "Unknown error")
+            logger.error(f"❌ {message_type} failed: {error_msg}")
+            await self._send_error_to_client(client_id, f"{message_type} failed: {error_msg}")
+            return
+        
+        # Handle successful response
+        logger.info(f"✅ {message_type} succeeded for {doc_id}")
+        
+        # Handle broadcast needs
+        if response.get("broadcast_needed"):
+            broadcast_data = response.get("broadcast_data", {})
+            await self.broadcast_to_other_clientss(client_id, broadcast_data)
+            logger.info(f"📡 Broadcasted {message_type} to {len(self.clients) - 1} other clients")
+        
+        # Handle direct response needs
+        if response.get("response_needed"):
+            response_data = response.get("response_data", {})
+            client = self.clients.get(client_id)
+            if client:
+                try:
+                    await client.websocket.send(json.dumps(response_data))
+                    logger.info(f"📤 Sent {response_data.get('type', 'response')} to {client_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to send response to {client_id}: {e}")
+        
+        # Log document state changes
+        if response.get("document_info"):
+            doc_info = response["document_info"]
+            logger.info(f"📋 {doc_id}: {doc_info.get('lexical_blocks', 0)} blocks, {doc_info.get('content_length', 0)} chars")
+    
+    async def _send_error_to_client(self, client_id: str, error_message: str):
+        """Send error message to client"""
+        client = self.clients.get(client_id)
+        if client:
+            try:
+                await client.websocket.send(json.dumps({
+                    "type": "error",
+                    "message": error_message
+                }))
+            except Exception as e:
+                logger.error(f"❌ Failed to send error to {client_id}: {e}")
+    
+    # ==========================================
+    # LEGACY COMPLEX MESSAGE HANDLING (DEPRECATED)
+    # ==========================================
+    
+    async def handle_message_legacy(self, client_id: str, message: str):
         """Handle a message from a client"""
         try:
             data = json.loads(message)
@@ -1004,105 +1115,6 @@ class LoroWebSocketServer:
         self.loro_models.clear()
         self.ephemeral_stores.clear()
         logger.info("✅ Server shutdown complete")
-
-    # ==========================================
-    # SIMPLIFIED MESSAGE HANDLING (Using Steps 1&2)
-    # ==========================================
-    
-    async def handle_message_simplified(self, client_id: str, message: str):
-        """
-        Simplified message handling using LexicalModel.handle_message()
-        
-        BEFORE Steps 1&2: 200+ lines of complex Loro-specific logic
-        AFTER Steps 1&2: Delegate to LexicalModel and handle responses
-        """
-        try:
-            data = json.loads(message)
-            message_type = data.get("type")
-            doc_id = data.get("docId", "shared-text")
-            
-            logger.info(f"📨 {message_type} for {doc_id} from {client_id}")
-            
-            # Define Loro-related message types that LexicalModel can handle
-            loro_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
-            
-            # Define ephemeral message types that LexicalModel can handle (Step 3)
-            ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
-            
-            if message_type in loro_message_types:
-                # Use LexicalModel.handle_message() - Step 2 feature!
-                model = self.get_loro_model(doc_id)
-                response = model.handle_message(message_type, data, client_id)
-                
-                # Handle the structured response from LexicalModel
-                await self._handle_model_response(response, client_id, doc_id)
-                
-            elif message_type in ephemeral_message_types:
-                # Use LexicalModel.handle_ephemeral_message() - Step 3 feature!
-                model = self.get_loro_model(doc_id)
-                response = model.handle_ephemeral_message(message_type, data, client_id)
-                
-                # Handle the structured response from LexicalModel
-                await self._handle_model_response(response, client_id, doc_id)
-                
-            else:
-                logger.warning(f"❓ Unknown message type: {message_type}")
-                await self._send_error_to_client(client_id, f"Unknown message type: {message_type}")
-                
-        except json.JSONDecodeError:
-            logger.error(f"❌ Invalid JSON from client {client_id}")
-            await self._send_error_to_client(client_id, "Invalid message format")
-        except Exception as e:
-            logger.error(f"❌ Error processing message from client {client_id}: {e}")
-            await self._send_error_to_client(client_id, f"Server error: {str(e)}")
-    
-    async def _handle_model_response(self, response: Dict[str, Any], client_id: str, doc_id: str):
-        """Handle structured response from LexicalModel.handle_message()"""
-        message_type = response.get("message_type", "unknown")
-        
-        if not response.get("success"):
-            # Handle error response
-            error_msg = response.get("error", "Unknown error")
-            logger.error(f"❌ {message_type} failed: {error_msg}")
-            await self._send_error_to_client(client_id, f"{message_type} failed: {error_msg}")
-            return
-        
-        # Handle successful response
-        logger.info(f"✅ {message_type} succeeded for {doc_id}")
-        
-        # Handle broadcast needs
-        if response.get("broadcast_needed"):
-            broadcast_data = response.get("broadcast_data", {})
-            await self.broadcast_to_other_clientss(client_id, broadcast_data)
-            logger.info(f"📡 Broadcasted {message_type} to {len(self.clients) - 1} other clients")
-        
-        # Handle direct response needs
-        if response.get("response_needed"):
-            response_data = response.get("response_data", {})
-            client = self.clients.get(client_id)
-            if client:
-                try:
-                    await client.websocket.send(json.dumps(response_data))
-                    logger.info(f"📤 Sent {response_data.get('type', 'response')} to {client_id}")
-                except Exception as e:
-                    logger.error(f"❌ Failed to send response to {client_id}: {e}")
-        
-        # Log document state changes
-        if response.get("document_info"):
-            doc_info = response["document_info"]
-            logger.info(f"📋 {doc_id}: {doc_info.get('lexical_blocks', 0)} blocks, {doc_info.get('content_length', 0)} chars")
-    
-    async def _send_error_to_client(self, client_id: str, error_message: str):
-        """Send error message to client"""
-        client = self.clients.get(client_id)
-        if client:
-            try:
-                await client.websocket.send(json.dumps({
-                    "type": "error",
-                    "message": error_message
-                }))
-            except Exception as e:
-                logger.error(f"❌ Failed to send error to {client_id}: {e}")
 
 
 async def main():
