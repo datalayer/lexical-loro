@@ -7,8 +7,8 @@ import React from 'react';
 import './ServerSelector.css';
 
 interface ServerSelectorProps {
-  currentServer: 'nodejs' | 'python' | 'minimal';
-  onServerChange: (server: 'nodejs' | 'python' | 'minimal') => void;
+  currentServer: 'nodejs' | 'python' | 'python-minimal';
+  onServerChange: (server: 'nodejs' | 'python' | 'python-minimal') => void;
   isConnected: boolean;
 }
 
@@ -53,13 +53,13 @@ export const ServerSelector: React.FC<ServerSelectorProps> = ({
           </div>
         </label>
         
-        <label className={`server-option ${currentServer === 'minimal' ? 'active' : ''}`}>
+        <label className={`server-option ${currentServer === 'python-minimal' ? 'active' : ''}`}>
           <input
             type="radio"
             name="server"
             value="minimal"
-            checked={currentServer === 'minimal'}
-            onChange={() => onServerChange('minimal')}
+            checked={currentServer === 'python-minimal'}
+            onChange={() => onServerChange('python-minimal')}
             disabled={isConnected}
           />
           <div className="server-info">
