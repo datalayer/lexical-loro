@@ -1292,6 +1292,8 @@ class LexicalModel:
                 "message_type": "append-paragraph",
                 "broadcast_needed": broadcast_data is not None,
                 "broadcast_data": broadcast_data,
+                "response_needed": broadcast_data is not None,  # Send update back to sender too
+                "response_data": broadcast_data,  # Same data as broadcast
                 "blocks_before": blocks_before,
                 "blocks_after": blocks_after,
                 "added_text": message_text,

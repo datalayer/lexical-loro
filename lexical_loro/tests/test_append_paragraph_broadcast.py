@@ -33,6 +33,11 @@ def test_append_paragraph_broadcasting():
     assert "update" in response["broadcast_data"], "Should include update data for broadcasting"
     assert response["added_text"] == "Test paragraph content", "Should include added text"
     
+    # Verify response back to sender
+    assert response["response_needed"] == True, "Should send response back to sender"
+    assert "response_data" in response, "Should include response_data for sender"
+    assert response["response_data"]["type"] == "loro-update", "Response should be loro-update type"
+    
     # Verify block count increased
     assert response["blocks_after"] > response["blocks_before"], "Block count should increase"
     
@@ -85,6 +90,7 @@ def run_all_tests():
         print("🎉 All Append-Paragraph tests PASSED!")
         print("✅ Append-paragraph generates proper broadcast data")
         print("✅ Broadcast data includes loro-update for other clients")
+        print("✅ Response data includes loro-update for sending client")
         print("✅ Document state is properly updated")
         print("✅ Block counts are correctly tracked")
         
