@@ -10,7 +10,6 @@ import click
 import uvicorn
 from mcp.server import FastMCP
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 
 from ..model.lexical_model import LexicalDocumentManager
@@ -24,10 +23,11 @@ logger = logging.getLogger(__name__)
 
 ###############################################################################
 
-
 class FastMCPWithCORS(FastMCP):
     def streamable_http_app(self) -> Starlette:
-        """Return StreamableHTTP server app with CORS middleware"""
+        """Return StreamableHTTP server app with CORS middleware
+        See: https://github.com/modelcontextprotocol/python-sdk/issues/187
+        """
         # Get the original Starlette app
         app = super().streamable_http_app()
         
@@ -40,13 +40,30 @@ class FastMCPWithCORS(FastMCP):
             allow_headers=["*"],
         )        
         return app
+    
+    def sse_app(self, mount_path: str | None = None) -> Starlette:
+        """Return SSE server app with CORS middleware"""
+        # Get the original Starlette app
+        app = super().sse_app(mount_path)
+        # Add CORS middleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],  # In production, should set specific domains
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )        
+        return app
+
+
+
 
 
 ###############################################################################
 
 
 # Create the FastMCP server
-mcp = FastMCP("Lexical MCP Server")
+mcp = FastMCPWithCORS(name="Lexical MCP Server", json_response=False, stateless_http=True)
 
 # Initialize document manager
 document_manager = LexicalDocumentManager()
