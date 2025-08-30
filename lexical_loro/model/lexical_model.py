@@ -905,6 +905,124 @@ class LexicalModel:
             self.lexical_data["lastSaved"] = int(time.time() * 1000)
             self._sync_to_loro()
     
+    def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str):
+        """
+        Add a new block at a specific index
+        
+        Args:
+            index: Index where to insert the block (0-based)
+            block_detail: Dictionary containing block details (text, formatting, etc.)
+            block_type: Type of block (paragraph, heading1, heading2, etc.)
+        """
+        try:
+            print(f"LoroModel: Adding block of type '{block_type}' at index {index}")
+            
+            # Map block types to lexical types
+            type_mapping = {
+                "paragraph": "paragraph",
+                "heading1": "heading",
+                "heading2": "heading",
+                "heading3": "heading",
+                "heading4": "heading",
+                "heading5": "heading",
+                "heading6": "heading",
+            }
+            
+            lexical_type = type_mapping.get(block_type, "paragraph")
+            
+            # Create the block structure
+            new_block = {
+                "children": [],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": lexical_type,
+                "version": 1
+            }
+            
+            # Add heading tag if it's a heading
+            if block_type.startswith("heading"):
+                tag_number = block_type[-1] if block_type[-1].isdigit() else "1"
+                new_block["tag"] = f"h{tag_number}"
+            elif lexical_type == "paragraph":
+                # Paragraphs don't have a tag property
+                pass
+            
+            # Add text content if provided
+            if "text" in block_detail:
+                text_node = {
+                    "detail": block_detail.get("detail", 0),
+                    "format": block_detail.get("format", 0),
+                    "mode": block_detail.get("mode", "normal"),
+                    "style": block_detail.get("style", ""),
+                    "text": block_detail["text"],
+                    "type": "text",
+                    "version": 1
+                }
+                new_block["children"].append(text_node)
+            
+            # Add any additional properties from block_detail
+            for key, value in block_detail.items():
+                if key not in ["text", "detail", "format", "mode", "style"]:
+                    new_block[key] = value
+            
+            # Ensure index is within valid range
+            children = self.lexical_data["root"]["children"]
+            if index < 0:
+                index = 0
+            elif index > len(children):
+                index = len(children)
+            
+            # Insert the block at the specified index
+            children.insert(index, new_block)
+            
+            # Update timestamp and sync
+            self.lexical_data["lastSaved"] = int(time.time() * 1000)
+            self._sync_to_loro()
+            
+            print(f"✅ Block added at index {index} - total blocks: {len(children)}")
+            
+        except Exception as e:
+            print(f"❌ Error adding block at index {index}: {e}")
+            raise e
+    
+    def get_complete_model(self) -> Dict[str, Any]:
+        """
+        Get the complete lexical model with all metadata and structure
+        
+        Returns:
+            Dict containing the complete lexical data structure including root, metadata, etc.
+        """
+        self._sync_from_loro()
+        return {
+            "lexical_data": self.lexical_data.copy(),
+            "metadata": {
+                "container_id": self.container_id,
+                "has_subscription": self._text_doc_subscription is not None,
+                "has_ephemeral_store": self.ephemeral_store is not None,
+                "ephemeral_timeout": self.ephemeral_timeout,
+                "block_count": len(self.lexical_data["root"]["children"])
+            }
+        }
+    
+    def get_block_at_index(self, index: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a block at a specific index
+        
+        Args:
+            index: Index of the block to retrieve (0-based)
+            
+        Returns:
+            Dict containing the block data, or None if index is out of range
+        """
+        self._sync_from_loro()
+        children = self.lexical_data["root"]["children"]
+        
+        if 0 <= index < len(children):
+            return children[index].copy()
+        else:
+            return None
+    
     def get_text_document(self):
         """Get the text Loro document"""
         return self.text_doc
