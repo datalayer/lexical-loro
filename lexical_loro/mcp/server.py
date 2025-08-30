@@ -61,13 +61,29 @@ current_document_id: Optional[str] = None
 
 @mcp.tool()
 async def load_document(doc_id: str) -> str:
-    """Load a document by document ID.
+    """Load a Lexical document by document ID and retrieve its complete structure.
+
+    This tool loads an existing document or creates a new one if it doesn't exist.
+    The document uses Loro's collaborative editing backend for real-time synchronization.
+    Returns the complete lexical data structure including all blocks, metadata, and
+    container information for collaborative editing.
 
     Args:
-        doc_id: The unique identifier of the document to load
+        doc_id: The unique identifier of the document to load. Can be any string
+               that serves as a document identifier (e.g., "my-doc", "report-2024").
+               Documents are automatically created if they don't exist.
 
     Returns:
-        str: JSON string containing the document data or error information
+        str: JSON string containing:
+            - success: Boolean indicating operation success
+            - doc_id: The document identifier that was loaded
+            - lexical_data: Complete lexical document structure with root and children blocks
+            - container_id: Loro container ID for collaborative editing synchronization
+            - On error: success=False with error message and doc_id
+
+    Example Usage:
+        Load existing document: load_document("project-notes")
+        Create new document: load_document("new-document-2024")
     """
     try:
         logger.info(f"Loading document: {doc_id}")
@@ -101,15 +117,37 @@ async def load_document(doc_id: str) -> str:
 
 @mcp.tool()
 async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) -> str:
-    """Insert a text paragraph at a specific index in a document.
+    """Insert a text paragraph at a specific position in a Lexical document.
+
+    This tool inserts a new paragraph block at the specified index position within
+    the document. All existing blocks at or after the specified index will be shifted
+    down by one position. The document uses Loro's collaborative editing backend,
+    so changes are automatically synchronized across all connected clients.
 
     Args:
-        index: The index position where to insert the paragraph (0-based)
-        text: The text content of the paragraph to insert
-        doc_id: The unique identifier of the document (optional, uses current document if not provided)
+        index: The zero-based index position where to insert the paragraph.
+               Use 0 to insert at the beginning, or any valid index within the document.
+               If index exceeds document length, paragraph is appended at the end.
+        text: The text content of the paragraph to insert. Can contain any UTF-8 text
+              including emojis, special characters, and multi-line content.
+        doc_id: The unique identifier of the document (optional). If not provided,
+                uses the current document set via set_current_document. Explicit doc_id
+                takes precedence over current document.
 
     Returns:
-        str: JSON string containing the operation result
+        str: JSON string containing:
+            - success: Boolean indicating operation success
+            - doc_id: The document identifier where insertion occurred
+            - action: "insert_paragraph" for operation tracking
+            - index: The actual index where paragraph was inserted
+            - text: The text content that was inserted
+            - total_blocks: Updated total number of blocks in the document
+            - On error: success=False with error message and context
+
+    Example Usage:
+        Insert at beginning: insert_paragraph(0, "Introduction paragraph")
+        Insert with explicit doc: insert_paragraph(2, "Middle content", "my-doc")
+        Insert using current doc: insert_paragraph(1, "Second paragraph")
     """
     global current_document_id
     try:
@@ -160,14 +198,35 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
 
 @mcp.tool()
 async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
-    """Append a text paragraph at the end of a document.
+    """Append a text paragraph to the end of a Lexical document.
+
+    This tool adds a new paragraph block at the end of the specified document.
+    It's the most common way to add content to a document and is equivalent to
+    inserting at the last position. The document uses Loro's collaborative editing
+    backend, ensuring real-time synchronization across all connected clients.
 
     Args:
-        text: The text content of the paragraph to append
-        doc_id: The unique identifier of the document (optional, uses current document if not provided)
+        text: The text content of the paragraph to append. Supports any UTF-8 text
+              including emojis, special characters, formatted content, and multi-line
+              text. Empty strings are allowed and will create an empty paragraph block.
+        doc_id: The unique identifier of the document (optional). If not provided,
+                uses the current document set via set_current_document. Explicit doc_id
+                takes precedence over current document setting.
 
     Returns:
-        str: JSON string containing the operation result
+        str: JSON string containing:
+            - success: Boolean indicating operation success
+            - doc_id: The document identifier where content was appended
+            - action: "append_paragraph" for operation tracking
+            - text: The text content that was appended
+            - total_blocks: Updated total number of blocks in the document after append
+            - On error: success=False with error message and context information
+
+    Example Usage:
+        Simple append: append_paragraph("This is my conclusion.")
+        With explicit doc: append_paragraph("Final thoughts", "report-2024")
+        Using current doc: append_paragraph("Additional notes")
+        Empty paragraph: append_paragraph("")
     """
     global current_document_id
     try:
@@ -217,13 +276,40 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
 
 @mcp.tool()
 async def get_document_info(doc_id: Optional[str] = None) -> str:
-    """Get basic information about a document.
+    """Retrieve comprehensive information and metadata about a Lexical document.
+
+    This tool provides detailed information about a document's structure, content,
+    and metadata without returning the full document content. It's useful for
+    understanding document composition, tracking changes, and getting quick insights
+    about document statistics before performing operations.
 
     Args:
-        doc_id: The unique identifier of the document (optional, uses current document if not provided)
+        doc_id: The unique identifier of the document to inspect (optional).
+                If not provided, uses the current document set via set_current_document.
+                Explicit doc_id takes precedence over current document setting.
 
     Returns:
-        str: JSON string containing document information
+        str: JSON string containing comprehensive document information:
+            - success: Boolean indicating operation success
+            - doc_id: The document identifier that was inspected
+            - container_id: Loro container ID for collaborative editing tracking
+            - total_blocks: Total number of content blocks in the document
+            - block_types: Dictionary with count of each block type (e.g., {"paragraph": 5})
+            - last_saved: Timestamp of last save operation (if available)
+            - version: Document version information (if available)
+            - source: Source information about document origin (if available)
+            - On error: success=False with error message and context
+
+    Example Usage:
+        Check current doc: get_document_info()
+        Check specific doc: get_document_info("project-notes")
+        Inspect before editing: get_document_info("draft-2024")
+
+    Use Cases:
+        - Document structure analysis before bulk operations
+        - Content auditing and statistics
+        - Version tracking and change monitoring
+        - Debugging document state issues
     """
     global current_document_id
     try:
@@ -275,13 +361,40 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
 
 @mcp.tool()
 async def set_current_document(doc_id: str) -> str:
-    """Set the current document for subsequent operations.
+    """Set the current document for subsequent operations that support optional doc_id.
+
+    This tool establishes a "working document" context that allows other tools
+    (append_paragraph, insert_paragraph, get_document_info) to operate without
+    explicitly specifying a doc_id parameter. This creates a more fluid workflow
+    when working primarily with a single document. The document is automatically
+    created if it doesn't exist.
 
     Args:
-        doc_id: The unique identifier of the document to set as current
+        doc_id: The unique identifier of the document to set as current working document.
+                Can be any string identifier. Document will be created if it doesn't exist.
+                Examples: "my-notes", "project-2024", "draft-document"
 
     Returns:
-        str: JSON string confirming the current document has been set
+        str: JSON string containing:
+            - success: Boolean indicating operation success
+            - message: Confirmation message about the current document setting
+            - doc_id: The document identifier that was set as current
+            - container_id: Loro container ID for the document
+            - On error: success=False with error message and doc_id
+
+    Example Usage:
+        Set working doc: set_current_document("project-notes")
+        Create new context: set_current_document("new-draft-2024")
+        Switch documents: set_current_document("meeting-minutes")
+
+    Workflow Benefits:
+        1. Set current document once: set_current_document("my-doc")
+        2. Work without doc_id: append_paragraph("First point")
+        3. Continue seamlessly: insert_paragraph(0, "Introduction")
+        4. Check status easily: get_document_info()
+
+    Note: The load_document tool always requires an explicit doc_id parameter
+    and is not affected by the current document setting.
     """
     global current_document_id
     try:
@@ -378,55 +491,10 @@ def start_command(
 
 
 ###############################################################################
-# Legacy class-based interface for backward compatibility
-
-
-class LexicalMCPServer:
-    """Legacy MCP Server class for backward compatibility"""
-    
-    def __init__(self):
-        self.server = mcp
-        self.document_manager = document_manager
-        
-        # Legacy method mapping for tests
-        self._load_document = self._wrap_legacy_tool(load_document)
-        self._insert_paragraph = self._wrap_legacy_tool(insert_paragraph)
-        self._append_paragraph = self._wrap_legacy_tool(append_paragraph)
-        self._get_document_info = self._wrap_legacy_tool(get_document_info)
-        self._set_current_document = self._wrap_legacy_tool(set_current_document)
-    
-    def _wrap_legacy_tool(self, tool_func):
-        """Wrap new tool functions for legacy interface compatibility"""
-        from mcp.types import TextContent
-        
-        async def wrapper(arguments: Dict[str, Any]):
-            try:
-                result_str = await tool_func(**arguments)
-                result_dict = json.loads(result_str)
-                
-                # Return in the format expected by old tests
-                return [TextContent(type="text", text=result_str)]
-            except Exception as e:
-                error_result = {"success": False, "error": str(e)}
-                return [TextContent(type="text", text=json.dumps(error_result))]
-        return wrapper
-    
-    async def run(self):
-        """Run the MCP server using stdio transport"""
-        await mcp.run(transport="stdio")
-
-
-###############################################################################
 # Main entry points
 
 
-async def main():
-    """Main entry point for the MCP server"""
-    server = LexicalMCPServer()
-    await server.run()
-
-
-def main_sync():
+def main():
     """Synchronous wrapper for the main function for script entry points"""
     # Use the FastMCP CLI instead of asyncio.run to avoid event loop conflicts
     server()
