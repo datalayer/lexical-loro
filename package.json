@@ -40,7 +40,7 @@
     "example:vite": "vite",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "tsx servers/server.ts",
+    "server": "tsx node-js/server.ts",
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
     "server:py:minimal": "python3 -m lexical_loro.cli_minimal",
