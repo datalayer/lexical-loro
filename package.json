@@ -1,7 +1,7 @@
 {
   "name": "@datalayer/lexical-loro",
   "private": false,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "description": "Collaborative editing plugin for Lexical based on Loro CRDT",
   "main": "lib/index.js",
@@ -35,14 +35,15 @@
     "dev:all:py": "npm run example:py",
     "dev:vite": "npm run example:vite",
     "example": "concurrently \"npm run server\" \"npm run server:py\" \"npm run example:vite\"",
-    "example:js": "concurrently \"npm run server\" \"npm run example:vite\"",    
-    "example:py": "concurrently \"npm run server:py\" \"npm run example:vite\"",
+    "example:js": "concurrently \"npm run server\" \"npm run example:vite\"",
+    "example:py": "concurrently \"npm run server:py:dev\" \"npm run server:py:minimal\" \"npm run example:vite\"",
     "example:vite": "vite",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "tsx servers/server.ts",
+    "server": "tsx node-js/server.ts",
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
+    "server:py:minimal": "python3 -m lexical_loro.cli_minimal",
     "test": "vitest",
     "test:js": "vitest run",
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",
@@ -51,18 +52,16 @@
   },
   "dependencies": {
     "loro-crdt": "^1.5.10",
-    "react": "^18 || ^19.1.0",
-    "react-dom": "^18 || ^19.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "lexical": "^0.33.1",
     "@lexical/react": "^0.33.1",
     "@lexical/selection": "^0.33.1"
   },
-  "peerDependencies": {
-  },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.6",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.6.0",
     "concurrently": "^9.2.0",
@@ -87,13 +86,5 @@
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
     "ws": "^8.18.3"
-  },
-  "resolutions": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
-  },
-  "overrides": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
   }
 }

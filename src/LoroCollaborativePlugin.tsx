@@ -847,6 +847,7 @@ interface LoroCollaborativePluginProps {
   onDisconnectReady?: (disconnectFn: () => void) => void;
   onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
   onInitialization?: (success: boolean) => void;
+  onSendMessageReady?: (sendMessageFn: (message: any) => void) => void;
 }
 
 interface LoroMessage {
@@ -872,6 +873,9 @@ interface LoroMessage {
     updated: string[];
     removed: string[];
   };
+  // For paragraph-added messages
+  message?: string;
+  addedBy?: string;
 }
 
 export function LoroCollaborativePlugin({ 
@@ -881,7 +885,8 @@ export function LoroCollaborativePlugin({
   onDisconnectReady,
   onPeerIdChange,
   onAwarenessChange,
-  onInitialization
+  onInitialization,
+  onSendMessageReady
 }: LoroCollaborativePluginProps) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
@@ -1184,14 +1189,33 @@ export function LoroCollaborativePlugin({
 
           // Send ephemeral update to other clients via WebSocket
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && awarenessRef.current) {
-            const ephemeralData = awarenessRef.current.encode();
-            const hexData = Array.from(ephemeralData).map(b => b.toString(16).padStart(2, '0')).join('');
-            
-            wsRef.current.send(JSON.stringify({
-              type: 'ephemeral-update',
-              docId: docId,
-              data: hexData  // Convert to hex string
-            }));
+            try {
+              const ephemeralData = awarenessRef.current.encode();
+              
+              // Validate ephemeral data before sending
+              if (!ephemeralData || ephemeralData.length === 0) {
+                console.warn('⚠️ Empty ephemeral data, skipping send');
+                return;
+              }
+              
+              const hexData = Array.from(ephemeralData).map(b => b.toString(16).padStart(2, '0')).join('');
+              
+              // Validate hex data
+              if (!hexData || hexData.length === 0) {
+                console.warn('⚠️ Empty hex data, skipping send');
+                return;
+              }
+              
+              wsRef.current.send(JSON.stringify({
+                type: 'ephemeral-update',
+                docId: docId,
+                data: hexData  // Convert to hex string
+              }));
+              
+              console.log('📤 Sent ephemeral update:', { docId, dataLength: hexData.length });
+            } catch (error) {
+              console.error('❌ Error encoding/sending ephemeral data:', error);
+            }
           }
         } catch (error) {
           console.warn('Error creating cursor:', error);
@@ -1965,11 +1989,13 @@ export function LoroCollaborativePlugin({
   // WebSocket connection management with stable dependencies
   const stableOnConnectionChange = useRef(onConnectionChange);
   const stableOnDisconnectReady = useRef(onDisconnectReady);
+  const stableOnSendMessageReady = useRef(onSendMessageReady);
   
   // Update refs when props change without triggering effect
   useEffect(() => {
     stableOnConnectionChange.current = onConnectionChange;
     stableOnDisconnectReady.current = onDisconnectReady;
+    stableOnSendMessageReady.current = onSendMessageReady;
   });
 
   useEffect(() => {
@@ -2036,6 +2062,14 @@ export function LoroCollaborativePlugin({
             }
           };
           stableOnDisconnectReady.current?.(disconnectFn);
+          
+          // Provide sendMessage function to parent component
+          const sendMessageFn = (message: any) => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify(message));
+            }
+          };
+          stableOnSendMessageReady.current?.(sendMessageFn);
         };
 
         ws.onmessage = (event) => {
@@ -2070,10 +2104,27 @@ export function LoroCollaborativePlugin({
                 onInitialization(true);
               }
               
-              // Immediately reflect the current Loro text into the editor after import
+              // Immediately reflect the current Loro content into the editor after import
               try {
-                const currentText = loroDocRef.current.getText(docId).toString();
-                updateLexicalFromLoro(editor, currentText);
+                // For lexical-shared-doc, we need to get the structured JSON from the content container
+                let currentContent = '';
+                
+                try {
+                  // Try to get from 'content' container first (structured JSON)
+                  currentContent = loroDocRef.current.getText('content').toString();
+                  console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
+                } catch {
+                  // Fallback to docId container if content doesn't exist
+                  currentContent = loroDocRef.current.getText(docId).toString();
+                  console.log('📋 Fallback to docId container:', currentContent.slice(0, 100) + '...');
+                }
+                
+                if (currentContent && currentContent.trim().length > 0) {
+                  updateLexicalFromLoro(editor, currentContent);
+                  console.log('✅ Successfully updated Lexical editor from snapshot');
+                } else {
+                  console.warn('⚠️ Empty content received from snapshot');
+                }
               } catch (e) {
                 console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
                 // Notify parent component about failed initialization
@@ -2215,6 +2266,29 @@ export function LoroCollaborativePlugin({
                 console.log('🧹 Completed immediate cleanup for disconnected client');
               } else {
                 console.warn('🧹 Cannot cleanup - missing client ID or awareness ref');
+              }
+            } else if (data.type === 'paragraph-added') {
+              // Handle server broadcast when a new paragraph was added
+              console.log('➕ Received paragraph-added broadcast:', {
+                docId: data.docId,
+                message: data.message,
+                addedBy: data.addedBy
+              });
+              
+              // Trigger a sync from Loro to Lexical to reflect the new paragraph
+              if (data.docId === docId) {
+                try {
+                  // Request fresh snapshot to get the updated content
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                      type: 'request-snapshot',
+                      docId: docId
+                    }));
+                    console.log('📞 Requested fresh snapshot after paragraph addition');
+                  }
+                } catch (error) {
+                  console.warn('Error handling paragraph-added message:', error);
+                }
               }
             }
           } catch (err) {

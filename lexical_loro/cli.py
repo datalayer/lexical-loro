@@ -3,6 +3,7 @@
 
 """
 Command line interface for the Lexical Loro server
+Step 5: CLI for pure WebSocket relay server
 """
 
 import asyncio
@@ -19,10 +20,15 @@ from .server import LoroWebSocketServer
               help="Logging level (default: INFO)")
 def main(port: int, host: str, log_level: str):
     """
-    Start the Lexical Loro WebSocket server for real-time collaboration.
+    Start the Lexical Loro WebSocket relay server for real-time collaboration.
     
-    This server handles Loro CRDT operations for collaborative text editing
-    with Lexical editor clients.
+    Step 5: This server is now a pure WebSocket relay that delegates all 
+    document and ephemeral operations to LexicalModel. The server only handles:
+    - Client connections and WebSocket communication
+    - Message routing to LexicalModel methods  
+    - Broadcasting responses from LexicalModel events
+    
+    All Loro CRDT operations and ephemeral data management are handled by LexicalModel.
     """
     # Configure logging
     logging.basicConfig(
@@ -31,11 +37,11 @@ def main(port: int, host: str, log_level: str):
     )
     
     # Create and start the server
-    server = LoroWebSocketServer(port)
-    server.host = host  # Add host attribute if needed
+    server = LoroWebSocketServer(port=port, host=host)
     
-    click.echo(f"🚀 Starting Lexical Loro server on {host}:{port}")
+    click.echo(f"🚀 Starting Lexical Loro relay server on {host}:{port}")
     click.echo(f"📋 Log level: {log_level}")
+    click.echo("📡 Step 5: Pure WebSocket relay - all operations delegated to LexicalModel")
     click.echo("Press Ctrl+C to stop the server")
     
     try:
