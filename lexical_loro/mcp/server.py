@@ -56,20 +56,46 @@ class FastMCPWithCORS(FastMCP):
         return app
 
 
-
-
-
 ###############################################################################
 
 
 # Create the FastMCP server
 mcp = FastMCPWithCORS(name="Lexical MCP Server", json_response=False, stateless_http=True)
 
-# Initialize document manager
-document_manager = LexicalDocumentManager()
+# Initialize document manager (can be overridden by providing a custom manager)
+document_manager: LexicalDocumentManager = LexicalDocumentManager()
 
 # Current document state
 current_document_id: Optional[str] = None
+
+
+def set_document_manager(manager: LexicalDocumentManager) -> None:
+    """Set a custom document manager that extends LexicalDocumentManager.
+    
+    This allows for custom implementations of document management with
+    different storage backends, synchronization strategies, or additional features.
+    
+    Args:
+        manager: An instance that extends LexicalDocumentManager
+        
+    Raises:
+        TypeError: If manager is not an instance of LexicalDocumentManager
+    """
+    global document_manager
+    if not isinstance(manager, LexicalDocumentManager):
+        raise TypeError(f"Document manager must be an instance of LexicalDocumentManager, got {type(manager)}")
+    
+    document_manager = manager
+    logger.info(f"Document manager set to: {type(manager).__name__}")
+
+
+def get_document_manager() -> LexicalDocumentManager:
+    """Get the current document manager instance.
+    
+    Returns:
+        The current document manager instance
+    """
+    return document_manager
 
 
 ###############################################################################
@@ -505,6 +531,60 @@ def start_command(
         uvicorn.run(mcp.streamable_http_app, host=host, port=port)
     else:
         raise ValueError("Transport should be 'stdio' or 'streamable-http'.")
+
+
+###############################################################################
+# Lexical MCP Server Class
+
+
+class LexicalMCPServer:
+    """Lexical MCP Server with configurable document manager.
+    
+    This class provides a programmatic interface to the Lexical MCP Server
+    with support for custom document managers that extend LexicalDocumentManager.
+    """
+    
+    def __init__(self, custom_document_manager: Optional[LexicalDocumentManager] = None):
+        """Initialize the Lexical MCP Server.
+        
+        Args:
+            custom_document_manager: Optional custom document manager that extends
+                                   LexicalDocumentManager. If not provided, uses
+                                   the default LexicalDocumentManager instance.
+        """
+        self.server = mcp
+        
+        if custom_document_manager is not None:
+            set_document_manager(custom_document_manager)
+        
+        self.document_manager = get_document_manager()
+        
+        # Legacy method mapping for tests and backward compatibility
+        self._load_document = self._wrap_legacy_tool(load_document)
+        self._insert_paragraph = self._wrap_legacy_tool(insert_paragraph)
+        self._append_paragraph = self._wrap_legacy_tool(append_paragraph)
+        self._get_document_info = self._wrap_legacy_tool(get_document_info)
+        self._set_current_document = self._wrap_legacy_tool(set_current_document)
+    
+    def _wrap_legacy_tool(self, tool_func):
+        """Wrap new tool functions for legacy interface compatibility"""
+        from mcp.types import TextContent
+        
+        async def wrapper(arguments: Dict[str, Any]):
+            try:
+                result_str = await tool_func(**arguments)
+                result_dict = json.loads(result_str)
+                
+                # Return in the format expected by old tests
+                return [TextContent(type="text", text=result_str)]
+            except Exception as e:
+                error_result = {"success": False, "error": str(e)}
+                return [TextContent(type="text", text=json.dumps(error_result))]
+        return wrapper
+    
+    async def run(self):
+        """Run the MCP server using stdio transport"""
+        await mcp.run(transport="stdio")
 
 
 ###############################################################################
