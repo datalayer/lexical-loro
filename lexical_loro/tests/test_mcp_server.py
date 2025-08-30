@@ -34,7 +34,7 @@ class TestLexicalMCPServer:
         assert hasattr(server.server, 'call_tool')
         
         # Test the tools indirectly by checking they work
-        expected_tools = ["load_document", "insert_paragraph", "append_paragraph"]
+        expected_tools = ["load_document", "insert_paragraph", "append_paragraph", "get_document_info", "set_current_document"]
         
         # Test each tool works (this verifies registration)
         for tool_name in expected_tools:
@@ -50,6 +50,16 @@ class TestLexicalMCPServer:
                 assert "success" in response_data
             elif tool_name == "insert_paragraph":
                 result = await server._insert_paragraph({"doc_id": "test-tool-check", "index": 0, "text": "test"})
+                assert len(result) == 1
+                response_data = json.loads(result[0].text)
+                assert "success" in response_data
+            elif tool_name == "get_document_info":
+                result = await server._get_document_info({"doc_id": "test-tool-check"})
+                assert len(result) == 1
+                response_data = json.loads(result[0].text)
+                assert "success" in response_data
+            elif tool_name == "set_current_document":
+                result = await server._set_current_document({"doc_id": "test-tool-check"})
                 assert len(result) == 1
                 response_data = json.loads(result[0].text)
                 assert "success" in response_data

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 # Copyright (c) 2023-2025 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
@@ -14,7 +15,6 @@ All document logic is handled by LexicalModel.
 """
 
 import asyncio
-import hashlib
 import json
 import logging
 import random
@@ -25,6 +25,7 @@ from typing import Dict, Any
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
 from .model.lexical_model import LexicalModel, LexicalDocumentManager
+from .client import Client
 
 
 INITIAL_LEXICAL_JSON = """
@@ -36,24 +37,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-class Client:
-    def __init__(self, websocket: WebSocketServerProtocol, client_id: str):
-        self.websocket = websocket
-        self.id = client_id
-        self.color = self._generate_color()  # Assign a unique color
-        
-    def _generate_color(self):
-        """Generate a unique color for this client"""
-        # Generate a color based on client ID hash
-        hash_val = int(hashlib.md5(self.id.encode()).hexdigest()[:6], 16)
-        colors = [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57',
-            '#FF9FF3', '#54A0FF', '#5F27CD', '#00D2D3', '#FF9F43',
-            '#C44569', '#F8B500', '#6C5CE7', '#A29BFE', '#FD79A8'
-        ]
-        return colors[hash_val % len(colors)]
 
 
 class LoroWebSocketServer:

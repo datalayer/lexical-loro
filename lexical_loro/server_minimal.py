@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+
 # Copyright (c) 2023-2025 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
 """
-Step 8: Minimal WebSocket Server (~200 lines) using LexicalModel
+Minimal WebSocket Server (~200 lines) using LexicalModel
 
 This demonstrates clean separation of concerns:
 - Server: WebSocket + Client Management (this file)
@@ -15,33 +16,19 @@ Easy to swap with FastAPI, Flask, Django, etc.
 import asyncio
 import json
 import logging
-import hashlib
 from typing import Dict
 import websockets
 from .model.lexical_model import LexicalModel
+from .client import Client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-class Client:
-    """Simple client representation"""
-    def __init__(self, websocket, client_id: str):
-        self.websocket = websocket
-        self.id = client_id
-        self.color = self._generate_color()
-        
-    def _generate_color(self):
-        """Generate a unique color for this client"""
-        colors = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#feca57", 
-                 "#ff9ff3", "#54a0ff", "#5f27cd", "#00d2d3", "#ff9f43"]
-        return colors[hash(self.id) % len(colors)]
-
-
 class MinimalLoroServer:
     """
-    Step 8: Minimal server demonstrating clean separation.
+    Minimal server demonstrating clean separation.0
     
     Server Responsibilities (this class):
     - WebSocket connections and lifecycle
@@ -320,28 +307,6 @@ class FastAPIMinimalServer:
     # @app.websocket("/ws")
     # async def websocket_endpoint(self, websocket: WebSocket):
     #     # Same client handling logic as MinimalLoroServer.handle_client()
-    #     pass
-
-
-class FlaskSocketIOMinimalServer:
-    """Example: Same logic with Flask-SocketIO (pseudo-code)"""
-    
-    def __init__(self):
-        from flask import Flask
-        from flask_socketio import SocketIO
-        self.app = Flask(__name__)
-        self.socketio = SocketIO(self.app)
-        self.documents: Dict[str, LexicalModel] = {}
-        
-    def get_document(self, doc_id: str) -> LexicalModel:
-        """Same document logic using LexicalModel"""
-        if doc_id not in self.documents:
-            self.documents[doc_id] = LexicalModel.create_document(doc_id)
-        return self.documents[doc_id]
-        
-    # @socketio.on('message')
-    # def handle_message(self, data):
-    #     # Same message handling logic as MinimalLoroServer.handle_message()
     #     pass
 
 

@@ -51,6 +51,9 @@ mcp = FastMCP("Lexical MCP Server")
 # Initialize document manager
 document_manager = LexicalDocumentManager()
 
+# Current document state
+current_document_id: Optional[str] = None
+
 
 ###############################################################################
 # Tools using FastMCP decorators
@@ -97,22 +100,29 @@ async def load_document(doc_id: str) -> str:
 
 
 @mcp.tool()
-async def insert_paragraph(doc_id: str, index: int, text: str) -> str:
+async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) -> str:
     """Insert a text paragraph at a specific index in a document.
 
     Args:
-        doc_id: The unique identifier of the document
         index: The index position where to insert the paragraph (0-based)
         text: The text content of the paragraph to insert
+        doc_id: The unique identifier of the document (optional, uses current document if not provided)
 
     Returns:
         str: JSON string containing the operation result
     """
+    global current_document_id
     try:
-        logger.info(f"Inserting paragraph in document {doc_id} at index {index}")
+        # Determine which document to use
+        target_doc_id = doc_id if doc_id is not None else current_document_id
+        
+        if target_doc_id is None:
+            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
+        
+        logger.info(f"Inserting paragraph in document {target_doc_id} at index {index}")
         
         # Get or create the document
-        model = document_manager.get_or_create_document(doc_id)
+        model = document_manager.get_or_create_document(target_doc_id)
         
         # Create paragraph structure
         block_detail = {"text": text}
@@ -126,43 +136,51 @@ async def insert_paragraph(doc_id: str, index: int, text: str) -> str:
         
         result = {
             "success": True,
-            "doc_id": doc_id,
+            "doc_id": target_doc_id,
             "action": "insert_paragraph",
             "index": index,
             "text": text,
             "total_blocks": total_blocks
         }
         
-        logger.info(f"Successfully inserted paragraph in document {doc_id} at index {index}")
+        logger.info(f"Successfully inserted paragraph in document {target_doc_id} at index {index}")
         return json.dumps(result, indent=2)
         
     except Exception as e:
-        logger.error(f"Error inserting paragraph in document {doc_id}: {e}")
+        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
+        logger.error(f"Error inserting paragraph in document {target_doc_id_for_error}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": doc_id,
+            "doc_id": target_doc_id_for_error,
             "action": "insert_paragraph"
         }
         return json.dumps(error_result, indent=2)
 
 
 @mcp.tool()
-async def append_paragraph(doc_id: str, text: str) -> str:
+async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
     """Append a text paragraph at the end of a document.
 
     Args:
-        doc_id: The unique identifier of the document
         text: The text content of the paragraph to append
+        doc_id: The unique identifier of the document (optional, uses current document if not provided)
 
     Returns:
         str: JSON string containing the operation result
     """
+    global current_document_id
     try:
-        logger.info(f"Appending paragraph to document {doc_id}")
+        # Determine which document to use
+        target_doc_id = doc_id if doc_id is not None else current_document_id
+        
+        if target_doc_id is None:
+            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
+        
+        logger.info(f"Appending paragraph to document {target_doc_id}")
         
         # Get or create the document
-        model = document_manager.get_or_create_document(doc_id)
+        model = document_manager.get_or_create_document(target_doc_id)
         
         # Create paragraph structure
         block_detail = {"text": text}
@@ -176,41 +194,49 @@ async def append_paragraph(doc_id: str, text: str) -> str:
         
         result = {
             "success": True,
-            "doc_id": doc_id,
+            "doc_id": target_doc_id,
             "action": "append_paragraph",
             "text": text,
             "total_blocks": total_blocks
         }
         
-        logger.info(f"Successfully appended paragraph to document {doc_id}")
+        logger.info(f"Successfully appended paragraph to document {target_doc_id}")
         return json.dumps(result, indent=2)
         
     except Exception as e:
-        logger.error(f"Error appending paragraph to document {doc_id}: {e}")
+        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
+        logger.error(f"Error appending paragraph to document {target_doc_id_for_error}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": doc_id,
+            "doc_id": target_doc_id_for_error,
             "action": "append_paragraph"
         }
         return json.dumps(error_result, indent=2)
 
 
 @mcp.tool()
-async def get_document_info(doc_id: str) -> str:
+async def get_document_info(doc_id: Optional[str] = None) -> str:
     """Get basic information about a document.
 
     Args:
-        doc_id: The unique identifier of the document
+        doc_id: The unique identifier of the document (optional, uses current document if not provided)
 
     Returns:
         str: JSON string containing document information
     """
+    global current_document_id
     try:
-        logger.info(f"Getting document info for: {doc_id}")
+        # Determine which document to use
+        target_doc_id = doc_id if doc_id is not None else current_document_id
+        
+        if target_doc_id is None:
+            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
+        
+        logger.info(f"Getting document info for: {target_doc_id}")
         
         # Get or create the document
-        model = document_manager.get_or_create_document(doc_id)
+        model = document_manager.get_or_create_document(target_doc_id)
         
         # Get lexical data
         lexical_data = model.get_lexical_data()
@@ -224,7 +250,7 @@ async def get_document_info(doc_id: str) -> str:
         
         result = {
             "success": True,
-            "doc_id": doc_id,
+            "doc_id": target_doc_id,
             "container_id": model.container_id,
             "total_blocks": len(children),
             "block_types": block_types,
@@ -233,11 +259,52 @@ async def get_document_info(doc_id: str) -> str:
             "source": lexical_data.get("source")
         }
         
-        logger.info(f"Successfully retrieved document info for {doc_id}")
+        logger.info(f"Successfully retrieved document info for {target_doc_id}")
         return json.dumps(result, indent=2)
         
     except Exception as e:
-        logger.error(f"Error getting document info for {doc_id}: {e}")
+        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
+        logger.error(f"Error getting document info for {target_doc_id_for_error}: {e}")
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "doc_id": target_doc_id_for_error
+        }
+        return json.dumps(error_result, indent=2)
+
+
+@mcp.tool()
+async def set_current_document(doc_id: str) -> str:
+    """Set the current document for subsequent operations.
+
+    Args:
+        doc_id: The unique identifier of the document to set as current
+
+    Returns:
+        str: JSON string confirming the current document has been set
+    """
+    global current_document_id
+    try:
+        logger.info(f"Setting current document to: {doc_id}")
+        
+        # Validate that the document exists or can be created
+        model = document_manager.get_or_create_document(doc_id)
+        
+        # Set the current document
+        current_document_id = doc_id
+        
+        result = {
+            "success": True,
+            "message": f"Current document set to: {doc_id}",
+            "doc_id": doc_id,
+            "container_id": model.container_id
+        }
+        
+        logger.info(f"Successfully set current document to {doc_id}")
+        return json.dumps(result, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Error setting current document to {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
@@ -325,6 +392,8 @@ class LexicalMCPServer:
         self._load_document = self._wrap_legacy_tool(load_document)
         self._insert_paragraph = self._wrap_legacy_tool(insert_paragraph)
         self._append_paragraph = self._wrap_legacy_tool(append_paragraph)
+        self._get_document_info = self._wrap_legacy_tool(get_document_info)
+        self._set_current_document = self._wrap_legacy_tool(set_current_document)
     
     def _wrap_legacy_tool(self, tool_func):
         """Wrap new tool functions for legacy interface compatibility"""
