@@ -82,6 +82,10 @@ class MCPWebSocketClient:
                     # Handle snapshot response from WebSocket server
                     await self._handle_initial_snapshot(data)
                 
+                elif data.get("type") == "loro-update":
+                    # Handle incremental updates from other clients
+                    await self._handle_loro_update(data)
+                
                 elif data.get("type") == "document-update":
                     # Handle document updates from other clients
                     await self._handle_document_update(data)
@@ -153,6 +157,41 @@ class MCPWebSocketClient:
         # This will be called when other clients make changes
         # The document manager will automatically sync via Loro CRDT
         logger.debug(f"📄 MCP received document update: {data}")
+    
+    async def _handle_loro_update(self, data: Dict[str, Any]):
+        """Handle incremental Loro updates from other clients"""
+        try:
+            doc_id = data.get("docId")
+            update_data = data.get("update")
+            
+            if not doc_id or not update_data:
+                logger.warning(f"⚠️ MCP received incomplete loro-update: {data}")
+                return
+            
+            logger.info(f"📄 MCP applying loro-update for {doc_id}")
+            
+            # Get the document manager to apply the update
+            global document_manager
+            if document_manager and doc_id in document_manager.models:
+                model = document_manager.models[doc_id]
+                
+                # Convert update data back to bytes
+                update_bytes = bytes(update_data)
+                
+                # Apply the incremental update to keep the model in sync
+                # Use the correct Loro method to import updates (import_ to avoid Python keyword)
+                model.text_doc.import_(update_bytes)
+                
+                # Sync the model from the updated Loro document
+                model._sync_from_loro()
+                
+                logger.info(f"✅ MCP successfully applied loro-update for {doc_id}")
+            else:
+                logger.warning(f"⚠️ MCP cannot apply update - no model found for {doc_id}")
+                
+        except Exception as e:
+            logger.error(f"❌ MCP error handling loro-update: {e}")
+            logger.exception("Full exception:")
 
 # Global WebSocket client instance
 mcp_websocket_client: Optional[MCPWebSocketClient] = None

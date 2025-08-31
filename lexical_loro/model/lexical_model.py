@@ -1,6 +1,89 @@
 # Copyright (c) 2023-2025 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
+"""
+Lexical-Loro Integration: Collaborative Text Editor Model
+
+ARCHITECTURE OVERVIEW:
+=====================
+
+This module implements a collaborative text editing system that bridges Lexical.js 
+(rich text editor) with Loro CRDT (Conflict-free Replicated Data Type) for real-time 
+collaborative editing.
+
+DOCUMENT ARCHITECTURE:
+=====================
+
+Two-Document System:
+1. **text_doc**: Primary CRDT document storing serialized lexical content
+2. **structured_doc**: Secondary document for metadata tracking
+
+KEY DESIGN PRINCIPLE: INCREMENTAL UPDATES ONLY
+==============================================
+
+**PROBLEM SOLVED:**
+Previous implementation used destructive "delete everything + insert new content" 
+operations that caused race conditions when multiple clients collaborated:
+
+❌ Dangerous Pattern:
+```python
+text_data.delete(0, current_length)  # Delete entire document
+text_data.insert(0, new_content)     # Insert new content
+```
+
+This caused Rust panics when:
+- Client A: Calls delete() on text_doc
+- Client B: Simultaneously calls import_() on same text_doc
+- Result: Mutex poisoning and application crash
+
+**SOLUTION IMPLEMENTED:**
+✅ Safe Collaborative Pattern:
+```python
+# Local update
+self.lexical_data["root"]["children"].append(new_block)
+
+# Collaborative propagation via events
+self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+    "type": "document-update",
+    "docId": self.container_id, 
+    "snapshot": self.get_snapshot()
+})
+```
+
+COLLABORATIVE SAFETY MECHANISMS:
+===============================
+
+1. **Collaborative Mode Detection**: 
+   - Checks for active _text_doc_subscription
+   - Prevents destructive operations when collaboration active
+
+2. **Event-Based Propagation**:
+   - Uses WebSocket server to coordinate updates
+   - CRDT handles conflict resolution automatically
+   - Eliminates race conditions
+
+3. **Safe Initialization**:
+   - Allows destructive sync only with force_initialization=True
+   - Used only for initial document setup
+
+USAGE PATTERNS:
+==============
+
+✅ Collaborative Operations (MCP, User Input):
+- add_block(), remove_block(), update_block()
+- All use event-based propagation
+- Safe for concurrent client operations
+
+✅ Initialization Operations:
+- New document creation
+- Uses _sync_to_loro(force_initialization=True)
+- Safe when no other clients connected
+
+❌ Legacy Dangerous Operations:
+- Direct _sync_to_loro() calls in collaborative mode
+- Now protected by safety checks
+"""
+
 import json
 import time
 from typing import Dict, Any, List, Optional, TYPE_CHECKING, Callable
@@ -30,9 +113,68 @@ class LexicalModel:
     """
     A class that implements two-way binding between Lexical data structure and Loro documents.
     
-    Manages two Loro documents:
-    1. A text document with serialized content
-    2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
+    DOCUMENT ARCHITECTURE:
+    =====================
+    
+    This class manages TWO separate Loro documents with distinct roles:
+    
+    1. **text_doc (Primary Document for Lexical Updates)**:
+       - Content: Complete serialized JSON of the lexical structure
+       - Format: Either direct JSON or wrapped in editorState format
+       - Usage: 
+         * All collaborative updates via import_() and export()
+         * Change subscriptions for real-time collaboration
+         * Source of truth for lexical content
+         * Target for CRDT operations
+       - Examples:
+         * Incoming updates: text_doc.import_(update_bytes)
+         * Exporting updates: text_doc.export(ExportMode.Snapshot())
+         * Change monitoring: text_doc.subscribe(change_handler)
+    
+    2. **structured_doc (Secondary Document for Metadata)**:
+       - Content: Basic metadata only (lastSaved, source, version, blockCount)
+       - Format: Simple key-value pairs in a LoroMap
+       - Usage:
+         * Lightweight metadata tracking
+         * Not used for main content updates
+         * Minimal role in collaboration
+    
+    COLLABORATIVE UPDATE STRATEGY:
+    =============================
+    
+    The class uses TWO different update mechanisms depending on context:
+    
+    1. **Incremental Updates (Collaborative Mode)**:
+       - Used when _text_doc_subscription is active (collaborative environment)
+       - Method: Event-based propagation via _emit_event()
+       - Safe for concurrent operations with other clients
+       - Avoids destructive delete+insert operations
+    
+    2. **Wholesale Replacement (Initialization Mode)**:
+       - Used only during initialization when force_initialization=True
+       - Method: Direct text_doc modification with delete+insert
+       - Safe only when no other clients are connected
+       - Protected by collaborative mode detection
+    
+    CRITICAL DESIGN PRINCIPLE:
+    =========================
+    
+    **Never use destructive operations (delete + insert) in collaborative mode**
+    
+    This prevents race conditions where:
+    - One client calls text_data.delete(0, current_length)
+    - Another client simultaneously calls text_doc.import_(update_bytes)
+    - Result: Rust mutex panic due to concurrent modification
+    
+    Instead, use event-based propagation which relies on the CRDT's built-in
+    conflict resolution mechanisms.
+    
+    Args:
+        text_doc: Optional existing text document for collaboration
+        structured_doc: Optional existing structured document for metadata
+        container_id: Container identifier for CRDT synchronization
+        event_callback: Callback for handling document events
+        ephemeral_timeout: Timeout for ephemeral data (cursors, selections)
     """
     
     def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
@@ -93,8 +235,8 @@ class LexicalModel:
             # Set up subscription to listen for changes
             self._setup_text_doc_subscription()
         else:
-            # Initialize Loro documents with the base structure
-            self._sync_to_loro()
+            # Initialize Loro documents with the base structure (safe for new instances)
+            self._sync_to_loro(force_initialization=True)
         
         # Set up ephemeral store subscription if available
         self._setup_ephemeral_subscription()
@@ -140,13 +282,83 @@ class LexicalModel:
         except Exception as e:
             print(f"Warning: Error handling ephemeral store event: {e}")
     
-    def _emit_event(self, event_type: LexicalEventType, event_data: Dict[str, Any]) -> None:
+    def _create_broadcast_data(self, event_type: str = "document-update", additional_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Emit a structured event to the server via the event callback.
+        Create broadcast-safe event data with base64-encoded snapshot.
+        
+        This ensures all event data is JSON-serializable for WebSocket transmission.
         
         Args:
-            event_type: The type of event being emitted
+            event_type: Type of broadcast event
+            additional_data: Additional data to include
+            
+        Returns:
+            Dict containing JSON-serializable broadcast data
+        """
+        import base64
+        
+        snapshot_bytes = self.get_snapshot()
+        broadcast_data = {
+            "type": event_type,
+            "docId": self.container_id,
+            "snapshot": base64.b64encode(snapshot_bytes).decode('utf-8')
+        }
+        
+        if additional_data:
+            broadcast_data.update(additional_data)
+            
+        return broadcast_data
+    
+    def _emit_event(self, event_type: LexicalEventType, event_data: Dict[str, Any]) -> None:
+        """
+        Emit a structured event to the server for collaborative propagation.
+        
+        **COLLABORATIVE EVENT SYSTEM:**
+        
+        This is the SAFE alternative to destructive _sync_to_loro() operations.
+        Instead of directly modifying the shared text_doc, this method:
+        
+        1. Emits events to the WebSocket server
+        2. Server broadcasts changes to all connected clients
+        3. Clients receive updates via import_() mechanism
+        4. CRDT handles conflict resolution automatically
+        
+        **EVENT FLOW:**
+        ```
+        Client A: add_block() → _emit_event() → WebSocket Server
+                                                       ↓
+        Client B: ← WebSocket → text_doc.import_() ← Server Broadcast
+        ```
+        
+        **SUPPORTED EVENT TYPES:**
+        
+        - BROADCAST_NEEDED: Request propagation of document changes
+        - DOCUMENT_CHANGED: Notify of local document modifications
+        - EPHEMERAL_CHANGED: Notify of cursor/selection changes
+        
+        **TYPICAL USAGE:**
+        ```python
+        # Safe collaborative update
+        self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+            "type": "document-update",
+            "docId": self.container_id,
+            "snapshot": self.get_snapshot()
+        })
+        ```
+        
+        **WHY THIS PREVENTS RACE CONDITIONS:**
+        
+        - No direct text_doc modification during collaboration
+        - Uses CRDT's built-in serialization/deserialization
+        - Server coordinates all updates sequentially
+        - Eliminates concurrent delete+insert operations
+        
+        Args:
+            event_type: The type of event being emitted (see LexicalEventType)
             event_data: Additional data associated with the event
+            
+        Returns:
+            None. Events are fire-and-forget with error handling.
         """
         if self._event_callback:
             try:
@@ -573,12 +785,71 @@ class LexicalModel:
         except Exception as e:
             print(f"Warning: Could not sync to structured document: {e}")
     
-    def _sync_to_loro(self):
-        """Sync the current lexical_data to both Loro documents"""
+    def _sync_to_loro(self, force_initialization: bool = False):
+        """
+        Sync the current lexical_data to both Loro documents using destructive operations.
+        
+        **CRITICAL WARNING: DESTRUCTIVE OPERATIONS**
+        ===========================================
+        
+        This method performs wholesale replacement of document content using:
+        1. text_data.delete(0, current_length)  # Delete entire content
+        2. text_data.insert(0, new_content)     # Insert new content
+        
+        **WHY THIS IS DANGEROUS IN COLLABORATIVE MODE:**
+        
+        Race Condition Scenario:
+        - Client A: Calls _sync_to_loro() → text_data.delete(0, length)
+        - Client B: Simultaneously calls text_doc.import_(update_bytes)
+        - Result: Rust mutex panic due to concurrent modification
+        
+        **SAFETY MECHANISM:**
+        
+        Collaborative Mode Detection:
+        - Checks if _text_doc_subscription exists (indicates active collaboration)
+        - If collaborative mode detected, skips destructive operations
+        - Logs warning and returns early
+        
+        **WHEN TO USE:**
+        
+        ✅ Safe Usage:
+        - Initial document creation (force_initialization=True)
+        - Single-client scenarios
+        - Testing environments
+        
+        ❌ Unsafe Usage:
+        - Active collaborative sessions
+        - When other clients might be sending updates
+        - After WebSocket connections established
+        
+        **ALTERNATIVE FOR COLLABORATIVE MODE:**
+        
+        Use event-based propagation instead:
+        ```python
+        self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+            "type": "document-update", 
+            "docId": self.container_id,
+            "snapshot": self.get_snapshot()
+        })
+        ```
+        
+        Args:
+            force_initialization: If True, bypasses collaborative safety check.
+                                 Use ONLY for initial document setup.
+        
+        Returns:
+            None. Method returns early if collaborative mode detected.
+        """
+        # Safety check: prevent destructive operations in collaborative environments
+        if not force_initialization and self._text_doc_subscription is not None:
+            print("⚠️ LoroModel: Skipping destructive _sync_to_loro() - collaborative mode detected")
+            print("LoroModel: Use event-based propagation instead for collaborative updates")
+            return
+        
         # Determine which container to write to (use container_id if available)
         target_container = self.container_id if self.container_id else "content"
         
-        print(f"LoroModel: Syncing TO container '{target_container}'")
+        print(f"LoroModel: Syncing TO container '{target_container}' (initialization mode)")
         
         # Update text document with serialized JSON
         text_data = self.text_doc.get_text(target_container)
@@ -766,11 +1037,50 @@ class LexicalModel:
     
     def add_block(self, block_detail: Dict[str, Any], block_type: str):
         """
-        Add a new block to the lexical model
+        Add a new block to the lexical model using collaborative-safe operations.
+        
+        **COLLABORATIVE DESIGN:**
+        
+        This method implements the collaborative-safe update pattern:
+        1. Updates local lexical_data structure
+        2. Uses event-based propagation instead of destructive sync
+        3. Avoids race conditions with concurrent client operations
+        
+        **OLD (DANGEROUS) APPROACH:**
+        ```python
+        # This caused Rust panics in collaborative mode
+        self._sync_to_loro()  # delete + insert entire document
+        ```
+        
+        **NEW (SAFE) APPROACH:**
+        ```python
+        # This uses CRDT-compatible event propagation
+        self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+            "type": "document-update", 
+            "docId": self.container_id,
+            "snapshot": self.get_snapshot()
+        })
+        ```
+        
+        **WHY THIS IS SAFER:**
+        - No destructive operations on shared text_doc
+        - Uses the CRDT's built-in conflict resolution
+        - Compatible with concurrent updates from other clients
+        - Prevents Rust mutex panics from race conditions
         
         Args:
             block_detail: Dictionary containing block details (text, formatting, etc.)
             block_type: Type of block (paragraph, heading1, heading2, etc.)
+            
+        Examples:
+            # Add a simple paragraph
+            model.add_block({"text": "Hello world"}, "paragraph")
+            
+            # Add a heading with formatting
+            model.add_block({
+                "text": "Chapter 1", 
+                "format": "bold"
+            }, "heading1")
         """
         try:
             # Sync from Loro to get the latest state
@@ -868,9 +1178,15 @@ class LexicalModel:
             
             print(f"✅ Block added to lexical_data: {old_count} -> {new_count} blocks")
             
-            # Sync to Loro documents
-            self._sync_to_loro()
-            print(f"✅ Synced to Loro documents successfully")
+            # In collaborative mode, avoid destructive sync to prevent conflicts
+            # Instead, emit a broadcast event and let the subscription system handle propagation
+            print("LoroModel: Using event-based propagation instead of destructive sync")
+            
+            # Emit broadcast event for this change
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
+                            self._create_broadcast_data("document-update"))
+            
+            print(f"✅ Broadcasted document update successfully")
             
         except Exception as e:
             print(f"❌ Error adding block to lexical data: {e}")
@@ -923,14 +1239,26 @@ class LexicalModel:
                         current_block[key] = value
                 
                 self.lexical_data["lastSaved"] = int(time.time() * 1000)
-                self._sync_to_loro()
+                
+                # Use event-based propagation instead of destructive sync
+                self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                    "type": "document-update", 
+                    "docId": self.container_id,
+                    "snapshot": self.get_snapshot()
+                })
     
     def remove_block(self, index: int):
         """Remove a block by index"""
         if 0 <= index < len(self.lexical_data["root"]["children"]):
             self.lexical_data["root"]["children"].pop(index)
             self.lexical_data["lastSaved"] = int(time.time() * 1000)
-            self._sync_to_loro()
+            
+            # Use event-based propagation instead of destructive sync
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "type": "document-update", 
+                "docId": self.container_id,
+                "snapshot": self.get_snapshot()
+            })
     
     def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str):
         """
@@ -1005,7 +1333,13 @@ class LexicalModel:
             
             # Update timestamp and sync
             self.lexical_data["lastSaved"] = int(time.time() * 1000)
-            self._sync_to_loro()
+            
+            # Use event-based propagation instead of destructive sync
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "type": "document-update", 
+                "docId": self.container_id,
+                "snapshot": self.get_snapshot()
+            })
             
             print(f"✅ Block added at index {index} - total blocks: {len(children)}")
             
@@ -1066,7 +1400,13 @@ class LexicalModel:
     def import_from_json(self, json_data: str):
         """Import lexical data from JSON string"""
         self.lexical_data = json.loads(json_data)
-        self._sync_to_loro()
+        
+        # Use event-based propagation instead of destructive sync
+        self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+            "type": "document-update", 
+            "docId": self.container_id,
+            "snapshot": self.get_snapshot()
+        })
     
     def force_sync_from_text_doc(self):
         """Manually force synchronization from the text document"""
@@ -1425,8 +1765,9 @@ class LexicalModel:
                 else:
                     raise ValueError("Invalid JSON structure: missing 'root' or 'editorState'")
                     
-                # Sync to Loro documents
-                model._sync_to_loro()
+                # Initialize the model with the data (safe for new instances)
+                # For new instances, we can use sync since no collaboration exists yet
+                model._sync_to_loro(force_initialization=True)
                 
                 print(f"✅ Created LexicalModel from JSON: {len(model.lexical_data.get('root', {}).get('children', []))} blocks")
                 return model
@@ -1713,10 +2054,24 @@ class LexicalModel:
             # Get current document info
             doc_info = self.get_document_info()
             
-            # CORRECT APPROACH: Let the lexical model handle all CRDT propagation automatically
-            # The add_block method has already updated the Loro document via _sync_to_loro
-            # The CRDT system will automatically propagate changes to connected clients
-            # No manual broadcasting needed - the model is fully responsible for updates
+            # MANUAL BROADCAST: Since add_block() now uses event-based propagation 
+            # but doesn't have client_id context, we need to handle broadcasting here
+            # to ensure the UI gets updated properly
+            import base64
+            snapshot_bytes = self.get_snapshot()
+            broadcast_data = {
+                "type": "document-update",
+                "docId": self.container_id,
+                "snapshot": base64.b64encode(snapshot_bytes).decode('utf-8'),
+                "blocks": blocks_after,
+                "text_added": message_text
+            }
+            
+            # Emit proper broadcast event with client_id context
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "broadcast_data": broadcast_data,
+                "client_id": client_id or "append-paragraph"
+            })
             
             return {
                 "success": True,
