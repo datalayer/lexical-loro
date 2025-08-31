@@ -17,6 +17,12 @@ from ..model.lexical_model import LexicalDocumentManager
 
 
 ###############################################################################
+
+
+logger = logging.getLogger(__name__)
+
+
+###############################################################################
 # WebSocket Client for MCP Server
 
 class MCPWebSocketClient:
@@ -269,12 +275,7 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
 
 
 ###############################################################################
-
-
-logger = logging.getLogger(__name__)
-
-
-###############################################################################
+# MCP Server with CORS
 
 class FastMCPWithCORS(FastMCP):
     def streamable_http_app(self) -> Starlette:
@@ -310,7 +311,7 @@ class FastMCPWithCORS(FastMCP):
 
 
 ###############################################################################
-
+# MCP Server
 
 # Create the FastMCP server
 mcp = FastMCPWithCORS(name="Lexical MCP Server", json_response=False, stateless_http=True)
