@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -43,8 +43,27 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [isInitialized, setIsInitialized] = useState(false);
   const [peerId, setPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
+  const [showMcpDropdown, setShowMcpDropdown] = useState(false);
+  const [mcpStatus, setMcpStatus] = useState<string>('');
   const disconnectRef = useRef<(() => void) | null>(null);
   const sendMessageRef = useRef<((message: any) => void) | null>(null);
+  const mcpDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mcpDropdownRef.current && !mcpDropdownRef.current.contains(event.target as Node)) {
+        setShowMcpDropdown(false);
+      }
+    };
+
+    if (showMcpDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showMcpDropdown]);
 
   const handleConnectionChange = useCallback((connected: boolean) => {
     setIsConnected(connected);
@@ -71,6 +90,120 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     setIsInitialized(success);
     onInitialization?.(success);
   }, [onInitialization]);
+
+  // MCP helper functions
+  const callMcpTool = useCallback(async (toolName: string, params: any = {}) => {
+    try {
+      setMcpStatus(`Calling ${toolName}...`);
+      
+      // Call MCP tool via the StreamableHTTP protocol
+      const response = await fetch('http://localhost:3001/mcp/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "tools/call",
+          params: {
+            name: toolName,
+            arguments: params
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Parse SSE response
+      const responseText = await response.text();
+      
+      // Extract JSON from SSE format (format: "event: message\ndata: {...}")
+      const lines = responseText.split('\n');
+      const dataLine = lines.find(line => line.startsWith('data: '));
+      
+      if (!dataLine) {
+        throw new Error('Invalid SSE response format');
+      }
+      
+      const jsonData = dataLine.substring(6); // Remove "data: " prefix
+      const result = JSON.parse(jsonData);
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'MCP error');
+      }
+      
+      // Extract the result from MCP response
+      let resultText = 'Success';
+      if (result.result && result.result.content && result.result.content.length > 0) {
+        // MCP returns content array
+        const content = result.result.content[0];
+        if (content && content.text) {
+          try {
+            // Try to parse the JSON response to get a cleaner status
+            const jsonResponse = JSON.parse(content.text);
+            if (jsonResponse.success) {
+              resultText = jsonResponse.message || `Success: ${jsonResponse.action || toolName}`;
+              if (jsonResponse.total_blocks) {
+                resultText += ` (${jsonResponse.total_blocks} blocks)`;
+              }
+            } else {
+              resultText = jsonResponse.error || 'Operation failed';
+            }
+          } catch {
+            // If not JSON, use the raw text
+            resultText = content.text;
+          }
+        }
+      }
+      
+      setMcpStatus(`${toolName}: ${resultText}`);
+      console.log(`MCP ${toolName} result:`, result);
+      
+      // Clear status after 3 seconds
+      setTimeout(() => setMcpStatus(''), 3000);
+      
+      return result;
+    } catch (error) {
+      const errorMsg = `${toolName} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      setMcpStatus(errorMsg);
+      console.error('MCP tool error:', error);
+      
+      // Clear error after 5 seconds
+      setTimeout(() => setMcpStatus(''), 5000);
+    }
+  }, []);
+
+  const mcpTools = [
+    {
+      name: 'set_current_document',
+      label: '📝 Set Current Document',
+      params: { doc_id: 'lexical-shared-doc' }
+    },
+    {
+      name: 'append_paragraph',
+      label: '➕ Append Paragraph (MCP)',
+      params: { doc_id: 'lexical-shared-doc', text: 'Hello from MCP!' }
+    },
+    {
+      name: 'get_document_data',
+      label: '📄 Get Document Data',
+      params: { doc_id: 'lexical-shared-doc' }
+    },
+    {
+      name: 'list_documents',
+      label: '📋 List Documents',
+      params: {}
+    },
+    {
+      name: 'export_document',
+      label: '💾 Export Document',
+      params: { doc_id: 'lexical-shared-doc' }
+    }
+  ];
 
   const initialConfig = {
     namespace: 'LexicalCollaborativeEditor',
@@ -157,10 +290,86 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                 >
                   ➕ Append Paragraph
                 </button>
+                <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block', marginLeft: '8px' }}>
+                  <button 
+                    onClick={() => setShowMcpDropdown(!showMcpDropdown)}
+                    className="mcp-tools-button"
+                    title="MCP Tools"
+                    style={{ 
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔧 MCP Tools ▼
+                  </button>
+                  {showMcpDropdown && (
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        backgroundColor: 'white',
+                        border: '1px solid #ccc',
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                        zIndex: 1000,
+                        minWidth: '200px',
+                        marginTop: '2px'
+                      }}
+                    >
+                      {mcpTools.map((tool, index) => (
+                        <button
+                          key={tool.name}
+                          onClick={() => {
+                            callMcpTool(tool.name, tool.params);
+                            setShowMcpDropdown(false);
+                          }}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: 'none',
+                            backgroundColor: 'transparent',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            borderBottom: index < mcpTools.length - 1 ? '1px solid #eee' : 'none'
+                          }}
+                          onMouseOver={(e) => {
+                            (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
+                          }}
+                          onMouseOut={(e) => {
+                            (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                          }}
+                          title={`Call MCP tool: ${tool.name}`}
+                        >
+                          {tool.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
           <span>Powered by Lexical + Loro CRDT</span>
+          {mcpStatus && (
+            <div style={{ 
+              marginTop: '8px', 
+              padding: '4px 8px', 
+              backgroundColor: mcpStatus.includes('failed') ? '#ffebee' : '#e8f5e8',
+              color: mcpStatus.includes('failed') ? '#c62828' : '#2e7d32',
+              borderRadius: '4px',
+              fontSize: '12px',
+              border: `1px solid ${mcpStatus.includes('failed') ? '#ffcdd2' : '#c8e6c9'}`
+            }}>
+              MCP: {mcpStatus}
+            </div>
+          )}
         </div>
       </div>
       

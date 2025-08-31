@@ -3,7 +3,7 @@
   "private": false,
   "version": "0.0.3",
   "type": "module",
-  "description": "Collaborative editing plugin for Lexical based on Loro CRDT",
+  "description": "Collaborative editing solution for Lexical based on Loro CRDT",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
@@ -16,7 +16,8 @@
     "collaborative",
     "editor",
     "plugin",
-    "react"
+    "react",
+    "rich-editor"
   ],
   "repository": {
     "type": "git",
@@ -34,7 +35,7 @@
     "dev:all:js": "npm run example:js",
     "dev:all:py": "npm run example:py",
     "dev:vite": "npm run example:vite",
-    "example": "concurrently \"npm run server\" \"npm run server:py\" \"npm run example:vite\"",
+    "example": "concurrently \"npm run server\" \"npm run server:py\" \"npm run server:mcp\" \"npm run example:vite\"",
     "example:js": "concurrently \"npm run server\" \"npm run example:vite\"",
     "example:py": "concurrently \"npm run server:py:dev\" \"npm run server:py:minimal\" \"npm run example:vite\"",
     "example:vite": "vite",
@@ -44,6 +45,7 @@
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
     "server:py:minimal": "python3 -m lexical_loro.cli_minimal",
+    "server:mcp": "python3 -m lexical_loro.mcp start --transport streamable-http --port 3001 --host 0.0.0.0",
     "test": "vitest",
     "test:js": "vitest run",
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",

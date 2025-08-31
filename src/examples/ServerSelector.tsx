@@ -37,22 +37,6 @@ export const ServerSelector: React.FC<ServerSelectorProps> = ({
           </div>
         </label>
         
-        <label className={`server-option ${currentServer === 'python' ? 'active' : ''}`}>
-          <input
-            type="radio"
-            name="server"
-            value="python"
-            checked={currentServer === 'python'}
-            onChange={() => onServerChange('python')}
-            disabled={isConnected}
-          />
-          <div className="server-info">
-            <span className="server-name">Python Server</span>
-            <span className="server-url">ws://localhost:8081</span>
-            <span className="server-tech">Python + loro-py</span>
-          </div>
-        </label>
-        
         <label className={`server-option ${currentServer === 'python-minimal' ? 'active' : ''}`}>
           <input
             type="radio"
@@ -63,11 +47,28 @@ export const ServerSelector: React.FC<ServerSelectorProps> = ({
             disabled={isConnected}
           />
           <div className="server-info">
-            <span className="server-name">🎯 Python Server (Minimal)</span>
+            <span className="server-name">Python Server (Minimal)</span>
             <span className="server-url">ws://localhost:8082</span>
             <span className="server-tech">Clean Separation Demo</span>
           </div>
         </label>
+
+        <label className={`server-option ${currentServer === 'python' ? 'active' : ''}`}>
+          <input
+            type="radio"
+            name="server"
+            value="python"
+            checked={currentServer === 'python'}
+            onChange={() => onServerChange('python')}
+            disabled={isConnected}
+          />
+          <div className="server-info">
+            <span className="server-name">🎯 Python Server</span>
+            <span className="server-url">ws://localhost:8081</span>
+            <span className="server-tech">Python + loro-py</span>
+          </div>
+        </label>
+        
       </div>
       
       {isConnected && (

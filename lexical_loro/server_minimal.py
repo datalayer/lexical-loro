@@ -161,9 +161,11 @@ class MinimalLoroServer:
     
     async def _send_initial_snapshots(self, websocket, client_id: str):
         """Send snapshots of existing documents to new client"""
-        for doc_id in ['shared-text', 'lexical-shared-doc']:
+        # Send snapshots for all existing documents
+        for doc_id in self.document_manager.models.keys():
             model = self.get_document(doc_id)
-            snapshot_data = model.to_json()
+            # Get the JSON data as a dict, not a string
+            snapshot_data = json.loads(model.to_json())
             
             await websocket.send(json.dumps({
                 "type": "initial-snapshot",
@@ -171,6 +173,19 @@ class MinimalLoroServer:
                 "data": snapshot_data
             }))
             logger.info(f"📄 Sent {doc_id} snapshot to {client_id}")
+            
+        # If no documents exist yet, still initialize the lexical-shared-doc for UI compatibility
+        if not self.document_manager.models:
+            model = self.get_document("lexical-shared-doc")
+            # Get the JSON data as a dict, not a string
+            snapshot_data = json.loads(model.to_json())
+            
+            await websocket.send(json.dumps({
+                "type": "initial-snapshot",
+                "docId": "lexical-shared-doc",
+                "data": snapshot_data
+            }))
+            logger.info(f"📄 Sent default lexical-shared-doc snapshot to {client_id}")
     
     async def handle_message(self, client_id: str, message: str):
         """Route message to LexicalModel and handle response"""
