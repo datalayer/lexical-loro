@@ -841,41 +841,104 @@ class LexicalModel:
         print(f"LoroModel: Commit complete - changes should propagate automatically")
     
     def _sync_from_loro(self):
-        """Sync data from Loro documents back to lexical_data"""
+        """Sync data from Loro documents back to lexical_data with backward compatibility"""
         print(f"LoroModel: Starting _sync_from_loro() with container_id='{self.container_id}'")
         
-        # Always use "content" as the container name since we have a model per doc_id
-        container_name = "content"
+        # Try containers in order of preference: 
+        # 1. "content" (new simplified approach)
+        # 2. container_id if provided (for backward compatibility)
+        # 3. Legacy container names
+        containers_to_try = ["content"]
+        if self.container_id and self.container_id != "content":
+            containers_to_try.append(self.container_id)
         
-        try:
-            print(f"LoroModel: Trying container '{container_name}'")
-            text_data = self.text_doc.get_text(container_name)
-            content = text_data.to_string()
-            print(f"LoroModel: Container '{container_name}' content length: {len(content) if content else 0}")
-            
-            if content and content.strip():
-                try:
-                    parsed_data = json.loads(content)
-                    
-                    # Handle direct lexical format
-                    if isinstance(parsed_data, dict) and "root" in parsed_data:
-                        # Direct lexical format
-                        old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                        new_block_count = len(parsed_data.get("root", {}).get("children", []))
-                        self.lexical_data = parsed_data
-                        print(f"LoroModel: Successfully synced from '{container_name}' - blocks {old_block_count} -> {new_block_count}")
-                        return  # Successfully synced
-                    else:
-                        print(f"LoroModel: Container '{container_name}' data is not valid lexical format: {type(parsed_data)}")
-                except json.JSONDecodeError as e:
-                    print(f"LoroModel: Container '{container_name}' has invalid JSON: {e}")
-            else:
-                print(f"LoroModel: Container '{container_name}' is empty or whitespace")
-        except Exception as e:
-            print(f"LoroModel: Error accessing container '{container_name}': {e}")
+        # Add common legacy container names
+        legacy_containers = ["lexical-shared-doc", "shared-text"]
+        for legacy in legacy_containers:
+            if legacy not in containers_to_try:
+                containers_to_try.append(legacy)
         
-        # If no valid content found, keep current data
-        print("LoroModel: No valid content found in content container during sync")
+        found_content = False
+        migration_needed = False
+        source_container = None
+        
+        for container_name in containers_to_try:
+            try:
+                print(f"LoroModel: Trying container '{container_name}'")
+                text_data = self.text_doc.get_text(container_name)
+                content = text_data.to_string()
+                print(f"LoroModel: Container '{container_name}' content length: {len(content) if content else 0}")
+                
+                if content and content.strip():
+                    try:
+                        parsed_data = json.loads(content)
+                        
+                        # Handle both new and legacy lexical formats
+                        lexical_format_data = None
+                        
+                        if isinstance(parsed_data, dict) and "root" in parsed_data:
+                            # New direct lexical format (simplified structure)
+                            lexical_format_data = parsed_data
+                            print(f"LoroModel: Found new format in '{container_name}'")
+                        elif isinstance(parsed_data, dict) and "editorState" in parsed_data:
+                            # Legacy format with editorState wrapper
+                            editor_state = parsed_data["editorState"]
+                            if isinstance(editor_state, dict) and "root" in editor_state:
+                                # Extract the lexical structure from editorState
+                                lexical_format_data = {
+                                    "root": editor_state["root"],
+                                    "lastSaved": editor_state.get("lastSaved", parsed_data.get("lastSaved", int(time.time() * 1000))),
+                                    "source": editor_state.get("source", parsed_data.get("source", "Lexical Loro")),
+                                    "version": editor_state.get("version", parsed_data.get("version", "0.34.0"))
+                                }
+                                print(f"LoroModel: Found legacy format in '{container_name}', extracted editorState")
+                        
+                        if lexical_format_data:
+                            # Direct lexical format
+                            old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                            new_block_count = len(lexical_format_data.get("root", {}).get("children", []))
+                            self.lexical_data = lexical_format_data
+                            print(f"LoroModel: Successfully synced from '{container_name}' - blocks {old_block_count} -> {new_block_count}")
+                            
+                            # Check if we need to migrate from legacy container to "content"
+                            if container_name != "content":
+                                migration_needed = True
+                                source_container = container_name
+                                print(f"LoroModel: Migration needed from '{source_container}' -> 'content'")
+                            
+                            found_content = True
+                            break  # Successfully synced
+                        else:
+                            print(f"LoroModel: Container '{container_name}' data is not valid lexical format: {type(parsed_data)}")
+                    except json.JSONDecodeError as e:
+                        print(f"LoroModel: Container '{container_name}' has invalid JSON: {e}")
+                else:
+                    print(f"LoroModel: Container '{container_name}' is empty or whitespace")
+            except Exception as e:
+                print(f"LoroModel: Error accessing container '{container_name}': {e}")
+        
+        # Perform migration if needed
+        if migration_needed and source_container:
+            try:
+                print(f"LoroModel: Migrating content from '{source_container}' to 'content'")
+                # Copy content to the standard "content" container
+                content_container = self.text_doc.get_text("content")
+                source_text_data = self.text_doc.get_text(source_container)
+                source_content = source_text_data.to_string()
+                
+                # Only migrate if content container is empty
+                current_content = content_container.to_string()
+                if not current_content or not current_content.strip():
+                    content_container.insert(0, source_content)
+                    self.text_doc.commit()
+                    print(f"LoroModel: Successfully migrated content from '{source_container}' to 'content'")
+                else:
+                    print(f"LoroModel: Content container already has data, skipping migration")
+            except Exception as e:
+                print(f"LoroModel: Error during migration: {e}")
+        
+        if not found_content:
+            print("LoroModel: No valid content found in any container during sync")
     
     def add_block(self, block_detail: Dict[str, Any], block_type: str):
         """
