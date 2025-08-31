@@ -433,17 +433,8 @@ class LexicalModel:
                     if isinstance(value, str) and value.strip().startswith('{'):
                         potential_containers.append((key, value))
                         
-            # Try to find content in preferred order: container_id first, then common names
-            if self.container_id:
-                container_names_to_try = [self.container_id]
-                # Only add fallbacks if container_id is not one of the common names
-                if self.container_id not in ["content", "lexical-shared-doc", "shared-text"]:
-                    container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
-            else:
-                container_names_to_try = ["content", "lexical-shared-doc", "shared-text"]
-            
-            # Add any containers we found in the document state that aren't already in the list
-            container_names_to_try.extend([name for name, _ in potential_containers if name not in container_names_to_try])
+            # Always use "content" as the container name since we have a model per doc_id
+            container_names_to_try = ["content"]
             
             for container_name in container_names_to_try:
                 try:
@@ -497,26 +488,8 @@ class LexicalModel:
     def _setup_text_doc_subscription(self):
         """Set up subscription to listen for changes in the text document"""
         try:
-            # Find which container actually has content - try container_id first
-            active_container = None
-            if self.container_id:
-                container_names_to_try = [self.container_id]
-            else:
-                container_names_to_try = ["content", "lexical-shared-doc", "shared-text"]
-            
-            for container_name in container_names_to_try:
-                try:
-                    text_data = self.text_doc.get_text(container_name)
-                    content = text_data.to_string()
-                    if content and content.strip():
-                        active_container = container_name
-                        break
-                except Exception:
-                    continue
-            
-            # If no container has content, default to container_id or "content"
-            if active_container is None:
-                active_container = self.container_id or "content"
+            # Always use "content" as the container name since we have a model per doc_id
+            active_container = "content"
             
             # Subscribe to document changes - try different subscription patterns
             try:
@@ -557,12 +530,8 @@ class LexicalModel:
                     target_str = str(container_diff.target) if hasattr(container_diff.target, '__str__') else repr(container_diff.target)
                     print(f"LoroModel: Processing diff for target: {target_str}")
                     
-                    # Check for our container_id or common container names
-                    target_matches = False
-                    if self.container_id and self.container_id in target_str:
-                        target_matches = True
-                    elif any(name in target_str for name in ['content', 'lexical-shared-doc', 'shared-text']):
-                        target_matches = True
+                    # Check if this is the "content" container we care about
+                    target_matches = "content" in target_str
                     
                     if target_matches:
                         print(f"LoroModel: Applying text diff for {target_str}")
@@ -651,22 +620,13 @@ class LexicalModel:
     
     def _get_current_text_content(self) -> str:
         """Get current text content from the document"""
-        # Try different container names - prioritize container_id if provided
-        container_names_to_try = []
-        if self.container_id:
-            container_names_to_try.append(self.container_id)
-        container_names_to_try.extend(["content", "lexical-shared-doc", "shared-text"])
-        
-        for container_name in container_names_to_try:
-            try:
-                text_data = self.text_doc.get_text(container_name)
-                content = text_data.to_string()
-                if content and content.strip():
-                    return content
-            except Exception:
-                continue
-        
-        return ""
+        # Always use "content" as the container name since we have a model per doc_id
+        try:
+            text_data = self.text_doc.get_text("content")
+            content = text_data.to_string()
+            return content if content else ""
+        except Exception:
+            return ""
     
     def _apply_text_deltas(self, content: str, deltas) -> str:
         """Apply a sequence of text deltas to content"""
@@ -846,8 +806,8 @@ class LexicalModel:
             print("LoroModel: Use event-based propagation instead for collaborative updates")
             return
         
-        # Determine which container to write to (use container_id if available)
-        target_container = self.container_id if self.container_id else "content"
+        # Always use "content" as the container name since we have a model per doc_id
+        target_container = "content"
         
         print(f"LoroModel: Syncing TO container '{target_container}' (initialization mode)")
         
@@ -857,20 +817,9 @@ class LexicalModel:
         if current_length > 0:
             text_data.delete(0, current_length)
         
-        # For lexical-shared-doc, wrap in editorState format to match expected structure
-        if target_container == "lexical-shared-doc":
-            wrapped_data = {
-                "editorState": self.lexical_data,
-                "lastSaved": self.lexical_data["lastSaved"],
-                "source": self.lexical_data["source"],
-                "version": self.lexical_data["version"]
-            }
-            text_data.insert(0, json.dumps(wrapped_data))
-            print(f"LoroModel: Wrote wrapped editorState format to '{target_container}'")
-        else:
-            # For content container, use direct format
-            text_data.insert(0, json.dumps(self.lexical_data))
-            print(f"LoroModel: Wrote direct format to '{target_container}'")
+        # Always use direct format for "content" container
+        text_data.insert(0, json.dumps(self.lexical_data))
+        print(f"LoroModel: Wrote direct format to '{target_container}'")
         
         # Update structured document with basic metadata only
         root_map = self.structured_doc.get_map("root")
@@ -895,145 +844,38 @@ class LexicalModel:
         """Sync data from Loro documents back to lexical_data"""
         print(f"LoroModel: Starting _sync_from_loro() with container_id='{self.container_id}'")
         
-        # If we have a specific container_id, only try that one
-        # Otherwise fall back to common container names
-        if self.container_id:
-            container_names_to_try = [self.container_id]
-        else:
-            container_names_to_try = ["content", "lexical-shared-doc", "shared-text"]
+        # Always use "content" as the container name since we have a model per doc_id
+        container_name = "content"
         
-        print(f"LoroModel: Will try containers: {container_names_to_try}")
-        
-        for container_name in container_names_to_try:
-            try:
-                print(f"LoroModel: Trying container '{container_name}'")
-                text_data = self.text_doc.get_text(container_name)
-                content = text_data.to_string()
-                print(f"LoroModel: Container '{container_name}' content length: {len(content) if content else 0}")
-                
-                if content and content.strip():
-                    try:
-                        parsed_data = json.loads(content)
-                        
-                        # Handle both direct lexical format and editorState wrapper
-                        if isinstance(parsed_data, dict):
-                            if "root" in parsed_data:
-                                # Direct lexical format
-                                old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                                new_block_count = len(parsed_data.get("root", {}).get("children", []))
-                                self.lexical_data = parsed_data
-                                print(f"LoroModel: Successfully synced from '{container_name}' - blocks {old_block_count} -> {new_block_count}")
-                                return  # Successfully synced
-                            elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict) and "root" in parsed_data["editorState"]:
-                                # editorState wrapper format
-                                editor_state = parsed_data["editorState"]
-                                old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                                new_block_count = len(editor_state.get("root", {}).get("children", []))
-                                self.lexical_data = {
-                                    "root": editor_state["root"],
-                                    "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
-                                    "source": parsed_data.get("source", "Lexical Loro"),
-                                    "version": parsed_data.get("version", "0.34.0")
-                                }
-                                print(f"LoroModel: Successfully synced from '{container_name}' (editorState format) - blocks {old_block_count} -> {new_block_count}")
-                                return  # Successfully synced
-                        else:
-                            print(f"LoroModel: Container '{container_name}' data is not a dict: {type(parsed_data)}")
-                    except json.JSONDecodeError as e:
-                        print(f"LoroModel: Container '{container_name}' has invalid JSON: {e}")
-                        continue
-                else:
-                    print(f"LoroModel: Container '{container_name}' is empty or whitespace")
-            except Exception as e:
-                print(f"LoroModel: Error accessing container '{container_name}': {e}")
-                continue
+        try:
+            print(f"LoroModel: Trying container '{container_name}'")
+            text_data = self.text_doc.get_text(container_name)
+            content = text_data.to_string()
+            print(f"LoroModel: Container '{container_name}' content length: {len(content) if content else 0}")
+            
+            if content and content.strip():
+                try:
+                    parsed_data = json.loads(content)
+                    
+                    # Handle direct lexical format
+                    if isinstance(parsed_data, dict) and "root" in parsed_data:
+                        # Direct lexical format
+                        old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
+                        new_block_count = len(parsed_data.get("root", {}).get("children", []))
+                        self.lexical_data = parsed_data
+                        print(f"LoroModel: Successfully synced from '{container_name}' - blocks {old_block_count} -> {new_block_count}")
+                        return  # Successfully synced
+                    else:
+                        print(f"LoroModel: Container '{container_name}' data is not valid lexical format: {type(parsed_data)}")
+                except json.JSONDecodeError as e:
+                    print(f"LoroModel: Container '{container_name}' has invalid JSON: {e}")
+            else:
+                print(f"LoroModel: Container '{container_name}' is empty or whitespace")
+        except Exception as e:
+            print(f"LoroModel: Error accessing container '{container_name}': {e}")
         
         # If no valid content found, keep current data
-        print("LoroModel: No valid content found in any text container during sync")
-    
-    def _sync_from_any_available_container(self):
-        """
-        Sync from any available container that has content after import/update operations.
-        This is useful when importing snapshots or applying updates that may create new containers.
-        """
-        try:
-            # Get all available containers from the document
-            doc_state = self.text_doc.get_deep_value()
-            available_containers = []
-            
-            if isinstance(doc_state, dict):
-                for key, value in doc_state.items():
-                    if isinstance(value, str) and value.strip():
-                        available_containers.append((key, len(value.strip())))
-            
-            print(f"LoroModel: Found {len(available_containers)} containers with content after import/update")
-            
-            # Try containers in order of content length (longest first, likely the main content)
-            available_containers.sort(key=lambda x: x[1], reverse=True)
-            
-            for container_name, content_length in available_containers:
-                try:
-                    print(f"LoroModel: Trying container '{container_name}' with {content_length} chars")
-                    text_container = self.text_doc.get_text(container_name)
-                    content = text_container.to_string()
-                    
-                    if content and content.strip():
-                        try:
-                            parsed_data = json.loads(content.strip())
-                            
-                            if isinstance(parsed_data, dict):
-                                # Check for direct Lexical format
-                                if "root" in parsed_data and isinstance(parsed_data["root"], dict):
-                                    # Direct lexical format
-                                    old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                                    self.lexical_data = parsed_data
-                                    new_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                                    print(f"LoroModel: Successfully synced from '{container_name}' (direct format) - blocks {old_block_count} -> {new_block_count}")
-                                    
-                                    # Update our container_id to the one that actually has content
-                                    self.container_id = container_name
-                                    print(f"LoroModel: Updated container_id to '{container_name}'")
-                                    
-                                    # Sync to structured document
-                                    self._sync_structured_doc_only()
-                                    return True
-                                    
-                                elif "editorState" in parsed_data and isinstance(parsed_data["editorState"], dict):
-                                    # editorState wrapper format
-                                    editor_state = parsed_data["editorState"]
-                                    old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                                    self.lexical_data = {
-                                        "root": editor_state["root"],
-                                        "lastSaved": parsed_data.get("lastSaved", int(time.time() * 1000)),
-                                        "source": parsed_data.get("source", "Lexical Loro"),
-                                        "version": parsed_data.get("version", "0.34.0")
-                                    }
-                                    new_block_count = len(self.lexical_data.get("root", {}).get("children", []))
-                                    print(f"LoroModel: Successfully synced from '{container_name}' (editorState format) - blocks {old_block_count} -> {new_block_count}")
-                                    
-                                    # Update our container_id to the one that actually has content
-                                    self.container_id = container_name
-                                    print(f"LoroModel: Updated container_id to '{container_name}'")
-                                    
-                                    # Sync to structured document
-                                    self._sync_structured_doc_only()
-                                    return True
-                                    
-                        except json.JSONDecodeError:
-                            print(f"LoroModel: Container '{container_name}' has invalid JSON")
-                            continue
-                            
-                except Exception as e:
-                    print(f"LoroModel: Error processing container '{container_name}': {e}")
-                    continue
-            
-            print("LoroModel: No valid lexical content found in any container after import/update")
-            return False
-            
-        except Exception as e:
-            print(f"LoroModel: Error during _sync_from_any_available_container: {e}")
-            return False
-    
+        print("LoroModel: No valid content found in content container during sync")
     
     def add_block(self, block_detail: Dict[str, Any], block_type: str):
         """
@@ -1185,22 +1027,11 @@ class LexicalModel:
             # CRITICAL: Persist changes to CRDT using incremental append
             # This is safer than destructive sync but still updates the document
             try:
-                container_name = self.container_id or "content"
+                container_name = "content"
                 text_container = self.text_doc.get_text(container_name)
                 
-                # Create the updated document content 
-                if container_name == "lexical-shared-doc":
-                    # Wrap in editorState format for lexical-shared-doc
-                    wrapped_data = {
-                        "editorState": self.lexical_data,
-                        "lastSaved": self.lexical_data["lastSaved"],
-                        "source": self.lexical_data["source"],
-                        "version": self.lexical_data["version"]
-                    }
-                    updated_content = json.dumps(wrapped_data)
-                else:
-                    # Direct format for other containers
-                    updated_content = json.dumps(self.lexical_data)
+                # Always use direct format for "content" container
+                updated_content = json.dumps(self.lexical_data)
                 
                 # Replace content incrementally
                 current_length = text_container.len_unicode
@@ -1606,9 +1437,8 @@ class LexicalModel:
                 # Import the snapshot into our text document
                 self.text_doc.import_(snapshot)
                 
-                # After import, look for content in any available container
-                # since the snapshot may have created new containers
-                self._sync_from_any_available_container()
+                # After import, sync from the standard "content" container
+                self._sync_from_loro()
                 
                 print(f"✅ Successfully imported snapshot ({len(snapshot)} bytes)")
                 return True
@@ -1644,9 +1474,8 @@ class LexicalModel:
                 # Apply the update to our text document
                 self.text_doc.import_(update_bytes)
                 
-                # After applying update, look for content in any available container
-                # since the update may have created new containers or updated existing ones
-                self._sync_from_any_available_container()
+                # After applying update, sync from the standard "content" container
+                self._sync_from_loro()
                 
                 print(f"✅ Successfully applied update ({len(update_bytes)} bytes)")
                 return True
