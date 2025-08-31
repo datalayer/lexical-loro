@@ -376,9 +376,30 @@ class LexicalModel:
             # Sync from Loro to update our internal state
             self._sync_from_loro()
             
-            # Emit document_changed event to notify server
+            # Create broadcast data for incremental updates
+            loro_snapshot = self.get_snapshot()
+            if loro_snapshot:
+                # Create proper broadcast data for the WebSocket server
+                # Use initial-snapshot type for snapshot data to avoid JSON concatenation
+                broadcast_data = {
+                    "type": "initial-snapshot",  # Correct type for snapshot data
+                    "docId": self.container_id,
+                    "snapshot": list(loro_snapshot),  # Use 'snapshot' field for snapshot data
+                    "hasData": True,
+                    "hasEvent": False
+                }
+                
+                # Emit BROADCAST_NEEDED event so the WebSocket server broadcasts it
+                print(f"LoroModel: Emitting BROADCAST_NEEDED for automatic CRDT propagation")
+                self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                    "message_type": "crdt-auto-sync",
+                    "broadcast_data": broadcast_data,
+                    "client_id": "crdt-system"
+                })
+            
+            # Also emit document_changed for logging/monitoring
             self._emit_event(LexicalEventType.DOCUMENT_CHANGED, {
-                "snapshot": self.get_snapshot(),
+                "snapshot": loro_snapshot,
                 "update": self.export_update() if hasattr(self, 'export_update') else None
             })
         except Exception as e:
@@ -592,6 +613,12 @@ class LexicalModel:
         root_map.insert("source", self.lexical_data["source"])
         root_map.insert("version", self.lexical_data["version"])
         root_map.insert("blockCount", len(self.lexical_data["root"]["children"]))
+        
+        # CRITICAL: Commit the changes to trigger CRDT change events
+        # This is essential for automatic propagation to other clients
+        print(f"LoroModel: Committing changes to trigger CRDT propagation")
+        self.text_doc.commit()
+        print(f"LoroModel: Commit complete - changes should propagate automatically")
     
     def _sync_from_loro(self):
         """Sync data from Loro documents back to lexical_data"""
@@ -1683,37 +1710,17 @@ class LexicalModel:
             
             print(f"✅ Added paragraph to document: '{message_text}' (blocks: {blocks_before} -> {blocks_after})")
             
-            # Export the current state to create broadcast data
-            loro_snapshot_bytes = self.get_snapshot()
-            if loro_snapshot_bytes:
-                # Create broadcast data as loro-update for other clients
-                # Using snapshot in the loro-update format that other clients expect
-                broadcast_data = {
-                    "type": "loro-update",
-                    "docId": self.container_id,
-                    "update": list(loro_snapshot_bytes),  # Convert bytes to list for JSON serialization
-                    "hasData": True,
-                    "hasEvent": False
-                }
-            else:
-                broadcast_data = None
-            
             # Get current document info
             doc_info = self.get_document_info()
             
-            # Emit broadcast_needed and response_needed events if we have updates
-            if broadcast_data:
-                self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
-                    "message_type": "append-paragraph",
-                    "broadcast_data": broadcast_data,
-                    "client_id": client_id
-                })
+            # CORRECT APPROACH: Let the lexical model handle all CRDT propagation automatically
+            # The add_block method has already updated the Loro document via _sync_to_loro
+            # The CRDT system will automatically propagate changes to connected clients
+            # No manual broadcasting needed - the model is fully responsible for updates
             
             return {
                 "success": True,
                 "message_type": "append-paragraph",
-                "response_needed": broadcast_data is not None,  # Send update back to sender too
-                "response_data": broadcast_data,  # Same data as broadcast
                 "blocks_before": blocks_before,
                 "blocks_after": blocks_after,
                 "added_text": message_text,
