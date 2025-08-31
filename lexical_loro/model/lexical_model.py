@@ -1475,10 +1475,15 @@ class LexicalModel:
     
     def get_blocks(self) -> List[Dict[str, Any]]:
         """Get all blocks from the lexical model (always current via subscriptions)"""
+        # CRITICAL: Sync from Loro to ensure we have the latest state
+        self._sync_from_loro()
         return self.lexical_data["root"]["children"]
     
     def get_lexical_data(self) -> Dict[str, Any]:
         """Get the complete lexical data structure (always current via subscriptions)"""
+        # CRITICAL: Sync from Loro to ensure we have the latest state
+        # This prevents MCP operations from working with stale data
+        self._sync_from_loro()
         return self.lexical_data
     
     def update_block(self, index: int, block_detail: Dict[str, Any], block_type: Optional[str] = None):
@@ -1970,6 +1975,9 @@ class LexicalModel:
             Dict with document information including content length, container info, etc.
         """
         try:
+            # CRITICAL: Sync from Loro to ensure we have the latest state
+            self._sync_from_loro()
+            
             # Get current content
             container_name = self.container_id or "content"
             try:
@@ -2297,6 +2305,10 @@ class LexicalModel:
     def _handle_snapshot_request(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
         """Handle snapshot request message type"""
         try:
+            # CRITICAL: Sync from Loro to ensure we have the latest state for snapshot
+            print(f"🔄 Syncing from Loro to get latest state for snapshot...")
+            self._sync_from_loro()
+            
             # Get current snapshot
             snapshot = self.get_snapshot()
             
@@ -2346,12 +2358,17 @@ class LexicalModel:
             
             print(f"➕ Received append-paragraph command from client {client_id or 'unknown'}: '{message_text}'")
             
+            # CRITICAL: Sync from Loro to ensure we have the latest state including any typed changes
+            # This prevents appending to stale state when user has typed since last sync
+            print(f"🔄 Syncing from Loro to get latest state before append...")
+            self._sync_from_loro()
+            
             # Create the paragraph structure
             new_paragraph = {
                 "text": message_text
             }
             
-            # Get blocks before adding
+            # Get blocks before adding (now from updated state)
             blocks_before = len(self.lexical_data.get("root", {}).get("children", []))
             
             # SAFE OPERATION: Use append_block instead of destructive add_block
