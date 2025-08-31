@@ -2171,9 +2171,14 @@ class LexicalModel:
             # Get current document info
             doc_info = self.get_document_info()
             
-            # COLLABORATIVE FIX: Don't do manual broadcast - add_block() already handles this
-            # The manual broadcast was creating a conflict with the automatic one
-            print("LoroModel: Skipping manual broadcast (add_block already broadcasted)")
+            # COLLABORATIVE FIX: Ensure broadcast happens for append-paragraph
+            # Even though add_block() should handle broadcasting, we need to ensure it happens
+            # for the WebSocket clients to receive the updated content
+            print("LoroModel: Ensuring broadcast for append-paragraph")
+            
+            # Emit broadcast event to notify WebSocket clients
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
+                            self._create_broadcast_data("document-update"))
             
             return {
                 "success": True,

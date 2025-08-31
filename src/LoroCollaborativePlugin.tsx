@@ -1030,9 +1030,21 @@ export function LoroCollaborativePlugin({
 
       try {
         if (incoming && incoming.trim().length > 0) {
+          // DEBUG: Log the incoming content to see what's causing JSON parsing to fail
+          console.log('🔍 updateLexicalFromLoro incoming content length:', incoming.length);
+          console.log('🔍 updateLexicalFromLoro incoming preview:', incoming.slice(0, 200) + '...');
+          
           // Try to parse as Lexical EditorState JSON first
           try {
             const parsed = JSON.parse(incoming);
+            console.log('✅ JSON parsing successful, parsed type:', typeof parsed);
+            console.log('✅ Parsed structure:', {
+              hasRoot: !!parsed.root,
+              hasEditorState: !!parsed.editorState,
+              rootType: parsed.root?.type,
+              children: parsed.root?.children?.length
+            });
+            
             // Support both raw EditorState and wrapper { editorState: { ... } }
             const stateLike = (parsed && typeof parsed === 'object' && parsed.editorState)
               ? parsed.editorState
@@ -1041,8 +1053,17 @@ export function LoroCollaborativePlugin({
               const newEditorState = editor.parseEditorState(stateLike);
               editor.setEditorState(newEditorState);
               applied = true;
+              console.log('✅ Successfully applied JSON as Lexical state');
+            } else {
+              console.log('❌ JSON structure invalid for Lexical:', {
+                stateLike: typeof stateLike,
+                hasRoot: !!stateLike?.root,
+                rootType: stateLike?.root?.type
+              });
             }
-          } catch {
+          } catch (parseError) {
+            console.log('❌ JSON parsing failed:', parseError);
+            console.log('❌ Content that failed to parse:', incoming.slice(0, 500));
             // Not JSON; will treat as plain text below
           }
 

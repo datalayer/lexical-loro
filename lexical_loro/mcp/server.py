@@ -4,7 +4,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 import websockets
 
 import click
@@ -196,8 +196,9 @@ class MCPWebSocketClient:
                 # Use the correct Loro method to import updates (import_ to avoid Python keyword)
                 model.text_doc.import_(update_bytes)
                 
-                # Sync the model from the updated Loro document
-                model._sync_from_loro()
+                # DON'T sync from Loro - the import already updated the CRDT correctly
+                # Calling _sync_from_loro() can cause double-processing and JSON nesting
+                # model._sync_from_loro()  # DISABLED - trust the CRDT import
                 
                 logger.info(f"✅ MCP successfully applied loro-update for {doc_id}")
             else:
