@@ -66,7 +66,6 @@ class MCPWebSocketClient:
         try:
             async for message in self.websocket:
                 data = json.loads(message)
-                logger.info(f"📥 MCP received message: {data}")  # Changed to INFO to see content
                 
                 # Handle different message types
                 if data.get("type") == "connection-established":
@@ -122,16 +121,11 @@ class MCPWebSocketClient:
                     logger.info(f"📄 Processing binary snapshot for {doc_id}")
                     binary_data = bytes(snapshot_data)
                     
-                    # Create a new model and import the binary data directly
-                    from lexical_loro.model.lexical_model import LexicalModel
-                    model = LexicalModel(container_id=doc_id)
-                    
-                    # Import the binary snapshot
-                    model.import_snapshot(binary_data)
-                    
-                    # Store the model in the global document manager
+                    # Get or create the model from document manager to preserve any existing state
                     if document_manager:
-                        document_manager.models[doc_id] = model
+                        model = document_manager.get_or_create_document(doc_id)
+                        # Import the binary snapshot into the existing model
+                        model.import_snapshot(binary_data)
                         logger.info(f"📄 Successfully imported binary snapshot for {doc_id}")
                     else:
                         logger.error(f"❌ No document manager available for {doc_id}")
