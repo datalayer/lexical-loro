@@ -974,7 +974,11 @@ class LexicalModel:
     
     def _sync_from_loro(self):
         """Sync data from Loro documents back to lexical_data with backward compatibility"""
-        print(f"LoroModel: Starting _sync_from_loro() with container_id='{self.container_id}'")
+        print(f"🔄 _sync_from_loro: STARTING with container_id='{self.container_id}'")
+        
+        # Log current state before sync
+        current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
+        print(f"🔄 _sync_from_loro: Current lexical_data has {current_blocks} blocks before sync")
         
         # Try containers in order of preference: 
         # 1. "content" (new simplified approach)
@@ -996,12 +1000,13 @@ class LexicalModel:
         
         for container_name in containers_to_try:
             try:
-                print(f"LoroModel: Trying container '{container_name}'")
+                print(f"🔍 _sync_from_loro: Trying container '{container_name}'")
                 text_data = self.text_doc.get_text(container_name)
                 content = text_data.to_string()
-                print(f"LoroModel: Container '{container_name}' content length: {len(content) if content else 0}")
+                print(f"🔍 _sync_from_loro: Container '{container_name}' content length: {len(content) if content else 0}")
                 
                 if content and content.strip():
+                    print(f"🔍 _sync_from_loro: Raw content preview: {content[:200]}...")
                     try:
                         parsed_data = json.loads(content)
                         
@@ -1029,19 +1034,21 @@ class LexicalModel:
                             # Direct lexical format
                             old_block_count = len(self.lexical_data.get("root", {}).get("children", []))
                             new_block_count = len(lexical_format_data.get("root", {}).get("children", []))
+                            print(f"✅ _sync_from_loro: Found valid data - updating lexical_data")
+                            print(f"✅ _sync_from_loro: Blocks changing from {old_block_count} -> {new_block_count}")
                             self.lexical_data = lexical_format_data
-                            print(f"LoroModel: Successfully synced from '{container_name}' - blocks {old_block_count} -> {new_block_count}")
+                            print(f"✅ _sync_from_loro: Successfully synced from '{container_name}'")
                             
                             # Check if we need to migrate from legacy container to "content"
                             if container_name != "content":
                                 migration_needed = True
                                 source_container = container_name
-                                print(f"LoroModel: Migration needed from '{source_container}' -> 'content'")
+                                print(f"🔄 _sync_from_loro: Migration needed from '{source_container}' -> 'content'")
                             
                             found_content = True
                             break  # Successfully synced
                         else:
-                            print(f"LoroModel: Container '{container_name}' data is not valid lexical format: {type(parsed_data)}")
+                            print(f"❌ _sync_from_loro: Container '{container_name}' data is not valid lexical format: {type(parsed_data)}")
                     except json.JSONDecodeError as e:
                         print(f"LoroModel: Container '{container_name}' has invalid JSON: {e}")
                 else:
@@ -1481,9 +1488,25 @@ class LexicalModel:
     
     def get_lexical_data(self) -> Dict[str, Any]:
         """Get the complete lexical data structure (always current via subscriptions)"""
+        print(f"📋 get_lexical_data: CALLED - before sync")
+        
+        # Log current state before sync
+        blocks_before_sync = len(self.lexical_data.get("root", {}).get("children", []))
+        print(f"📊 get_lexical_data: BEFORE sync - lexical_data has {blocks_before_sync} blocks")
+        
         # CRITICAL: Sync from Loro to ensure we have the latest state
         # This prevents MCP operations from working with stale data
         self._sync_from_loro()
+        
+        # Log state after sync
+        blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
+        print(f"📊 get_lexical_data: AFTER sync - lexical_data has {blocks_after_sync} blocks")
+        
+        if blocks_after_sync != blocks_before_sync:
+            print(f"🔄 get_lexical_data: SYNC UPDATED! Blocks changed: {blocks_before_sync} -> {blocks_after_sync}")
+        else:
+            print(f"⚠️ get_lexical_data: NO SYNC CHANGE - same blocks ({blocks_after_sync})")
+        
         return self.lexical_data
     
     def update_block(self, index: int, block_detail: Dict[str, Any], block_type: Optional[str] = None):
@@ -1885,10 +1908,14 @@ class LexicalModel:
                 # Import the snapshot into our text document
                 self.text_doc.import_(snapshot)
                 
+                # CRITICAL: Commit the imported snapshot to make changes visible
+                print(f"🔧 Committing imported snapshot to make changes visible...")
+                self.text_doc.commit()
+                
                 # After import, sync from the standard "content" container
                 self._sync_from_loro()
                 
-                print(f"✅ Successfully imported snapshot ({len(snapshot)} bytes)")
+                print(f"✅ Successfully imported and committed snapshot ({len(snapshot)} bytes)")
                 return True
                 
             finally:
@@ -1910,22 +1937,45 @@ class LexicalModel:
         Returns:
             bool: True if update was applied successfully, False otherwise
         """
+        print(f"🔧 apply_update: STARTING - update size: {len(update_bytes) if update_bytes else 0} bytes")
+        
         try:
             if not update_bytes:
-                print("Warning: Empty update provided")
+                print("❌ apply_update: Empty update provided")
                 return False
+
+            # Log current state before import
+            blocks_before_import = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"📊 apply_update: BEFORE import - lexical_data has {blocks_before_import} blocks")
             
             # Set flag to prevent recursive operations during import
             self._import_in_progress = True
             
             try:
                 # Apply the update to our text document
+                print(f"🔧 apply_update: Importing update into text_doc...")
                 self.text_doc.import_(update_bytes)
                 
+                # CRITICAL: Commit the imported changes to make them visible to subsequent operations
+                # Without this commit, MCP operations won't see the latest frontend changes
+                print(f"🔧 apply_update: Committing imported update to make changes visible...")
+                self.text_doc.commit()
+                print(f"✅ apply_update: Commit completed")
+                
                 # After applying update, sync from the standard "content" container
+                print(f"🔄 apply_update: Syncing from Loro after import+commit...")
                 self._sync_from_loro()
                 
-                print(f"✅ Successfully applied update ({len(update_bytes)} bytes)")
+                # Log state after sync
+                blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
+                print(f"📊 apply_update: AFTER sync - lexical_data has {blocks_after_sync} blocks")
+                
+                if blocks_after_sync != blocks_before_import:
+                    print(f"✅ apply_update: SUCCESS - blocks changed: {blocks_before_import} -> {blocks_after_sync}")
+                else:
+                    print(f"⚠️ apply_update: NO CHANGE - same number of blocks ({blocks_after_sync})")
+                
+                print(f"✅ apply_update: Successfully applied and committed update ({len(update_bytes)} bytes)")
                 return True
                 
             finally:
@@ -2174,14 +2224,20 @@ class LexicalModel:
         Returns:
             Dict with response information including any broadcast data needed
         """
+        print(f"📨 handle_message: RECEIVED {message_type} from client {client_id or 'unknown'}")
+        
         try:
             if message_type == "loro-update":
+                print(f"🔧 handle_message: Processing loro-update...")
                 return self._handle_loro_update(data, client_id)
             elif message_type == "snapshot":
+                print(f"📷 handle_message: Processing snapshot...")
                 return self._handle_snapshot_import(data, client_id)
             elif message_type == "request-snapshot":
+                print(f"📞 handle_message: Processing snapshot request...")
                 return self._handle_snapshot_request(data, client_id)
             elif message_type == "append-paragraph":
+                print(f"➕ handle_message: Processing append-paragraph...")
                 return self._handle_append_paragraph(data, client_id)
             else:
                 return {
@@ -2356,12 +2412,26 @@ class LexicalModel:
         try:
             message_text = data.get("message", "Hello")
             
-            print(f"➕ Received append-paragraph command from client {client_id or 'unknown'}: '{message_text}'")
+            print(f"➕ _handle_append_paragraph: STARTING - message='{message_text}', client={client_id or 'unknown'}")
+            
+            # Log current state before sync
+            blocks_before_sync = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"📊 _handle_append_paragraph: BEFORE sync - lexical_data has {blocks_before_sync} blocks")
             
             # CRITICAL: Sync from Loro to ensure we have the latest state including any typed changes
             # This prevents appending to stale state when user has typed since last sync
-            print(f"🔄 Syncing from Loro to get latest state before append...")
+            print(f"🔄 _handle_append_paragraph: Syncing from Loro to get latest state...")
             self._sync_from_loro()
+            
+            # Log state after sync
+            blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks")
+            
+            if blocks_after_sync != blocks_before_sync:
+                print(f"🔄 _handle_append_paragraph: SYNC UPDATED STATE! Blocks changed: {blocks_before_sync} -> {blocks_after_sync}")
+            else:
+                print(f"⚠️ _handle_append_paragraph: SYNC NO CHANGE - same number of blocks ({blocks_after_sync})")
+                print(f"⚠️ _handle_append_paragraph: This indicates MCP process isolation - working with stale state")
             
             # Create the paragraph structure
             new_paragraph = {

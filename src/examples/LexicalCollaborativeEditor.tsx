@@ -189,6 +189,11 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       params: { doc_id: 'lexical-shared-doc', text: 'Hello from MCP!' }
     },
     {
+      name: 'append_paragraph_via_websocket',
+      label: '🔌 Append Paragraph 2 (WebSocket)',
+      params: { doc_id: 'lexical-shared-doc', text: 'Hello from MCP via WebSocket!' }
+    },
+    {
       name: 'get_document_data',
       label: '📄 Get Document Data',
       params: { doc_id: 'lexical-shared-doc' }

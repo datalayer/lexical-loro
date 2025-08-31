@@ -44,8 +44,8 @@ class MCPWebSocketClient:
             # Start listening for messages
             asyncio.create_task(self._listen_for_messages())
             
-            # Skip awareness for now - let's see if client is detected just by connection
-            # await self._send_initial_awareness()
+            # Wait for connection-established or welcome message before sending awareness
+            # _send_initial_awareness() will be called from message handler
             
         except Exception as e:
             logger.error(f"❌ Failed to connect to WebSocket server: {e}")
@@ -74,10 +74,22 @@ class MCPWebSocketClient:
                 data = json.loads(message)
                 message_type = data.get("type")
                 
+                # LOG ALL MESSAGES received by MCP client
+                logger.info(f"📨 MCP CLIENT RECEIVED: {message_type} from {data.get('clientId', 'unknown')}")
+                
                 # Handle different message types
                 if message_type == "connection-established":
                     self.client_id = data.get("clientId")
                     logger.info(f"✅ MCP client established with ID: {self.client_id}")
+                    # Send awareness immediately after connection is established
+                    await self._send_initial_awareness()
+                
+                elif message_type == "welcome":
+                    # Handle welcome message (might come instead of connection-established)
+                    self.client_id = data.get("clientId")
+                    logger.info(f"👋 MCP client welcomed with ID: {self.client_id}")
+                    # Send awareness immediately after welcome
+                    await self._send_initial_awareness()
                 
                 elif message_type == "initial-snapshot":
                     # Handle snapshot response from WebSocket server
@@ -86,6 +98,8 @@ class MCPWebSocketClient:
                 elif message_type == "loro-update":
                     # ECHO PREVENTION: Check if this update originated from us
                     sender_id = data.get("senderId") or data.get("clientId")
+                    logger.info(f"📄 MCP received loro-update from {sender_id}, my_id={self.client_id}")
+                    
                     if sender_id == self.client_id:
                         logger.debug(f"🔄 MCP ignoring echo update from self ({sender_id})")
                         continue
@@ -114,18 +128,63 @@ class MCPWebSocketClient:
     async def _send_initial_awareness(self):
         """Send initial awareness to make this client visible to others"""
         try:
-            # Send awareness for the current document if one is set
-            if current_document_id:
-                # Create a simple cursor position update with minimal data
+            # ALWAYS register for the default document that the UI uses
+            default_doc_id = "lexical-shared-doc"  # This is what the UI uses
+            
+            logger.info(f"👁️ MCP client registering for default document: {default_doc_id}")
+            
+            # Request snapshot to get latest state for the default document
+            snapshot_request = {
+                "type": "request-snapshot",
+                "docId": default_doc_id
+            }
+            await self.send_message(snapshot_request)
+            logger.info(f"📄 MCP requested snapshot for document: {default_doc_id}")
+            
+            # Send ephemeral update to register as a peer for the default document
+            awareness_message = {
+                "type": "ephemeral-update",
+                "docId": default_doc_id,
+                "data": {
+                    "anchor": None,  # No cursor position for MCP server
+                    "focus": None,   # No cursor position for MCP server  
+                    "user": {
+                        "name": "MCP Server",
+                        "color": "#FF6B6B",  # Distinctive color for MCP server
+                        "clientType": "MCP"
+                    }
+                }
+            }
+            await self.send_message(awareness_message)
+            logger.info(f"👁️ MCP client registered awareness for {default_doc_id}")
+            
+            # ALSO register for current_document_id if it's set and different
+            if current_document_id and current_document_id != default_doc_id:
+                # Request snapshot for the current document too
+                snapshot_request = {
+                    "type": "request-snapshot",
+                    "docId": current_document_id
+                }
+                await self.send_message(snapshot_request)
+                logger.info(f"📄 MCP requested snapshot for current document: {current_document_id}")
+                
+                # Send awareness for current document
                 awareness_message = {
                     "type": "ephemeral-update",
                     "docId": current_document_id,
-                    "data": ""  # Empty ephemeral data, just to register the client
+                    "data": {
+                        "anchor": None,  # No cursor position for MCP server
+                        "focus": None,   # No cursor position for MCP server  
+                        "user": {
+                            "name": "MCP Server",
+                            "color": "#FF6B6B",  # Distinctive color for MCP server
+                            "clientType": "MCP"
+                        }
+                    }
                 }
                 await self.send_message(awareness_message)
-                logger.info(f"👁️ MCP client sent initial awareness for {current_document_id}")
-            else:
-                logger.debug("👁️ No current document set, skipping awareness")
+                logger.info(f"👁️ MCP client registered awareness for current document: {current_document_id}")
+                
         except Exception as e:
             logger.error(f"❌ Failed to send initial awareness: {e}")
     
@@ -177,36 +236,49 @@ class MCPWebSocketClient:
         try:
             doc_id = data.get("docId")
             update_data = data.get("update")
+            sender_id = data.get("senderId", "unknown")
             
             if not doc_id or not update_data:
                 logger.warning(f"⚠️ MCP received incomplete loro-update: {data}")
                 return
             
-            logger.info(f"📄 MCP applying loro-update for {doc_id}")
+            logger.info(f"📄 MCP applying loro-update for {doc_id} from {sender_id}")
             
             # Get the document manager to apply the update
             global document_manager
             if document_manager and doc_id in document_manager.models:
                 model = document_manager.models[doc_id]
                 
+                # Get state BEFORE update for logging
+                try:
+                    json_before = model.export_json_snapshot()
+                    logger.info(f"🔍 MCP state BEFORE update: {json_before[:200]}...")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not export state before update: {e}")
+                
                 # Convert update data back to bytes
                 update_bytes = bytes(update_data)
+                logger.info(f"📤 MCP applying {len(update_bytes)} bytes from {sender_id}")
                 
                 # Apply the incremental update to keep the model in sync
                 # Use the correct Loro method to import updates (import_ to avoid Python keyword)
                 model.text_doc.import_(update_bytes)
                 
-                # DON'T sync from Loro - the import already updated the CRDT correctly
-                # Calling _sync_from_loro() can cause double-processing and JSON nesting
-                # model._sync_from_loro()  # DISABLED - trust the CRDT import
+                # Get state AFTER update for logging
+                try:
+                    json_after = model.export_json_snapshot()
+                    logger.info(f"🔍 MCP state AFTER update: {json_after[:200]}...")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not export state after update: {e}")
                 
-                logger.info(f"✅ MCP successfully applied loro-update for {doc_id}")
+                logger.info(f"✅ MCP successfully applied loro-update from {sender_id}")
             else:
-                logger.warning(f"⚠️ MCP cannot apply update - no model found for {doc_id}")
+                logger.warning(f"⚠️ MCP no model found for doc_id: {doc_id}")
                 
         except Exception as e:
             logger.error(f"❌ MCP error handling loro-update: {e}")
-            logger.exception("Full exception:")
+            import traceback
+            logger.error(traceback.format_exc())
 
 # Global WebSocket client instance
 mcp_websocket_client: Optional[MCPWebSocketClient] = None
@@ -265,6 +337,28 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
         if not self.websocket_client.connected:
             await self.websocket_client.connect()
     
+    async def request_fresh_snapshot(self, doc_id: str):
+        """Request a fresh snapshot from the WebSocket server to get latest state"""
+        try:
+            await self.ensure_websocket_connection()
+            
+            if self.websocket_client.connected:
+                logger.info(f"🔄 MCP: Requesting fresh snapshot for {doc_id} to get latest state")
+                snapshot_request = {
+                    "type": "request-snapshot", 
+                    "docId": doc_id
+                }
+                await self.websocket_client.send_message(snapshot_request)
+                
+                # Give a small delay for the snapshot response to arrive
+                import asyncio
+                await asyncio.sleep(0.2)
+                logger.info(f"🔄 MCP: Fresh snapshot request completed for {doc_id}")
+            else:
+                logger.warning(f"⚠️ MCP: Cannot request snapshot - WebSocket not connected")
+        except Exception as e:
+            logger.error(f"❌ MCP: Error requesting fresh snapshot for {doc_id}: {e}")
+    
     def get_or_create_document(self, doc_id: str, initial_content: Optional[str] = None):
         """Override to ensure WebSocket connection and request document sync"""
         # If this is the first time accessing this document, sync first
@@ -307,6 +401,25 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
     def handle_message(self, doc_id: str, message_type: str, data: Dict[str, Any], client_id: str = None):
         """Override to send updates via WebSocket with extensive logging"""
         logger.info(f"🔍 MCP handle_message START: doc_id={doc_id}, type={message_type}, client_id={client_id}")
+        
+        # CRITICAL: For modifying operations, request fresh state from WebSocket server first
+        if message_type in ["append-paragraph", "insert-paragraph"]:
+            logger.info(f"🔄 MCP: Requesting fresh snapshot before {message_type} operation...")
+            try:
+                # Use asyncio to run the async method
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If we're already in an async context, create a task
+                    asyncio.create_task(self.request_fresh_snapshot(doc_id))
+                    # Small delay to let the snapshot arrive
+                    import time
+                    time.sleep(0.3)
+                else:
+                    # If not in async context, run it
+                    loop.run_until_complete(self.request_fresh_snapshot(doc_id))
+            except Exception as e:
+                logger.warning(f"⚠️ MCP: Could not request fresh snapshot: {e}")
         
         # Check if we have a model for this document
         if doc_id in self.models:
@@ -682,6 +795,92 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
 
 
 @mcp.tool()
+async def append_paragraph_via_websocket(text: str, doc_id: Optional[str] = None) -> str:
+    """Append a text paragraph using WebSocket messaging (alternative approach).
+
+    This tool sends an 'append-paragraph' message directly through the WebSocket 
+    connection instead of mutating the local document model. This ensures the 
+    operation goes through the same collaborative pathway as frontend interactions.
+
+    Args:
+        text: The text content of the paragraph to append. Supports any UTF-8 text
+              including emojis, special characters, formatted content, and multi-line
+              text. Empty strings are allowed and will create an empty paragraph block.
+        doc_id: The unique identifier of the document (optional). If not provided,
+                uses the current document set via set_current_document. Explicit doc_id
+                takes precedence over current document setting.
+
+    Returns:
+        str: JSON string containing:
+            - success: Boolean indicating operation success
+            - doc_id: The document identifier where content was appended
+            - action: "append_paragraph_via_websocket" for operation tracking
+            - text: The text content that was appended
+            - method: "websocket" to indicate the approach used
+            - On error: success=False with error message and context information
+
+    Example Usage:
+        Simple append: append_paragraph_via_websocket("This is my conclusion.")
+        With explicit doc: append_paragraph_via_websocket("Final thoughts", "report-2024")
+        Using current doc: append_paragraph_via_websocket("Additional notes")
+    """
+    global current_document_id
+    try:
+        # Determine which document to use
+        target_doc_id = doc_id if doc_id is not None else current_document_id
+        
+        if target_doc_id is None:
+            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
+        
+        logger.info(f"Appending paragraph via WebSocket to document {target_doc_id}")
+        
+        # Ensure WebSocket connection is established
+        global mcp_websocket_client
+        if not mcp_websocket_client or not mcp_websocket_client.connected:
+            raise Exception("MCP WebSocket client not connected to collaborative server")
+        
+        # Send append-paragraph message via WebSocket
+        append_message = {
+            "type": "append-paragraph",
+            "docId": target_doc_id,
+            "message": text,  # Use "message" field as expected by LexicalModel
+            "position": "end",  # append at the end
+            "clientId": mcp_websocket_client.client_id or "mcp-client"
+        }
+        
+        logger.info(f"📤 MCP sending append-paragraph via WebSocket: {append_message}")
+        await mcp_websocket_client.send_message(append_message)
+        
+        # Give a small delay for the operation to be processed
+        import asyncio
+        await asyncio.sleep(0.3)
+        
+        response_result = {
+            "success": True,
+            "doc_id": target_doc_id,
+            "action": "append_paragraph_via_websocket",
+            "text": text,
+            "method": "websocket",
+            "message": "Sent append-paragraph message via WebSocket collaboration"
+        }
+        
+        logger.info(f"Successfully sent append paragraph via WebSocket to document {target_doc_id}")
+        return json.dumps(response_result, indent=2)
+        
+    except Exception as e:
+        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
+        logger.error(f"Error sending append paragraph via WebSocket to document {target_doc_id_for_error}: {e}")
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "doc_id": target_doc_id_for_error,
+            "action": "append_paragraph_via_websocket",
+            "method": "websocket"
+        }
+        return json.dumps(error_result, indent=2)
+
+
+@mcp.tool()
 async def get_document_info(doc_id: Optional[str] = None) -> str:
     """Retrieve comprehensive information and metadata about a Lexical document.
 
@@ -927,6 +1126,7 @@ class LexicalMCPServer:
         self._load_document = self._wrap_legacy_tool(load_document)
         self._insert_paragraph = self._wrap_legacy_tool(insert_paragraph)
         self._append_paragraph = self._wrap_legacy_tool(append_paragraph)
+        self._append_paragraph_via_websocket = self._wrap_legacy_tool(append_paragraph_via_websocket)
         self._get_document_info = self._wrap_legacy_tool(get_document_info)
         self._set_current_document = self._wrap_legacy_tool(set_current_document)
     
