@@ -68,26 +68,40 @@ class MCPWebSocketClient:
                 logger.error(f"❌ Failed to send message: {e}")
     
     async def _listen_for_messages(self):
-        """Listen for messages from the WebSocket server"""
+        """Listen for messages from the WebSocket server with echo prevention"""
         try:
             async for message in self.websocket:
                 data = json.loads(message)
+                message_type = data.get("type")
                 
                 # Handle different message types
-                if data.get("type") == "connection-established":
+                if message_type == "connection-established":
                     self.client_id = data.get("clientId")
                     logger.info(f"✅ MCP client established with ID: {self.client_id}")
                 
-                elif data.get("type") == "initial-snapshot":
+                elif message_type == "initial-snapshot":
                     # Handle snapshot response from WebSocket server
                     await self._handle_initial_snapshot(data)
                 
-                elif data.get("type") == "loro-update":
-                    # Handle incremental updates from other clients
+                elif message_type == "loro-update":
+                    # ECHO PREVENTION: Check if this update originated from us
+                    sender_id = data.get("senderId") or data.get("clientId")
+                    if sender_id == self.client_id:
+                        logger.debug(f"🔄 MCP ignoring echo update from self ({sender_id})")
+                        continue
+                    
+                    logger.info(f"📄 MCP applying loro-update from {sender_id}")
+                    # Handle incremental updates from OTHER clients only
                     await self._handle_loro_update(data)
                 
-                elif data.get("type") == "document-update":
-                    # Handle document updates from other clients
+                elif message_type == "document-update":
+                    # ECHO PREVENTION: Check if this update originated from us  
+                    sender_id = data.get("senderId") or data.get("clientId")
+                    if sender_id == self.client_id:
+                        logger.debug(f"🔄 MCP ignoring echo document-update from self ({sender_id})")
+                        continue
+                        
+                    # Handle document updates from OTHER clients only
                     await self._handle_document_update(data)
                     
         except websockets.exceptions.ConnectionClosed:
@@ -207,9 +221,9 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
     def apply_snapshot(self, doc_id: str, snapshot_data: Dict[str, Any]):
         """Apply snapshot data received from WebSocket server"""
         try:
-            logger.info(f"📄 Attempting to apply snapshot for {doc_id}")
-            logger.debug(f"📄 Snapshot data type: {type(snapshot_data)}")
-            logger.debug(f"📄 Snapshot data keys: {list(snapshot_data.keys()) if isinstance(snapshot_data, dict) else 'not a dict'}")
+            logger.info(f"📄 MCP: Attempting to apply snapshot for {doc_id}")
+            logger.debug(f"📄 MCP: Snapshot data type: {type(snapshot_data)}")
+            logger.debug(f"📄 MCP: Snapshot data keys: {list(snapshot_data.keys()) if isinstance(snapshot_data, dict) else 'not a dict'}")
             
             # Create model from snapshot data instead of default
             from lexical_loro.model.lexical_model import LexicalModel
@@ -217,18 +231,30 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
             # The snapshot_data is already a dict, convert to JSON string for from_json method
             json_data = json.dumps(snapshot_data)
             
-            logger.debug(f"📄 JSON data length: {len(json_data)}")
+            logger.info(f"📄 MCP: Creating LexicalModel with container_id='content' and doc_id='{doc_id}'")
+            logger.debug(f"📄 MCP: JSON data length: {len(json_data)}")
             
             # Use the class method to create model from JSON
-            model = LexicalModel.from_json(json_data, container_id=doc_id)
+            # CRITICAL: Use "content" as container_id to match collaborative server
+            # IMPORTANT: Disable subscriptions to prevent conflicts with WebSocket imports
+            model = LexicalModel.from_json(json_data, container_id="content", enable_subscriptions=False)
+            
+            # Set the document ID for WebSocket protocol compatibility
+            model.doc_id = doc_id
+            logger.info(f"📄 MCP: Created model with subscriptions DISABLED for WebSocket-only sync")
+            logger.info(f"📄 MCP: Set model.doc_id = '{doc_id}', model.container_id = '{model.container_id}'")
+            
+            # Add extensive sync logging
+            logger.info(f"📄 MCP: Model created with {len(model.lexical_data.get('root', {}).get('children', []))} blocks")
+            logger.info(f"📄 MCP: Model text_doc instance: {id(model.text_doc)}")
             
             # Store the model
             self.models[doc_id] = model
-            logger.info(f"📄 Successfully applied snapshot for {doc_id} from WebSocket server")
+            logger.info(f"📄 MCP: Successfully applied snapshot for {doc_id} from WebSocket server")
                 
         except Exception as e:
-            logger.error(f"❌ Error applying snapshot for {doc_id}: {e}")
-            logger.error(f"❌ Snapshot data: {snapshot_data}")
+            logger.error(f"❌ MCP: Error applying snapshot for {doc_id}: {e}")
+            logger.error(f"❌ MCP: Snapshot data: {snapshot_data}")
             logger.exception("Full exception:")
             # Fall back to parent implementation if snapshot application fails
             super().get_or_create_document(doc_id)
@@ -278,9 +304,31 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
             logger.error(f"❌ Failed to send awareness for {doc_id}: {e}")
     
     def handle_message(self, doc_id: str, message_type: str, data: Dict[str, Any], client_id: str = None):
-        """Override to send updates via WebSocket"""
+        """Override to send updates via WebSocket with extensive logging"""
+        logger.info(f"🔍 MCP handle_message START: doc_id={doc_id}, type={message_type}, client_id={client_id}")
+        
+        # Check if we have a model for this document
+        if doc_id in self.models:
+            model = self.models[doc_id]
+            logger.info(f"🔍 MCP: Found model for {doc_id}, container_id={getattr(model, 'container_id', 'unknown')}")
+            logger.info(f"🔍 MCP: Model text_doc instance: {id(getattr(model, 'text_doc', None))}")
+            logger.info(f"🔍 MCP: Model blocks before operation: {len(model.lexical_data.get('root', {}).get('children', []))}")
+        else:
+            logger.warning(f"⚠️ MCP: No model found for {doc_id}")
+        
         # Call parent implementation first
-        result = super().handle_message(doc_id, message_type, data, client_id)
+        try:
+            result = super().handle_message(doc_id, message_type, data, client_id)
+            logger.info(f"🔍 MCP: Parent handle_message result: {result}")
+        except Exception as e:
+            logger.error(f"❌ MCP: Parent handle_message failed: {e}")
+            logger.exception("Full exception:")
+            raise e
+        
+        # Check model state after operation
+        if doc_id in self.models:
+            model = self.models[doc_id]
+            logger.info(f"🔍 MCP: Model blocks after operation: {len(model.lexical_data.get('root', {}).get('children', []))}")
         
         # Debug: Log all message types
         logger.info(f"🔍 MCP handle_message: type={message_type}, success={result.get('success')}, connected={self.websocket_client.connected}")

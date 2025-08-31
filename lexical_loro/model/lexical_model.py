@@ -177,7 +177,7 @@ class LexicalModel:
         ephemeral_timeout: Timeout for ephemeral data (cursors, selections)
     """
     
-    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, doc_id: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, doc_id: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000, enable_subscriptions: bool = True):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
@@ -191,6 +191,9 @@ class LexicalModel:
         
         # Store event callback for structured communication with server
         self._event_callback = event_callback
+        
+        # Store subscription control flag
+        self._enable_subscriptions = enable_subscriptions
         
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
@@ -488,6 +491,12 @@ class LexicalModel:
     
     def _setup_text_doc_subscription(self):
         """Set up subscription to listen for changes in the text document"""
+        
+        # Check if subscriptions are disabled (e.g., for MCP server to prevent import conflicts)
+        if not getattr(self, '_enable_subscriptions', True):
+            print(f"🚫 Subscriptions disabled for this model (WebSocket-only sync mode)")
+            return
+            
         try:
             # Always use "content" as the container name since we have a model per doc_id
             active_container = "content"
@@ -1218,14 +1227,38 @@ class LexicalModel:
                 container_name = "content"
                 text_container = self.text_doc.get_text(container_name)
                 
-                # Always use direct format for "content" container
-                updated_content = json.dumps(self.lexical_data)
+                # Create full Lexical format with metadata (not just root content)
+                full_lexical_document = {
+                    "root": self.lexical_data["root"],
+                    "lastSaved": self.lexical_data.get("lastSaved", int(time.time() * 1000)),
+                    "source": self.lexical_data.get("source", "Lexical Loro"),
+                    "version": self.lexical_data.get("version", "0.34.0")
+                }
+                updated_content = json.dumps(full_lexical_document)
                 
-                # Replace content incrementally
+                # Replace content incrementally with extensive logging
+                print(f"🔍 CRDT Operation START: container={container_name}, doc_id={getattr(self, 'doc_id', 'unknown')}")
+                print(f"🔍 CRDT text_doc instance: {id(self.text_doc)}")
+                
                 current_length = text_container.len_unicode
+                print(f"🔍 CRDT current_length: {current_length}")
+                
                 if current_length > 0:
-                    text_container.delete(0, current_length)
-                text_container.insert(0, updated_content)
+                    print(f"🔍 CRDT About to call delete(0, {current_length})")
+                    try:
+                        text_container.delete(0, current_length)
+                        print(f"✅ CRDT delete operation successful")
+                    except Exception as delete_error:
+                        print(f"❌ CRDT delete operation failed: {delete_error}")
+                        raise delete_error
+                
+                print(f"🔍 CRDT About to call insert(0, content_length={len(updated_content)})")
+                try:
+                    text_container.insert(0, updated_content)
+                    print(f"✅ CRDT insert operation successful")
+                except Exception as insert_error:
+                    print(f"❌ CRDT insert operation failed: {insert_error}")
+                    raise insert_error
                 
                 # Commit the changes
                 self.text_doc.commit()
@@ -1806,7 +1839,7 @@ class LexicalModel:
     @classmethod
     def from_json(cls, json_data: str, container_id: Optional[str] = None, 
                   event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
-                  ephemeral_timeout: int = 300000) -> 'LexicalModel':
+                  ephemeral_timeout: int = 300000, enable_subscriptions: bool = True) -> 'LexicalModel':
         """
         Create a LexicalModel instance from JSON data.
         
@@ -1815,6 +1848,7 @@ class LexicalModel:
             container_id: Optional container ID for the model
             event_callback: Optional callback for structured event communication
             ephemeral_timeout: Timeout for ephemeral data in milliseconds
+            enable_subscriptions: Whether to enable CRDT change subscriptions
             
         Returns:
             New LexicalModel instance with the imported data
@@ -1825,7 +1859,8 @@ class LexicalModel:
             # Create a new model
             model = cls(container_id=container_id, 
                        event_callback=event_callback,
-                       ephemeral_timeout=ephemeral_timeout)
+                       ephemeral_timeout=ephemeral_timeout,
+                       enable_subscriptions=enable_subscriptions)
             
             # Import the data
             if isinstance(parsed_data, dict):
