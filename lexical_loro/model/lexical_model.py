@@ -45,7 +45,7 @@ self.lexical_data["root"]["children"].append(new_block)
 # Collaborative propagation via events
 self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
     "type": "document-update",
-    "docId": self.container_id, 
+    "docId": self.doc_id, 
     "snapshot": self.get_snapshot()
 })
 ```
@@ -177,16 +177,17 @@ class LexicalModel:
         ephemeral_timeout: Timeout for ephemeral data (cursors, selections)
     """
     
-    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
+    def __init__(self, text_doc: Optional['LoroDoc'] = None, structured_doc: Optional['LoroDoc'] = None, container_id: Optional[str] = None, doc_id: Optional[str] = None, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
         if loro is None:
             raise ImportError("loro package is required for LoroModel")
             
         # Initialize two Loro documents (use provided ones or create new)
         self.text_doc = text_doc if text_doc is not None else loro.LoroDoc()
-        self.structured_doc = structured_doc if structured_doc is not None else loro.LoroDoc()
         
-        # Store the container ID hint for syncing
-        self.container_id = container_id
+        # Store both document ID (for WebSocket protocol) and container ID (for CRDT operations)
+        self.doc_id = doc_id or container_id or "content"  # WebSocket document identifier
+        self.container_id = container_id or "content"      # CRDT container identifier
+        self.structured_doc = structured_doc if structured_doc is not None else loro.LoroDoc()
         
         # Store event callback for structured communication with server
         self._event_callback = event_callback
@@ -300,7 +301,7 @@ class LexicalModel:
         snapshot_bytes = self.get_snapshot()
         broadcast_data = {
             "type": event_type,
-            "docId": self.container_id,
+            "docId": self.doc_id,
             "snapshot": base64.b64encode(snapshot_bytes).decode('utf-8')
         }
         
@@ -341,7 +342,7 @@ class LexicalModel:
         # Safe collaborative update
         self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
             "type": "document-update",
-            "docId": self.container_id,
+            "docId": self.doc_id,
             "snapshot": self.get_snapshot()
         })
         ```
@@ -392,8 +393,8 @@ class LexicalModel:
         # Use provided document or create new one
         doc = loro_doc if loro_doc is not None else loro.LoroDoc()
         
-        # Get text container using doc_id as container name
-        text_container = doc.get_text(doc_id)
+        # Get text container using "content" as container name (single container architecture)
+        text_container = doc.get_text("content")
         
         # Seed with initial content if provided
         if initial_content:
@@ -414,7 +415,7 @@ class LexicalModel:
                 raise ValueError(f"Invalid initial_content: {e}")
         
         # Create LexicalModel instance with the initialized document and ephemeral timeout
-        model = cls(text_doc=doc, container_id=doc_id, event_callback=event_callback, ephemeral_timeout=ephemeral_timeout)
+        model = cls(text_doc=doc, container_id="content", doc_id=doc_id, event_callback=event_callback, ephemeral_timeout=ephemeral_timeout)
         
         return model
     
@@ -491,36 +492,59 @@ class LexicalModel:
             # Always use "content" as the container name since we have a model per doc_id
             active_container = "content"
             
+            print(f"🔧 Setting up subscription for container '{active_container}'...")
+            
             # Subscribe to document changes - try different subscription patterns
             try:
                 # Try the most common pattern first
                 self._text_doc_subscription = self.text_doc.subscribe(
                     self._handle_text_doc_change
                 )
-                print(f"LoroModel: Set up document subscription (monitoring '{active_container}' container)")
-            except TypeError:
+                print(f"✅ Set up document subscription (monitoring '{active_container}' container)")
+                print(f"✅ Subscription object: {type(self._text_doc_subscription)}")
+            except TypeError as e1:
+                print(f"❌ Document subscription failed: {e1}")
                 # Try with additional parameters that might be required
                 try:
                     self._text_doc_subscription = self.text_doc.subscribe(
                         active_container, self._handle_text_doc_change
                     )
-                    print(f"LoroModel: Set up container subscription for '{active_container}'")
-                except TypeError:
+                    print(f"✅ Set up container subscription for '{active_container}'")
+                    print(f"✅ Subscription object: {type(self._text_doc_subscription)}")
+                except TypeError as e2:
+                    print(f"❌ Container subscription failed: {e2}")
                     # Try the observer pattern with container-specific subscription
                     text_container = self.text_doc.get_text(active_container)
                     self._text_doc_subscription = text_container.subscribe(
                         self._handle_text_doc_change
                     )
-                    print(f"LoroModel: Set up text container subscription for '{active_container}'")
+                    print(f"✅ Set up text container subscription for '{active_container}'")
+                    print(f"✅ Subscription object: {type(self._text_doc_subscription)}")
+                    
+            # Test the subscription by making a small change to verify it works
+            print(f"🧪 Testing subscription by making a test change...")
+            try:
+                test_container = self.text_doc.get_text(active_container)
+                current_length = test_container.len_unicode
+                test_container.insert(current_length, " ")  # Add a space
+                test_container.delete(current_length, 1)    # Remove the space
+                self.text_doc.commit()
+                print(f"🧪 Test change completed")
+            except Exception as test_e:
+                print(f"🧪 Test change failed: {test_e}")
                     
         except Exception as e:
             # If subscription fails, we'll fall back to manual syncing
-            print(f"Warning: Could not set up text_doc subscription: {e}")
+            print(f"❌ Could not set up text_doc subscription: {e}")
+            print(f"❌ Exception type: {type(e)}")
+            import traceback
+            traceback.print_exc()
             self._text_doc_subscription = None
     
     def _handle_text_doc_change(self, diff_event):
         """Handle changes to the text document using fine-grained diffs"""
         try:
+            print(f"🔥 _handle_text_doc_change: CALLED with diff_event type {type(diff_event)}")
             print(f"LoroModel: Received text doc change event")
             # Process each container diff in the event
             for container_diff in diff_event.events:
@@ -542,20 +566,23 @@ class LexicalModel:
                         print(f"LoroModel: Ignoring diff for {target_str} (not our container)")
                         
         except Exception as e:
-            print(f"Warning: Error handling text document change event: {e}")
+            print(f"❌ Error handling text document change event: {e}")
+            import traceback
+            traceback.print_exc()
             # Fallback to full sync
             self._sync_from_loro_fallback()
     
     def _auto_sync_on_change(self):
-        """Automatically sync and notify about changes"""
+        """Automatically notify about changes (no sync needed - diff already applied)"""
         try:
             # Prevent recursive operations during import/update
             if self._import_in_progress:
                 print("LoroModel: Skipping auto-sync (import in progress)")
                 return
                 
-            # Sync from Loro to update our internal state
-            self._sync_from_loro()
+            # COLLABORATIVE FIX: Don't sync here - the diff was already applied by _apply_text_diff()
+            # Syncing here reads stale CRDT state and causes content loss
+            print("LoroModel: Change processed via diff, emitting broadcast (no sync needed)")
             
             # Create broadcast data for incremental updates
             loro_snapshot = self.get_snapshot()
@@ -564,7 +591,7 @@ class LexicalModel:
                 # Use initial-snapshot type for snapshot data to avoid JSON concatenation
                 broadcast_data = {
                     "type": "initial-snapshot",  # Correct type for snapshot data
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "snapshot": list(loro_snapshot),  # Use 'snapshot' field for snapshot data
                     "hasData": True,
                     "hasEvent": False
@@ -594,29 +621,86 @@ class LexicalModel:
     def _apply_text_diff(self, diff):
         """Apply text diff to update lexical_data incrementally"""
         try:
-            if hasattr(diff, '__class__') and diff.__class__.__name__ == 'Text':
+            diff_type = diff.__class__.__name__ if hasattr(diff, '__class__') else 'unknown'
+            print(f"🔄 _apply_text_diff: Processing diff of type {diff_type}")
+            print(f"🔍 Full diff object: {diff}")
+            print(f"🔍 Diff attributes: {[attr for attr in dir(diff) if not attr.startswith('_')]}")
+            
+            # Log current state before applying diff
+            current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"📊 Before diff: {current_blocks} blocks")
+            
+            # Be more flexible with diff type checking - look for "Text" in the name or check for text diff attributes
+            is_text_diff = (hasattr(diff, '__class__') and 
+                          ('Text' in diff.__class__.__name__ or 
+                           hasattr(diff, 'diff') or 
+                           hasattr(diff, 'insert') or 
+                           hasattr(diff, 'delete') or 
+                           hasattr(diff, 'retain')))
+            
+            print(f"🔍 Is text diff: {is_text_diff}")
+            
+            if is_text_diff:
                 # Get current content to work with
                 current_content = self._get_current_text_content()
+                print(f"📝 Current content length: {len(current_content)} chars")
+                
+                # Try to access diff data - could be diff.diff or just diff
+                diff_data = None
+                if hasattr(diff, 'diff'):
+                    diff_data = diff.diff
+                    print(f"🔍 Using diff.diff: {type(diff_data)}")
+                    print(f"🔍 Diff data content: {diff_data}")
+                else:
+                    diff_data = diff
+                    print(f"🔍 Using diff directly: {type(diff_data)}")
                 
                 # Apply text deltas to reconstruct the new content
-                new_content = self._apply_text_deltas(current_content, diff.diff)
+                new_content = self._apply_text_deltas(current_content, diff_data)
+                
+                print(f"📝 Content comparison:")
+                print(f"  📝 Old length: {len(current_content)}")
+                print(f"  📝 New length: {len(new_content)}")
+                print(f"  📝 Content changed: {new_content != current_content}")
+                if new_content != current_content:
+                    print(f"  📝 Old preview: {current_content[:100]}...")
+                    print(f"  📝 New preview: {new_content[:100]}...")
                 
                 if new_content and new_content != current_content:
+                    print(f"📝 Content changed: {len(current_content)} -> {len(new_content)} chars")
+                    
                     # Parse the new content as JSON
                     try:
                         new_lexical_data = json.loads(new_content)
                         
+                        # Log what we're about to update to
+                        new_blocks = len(new_lexical_data.get("root", {}).get("children", []))
+                        print(f"📊 New lexical data has {new_blocks} blocks")
+                        
                         # Compare and update blocks incrementally
                         self._update_lexical_data_incrementally(new_lexical_data)
+                        
+                        # Log final state after update
+                        final_blocks = len(self.lexical_data.get("root", {}).get("children", []))
+                        print(f"📊 After diff: {final_blocks} blocks")
                         
                         # Sync to structured document
                         self._sync_structured_doc_only()
                         
                     except json.JSONDecodeError as e:
-                        print(f"Warning: Could not parse updated content as JSON: {e}")
+                        print(f"❌ Could not parse updated content as JSON: {e}")
+                        print(f"📋 Content preview: {new_content[:200]}...")
+                else:
+                    print(f"📝 No content change detected")
+            else:
+                print(f"❌ Diff is not a recognized text diff type")
+                print(f"🔍 Expected: Text diff with 'Text' in name or text diff attributes")
+                print(f"🔍 Got: {diff_type} with attributes {[attr for attr in dir(diff) if not attr.startswith('_')]}")
                         
         except Exception as e:
-            print(f"Warning: Error applying text diff: {e}")
+            print(f"❌ Error applying text diff: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _get_current_text_content(self) -> str:
         """Get current text content from the document"""
@@ -630,31 +714,66 @@ class LexicalModel:
     
     def _apply_text_deltas(self, content: str, deltas) -> str:
         """Apply a sequence of text deltas to content"""
+        print(f"🔧 _apply_text_deltas: Starting with content length {len(content)}")
+        print(f"🔧 Deltas type: {type(deltas)}")
+        print(f"🔧 Deltas content: {deltas}")
+        
+        if not deltas:
+            print(f"🔧 No deltas to apply")
+            return content
+            
         result = content
         position = 0
         
         try:
-            for delta in deltas:
+            for i, delta in enumerate(deltas):
                 delta_class = delta.__class__.__name__
+                print(f"🔧 Delta {i}: {delta_class} - {delta}")
                 
-                if delta_class == 'Retain':
+                if delta_class == 'Retain' or delta_class == 'TextDelta_Retain':
                     # Move position forward
-                    position += delta.retain
+                    retain_amount = getattr(delta, 'retain', getattr(delta, 'len', 0))
+                    print(f"🔧 Retaining {retain_amount} chars from position {position}")
+                    position += retain_amount
                     
-                elif delta_class == 'Insert':
+                elif delta_class == 'Insert' or delta_class == 'TextDelta_Insert':
                     # Insert text at current position
-                    result = result[:position] + delta.insert + result[position:]
-                    position += len(delta.insert)
+                    insert_text = getattr(delta, 'insert', str(delta))
+                    print(f"🔧 Inserting '{insert_text[:50]}...' at position {position}")
                     
-                elif delta_class == 'Delete':
+                    # Special case: if inserting at position 0 and we have existing content,
+                    # and the insert looks like a complete JSON document, replace instead of insert
+                    if position == 0 and result and insert_text.strip().startswith('{"root":'):
+                        print(f"🔧 Detected complete JSON replacement, using replace instead of insert")
+                        result = insert_text
+                        position = len(insert_text)
+                    else:
+                        result = result[:position] + insert_text + result[position:]
+                        position += len(insert_text)
+                    
+                elif delta_class == 'Delete' or delta_class == 'TextDelta_Delete':
                     # Delete text at current position
-                    result = result[:position] + result[position + delta.delete:]
+                    delete_amount = getattr(delta, 'delete', getattr(delta, 'len', 0))
+                    print(f"🔧 Deleting {delete_amount} chars from position {position}")
+                    result = result[:position] + result[position + delete_amount:]
                     # Position stays the same after deletion
+                else:
+                    print(f"🔧 Unknown delta type: {delta_class}")
+                    print(f"🔧 Delta attributes: {[attr for attr in dir(delta) if not attr.startswith('_')]}")
+                    # Try to handle it generically
+                    if hasattr(delta, 'insert'):
+                        insert_text = delta.insert
+                        print(f"🔧 Generic insert: '{insert_text[:50]}...' at position {position}")
+                        result = result[:position] + insert_text + result[position:]
+                        position += len(insert_text)
                     
         except Exception as e:
-            print(f"Warning: Error applying text deltas: {e}")
+            print(f"❌ Error applying text deltas: {e}")
+            import traceback
+            traceback.print_exc()
             return content
             
+        print(f"🔧 _apply_text_deltas: Finished with content length {len(result)}")
         return result
     
     def _update_lexical_data_incrementally(self, new_lexical_data: Dict[str, Any]):
@@ -662,6 +781,8 @@ class LexicalModel:
         try:
             old_blocks = self.lexical_data.get("root", {}).get("children", [])
             new_blocks = new_lexical_data.get("root", {}).get("children", [])
+            
+            print(f"🔄 _update_lexical_data_incrementally: {len(old_blocks)} -> {len(new_blocks)} blocks")
             
             # Update metadata
             self.lexical_data["lastSaved"] = new_lexical_data.get("lastSaved", self.lexical_data["lastSaved"])
@@ -672,7 +793,7 @@ class LexicalModel:
             if len(old_blocks) != len(new_blocks):
                 # Block count changed - update entire children array
                 self.lexical_data["root"]["children"] = new_blocks
-                print(f"LoroModel: Block count changed - {len(old_blocks)} -> {len(new_blocks)}")
+                print(f"✅ Block count changed - {len(old_blocks)} -> {len(new_blocks)}")
             else:
                 # Same number of blocks - check for content changes
                 blocks_changed = False
@@ -685,14 +806,16 @@ class LexicalModel:
                         old_type = old_block.get('type', 'unknown')
                         new_type = new_block.get('type', 'unknown')
                         if old_type != new_type:
-                            print(f"LoroModel: Block {i} type changed - {old_type} -> {new_type}")
+                            print(f"✅ Block {i} type changed - {old_type} -> {new_type}")
                         
                         # Check for text content changes
                         old_text = self._extract_block_text(old_block)
                         new_text = self._extract_block_text(new_block)
                         if old_text != new_text:
-                            print(f"LoroModel: Block {i} text changed - '{old_text[:50]}...' -> '{new_text[:50]}...'")
+                            print(f"✅ Block {i} text changed - '{old_text[:50]}...' -> '{new_text[:50]}...'")
                 
+                if not blocks_changed:
+                    print(f"📝 No block content changes detected")
                 if blocks_changed:
                     print(f"LoroModel: {sum(1 for i in range(len(old_blocks)) if old_blocks[i] != new_blocks[i])} blocks updated")
                     
@@ -788,7 +911,7 @@ class LexicalModel:
         ```python
         self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
             "type": "document-update", 
-            "docId": self.container_id,
+            "docId": self.doc_id,
             "snapshot": self.get_snapshot()
         })
         ```
@@ -962,7 +1085,7 @@ class LexicalModel:
         # This uses CRDT-compatible event propagation
         self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
             "type": "document-update", 
-            "docId": self.container_id,
+            "docId": self.doc_id,
             "snapshot": self.get_snapshot()
         })
         ```
@@ -988,8 +1111,10 @@ class LexicalModel:
             }, "heading1")
         """
         try:
-            # Sync from Loro to get the latest state
-            self._sync_from_loro()
+            # COLLABORATIVE FIX: Never sync in add_block() - the model is kept current via subscriptions
+            # The subscription events ensure lexical_data is always up-to-date
+            # Manual syncing can read stale CRDT state and cause content loss
+            print("LoroModel: add_block() using current lexical_data (no sync needed)")
             
             # Ensure we have a valid lexical_data structure
             if not isinstance(self.lexical_data, dict):
@@ -1122,13 +1247,11 @@ class LexicalModel:
             raise e
     
     def get_blocks(self) -> List[Dict[str, Any]]:
-        """Get all blocks from the lexical model"""
-        self._sync_from_loro()
+        """Get all blocks from the lexical model (always current via subscriptions)"""
         return self.lexical_data["root"]["children"]
     
     def get_lexical_data(self) -> Dict[str, Any]:
-        """Get the complete lexical data structure"""
-        self._sync_from_loro()
+        """Get the complete lexical data structure (always current via subscriptions)"""
         return self.lexical_data
     
     def update_block(self, index: int, block_detail: Dict[str, Any], block_type: Optional[str] = None):
@@ -1171,7 +1294,7 @@ class LexicalModel:
                 # Use event-based propagation instead of destructive sync
                 self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
                     "type": "document-update", 
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "snapshot": self.get_snapshot()
                 })
     
@@ -1184,7 +1307,7 @@ class LexicalModel:
             # Use event-based propagation instead of destructive sync
             self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
                 "type": "document-update", 
-                "docId": self.container_id,
+                "docId": self.doc_id,
                 "snapshot": self.get_snapshot()
             })
     
@@ -1265,7 +1388,7 @@ class LexicalModel:
             # Use event-based propagation instead of destructive sync
             self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
                 "type": "document-update", 
-                "docId": self.container_id,
+                "docId": self.doc_id,
                 "snapshot": self.get_snapshot()
             })
             
@@ -1332,7 +1455,7 @@ class LexicalModel:
         # Use event-based propagation instead of destructive sync
         self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
             "type": "document-update", 
-            "docId": self.container_id,
+            "docId": self.doc_id,
             "snapshot": self.get_snapshot()
         })
     
@@ -1400,6 +1523,36 @@ class LexicalModel:
                 f"version='{self.lexical_data.get('version', 'unknown')}', "
                 f"lastSaved={last_saved}, "
                 f"mode={subscription_status})")
+    
+    def log_detailed_state(self, context: str = ""):
+        """Log detailed state of the lexical model for debugging"""
+        print(f"📊 LexicalModel detailed state{' (' + context + ')' if context else ''}:")
+        print(f"  📋 Blocks: {len(self.lexical_data.get('root', {}).get('children', []))}")
+        
+        blocks = self.lexical_data.get("root", {}).get("children", [])
+        for i, block in enumerate(blocks):
+            block_type = block.get('type', 'unknown')
+            text_content = self._extract_block_text(block)
+            print(f"    {i+1}. {block_type}: '{text_content[:100]}{'...' if len(text_content) > 100 else ''}'")
+        
+        print(f"  🕒 Last saved: {self.lexical_data.get('lastSaved', 'unknown')}")
+        print(f"  📄 Source: {self.lexical_data.get('source', 'unknown')}")
+        print(f"  📝 Version: {self.lexical_data.get('version', 'unknown')}")
+        
+        # Also log CRDT state
+        try:
+            content_container = self.text_doc.get_text("content")
+            crdt_content = content_container.to_string()
+            print(f"  💾 CRDT content length: {len(crdt_content)} chars")
+            if crdt_content:
+                try:
+                    crdt_data = json.loads(crdt_content)
+                    crdt_blocks = len(crdt_data.get("root", {}).get("children", []))
+                    print(f"  💾 CRDT blocks: {crdt_blocks}")
+                except:
+                    print(f"  💾 CRDT content (not JSON): {crdt_content[:100]}...")
+        except Exception as e:
+            print(f"  💾 CRDT error: {e}")
     
     def _extract_block_text(self, block: Dict[str, Any]) -> str:
         """Extract text content from a block for summary purposes"""
@@ -1834,6 +1987,9 @@ class LexicalModel:
                 print(f"📋 Current content length: {doc_info.get('content_length', 0)}")
                 print(f"📋 Current blocks: {doc_info.get('lexical_blocks', 0)}")
                 
+                # Log detailed state after update
+                self.log_detailed_state("after loro-update")
+                
                 # Emit broadcast_needed event
                 self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
                     "message_type": "loro-update",
@@ -1925,7 +2081,7 @@ class LexicalModel:
                     "response_data": {
                         "type": "initial-snapshot",
                         "snapshot": list(snapshot),
-                        "docId": self.container_id
+                        "docId": self.doc_id
                     },
                     "snapshot_size": len(snapshot)
                 }
@@ -1936,7 +2092,7 @@ class LexicalModel:
                     "broadcast_data": {
                         "type": "snapshot-request",
                         "requesterId": client_id,
-                        "docId": self.container_id
+                        "docId": self.doc_id
                     },
                     "client_id": client_id
                 })
@@ -1980,24 +2136,9 @@ class LexicalModel:
             # Get current document info
             doc_info = self.get_document_info()
             
-            # MANUAL BROADCAST: Since add_block() now uses event-based propagation 
-            # but doesn't have client_id context, we need to handle broadcasting here
-            # to ensure the UI gets updated properly
-            import base64
-            snapshot_bytes = self.get_snapshot()
-            broadcast_data = {
-                "type": "document-update",
-                "docId": self.container_id,
-                "snapshot": base64.b64encode(snapshot_bytes).decode('utf-8'),
-                "blocks": blocks_after,
-                "text_added": message_text
-            }
-            
-            # Emit proper broadcast event with client_id context
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
-                "broadcast_data": broadcast_data,
-                "client_id": client_id or "append-paragraph"
-            })
+            # COLLABORATIVE FIX: Don't do manual broadcast - add_block() already handles this
+            # The manual broadcast was creating a conflict with the automatic one
+            print("LoroModel: Skipping manual broadcast (add_block already broadcasted)")
             
             return {
                 "success": True,
@@ -2125,7 +2266,7 @@ class LexicalModel:
                     "message_type": "ephemeral-update",
                     "broadcast_data": {
                         "type": "ephemeral-update",
-                        "docId": self.container_id,
+                        "docId": self.doc_id,  # Use document ID for WebSocket protocol
                         "data": ephemeral_data  # Use original hex data for broadcast
                     },
                     "client_id": client_id,
@@ -2153,7 +2294,7 @@ class LexicalModel:
                 "message_type": "ephemeral-update",
                 "broadcast_data": {
                     "type": "ephemeral-update",
-                    "docId": self.container_id,
+                    "docId": self.doc_id,  # Use document ID for WebSocket protocol
                     "data": broadcast_data
                 },
                 "client_id": client_id
@@ -2202,7 +2343,7 @@ class LexicalModel:
                 "message_type": "ephemeral",
                 "broadcast_data": {
                     "type": "ephemeral-update",
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "data": ephemeral_data_for_broadcast.hex()
                 },
                 "client_id": client_id
@@ -2246,7 +2387,7 @@ class LexicalModel:
                 "message_type": "awareness-update",
                 "broadcast_data": {
                     "type": "ephemeral-update",
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "data": ephemeral_data.hex()
                 },
                 "client_id": client_id,
@@ -2299,7 +2440,7 @@ class LexicalModel:
                 "message_type": "cursor-position",
                 "broadcast_data": {
                     "type": "ephemeral-update",
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "data": ephemeral_data.hex()
                 },
                 "client_id": client_id,
@@ -2352,7 +2493,7 @@ class LexicalModel:
                 "message_type": "text-selection",
                 "broadcast_data": {
                     "type": "ephemeral-update",
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "data": ephemeral_data.hex()
                 },
                 "client_id": client_id,
@@ -2441,7 +2582,7 @@ class LexicalModel:
                 "message_type": "client-disconnect",
                 "broadcast_data": {
                     "type": "ephemeral-update",
-                    "docId": self.container_id,
+                    "docId": self.doc_id,
                     "data": ephemeral_data.hex(),
                     "event": {
                         "by": "server-disconnect",

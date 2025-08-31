@@ -1225,8 +1225,8 @@ export function LoroCollaborativePlugin({
   }, [editor, clientId, clientColor, docId]);
 
   useEffect(() => {
-    // Initialize Loro document and text object
-    loroTextRef.current = loroDocRef.current.getText(docId);
+    // Initialize Loro document and text object - always use "content" container
+    loroTextRef.current = loroDocRef.current.getText("content");
     
     // Only initialize awareness if it doesn't exist yet
     if (!awarenessRef.current) {
@@ -2106,18 +2106,9 @@ export function LoroCollaborativePlugin({
               
               // Immediately reflect the current Loro content into the editor after import
               try {
-                // For lexical-shared-doc, we need to get the structured JSON from the content container
-                let currentContent = '';
-                
-                try {
-                  // Try to get from 'content' container first (structured JSON)
-                  currentContent = loroDocRef.current.getText('content').toString();
-                  console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
-                } catch {
-                  // Fallback to docId container if content doesn't exist
-                  currentContent = loroDocRef.current.getText(docId).toString();
-                  console.log('📋 Fallback to docId container:', currentContent.slice(0, 100) + '...');
-                }
+                // Always use 'content' container for structured JSON (single container architecture)
+                const currentContent = loroDocRef.current.getText('content').toString();
+                console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
                 
                 if (currentContent && currentContent.trim().length > 0) {
                   updateLexicalFromLoro(editor, currentContent);
