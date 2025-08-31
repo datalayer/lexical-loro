@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 class LoroWebSocketServer:
     """
-    Step 6: Pure WebSocket Relay Server with Multi-Document Support
+    Pure WebSocket Relay Server with Multi-Document Support
     
     This server is a thin relay that only handles:
     - WebSocket client connections
@@ -64,7 +64,7 @@ class LoroWebSocketServer:
     def get_document(self, doc_id: str) -> LexicalModel:
         """
         Get or create a document through the document manager.
-        Step 6: Delegate to LexicalDocumentManager.
+        Delegate to LexicalDocumentManager.
         """
         # Provide initial content for lexical documents
         initial_content = None
@@ -76,7 +76,7 @@ class LoroWebSocketServer:
     def _on_document_event(self, event_type: str, event_data: dict):
         """
         Handle events from LexicalDocumentManager.
-        Step 6: Server only handles broadcasting, no document logic.
+        Server only handles broadcasting, no document logic.
         """
         try:
             if event_type in ["ephemeral_changed", "broadcast_needed"]:
@@ -185,7 +185,7 @@ class LoroWebSocketServer:
         except Exception as e:
             logger.error(f"❌ Error handling client {client_id}: {e}")
         finally:
-            # Step 6: Delegate client cleanup to DocumentManager
+            # Delegate client cleanup to DocumentManager
             logger.info(f"🧹 Cleaning up client {client_id}")
             
             # Clean up client data in all managed documents
@@ -209,7 +209,7 @@ class LoroWebSocketServer:
     async def send_initial_snapshots(self, websocket: WebSocketServerProtocol, client_id: str):
         """
         Send initial snapshots for known documents.
-        Step 6: Create documents with initial content and send snapshots.
+        Create documents with initial content and send snapshots.
         """
         # For known document types, create documents with initial content and send snapshots
         for doc_id in ['shared-text', 'lexical-shared-doc']:
@@ -238,7 +238,7 @@ class LoroWebSocketServer:
     async def handle_message(self, client_id: str, message: str):
         """
         Handle a message from a client.
-        Step 5: Pure delegation to LexicalModel - server doesn't process messages.
+        Pure delegation to LexicalModel - server doesn't process messages.
         """
         try:
             data = json.loads(message)
@@ -252,7 +252,7 @@ class LoroWebSocketServer:
             if client and "color" not in data:
                 data["color"] = client.color
             
-            # Step 6: Delegate message handling to DocumentManager
+            # Delegate message handling to DocumentManager
             response = self.document_manager.handle_message(doc_id, message_type, data, client_id)
             
             # Log LexicalModel state after ephemeral updates
@@ -274,7 +274,7 @@ class LoroWebSocketServer:
     async def _handle_model_response(self, response: Dict[str, Any], client_id: str, doc_id: str):
         """
         Handle structured response from LexicalModel methods.
-        Step 5: Server only handles success/error and direct responses.
+        Server only handles success/error and direct responses.
         """
         message_type = response.get("message_type", "unknown")
         
@@ -319,7 +319,7 @@ class LoroWebSocketServer:
     async def broadcast_to_other_clients(self, sender_id: str, message: dict):
         """
         Broadcast a message to all clients except the sender.
-        Step 5: Pure broadcasting function - no document logic.
+        Pure broadcasting function - no document logic.
         """
         if len(self.clients) <= 1:
             return
@@ -372,7 +372,7 @@ class LoroWebSocketServer:
                                 pass
                             del self.clients[client_id]
                     
-                    # Log basic stats - Step 6: Use document manager
+                    # Log basic stats - Use document manager
                     doc_count = len(self.document_manager.list_documents())
                     logger.info(f"📊 Relay stats: {len(self.clients)} clients, {doc_count} documents")
                     
@@ -396,7 +396,7 @@ class LoroWebSocketServer:
         
         self.clients.clear()
         
-        # Step 6: Clean up document manager
+        # Clean up document manager
         self.document_manager.cleanup()
         
         logger.info("✅ Relay shutdown complete")

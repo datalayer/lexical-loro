@@ -140,7 +140,7 @@ class MinimalLoroServer:
                 "type": "welcome",
                 "clientId": client_id,
                 "color": self.clients[client_id].color,
-                "message": "Connected to Minimal Loro Server (Step 8)"
+                "message": "Connected to Minimal Loro Server"
             }))
             
             # Send existing document snapshots

@@ -402,24 +402,10 @@ class MCPCollaborativeDocumentManager(LexicalDocumentManager):
         """Override to send updates via WebSocket with extensive logging"""
         logger.info(f"🔍 MCP handle_message START: doc_id={doc_id}, type={message_type}, client_id={client_id}")
         
-        # CRITICAL: For modifying operations, request fresh state from WebSocket server first
-        if message_type in ["append-paragraph", "insert-paragraph"]:
-            logger.info(f"🔄 MCP: Requesting fresh snapshot before {message_type} operation...")
-            try:
-                # Use asyncio to run the async method
-                import asyncio
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If we're already in an async context, create a task
-                    asyncio.create_task(self.request_fresh_snapshot(doc_id))
-                    # Small delay to let the snapshot arrive
-                    import time
-                    time.sleep(0.3)
-                else:
-                    # If not in async context, run it
-                    loop.run_until_complete(self.request_fresh_snapshot(doc_id))
-            except Exception as e:
-                logger.warning(f"⚠️ MCP: Could not request fresh snapshot: {e}")
+        # DISABLE fresh snapshot requests to avoid concurrency issues with Loro CRDT
+        # The request_fresh_snapshot creates race conditions when called synchronously
+        # if message_type in ["append-paragraph", "insert-paragraph"]:
+        #     logger.info(f"🔄 MCP: Requesting fresh snapshot before {message_type} operation...")
         
         # Check if we have a model for this document
         if doc_id in self.models:

@@ -2,7 +2,7 @@
 # Distributed under the terms of the MIT License.
 
 """
-CLI for Step 8: Minimal server demonstrating clean separation
+CLI: Minimal server demonstrating clean separation
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from .server_minimal import MinimalLoroServer
               help="Logging level (default: INFO)")
 def main(port: int, host: str, log_level: str):
     """
-    Start the Step 8 Minimal Loro Server demonstrating clean separation.
+    Start the Minimal Loro Server demonstrating clean separation.
     
     This ~200-line server shows how easy it is to build a collaboration
     server when all document logic is contained in the LexicalModel library.
@@ -36,7 +36,7 @@ def main(port: int, host: str, log_level: str):
     )
     
     logger = logging.getLogger(__name__)
-    logger.info("🎯 Step 8: Minimal Server Demo")
+    logger.info("🎯 Minimal Server Demo")
     logger.info(f"📍 Server: {host}:{port}")
     logger.info("✨ Clean separation: Server=WebSocket, LexicalModel=Documents")
     logger.info("🔄 Easy to swap with FastAPI, Flask, Django, etc.")

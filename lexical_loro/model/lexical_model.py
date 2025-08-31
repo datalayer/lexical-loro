@@ -201,7 +201,7 @@ class LexicalModel:
         # Flag to prevent recursive operations during import/update
         self._import_in_progress = False
         
-        # Step 3: Initialize EphemeralStore for cursor/selection data
+        # Initialize EphemeralStore for cursor/selection data
         self.ephemeral_timeout = ephemeral_timeout
         
         # Validate ephemeral_timeout before creating EphemeralStore
@@ -1867,7 +1867,7 @@ class LexicalModel:
             "version": "0.34.0"
         }
     
-    # Document Management Methods (Step 1)
+    # Document Management Methods
     
     def get_snapshot(self) -> bytes:
         """
@@ -2064,7 +2064,7 @@ class LexicalModel:
             }
     
     # ==========================================
-    # STEP 7: SERIALIZATION METHODS
+    # SERIALIZATION METHODS
     # ==========================================
     
     def to_json(self, include_metadata: bool = True) -> str:
@@ -2210,7 +2210,7 @@ class LexicalModel:
             print(f"❌ Error loading from file {file_path}: {e}")
             return None
     
-    # Message Handling Methods (Step 2)
+    # Message Handling Methods
     
     def handle_message(self, message_type: str, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -2479,7 +2479,7 @@ class LexicalModel:
             }
     
     # ==========================================
-    # STEP 3: EPHEMERAL MESSAGE HANDLING
+    # EPHEMERAL MESSAGE HANDLING
     # ==========================================
     
     def handle_ephemeral_message(self, message_type: str, data: Dict[str, Any], client_id: str) -> Dict[str, Any]:
@@ -2975,7 +2975,7 @@ class LexicalModel:
 
 class LexicalDocumentManager:
     """
-    Step 6: Multi-Document Support
+    Multi-Document Support
     
     Manages multiple LexicalModel instances, providing a single interface
     for the server to interact with multiple documents.
