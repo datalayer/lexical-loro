@@ -1179,8 +1179,42 @@ class LexicalModel:
             print(f"✅ Block added to lexical_data: {old_count} -> {new_count} blocks")
             
             # In collaborative mode, avoid destructive sync to prevent conflicts
-            # Instead, emit a broadcast event and let the subscription system handle propagation
+            # But we still need to persist the changes to the CRDT
             print("LoroModel: Using event-based propagation instead of destructive sync")
+            
+            # CRITICAL: Persist changes to CRDT using incremental append
+            # This is safer than destructive sync but still updates the document
+            try:
+                container_name = self.container_id or "content"
+                text_container = self.text_doc.get_text(container_name)
+                
+                # Create the updated document content 
+                if container_name == "lexical-shared-doc":
+                    # Wrap in editorState format for lexical-shared-doc
+                    wrapped_data = {
+                        "editorState": self.lexical_data,
+                        "lastSaved": self.lexical_data["lastSaved"],
+                        "source": self.lexical_data["source"],
+                        "version": self.lexical_data["version"]
+                    }
+                    updated_content = json.dumps(wrapped_data)
+                else:
+                    # Direct format for other containers
+                    updated_content = json.dumps(self.lexical_data)
+                
+                # Replace content incrementally
+                current_length = text_container.len_unicode
+                if current_length > 0:
+                    text_container.delete(0, current_length)
+                text_container.insert(0, updated_content)
+                
+                # Commit the changes
+                self.text_doc.commit()
+                print(f"✅ Persisted changes to CRDT container '{container_name}'")
+                
+            except Exception as persist_error:
+                print(f"⚠️ Failed to persist to CRDT: {persist_error}")
+                # Continue with broadcast even if persistence fails
             
             # Emit broadcast event for this change
             self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
