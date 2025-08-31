@@ -1421,24 +1421,31 @@ class LexicalModel:
                     
                     # Find differences and apply minimal changes
                     if current_content != new_content:
-                        # For now, use careful replace operation
-                        # TODO: In future, implement true diff-based updates
-                        print(f"🔍 SAFE append_block: Content differs, updating CRDT carefully")
+                        print(f"🔍 SAFE append_block: Content differs, updating CRDT with improved error handling")
                         
-                        # Clear and replace - but with better error handling
-                        text_container.delete(0, current_length)
-                        text_container.insert(0, new_content)
-                        
-                        # Commit the changes
-                        self.text_doc.commit()
-                        print(f"✅ SAFE append_block: Updated CRDT with new content ({len(new_content)} chars)")
+                        try:
+                            # CAREFUL: Use atomic replace operation with better error handling
+                            # This still risks race conditions but is necessary for broadcast propagation
+                            text_container.delete(0, current_length)
+                            text_container.insert(0, new_content)
+                            
+                            # Commit the changes
+                            self.text_doc.commit()
+                            print(f"✅ SAFE append_block: Updated CRDT with new content ({len(new_content)} chars)")
+                            
+                        except Exception as crdt_error:
+                            print(f"⚠️ SAFE append_block: CRDT update failed, but continuing: {crdt_error}")
+                            # Continue with event-based propagation even if CRDT update fails
                     else:
                         print(f"ℹ️ SAFE append_block: Content unchanged, skipping CRDT update")
                 else:
-                    # First time: just insert
-                    text_container.insert(0, new_content)
-                    self.text_doc.commit()
-                    print(f"✅ SAFE append_block: Inserted initial content to CRDT ({len(new_content)} chars)")
+                    # First time: just insert with error handling
+                    try:
+                        text_container.insert(0, new_content)
+                        self.text_doc.commit()
+                        print(f"✅ SAFE append_block: Inserted initial content to CRDT ({len(new_content)} chars)")
+                    except Exception as insert_error:
+                        print(f"⚠️ SAFE append_block: Initial CRDT insert failed: {insert_error}")
                     
             except Exception as persist_error:
                 print(f"⚠️ SAFE append_block: CRDT update failed: {persist_error}")
