@@ -301,7 +301,13 @@ class LexicalModel:
         """
         import base64
         
+        # DEBUG: Check current state before creating snapshot
+        current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
+        print(f"🔄 _create_broadcast_data: Creating snapshot with {current_blocks} blocks", flush=True)
+        
         snapshot_bytes = self.get_snapshot()
+        print(f"🔄 _create_broadcast_data: Snapshot size: {len(snapshot_bytes)} bytes", flush=True)
+        
         broadcast_data = {
             "type": event_type,
             "docId": self.doc_id,
@@ -505,31 +511,26 @@ class LexicalModel:
             
             # Subscribe to document changes - try different subscription patterns
             try:
-                # Try the most common pattern first
-                self._text_doc_subscription = self.text_doc.subscribe(
+                # Try text container subscription first (most reliable)
+                text_container = self.text_doc.get_text(active_container)
+                self._text_doc_subscription = text_container.subscribe(
                     self._handle_text_doc_change
                 )
-                print(f"✅ Set up document subscription (monitoring '{active_container}' container)")
+                print(f"✅ Set up text container subscription for '{active_container}'")
                 print(f"✅ Subscription object: {type(self._text_doc_subscription)}")
-            except TypeError as e1:
-                print(f"❌ Document subscription failed: {e1}")
-                # Try with additional parameters that might be required
+            except Exception as e1:
+                print(f"❌ Text container subscription failed: {e1}")
                 try:
+                    # Try document-level subscription with callback
                     self._text_doc_subscription = self.text_doc.subscribe(
-                        active_container, self._handle_text_doc_change
-                    )
-                    print(f"✅ Set up container subscription for '{active_container}'")
-                    print(f"✅ Subscription object: {type(self._text_doc_subscription)}")
-                except TypeError as e2:
-                    print(f"❌ Container subscription failed: {e2}")
-                    # Try the observer pattern with container-specific subscription
-                    text_container = self.text_doc.get_text(active_container)
-                    self._text_doc_subscription = text_container.subscribe(
                         self._handle_text_doc_change
                     )
-                    print(f"✅ Set up text container subscription for '{active_container}'")
+                    print(f"✅ Set up document subscription")
                     print(f"✅ Subscription object: {type(self._text_doc_subscription)}")
-                    
+                except Exception as e2:
+                    print(f"❌ Document subscription failed: {e2}")
+                    print(f"⚠️ Operating without real-time subscriptions - using polling mode")
+                    self._text_doc_subscription = None
             # Test the subscription by making a small change to verify it works
             print(f"🧪 Testing subscription by making a test change...")
             try:
@@ -1228,52 +1229,20 @@ class LexicalModel:
             # But we still need to persist the changes to the CRDT
             print("LoroModel: Using event-based propagation instead of destructive sync")
             
-            # CRITICAL: Persist changes to CRDT using incremental append
-            # This is safer than destructive sync but still updates the document
-            try:
-                container_name = "content"
-                text_container = self.text_doc.get_text(container_name)
-                
-                # Create full Lexical format with metadata (not just root content)
-                full_lexical_document = {
-                    "root": self.lexical_data["root"],
-                    "lastSaved": self.lexical_data.get("lastSaved", int(time.time() * 1000)),
-                    "source": self.lexical_data.get("source", "Lexical Loro"),
-                    "version": self.lexical_data.get("version", "0.34.0")
-                }
-                updated_content = json.dumps(full_lexical_document)
-                
-                # Replace content incrementally with extensive logging
-                print(f"🔍 CRDT Operation START: container={container_name}, doc_id={getattr(self, 'doc_id', 'unknown')}")
-                print(f"🔍 CRDT text_doc instance: {id(self.text_doc)}")
-                
-                current_length = text_container.len_unicode
-                print(f"🔍 CRDT current_length: {current_length}")
-                
-                if current_length > 0:
-                    print(f"🔍 CRDT About to call delete(0, {current_length})")
-                    try:
-                        text_container.delete(0, current_length)
-                        print(f"✅ CRDT delete operation successful")
-                    except Exception as delete_error:
-                        print(f"❌ CRDT delete operation failed: {delete_error}")
-                        raise delete_error
-                
-                print(f"🔍 CRDT About to call insert(0, content_length={len(updated_content)})")
-                try:
-                    text_container.insert(0, updated_content)
-                    print(f"✅ CRDT insert operation successful")
-                except Exception as insert_error:
-                    print(f"❌ CRDT insert operation failed: {insert_error}")
-                    raise insert_error
-                
-                # Commit the changes
-                self.text_doc.commit()
-                print(f"✅ Persisted changes to CRDT container '{container_name}'")
-                
-            except Exception as persist_error:
-                print(f"⚠️ Failed to persist to CRDT: {persist_error}")
-                # Continue with broadcast even if persistence fails
+            # TRUE INCREMENTAL: Use only event-based propagation, no CRDT manipulation
+            # NEVER use destructive delete+insert operations that cause PoisonError
+            print("LoroModel: Using TRUE incremental approach - event-based propagation only")
+            print("LoroModel: Skipping destructive CRDT operations to prevent PoisonError")
+            
+            # NO CRDT MANIPULATION HERE - this is what causes the race condition!
+            # The typing operations and MCP operations conflict when both try to modify CRDT
+            # 
+            # Instead, we rely on:
+            # 1. Local lexical_data modification (already done above)
+            # 2. Event-based propagation (done below)
+            # 3. CRDT subscriptions handle the actual synchronization
+            
+            print(f"✅ TRUE INCREMENTAL: Local lexical_data updated, relying on events for sync")
             
             # Emit broadcast event for this change
             self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
@@ -1400,63 +1369,30 @@ class LexicalModel:
             new_count = len(self.lexical_data["root"]["children"])
             print(f"✅ SAFE append_block: Added block to lexical_data: {old_count} -> {new_count} blocks")
             
-            # INCREMENTAL CRDT UPDATE: Update CRDT with complete structure but incrementally
-            # This is safer than deleting+replacing the entire document
+            # SAFE CRDT WRITE: Write the updated lexical_data to CRDT for collaborative sync
+            # This is the key missing piece - we need to update the CRDT so other clients can see the change
+            print(f"🔄 SAFE append_block: Writing updated lexical_data to CRDT for collaboration")
+            
             try:
-                container_name = "content"
-                text_container = self.text_doc.get_text(container_name)
+                # Convert lexical_data to JSON and write it to the CRDT safely
+                lexical_json = json.dumps(self.lexical_data)
+                text_container = self.text_doc.get_text(self.container_id or "content")
                 
-                # Create complete lexical document with the new block
-                complete_document = {
-                    "root": self.lexical_data["root"],
-                    "lastSaved": self.lexical_data.get("lastSaved", int(time.time() * 1000)),
-                    "source": self.lexical_data.get("source", "Lexical Loro"),
-                    "version": self.lexical_data.get("version", "0.34.0")
-                }
-                new_content = json.dumps(complete_document)
-                
-                # Get current content length
+                # Clear and replace the container content safely
                 current_length = text_container.len_unicode
-                print(f"🔍 SAFE append_block: Current CRDT length: {current_length}, new content length: {len(new_content)}")
-                
                 if current_length > 0:
-                    # INCREMENTAL APPROACH: Replace content using smaller chunks
-                    # Instead of delete(0, all) + insert(0, all), we do targeted replacements
-                    
-                    # Get current content to compare
-                    current_content = text_container.to_string()
-                    
-                    # Find differences and apply minimal changes
-                    if current_content != new_content:
-                        print(f"🔍 SAFE append_block: Content differs, updating CRDT with improved error handling")
-                        
-                        try:
-                            # CAREFUL: Use atomic replace operation with better error handling
-                            # This still risks race conditions but is necessary for broadcast propagation
-                            text_container.delete(0, current_length)
-                            text_container.insert(0, new_content)
-                            
-                            # Commit the changes
-                            self.text_doc.commit()
-                            print(f"✅ SAFE append_block: Updated CRDT with new content ({len(new_content)} chars)")
-                            
-                        except Exception as crdt_error:
-                            print(f"⚠️ SAFE append_block: CRDT update failed, but continuing: {crdt_error}")
-                            # Continue with event-based propagation even if CRDT update fails
-                    else:
-                        print(f"ℹ️ SAFE append_block: Content unchanged, skipping CRDT update")
-                else:
-                    # First time: just insert with error handling
-                    try:
-                        text_container.insert(0, new_content)
-                        self.text_doc.commit()
-                        print(f"✅ SAFE append_block: Inserted initial content to CRDT ({len(new_content)} chars)")
-                    except Exception as insert_error:
-                        print(f"⚠️ SAFE append_block: Initial CRDT insert failed: {insert_error}")
-                    
-            except Exception as persist_error:
-                print(f"⚠️ SAFE append_block: CRDT update failed: {persist_error}")
-                # Continue with event-based propagation even if CRDT update fails
+                    text_container.delete(0, current_length)
+                text_container.insert(0, lexical_json)
+                
+                # Commit the changes to make them visible to subscriptions
+                self.text_doc.commit()
+                print(f"✅ SAFE append_block: Successfully updated CRDT with {new_count} blocks")
+                
+            except Exception as crdt_error:
+                print(f"⚠️ SAFE append_block: CRDT write failed, using event-only mode: {crdt_error}")
+                # Fall back to event-only approach if CRDT write fails
+                
+            print(f"✅ SAFE append_block: Local and CRDT updated, other clients will receive via subscription")
             
             # COLLABORATIVE-SAFE: Use event-based propagation as backup
             # This allows the CRDT system to handle synchronization properly without conflicts
@@ -1482,30 +1418,43 @@ class LexicalModel:
     
     def get_blocks(self) -> List[Dict[str, Any]]:
         """Get all blocks from the lexical model (always current via subscriptions)"""
-        # CRITICAL: Sync from Loro to ensure we have the latest state
-        self._sync_from_loro()
+        # COLLABORATIVE FIX: Don't auto-sync when using event-based propagation
+        # The subscription system keeps lexical_data current, and syncing can overwrite
+        # local changes before events have propagated through the CRDT system
+        if self._text_doc_subscription is not None:
+            print(f"✅ get_blocks: Using current data (subscription mode - no sync needed)")
+        else:
+            print(f"🔄 get_blocks: No subscription - syncing from CRDT")
+            # Only sync when there's no subscription (standalone mode)
+            self._sync_from_loro()
+        
         return self.lexical_data["root"]["children"]
     
     def get_lexical_data(self) -> Dict[str, Any]:
         """Get the complete lexical data structure (always current via subscriptions)"""
-        print(f"📋 get_lexical_data: CALLED - before sync")
+        print(f"📋 get_lexical_data: CALLED")
         
-        # Log current state before sync
-        blocks_before_sync = len(self.lexical_data.get("root", {}).get("children", []))
-        print(f"📊 get_lexical_data: BEFORE sync - lexical_data has {blocks_before_sync} blocks")
+        # Log current state
+        current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
+        print(f"📊 get_lexical_data: Current lexical_data has {current_blocks} blocks")
         
-        # CRITICAL: Sync from Loro to ensure we have the latest state
-        # This prevents MCP operations from working with stale data
-        self._sync_from_loro()
-        
-        # Log state after sync
-        blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
-        print(f"📊 get_lexical_data: AFTER sync - lexical_data has {blocks_after_sync} blocks")
-        
-        if blocks_after_sync != blocks_before_sync:
-            print(f"🔄 get_lexical_data: SYNC UPDATED! Blocks changed: {blocks_before_sync} -> {blocks_after_sync}")
+        # COLLABORATIVE FIX: Don't auto-sync when using event-based propagation
+        # The subscription system keeps lexical_data current, and syncing can overwrite
+        # local changes before events have propagated through the CRDT system
+        if self._text_doc_subscription is not None:
+            print(f"✅ get_lexical_data: Using current data (subscription mode - no sync needed)")
+            print(f"✅ get_lexical_data: Subscription keeps data current, avoiding sync to prevent overwrites")
         else:
-            print(f"⚠️ get_lexical_data: NO SYNC CHANGE - same blocks ({blocks_after_sync})")
+            print(f"🔄 get_lexical_data: No subscription - syncing from CRDT")
+            # Only sync when there's no subscription (standalone mode)
+            blocks_before_sync = current_blocks
+            self._sync_from_loro()
+            blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
+            
+            if blocks_after_sync != blocks_before_sync:
+                print(f"🔄 get_lexical_data: SYNC UPDATED! Blocks changed: {blocks_before_sync} -> {blocks_after_sync}")
+            else:
+                print(f"⚠️ get_lexical_data: NO SYNC CHANGE - same blocks ({blocks_after_sync})")
         
         return self.lexical_data
     
@@ -1660,7 +1609,13 @@ class LexicalModel:
         Returns:
             Dict containing the complete lexical data structure including root, metadata, etc.
         """
-        self._sync_from_loro()
+        # COLLABORATIVE FIX: Don't auto-sync when using event-based propagation
+        if self._text_doc_subscription is not None:
+            print(f"✅ get_complete_model: Using current data (subscription mode)")
+        else:
+            print(f"🔄 get_complete_model: No subscription - syncing from CRDT")
+            self._sync_from_loro()
+        
         return {
             "lexical_data": self.lexical_data.copy(),
             "metadata": {
@@ -1682,7 +1637,13 @@ class LexicalModel:
         Returns:
             Dict containing the block data, or None if index is out of range
         """
-        self._sync_from_loro()
+        # COLLABORATIVE FIX: Don't auto-sync when using event-based propagation
+        if self._text_doc_subscription is not None:
+            print(f"✅ get_block_at_index: Using current data (subscription mode)")
+        else:
+            print(f"🔄 get_block_at_index: No subscription - syncing from CRDT")
+            self._sync_from_loro()
+        
         children = self.lexical_data["root"]["children"]
         
         if 0 <= index < len(children):
@@ -1700,7 +1661,13 @@ class LexicalModel:
     
     def export_as_json(self) -> str:
         """Export the current lexical data as JSON string"""
-        self._sync_from_loro()
+        # COLLABORATIVE FIX: Don't auto-sync when using event-based propagation
+        if self._text_doc_subscription is not None:
+            print(f"✅ export_as_json: Using current data (subscription mode)")
+        else:
+            print(f"🔄 export_as_json: No subscription - syncing from CRDT")
+            self._sync_from_loro()
+        
         return json.dumps(self.lexical_data, indent=2)
     
     def import_from_json(self, json_data: str):
@@ -2025,8 +1992,12 @@ class LexicalModel:
             Dict with document information including content length, container info, etc.
         """
         try:
-            # CRITICAL: Sync from Loro to ensure we have the latest state
-            self._sync_from_loro()
+            # COLLABORATIVE FIX: Don't auto-sync when using event-based propagation
+            if self._text_doc_subscription is not None:
+                print(f"✅ get_document_info: Using current data (subscription mode)")
+            else:
+                print(f"🔄 get_document_info: No subscription - syncing from CRDT")
+                self._sync_from_loro()
             
             # Get current content
             container_name = self.container_id or "content"
@@ -2224,7 +2195,8 @@ class LexicalModel:
         Returns:
             Dict with response information including any broadcast data needed
         """
-        print(f"📨 handle_message: RECEIVED {message_type} from client {client_id or 'unknown'}")
+        print(f"📨 LexicalModel.handle_message: RECEIVED {message_type} from client {client_id or 'unknown'}")
+        print(f"📨 LexicalModel.handle_message: data keys: {list(data.keys()) if data else 'None'}")
         
         try:
             if message_type == "loro-update":
@@ -2409,29 +2381,80 @@ class LexicalModel:
     
     def _handle_append_paragraph(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
         """Handle append-paragraph message type"""
+        # IMMEDIATE DEBUG: Force flush to see if method is called
+        import sys
+        print(f"🚨 _handle_append_paragraph: METHOD CALLED!", flush=True)
+        sys.stdout.flush()
+        
+        # DEBUG: Check data parameter
+        print(f"🔍 _handle_append_paragraph: data type = {type(data)}", flush=True)
+        print(f"🔍 _handle_append_paragraph: data = {data}", flush=True)
+        sys.stdout.flush()
+        
         try:
+            print(f"🔍 _handle_append_paragraph: About to call data.get('message', 'Hello')", flush=True)
+            sys.stdout.flush()
             message_text = data.get("message", "Hello")
+            print(f"🔍 _handle_append_paragraph: message_text = '{message_text}'", flush=True)
+            sys.stdout.flush()
             
             print(f"➕ _handle_append_paragraph: STARTING - message='{message_text}', client={client_id or 'unknown'}")
             
-            # Log current state before sync
-            blocks_before_sync = len(self.lexical_data.get("root", {}).get("children", []))
-            print(f"📊 _handle_append_paragraph: BEFORE sync - lexical_data has {blocks_before_sync} blocks")
+            # Log current state - DEBUG LEXICAL_DATA ACCESS
+            print(f"🔍 _handle_append_paragraph: About to access self.lexical_data", flush=True)
+            sys.stdout.flush()
             
-            # CRITICAL: Sync from Loro to ensure we have the latest state including any typed changes
-            # This prevents appending to stale state when user has typed since last sync
-            print(f"🔄 _handle_append_paragraph: Syncing from Loro to get latest state...")
-            self._sync_from_loro()
+            try:
+                print(f"🔍 _handle_append_paragraph: self.lexical_data type = {type(self.lexical_data)}", flush=True)
+                sys.stdout.flush()
+                
+                root_data = self.lexical_data.get("root", {})
+                print(f"🔍 _handle_append_paragraph: root_data type = {type(root_data)}", flush=True)
+                sys.stdout.flush()
+                
+                children_data = root_data.get("children", [])
+                print(f"🔍 _handle_append_paragraph: children_data type = {type(children_data)}", flush=True)
+                sys.stdout.flush()
+                
+                print(f"🔍 _handle_append_paragraph: About to call len(children_data)", flush=True)
+                sys.stdout.flush()
+                blocks_current = len(children_data)
+                print(f"� _handle_append_paragraph: len() returned {blocks_current}", flush=True)
+                sys.stdout.flush()
+                
+                print(f"�📊 _handle_append_paragraph: Current lexical_data has {blocks_current} blocks")
+            except Exception as data_error:
+                print(f"❌ _handle_append_paragraph: Error accessing lexical_data: {data_error}", flush=True)
+                print(f"❌ _handle_append_paragraph: lexical_data = {self.lexical_data}", flush=True)
+                sys.stdout.flush()
+                raise data_error
             
-            # Log state after sync
-            blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
-            print(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks")
+            print(f"🔍 _handle_append_paragraph: Successfully accessed data, continuing...", flush=True)
+            sys.stdout.flush()
             
-            if blocks_after_sync != blocks_before_sync:
-                print(f"🔄 _handle_append_paragraph: SYNC UPDATED STATE! Blocks changed: {blocks_before_sync} -> {blocks_after_sync}")
+            # COLLABORATIVE FIX: Don't sync manually when subscriptions are active
+            # The subscription system keeps lexical_data current automatically
+            print(f"🔍 _handle_append_paragraph: About to check subscription status", flush=True)
+            sys.stdout.flush()
+            
+            print(f"🔍 _handle_append_paragraph: self._text_doc_subscription = {self._text_doc_subscription}", flush=True)
+            sys.stdout.flush()
+            
+            if self._text_doc_subscription is not None:
+                print(f"✅ _handle_append_paragraph: Using current data (subscription mode - no sync needed)", flush=True)
+                print(f"✅ _handle_append_paragraph: Subscription keeps data current, avoiding sync to prevent race conditions", flush=True)
+                sys.stdout.flush()
             else:
-                print(f"⚠️ _handle_append_paragraph: SYNC NO CHANGE - same number of blocks ({blocks_after_sync})")
-                print(f"⚠️ _handle_append_paragraph: This indicates MCP process isolation - working with stale state")
+                print(f"🔄 _handle_append_paragraph: No subscription - syncing from CRDT", flush=True)
+                sys.stdout.flush()
+                # Only sync when there's no subscription (standalone mode)
+                self._sync_from_loro()
+                blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
+                print(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks", flush=True)
+                sys.stdout.flush()
+            
+            print(f"🔍 _handle_append_paragraph: Subscription check completed", flush=True)
+            sys.stdout.flush()
             
             # Create the paragraph structure
             new_paragraph = {
@@ -2440,13 +2463,24 @@ class LexicalModel:
             
             # Get blocks before adding (now from updated state)
             blocks_before = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"➕ _handle_append_paragraph: About to call append_block() with {blocks_before} blocks")
             
             # SAFE OPERATION: Use append_block instead of destructive add_block
             # This prevents JSON corruption and Rust panics from wholesale CRDT operations
-            result = self.append_block(new_paragraph, "paragraph")
+            try:
+                print(f"➕ _handle_append_paragraph: Calling append_block(text='{message_text}', type='paragraph')")
+                result = self.append_block(new_paragraph, "paragraph")
+                print(f"➕ _handle_append_paragraph: append_block() returned: {result}")
+            except Exception as append_error:
+                print(f"❌ _handle_append_paragraph: append_block() FAILED: {append_error}")
+                print(f"❌ _handle_append_paragraph: Exception type: {type(append_error)}")
+                import traceback
+                traceback.print_exc()
+                raise append_error
             
             # Get blocks after adding
             blocks_after = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"➕ _handle_append_paragraph: Blocks after append_block(): {blocks_after}")
             
             print(f"✅ SAFE append: Added paragraph to document: '{message_text}' (blocks: {blocks_before} -> {blocks_after})")
             
@@ -2456,6 +2490,10 @@ class LexicalModel:
             # COLLABORATIVE-SAFE: The append_block method already handles broadcasting properly
             # But we ensure one more broadcast for MCP clients to receive the updated content
             print("LoroModel: Ensuring additional broadcast for MCP append-paragraph")
+            
+            # Check what we're broadcasting
+            blocks_final = len(self.lexical_data.get("root", {}).get("children", []))
+            print(f"🔄 _handle_append_paragraph: About to broadcast with {blocks_final} blocks")
             
             # Emit broadcast event to notify WebSocket clients
             self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
@@ -3059,6 +3097,9 @@ class LexicalDocumentManager:
         Returns:
             Response from the document's message handler
         """
+        print(f"🔍 DocumentManager.handle_message: CALLED with message_type='{message_type}', doc_id='{doc_id}', client_id='{client_id}'")
+        print(f"🔍 DocumentManager.handle_message: data keys: {list(data.keys()) if data else 'None'}")
+        
         model = self.get_or_create_document(doc_id)
         
         # Route to appropriate handler based on message type
@@ -3066,6 +3107,7 @@ class LexicalDocumentManager:
         ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
         
         if message_type in document_message_types:
+            print(f"🔄 DocumentManager: Routing '{message_type}' to model.handle_message()")
             return model.handle_message(message_type, data, client_id)
         elif message_type in ephemeral_message_types:
             if client_id is None:
