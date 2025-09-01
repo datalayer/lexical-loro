@@ -189,8 +189,8 @@ class LexicalModel:
         self.text_doc = text_doc if text_doc is not None else loro.LoroDoc()
         
         # Store both document ID (for WebSocket protocol) and container ID (for CRDT operations)
-        self.doc_id = doc_id or container_id or "content"  # WebSocket document identifier
-        self.container_id = container_id or "content"      # CRDT container identifier
+        self.doc_id = doc_id or "demo-document"  # WebSocket document identifier
+        self.container_id = container_id or "content"      # Loro CRDT container identifier
         self.structured_doc = structured_doc if structured_doc is not None else loro.LoroDoc()
         
         # Store event callback for structured communication with server
