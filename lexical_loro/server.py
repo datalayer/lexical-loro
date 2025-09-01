@@ -327,18 +327,28 @@ class LoroWebSocketServer:
         message_str = json.dumps(message)
         failed_clients = []
         
-        for client_id, client in self.clients.items():
+        # Create a copy of clients to avoid "dictionary changed size during iteration" error
+        clients_copy = dict(self.clients)
+        
+        for client_id, client in clients_copy.items():
             if client_id != sender_id:
                 try:
-                    await client.websocket.send(message_str)
+                    # Check if websocket is still valid before sending
+                    # For websockets.ServerConnection, check if it's closed instead of open
+                    if hasattr(client.websocket, 'closed') and client.websocket.closed:
+                        logger.warning(f"⚠️ Skipping send to closed websocket for client {client_id}")
+                        failed_clients.append(client_id)
+                    else:
+                        await client.websocket.send(message_str)
                 except (websockets.exceptions.ConnectionClosed, Exception) as e:
-                    logger.error(f"❌ Error sending message to client {client_id}: {e}")
+                    logger.warning(f"⚠️ Client {client_id} disconnected during broadcast: {e}")
                     failed_clients.append(client_id)
         
-        # Remove failed clients
+        # Remove failed clients safely
         for client_id in failed_clients:
             if client_id in self.clients:
                 del self.clients[client_id]
+                logger.info(f"🧹 Removed disconnected client {client_id} from broadcast list")
     
     def generate_client_id(self) -> str:
         """Generate a unique client ID"""

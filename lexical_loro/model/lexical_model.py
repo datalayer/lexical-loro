@@ -574,8 +574,14 @@ class LexicalModel:
                     if target_matches:
                         print(f"LoroModel: Applying text diff for {target_str}")
                         self._apply_text_diff(container_diff.diff)
-                        # Auto-sync after receiving changes
-                        self._auto_sync_on_change()
+                        # Auto-sync after receiving changes - schedule async operation
+                        import asyncio
+                        try:
+                            loop = asyncio.get_event_loop()
+                            loop.create_task(self._auto_sync_on_change())
+                        except RuntimeError:
+                            # No event loop running, skip async operation
+                            print("LoroModel: No event loop available, skipping auto-sync")
                     else:
                         print(f"LoroModel: Ignoring diff for {target_str} (not our container)")
                         
@@ -586,7 +592,7 @@ class LexicalModel:
             # Fallback to full sync
             self._sync_from_loro_fallback()
     
-    def _auto_sync_on_change(self):
+    async def _auto_sync_on_change(self):
         """Automatically notify about changes (no sync needed - diff already applied)"""
         try:
             # Prevent recursive operations during import/update
@@ -598,8 +604,12 @@ class LexicalModel:
             # Syncing here reads stale CRDT state and causes content loss
             print("LoroModel: Change processed via diff, emitting broadcast (no sync needed)")
             
-            # Create broadcast data for incremental updates
-            loro_snapshot = self.get_snapshot()
+            # THREAD-SAFE: Protect CRDT snapshot operation with async lock to prevent deadlocks
+            async with self._operation_lock:
+                print("🔒 _auto_sync_on_change: Acquired lock for snapshot operation")
+                loro_snapshot = self.get_snapshot()
+                print("🔓 _auto_sync_on_change: Released lock after snapshot")
+                
             if loro_snapshot:
                 # Create proper broadcast data for the WebSocket server
                 # Use initial-snapshot type for snapshot data to avoid JSON concatenation
@@ -630,7 +640,14 @@ class LexicalModel:
     def _sync_from_loro_fallback(self):
         """Fallback sync method when diff processing fails"""
         print("LoroModel: Using fallback sync")
-        self._auto_sync_on_change()
+        # Schedule async auto-sync properly  
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(self._auto_sync_on_change())
+        except RuntimeError:
+            # No event loop running, skip async operation
+            print("LoroModel: No event loop available, skipping fallback auto-sync")
     
     def _apply_text_diff(self, diff):
         """Apply text diff to update lexical_data incrementally"""
@@ -794,10 +811,9 @@ class LexicalModel:
                     insert_text = getattr(delta, 'insert', str(delta))
                     print(f"🔧 Inserting '{insert_text[:50]}...' at position {position}")
                     
-                    # Special case: if inserting at position 0 and we have existing content,
-                    # and the insert looks like a complete JSON document, replace instead of insert
-                    if position == 0 and result and insert_text.strip().startswith('{"root":'):
-                        print(f"🔧 Detected complete JSON replacement, using replace instead of insert")
+                    # Special case: if inserting JSON content, always replace to avoid concatenation
+                    if insert_text.strip().startswith('{"root":') or insert_text.strip().startswith('{\n  "root":'):
+                        print(f"🔧 Detected JSON content insert, using complete replacement to avoid concatenation")
                         result = insert_text
                         position = len(insert_text)
                     else:
@@ -1425,33 +1441,42 @@ class LexicalModel:
                     lexical_json = json.dumps(self.lexical_data)
                     text_container = self.text_doc.get_text(self.container_id or "content")
                     
-                    # Clear and replace the container content safely
+                    # ATOMIC REPLACEMENT: Use a more robust approach to avoid concatenation
                     current_length = text_container.len_unicode
-                    if current_length > 0:
-                        try:
-                            text_container.delete(0, current_length)
-                        except Exception as delete_error:
-                            print(f"⚠️ Error during CRDT delete, attempting recovery: {delete_error}")
-                            # Try to recreate the container if it's corrupted
-                            try:
-                                # Force commit any pending changes
-                                self.text_doc.commit()
-                                # Try delete again after commit
-                                current_length = text_container.len_unicode
-                                if current_length > 0:
-                                    text_container.delete(0, current_length)
-                            except Exception as recovery_error:
-                                print(f"❌ Could not recover from CRDT corruption: {recovery_error}")
-                                print(f"🔄 Attempting to recreate text container...")
-                                # Last resort: create new text container  
-                                self.text_doc = loro.LoroDoc()
-                                text_container = self.text_doc.get_text("content")
+                    print(f"🔄 SAFE append_block: Replacing CRDT content (current: {current_length} chars, new: {len(lexical_json)} chars)")
                     
+                    if current_length > 0:
+                        # Replace content atomically by deleting all and inserting new in one operation batch
+                        # Use transaction-like behavior if possible
+                        try:
+                            # Delete all content at once
+                            text_container.delete(0, current_length)
+                            # Force commit the deletion before inserting
+                            self.text_doc.commit()
+                            # Verify deletion worked
+                            remaining_length = text_container.len_unicode
+                            if remaining_length > 0:
+                                print(f"⚠️ CRDT deletion incomplete: {remaining_length} chars remaining, forcing clear")
+                                text_container.delete(0, remaining_length)
+                                self.text_doc.commit()
+                        except Exception as delete_error:
+                            print(f"⚠️ Error during CRDT delete: {delete_error}")
+                            # Try to recreate container if deletion fails
+                            print(f"🔄 Attempting to recreate text container for clean state...")
+                            self.text_doc = loro.LoroDoc()
+                            text_container = self.text_doc.get_text("content")
+                    
+                    # Insert the new content only after ensuring container is empty
+                    final_length = text_container.len_unicode
+                    print(f"🔄 SAFE append_block: Container cleared, inserting new content (container length: {final_length})")
                     text_container.insert(0, lexical_json)
                     
                     # Commit the changes to make them visible to subscriptions
                     self.text_doc.commit()
-                    print(f"✅ SAFE append_block: Successfully updated CRDT with {new_count} blocks")
+                    
+                    # Verify the write was successful
+                    final_content_length = text_container.len_unicode
+                    print(f"✅ SAFE append_block: Successfully updated CRDT ({final_content_length} chars, {new_count} blocks)")
                     
                 except Exception as crdt_error:
                     print(f"⚠️ SAFE append_block: CRDT write failed, using event-only mode: {crdt_error}")

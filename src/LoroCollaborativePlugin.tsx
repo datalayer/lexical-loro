@@ -2299,6 +2299,18 @@ export function LoroCollaborativePlugin({
                 console.error('🚨 CRDT content appears truncated after import - does not end with }');
                 console.error('🚨 Last 200 characters:', contentAfter.slice(-200));
               }
+              
+              // Sync imported changes to Lexical editor
+              if (contentAfter && contentAfter.trim().length > 0 && contentBefore !== contentAfter) {
+                try {
+                  updateLexicalFromLoro(editor, contentAfter);
+                  console.log('✅ Successfully updated Lexical editor from loro-update');
+                } catch (e) {
+                  console.warn('⚠️ Could not update Lexical editor from loro-update:', e);
+                }
+              } else {
+                console.log('📝 No content change detected, skipping Lexical update');
+              }
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
               // Apply initial snapshot from server and immediately sync to Lexical
               const snapshot = new Uint8Array(data.snapshot!);
