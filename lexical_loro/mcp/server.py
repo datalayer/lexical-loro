@@ -18,6 +18,14 @@ from ..model.lexical_model import LexicalDocumentManager
 ###############################################################################
 
 
+DOC_ID = "lexical-shared-doc-2"
+
+WEBSOCKET_URL = f"ws://localhost:8081/{DOC_ID}"
+
+
+###############################################################################
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,7 +99,7 @@ async def initialize_mcp_collaboration():
         event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,  # Enable WebSocket client mode for collaboration
-        websocket_url="ws://localhost:8081"  # Connect to collaborative server
+        websocket_url=WEBSOCKET_URL  # Connect to collaborative server
     )
     
     # Start the client connection immediately when in async context
@@ -125,7 +133,7 @@ def sync_initialize_mcp_collaboration():
         event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,
-        websocket_url="ws://localhost:8081"
+        websocket_url=WEBSOCKET_URL
     )
     
     logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")

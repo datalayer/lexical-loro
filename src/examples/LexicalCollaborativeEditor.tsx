@@ -23,7 +23,7 @@ import { lexicalTheme } from './theme';
 import "./LexicalCollaborativeEditor.css";
 
 // Constants
-const DEFAULT_DOC_ID = 'lexical-shared-doc';
+const DOC_ID = 'lexical-shared-doc-2';
 
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
@@ -184,22 +184,22 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     {
       name: 'set_current_document',
       label: '📝 Set Current Document',
-      params: { doc_id: DEFAULT_DOC_ID }
+      params: { doc_id: DOC_ID }
     },
     {
       name: 'append_paragraph',
       label: '➕ Append Paragraph (MCP)',
-      params: { doc_id: DEFAULT_DOC_ID, text: 'Hello from MCP!' }
+      params: { doc_id: DOC_ID, text: 'Hello from MCP!' }
     },
     {
       name: 'insert_paragraph',
       label: '📝 Insert Paragraph at Index 2',
-      params: { doc_id: DEFAULT_DOC_ID, index: 2, text: 'Inserted at index 2 via MCP!' }
+      params: { doc_id: DOC_ID, index: 2, text: 'Inserted at index 2 via MCP!' }
     },
     {
       name: 'get_document_data',
       label: '📄 Get Document Data',
-      params: { doc_id: DEFAULT_DOC_ID }
+      params: { doc_id: DOC_ID }
     },
     {
       name: 'list_documents',
@@ -209,7 +209,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     {
       name: 'export_document',
       label: '💾 Export Document',
-      params: { doc_id: DEFAULT_DOC_ID }
+      params: { doc_id: DOC_ID }
     }
   ];
 
@@ -286,7 +286,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                     if (sendMessageRef.current) {
                       const command = {
                         type: "append-paragraph",
-                        docId: DEFAULT_DOC_ID,
+                        docId: DOC_ID,
                         message: "Hello"
                       };
                       sendMessageRef.current(command);
@@ -398,9 +398,9 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
           <HistoryPlugin />
           <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin
-            websocketUrl={websocketUrl}
-//            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/lexical-shared-doc"
-            docId={DEFAULT_DOC_ID}
+            websocketUrl={`${websocketUrl}/${DOC_ID}`}
+//            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/${DOC_ID}"
+            docId={DOC_ID}
             onConnectionChange={handleConnectionChange}
             onPeerIdChange={handlePeerIdChange}
             onAwarenessChange={handleAwarenessChange}
@@ -416,7 +416,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       </LexicalComposer>
       
       <div className="lexical-editor-footer">
-        <p>Document ID: {DEFAULT_DOC_ID}</p>
+        <p>Document ID: {DOC_ID}</p>
         <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
       </div>
     </div>

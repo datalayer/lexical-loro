@@ -102,9 +102,6 @@ except ImportError:
 if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
 
-# Constants
-DEFAULT_LEXICAL_DOC_ID = 'lexical-shared-doc'
-
 
 class LexicalEventType(Enum):
     """Event types for LexicalModel communication with server"""
@@ -3525,9 +3522,17 @@ class LexicalDocumentManager:
             self.connected = False
     
     async def _register_for_default_document(self):
-        """Register for the default document that the UI uses"""
-        try:            
-            default_doc_id = DEFAULT_LEXICAL_DOC_ID  # This is what the UI uses
+        """Register for the first available document"""
+        try:
+            # Get the first available document or use a standard name
+            if self.models:
+                default_doc_id = list(self.models.keys())[0]
+                print(f"👁️ DocumentManager using first available document: {default_doc_id}")
+            else:
+                # If no documents exist yet, we can't register for anything
+                print(f"👁️ DocumentManager: No documents available to register for")
+                return
+            
             print(f"👁️ DocumentManager registering for document: {default_doc_id}")
             
             # Request snapshot to get latest state

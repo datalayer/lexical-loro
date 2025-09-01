@@ -32,9 +32,6 @@ INITIAL_LEXICAL_JSON = """
 {"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Lexical with Loro","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something...","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"paragraph","version":1,"textFormat":0,"textStyle":""}],"direction":null,"format":"","indent":0,"type":"root","version":1}}
 """
 
-# Constants
-DEFAULT_LEXICAL_DOC_ID = 'lexical-shared-doc'
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -71,11 +68,120 @@ class LoroWebSocketServer:
         Delegate to LexicalDocumentManager.
         """
         # Provide initial content for lexical documents
-        initial_content = None
-        if doc_id == DEFAULT_LEXICAL_DOC_ID:
-            initial_content = INITIAL_LEXICAL_JSON
+        initial_content = INITIAL_LEXICAL_JSON
         
         return self.document_manager.get_or_create_document(doc_id, initial_content)
+
+    def _extract_doc_id_from_websocket(self, websocket: WebSocketServerProtocol) -> str:
+        """
+        Extract document ID from WebSocket request.
+        Checks multiple sources in order of preference:
+        1. Query parameter 'docId' or 'doc_id'
+        2. Path segments for specific patterns:
+           - /api/spacer/v1/lexical/ws/{DOC_ID}
+           - /{DOC_ID} (direct path)
+           - /ws/documents/{DOC_ID}
+           - /documents/{DOC_ID}
+        
+        Raises ValueError if no valid document ID is found.
+        """
+        logger.info(f"🔍 _extract_doc_id_from_websocket called with websocket: {websocket}")
+        logger.info(f"🔍 WebSocket attributes: {dir(websocket)}")
+        
+        # The websockets library stores the path in different attributes
+        path = None
+        if hasattr(websocket, 'path'):
+            path = websocket.path
+        elif hasattr(websocket, 'request_uri'):
+            path = websocket.request_uri
+        elif hasattr(websocket, 'uri'):
+            path = websocket.uri
+        elif hasattr(websocket, 'request') and hasattr(websocket.request, 'path'):
+            path = websocket.request.path
+        
+        logger.info(f"🔍 Extracted path: {path}")
+        
+        if not path:
+            logger.error(f"❌ Could not extract path from WebSocket object")
+            raise ValueError("No path found in WebSocket request")
+        
+        try:
+            # Parse query string from path
+            from urllib.parse import urlparse, parse_qs
+            parsed_url = urlparse(path)
+            query_params = parse_qs(parsed_url.query)
+            
+            logger.info(f"🔍 Parsed URL: {parsed_url}")
+            logger.info(f"🔍 Query params: {query_params}")
+            logger.info(f"🔍 Path: {parsed_url.path}")
+            
+            # Check for docId or doc_id parameter
+            if 'docId' in query_params and query_params['docId']:
+                doc_id = query_params['docId'][0]
+                logger.info(f"📄 Document ID from query param 'docId': {doc_id}")
+                return doc_id
+            elif 'doc_id' in query_params and query_params['doc_id']:
+                doc_id = query_params['doc_id'][0]
+                logger.info(f"📄 Document ID from query param 'doc_id': {doc_id}")
+                return doc_id
+            
+            # Parse path segments
+            path_segments = [seg for seg in parsed_url.path.split('/') if seg]
+            logger.info(f"🔍 Path segments: {path_segments}")
+            
+            # Pattern 1: /api/spacer/v1/lexical/ws/{DOC_ID}
+            if (len(path_segments) >= 6 and 
+                path_segments[0] == 'api' and 
+                path_segments[1] == 'spacer' and
+                path_segments[2] == 'v1' and
+                path_segments[3] == 'lexical' and
+                path_segments[4] == 'ws'):
+                doc_id = path_segments[5]
+                logger.info(f"📄 Document ID from Spacer API pattern: {doc_id}")
+                return doc_id
+            
+            # Pattern 2: /ws/documents/{DOC_ID} or /documents/{DOC_ID}
+            elif len(path_segments) >= 2 and path_segments[-2] in ['documents', 'docs', 'doc']:
+                doc_id = path_segments[-1]
+                logger.info(f"📄 Document ID from documents path: {doc_id}")
+                return doc_id
+            
+            # Pattern 3: /{DOC_ID} (direct path - last segment)
+            elif len(path_segments) >= 1:
+                # Use last path segment as potential doc_id if it looks like a document ID
+                potential_doc_id = path_segments[-1]
+                logger.info(f"🔍 Checking potential doc_id: {potential_doc_id}")
+                
+                # Exclude common WebSocket endpoint names but be more permissive
+                # Allow document IDs that contain common words but are clearly document identifiers
+                excluded_endpoints = ['ws', 'websocket', 'socket', 'api', 'v1']
+                
+                if potential_doc_id not in excluded_endpoints:
+                    # Additional validation: if it contains hyphens or underscores, likely a doc ID
+                    # Or if it's longer than 3 characters and not in excluded list
+                    has_separators = '-' in potential_doc_id or '_' in potential_doc_id
+                    is_long_enough = len(potential_doc_id) > 3 and potential_doc_id not in excluded_endpoints
+                    
+                    logger.info(f"🔍 Validation check: has_separators={has_separators}, is_long_enough={is_long_enough}")
+                    
+                    if (has_separators or is_long_enough):
+                        logger.info(f"📄 Document ID from last path segment: {potential_doc_id}")
+                        return potential_doc_id
+                    else:
+                        logger.info(f"🔍 Potential doc_id '{potential_doc_id}' failed validation")
+                else:
+                    logger.info(f"🔍 Potential doc_id '{potential_doc_id}' is in excluded endpoints")
+            else:
+                logger.info(f"🔍 No path segments found")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error extracting document ID from WebSocket: {e}")
+            import traceback
+            logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
+        
+        # No fallback - raise error if no document ID found
+        logger.error(f"❌ No document ID found in WebSocket request. WebSocket path: {path}")
+        raise ValueError("No document ID found in WebSocket request. Please provide docId as query parameter or in path.")
 
     def _on_document_event(self, event_type: str, event_data: dict):
         """
@@ -165,20 +271,35 @@ class LoroWebSocketServer:
         client_id = self.generate_client_id()
         client = Client(websocket, client_id)
         
+        try:
+            # Extract document ID from WebSocket request
+            doc_id = self._extract_doc_id_from_websocket(websocket)
+        except ValueError as e:
+            # Send error message and close connection if no document ID found
+            logger.error(f"❌ Client {client_id} connection rejected: {e}")
+            await websocket.send(json.dumps({
+                "type": "error",
+                "message": str(e),
+                "code": "MISSING_DOCUMENT_ID"
+            }))
+            await websocket.close()
+            return
+        
         self.clients[client_id] = client
-        logger.info(f"📱 Client {client_id} connected. Total clients: {len(self.clients)}")
+        logger.info(f"📱 Client {client_id} connected for document '{doc_id}'. Total clients: {len(self.clients)}")
         
         try:
-            # Send welcome message
+            # Send welcome message with document info
             await websocket.send(json.dumps({
                 "type": "welcome",
                 "clientId": client_id,
                 "color": client.color,
+                "docId": doc_id,
                 "message": "Connected to Loro CRDT relay (Python)"
             }))
             
-            # Send initial snapshots to the new client
-            await self.send_initial_snapshots(websocket, client_id)
+            # Send initial snapshots to the new client for the specific document
+            await self.send_initial_snapshots(websocket, client_id, doc_id)
             
             # Listen for messages from this client
             async for message in websocket:
@@ -210,49 +331,48 @@ class LoroWebSocketServer:
             
             logger.info(f"📴 Client {client_id} cleanup complete. Total clients: {len(self.clients)}")
     
-    async def send_initial_snapshots(self, websocket: WebSocketServerProtocol, client_id: str):
+    async def send_initial_snapshots(self, websocket: WebSocketServerProtocol, client_id: str, doc_id: str):
         """
-        Send initial snapshots for known documents.
-        Create documents with initial content and send snapshots.
+        Send initial snapshot for the specified document.
+        Create document with initial content and send snapshot.
         """
-        # For known document types, create documents with initial content and send snapshots
-        for doc_id in ['shared-text', DEFAULT_LEXICAL_DOC_ID]:
-            try:
-                # Ensure document exists with initial content
-                self.get_document(doc_id)  # This will create with initial content if needed
+            
+        try:
+            # Ensure document exists with initial content
+            self.get_document(doc_id)  # This will create with initial content if needed
+            
+            # Now get the snapshot
+            snapshot_bytes = self.document_manager.get_snapshot(doc_id)
+            
+            if snapshot_bytes and len(snapshot_bytes) > 0:
+                # Convert bytes to list of integers for JSON serialization
+                snapshot_data = list(snapshot_bytes)
+                await websocket.send(json.dumps({
+                    "type": "initial-snapshot",
+                    "snapshot": snapshot_data,
+                    "docId": doc_id,
+                    "hasData": True,
+                    "hasEvent": True,
+                    "hasSnapshot": True,
+                    "clientId": client_id,
+                    "dataLength": len(snapshot_bytes)
+                }))
+                logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot_bytes)} bytes) to client {client_id}")
+            else:
+                # Send empty response with enhanced fields
+                await websocket.send(json.dumps({
+                    "type": "initial-snapshot",
+                    "docId": doc_id,
+                    "hasData": False,
+                    "hasEvent": False,
+                    "hasSnapshot": False,
+                    "clientId": client_id,
+                    "dataLength": 0
+                }))
+                logger.info(f"📄 No content in {doc_id} to send to client {client_id}")
                 
-                # Now get the snapshot
-                snapshot_bytes = self.document_manager.get_snapshot(doc_id)
-                
-                if snapshot_bytes and len(snapshot_bytes) > 0:
-                    # Convert bytes to list of integers for JSON serialization
-                    snapshot_data = list(snapshot_bytes)
-                    await websocket.send(json.dumps({
-                        "type": "initial-snapshot",
-                        "snapshot": snapshot_data,
-                        "docId": doc_id,
-                        "hasData": True,
-                        "hasEvent": True,
-                        "hasSnapshot": True,
-                        "clientId": client_id,
-                        "dataLength": len(snapshot_bytes)
-                    }))
-                    logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot_bytes)} bytes) to client {client_id}")
-                else:
-                    # Send empty response with enhanced fields
-                    await websocket.send(json.dumps({
-                        "type": "initial-snapshot",
-                        "docId": doc_id,
-                        "hasData": False,
-                        "hasEvent": False,
-                        "hasSnapshot": False,
-                        "clientId": client_id,
-                        "dataLength": 0
-                    }))
-                    logger.info(f"📄 No content in {doc_id} to send to client {client_id}")
-                    
-            except Exception as e:
-                logger.error(f"❌ Error sending snapshot for {doc_id} to {client_id}: {e}")
+        except Exception as e:
+            logger.error(f"❌ Error sending snapshot for {doc_id} to {client_id}: {e}")
     
     async def handle_message(self, client_id: str, message: str):
         """
@@ -262,7 +382,11 @@ class LoroWebSocketServer:
         try:
             data = json.loads(message)
             message_type = data.get("type")
-            doc_id = data.get("docId", "shared-text")
+            doc_id = data.get("docId")
+            
+            # Validate that docId is provided in the message
+            if not doc_id:
+                raise ValueError(f"Message of type '{message_type}' missing required 'docId' field")
             
             logger.info(f"📨 {message_type} for {doc_id} from {client_id}")
             
