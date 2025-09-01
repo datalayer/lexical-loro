@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Step 6: LexicalDocumentManager Implementation
+Test: LexicalDocumentManager Implementation
 """
 
 import sys

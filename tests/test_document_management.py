@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Step 1: Document Management Methods for LexicalModel
+Test Document Management Methods for LexicalModel
 
 Tests the new class method and document management methods:
 - LexicalModel.create_document()
@@ -175,7 +175,7 @@ def test_export_update(model):
 
 def main():
     """Main test function"""
-    print("🚀 Testing Step 1: Document Management Methods")
+    print("🚀 Testing: Document Management Methods")
     print("=" * 50)
     
     try:
@@ -199,7 +199,7 @@ def main():
         test_export_update(model2)
         
         print("\n" + "=" * 50)
-        print("🎉 All Step 1 tests completed successfully!")
+        print("🎉 All tests completed successfully!")
         
         # Show final state
         print(f"\n📋 Final state summary:")

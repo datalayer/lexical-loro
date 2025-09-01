@@ -189,6 +189,11 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       params: { doc_id: 'lexical-shared-doc', text: 'Hello from MCP!' }
     },
     {
+      name: 'insert_paragraph',
+      label: '📝 Insert Paragraph at Index 2',
+      params: { doc_id: 'lexical-shared-doc', index: 2, text: 'Inserted at index 2 via MCP!' }
+    },
+    {
       name: 'get_document_data',
       label: '📄 Get Document Data',
       params: { doc_id: 'lexical-shared-doc' }

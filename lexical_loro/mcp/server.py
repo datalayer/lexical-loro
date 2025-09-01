@@ -229,6 +229,160 @@ async def load_document(doc_id: str) -> str:
 
 
 @mcp.tool()
+async def set_current_document(doc_id: str) -> str:
+    """Set the current document for subsequent operations that support optional doc_id.
+
+    This tool establishes a "working document" context that allows other tools
+    (append_paragraph, insert_paragraph, get_document_info) to operate without
+    explicitly specifying a doc_id parameter. This creates a more fluid workflow
+    when working primarily with a single document. The document is automatically
+    created if it doesn't exist.
+
+    Args:
+        doc_id: The unique identifier of the document to set as current working document.
+                Can be any string identifier. Document will be created if it doesn't exist.
+                Examples: "my-notes", "project-2024", "draft-document"
+
+    Returns:
+        str: JSON string containing:
+            - success: Boolean indicating operation success
+            - message: Confirmation message about the current document setting
+            - doc_id: The document identifier that was set as current
+            - container_id: Loro container ID for the document
+            - On error: success=False with error message and doc_id
+
+    Example Usage:
+        Set working doc: set_current_document("project-notes")
+        Create new context: set_current_document("new-draft-2024")
+        Switch documents: set_current_document("meeting-minutes")
+
+    Workflow Benefits:
+        1. Set current document once: set_current_document("my-doc")
+        2. Work without doc_id: append_paragraph("First point")
+        3. Continue seamlessly: insert_paragraph(0, "Introduction")
+        4. Check status easily: get_document_info()
+
+    Note: The load_document tool always requires an explicit doc_id parameter
+    and is not affected by the current document setting.
+    """
+    global current_document_id
+    try:
+        logger.info(f"Setting current document to: {doc_id}")
+        
+        # Validate that the document exists or can be created
+        model = document_manager.get_or_create_document(doc_id)
+        
+        # Set the current document
+        current_document_id = doc_id
+        
+        result = {
+            "success": True,
+            "message": f"Current document set to: {doc_id}",
+            "doc_id": doc_id,
+            "container_id": model.container_id
+        }
+        
+        logger.info(f"Successfully set current document to {doc_id}")
+        return json.dumps(result, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Error setting current document to {doc_id}: {e}")
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "doc_id": doc_id
+        }
+        return json.dumps(error_result, indent=2)
+
+
+@mcp.tool()
+async def get_document_info(doc_id: Optional[str] = None) -> str:
+    """Retrieve comprehensive information and metadata about a Lexical document.
+
+    This tool provides detailed information about a document's structure, content,
+    and metadata without returning the full document content. It's useful for
+    understanding document composition, tracking changes, and getting quick insights
+    about document statistics before performing operations.
+
+    Args:
+        doc_id: The unique identifier of the document to inspect (optional).
+                If not provided, uses the current document set via set_current_document.
+                Explicit doc_id takes precedence over current document setting.
+
+    Returns:
+        str: JSON string containing comprehensive document information:
+            - success: Boolean indicating operation success
+            - doc_id: The document identifier that was inspected
+            - container_id: Loro container ID for collaborative editing tracking
+            - total_blocks: Total number of content blocks in the document
+            - block_types: Dictionary with count of each block type (e.g., {"paragraph": 5})
+            - last_saved: Timestamp of last save operation (if available)
+            - version: Document version information (if available)
+            - source: Source information about document origin (if available)
+            - On error: success=False with error message and context
+
+    Example Usage:
+        Check current doc: get_document_info()
+        Check specific doc: get_document_info("project-notes")
+        Inspect before editing: get_document_info("draft-2024")
+
+    Use Cases:
+        - Document structure analysis before bulk operations
+        - Content auditing and statistics
+        - Version tracking and change monitoring
+        - Debugging document state issues
+    """
+    global current_document_id
+    try:
+        # Determine which document to use
+        target_doc_id = doc_id if doc_id is not None else current_document_id
+        
+        if target_doc_id is None:
+            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
+        
+        logger.info(f"Getting document info for: {target_doc_id}")
+        
+        # Get or create the document
+        model = document_manager.get_or_create_document(target_doc_id)
+        
+        # Get lexical data
+        lexical_data = model.get_lexical_data()
+        children = lexical_data.get("root", {}).get("children", [])
+        
+        # Count different block types
+        block_types = {}
+        for child in children:
+            block_type = child.get("type", "unknown")
+            block_types[block_type] = block_types.get(block_type, 0) + 1
+        
+        result = {
+            "success": True,
+            "doc_id": target_doc_id,
+            "container_id": model.container_id,
+            "total_blocks": len(children),
+            "block_types": block_types,
+            "last_saved": lexical_data.get("lastSaved"),
+            "version": lexical_data.get("version"),
+            "source": lexical_data.get("source")
+        }
+        
+        logger.info(f"Successfully retrieved document info for {target_doc_id}")
+        return json.dumps(result, indent=2)
+        
+    except Exception as e:
+        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
+        logger.error(f"Error getting document info for {target_doc_id_for_error}: {e}")
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "doc_id": target_doc_id_for_error
+        }
+        return json.dumps(error_result, indent=2)
+
+
+###############################################################################
+
+@mcp.tool()
 async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) -> str:
     """Insert a text paragraph at a specific position in a Lexical document.
 
@@ -236,6 +390,9 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
     the document. All existing blocks at or after the specified index will be shifted
     down by one position. The document uses Loro's collaborative editing backend,
     so changes are automatically synchronized across all connected clients.
+
+    Uses the same SAFE incremental operations as append_paragraph to prevent
+    race conditions and ensure collaborative stability.
 
     Args:
         index: The zero-based index position where to insert the paragraph.
@@ -270,18 +427,19 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
         if target_doc_id is None:
             raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
         
+        logger.info(f"🚀🚀🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{target_doc_id}'")
         logger.info(f"Inserting paragraph in document {target_doc_id} at index {index}")
         
         # Get or create the document
         model = document_manager.get_or_create_document(target_doc_id)
         
-        # Create paragraph structure
+        # Create paragraph structure with message data 
         block_detail = {"text": text}
         
-        # Insert the paragraph at the specified index
-        model.add_block_at_index(index, block_detail, "paragraph")
+        # Insert the paragraph at the specified index using SAFE operations
+        result = await model.add_block_at_index(index, block_detail, "paragraph")
         
-        # Get updated document structure
+        # Get updated document structure  
         lexical_data = model.get_lexical_data()
         total_blocks = len(lexical_data.get("root", {}).get("children", []))
         
@@ -393,158 +551,6 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
             "error": str(e),
             "doc_id": target_doc_id_for_error,
             "action": "append_paragraph"
-        }
-        return json.dumps(error_result, indent=2)
-
-
-@mcp.tool()
-async def get_document_info(doc_id: Optional[str] = None) -> str:
-    """Retrieve comprehensive information and metadata about a Lexical document.
-
-    This tool provides detailed information about a document's structure, content,
-    and metadata without returning the full document content. It's useful for
-    understanding document composition, tracking changes, and getting quick insights
-    about document statistics before performing operations.
-
-    Args:
-        doc_id: The unique identifier of the document to inspect (optional).
-                If not provided, uses the current document set via set_current_document.
-                Explicit doc_id takes precedence over current document setting.
-
-    Returns:
-        str: JSON string containing comprehensive document information:
-            - success: Boolean indicating operation success
-            - doc_id: The document identifier that was inspected
-            - container_id: Loro container ID for collaborative editing tracking
-            - total_blocks: Total number of content blocks in the document
-            - block_types: Dictionary with count of each block type (e.g., {"paragraph": 5})
-            - last_saved: Timestamp of last save operation (if available)
-            - version: Document version information (if available)
-            - source: Source information about document origin (if available)
-            - On error: success=False with error message and context
-
-    Example Usage:
-        Check current doc: get_document_info()
-        Check specific doc: get_document_info("project-notes")
-        Inspect before editing: get_document_info("draft-2024")
-
-    Use Cases:
-        - Document structure analysis before bulk operations
-        - Content auditing and statistics
-        - Version tracking and change monitoring
-        - Debugging document state issues
-    """
-    global current_document_id
-    try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
-        
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
-        
-        logger.info(f"Getting document info for: {target_doc_id}")
-        
-        # Get or create the document
-        model = document_manager.get_or_create_document(target_doc_id)
-        
-        # Get lexical data
-        lexical_data = model.get_lexical_data()
-        children = lexical_data.get("root", {}).get("children", [])
-        
-        # Count different block types
-        block_types = {}
-        for child in children:
-            block_type = child.get("type", "unknown")
-            block_types[block_type] = block_types.get(block_type, 0) + 1
-        
-        result = {
-            "success": True,
-            "doc_id": target_doc_id,
-            "container_id": model.container_id,
-            "total_blocks": len(children),
-            "block_types": block_types,
-            "last_saved": lexical_data.get("lastSaved"),
-            "version": lexical_data.get("version"),
-            "source": lexical_data.get("source")
-        }
-        
-        logger.info(f"Successfully retrieved document info for {target_doc_id}")
-        return json.dumps(result, indent=2)
-        
-    except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error getting document info for {target_doc_id_for_error}: {e}")
-        error_result = {
-            "success": False,
-            "error": str(e),
-            "doc_id": target_doc_id_for_error
-        }
-        return json.dumps(error_result, indent=2)
-
-
-@mcp.tool()
-async def set_current_document(doc_id: str) -> str:
-    """Set the current document for subsequent operations that support optional doc_id.
-
-    This tool establishes a "working document" context that allows other tools
-    (append_paragraph, insert_paragraph, get_document_info) to operate without
-    explicitly specifying a doc_id parameter. This creates a more fluid workflow
-    when working primarily with a single document. The document is automatically
-    created if it doesn't exist.
-
-    Args:
-        doc_id: The unique identifier of the document to set as current working document.
-                Can be any string identifier. Document will be created if it doesn't exist.
-                Examples: "my-notes", "project-2024", "draft-document"
-
-    Returns:
-        str: JSON string containing:
-            - success: Boolean indicating operation success
-            - message: Confirmation message about the current document setting
-            - doc_id: The document identifier that was set as current
-            - container_id: Loro container ID for the document
-            - On error: success=False with error message and doc_id
-
-    Example Usage:
-        Set working doc: set_current_document("project-notes")
-        Create new context: set_current_document("new-draft-2024")
-        Switch documents: set_current_document("meeting-minutes")
-
-    Workflow Benefits:
-        1. Set current document once: set_current_document("my-doc")
-        2. Work without doc_id: append_paragraph("First point")
-        3. Continue seamlessly: insert_paragraph(0, "Introduction")
-        4. Check status easily: get_document_info()
-
-    Note: The load_document tool always requires an explicit doc_id parameter
-    and is not affected by the current document setting.
-    """
-    global current_document_id
-    try:
-        logger.info(f"Setting current document to: {doc_id}")
-        
-        # Validate that the document exists or can be created
-        model = document_manager.get_or_create_document(doc_id)
-        
-        # Set the current document
-        current_document_id = doc_id
-        
-        result = {
-            "success": True,
-            "message": f"Current document set to: {doc_id}",
-            "doc_id": doc_id,
-            "container_id": model.container_id
-        }
-        
-        logger.info(f"Successfully set current document to {doc_id}")
-        return json.dumps(result, indent=2)
-        
-    except Exception as e:
-        logger.error(f"Error setting current document to {doc_id}: {e}")
-        error_result = {
-            "success": False,
-            "error": str(e),
-            "doc_id": doc_id
         }
         return json.dumps(error_result, indent=2)
 
