@@ -2459,7 +2459,7 @@ class LexicalModel:
             
             # Emit broadcast event to notify WebSocket clients
             self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-                            self._create_broadcast_data("document-update"))
+            self._create_broadcast_data("document-update"))
             
             return {
                 "success": True,
