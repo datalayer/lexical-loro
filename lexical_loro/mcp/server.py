@@ -1,6 +1,7 @@
 # Copyright (c) 2023-2025 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -72,10 +73,22 @@ async def initialize_mcp_collaboration():
     """Initialize MCP server with standard LexicalDocumentManager in client mode"""
     global document_manager
     
+    def handle_document_events(event_type: str, event_data: dict):
+        """Handle events from document models, especially BROADCAST_NEEDED"""
+        if event_type == "broadcast_needed" and document_manager.client_mode:
+            # Get the document that emitted the event
+            doc_id = event_data.get("doc_id")
+            if doc_id and doc_id in document_manager.models:
+                print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
+                # Extract broadcast data from the event - this contains the pre-built message
+                broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
+                # Call broadcast_change with the pre-built data
+                asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
+    
     # Create standard document manager with client mode enabled
     # This will automatically connect to the collaborative WebSocket server
     document_manager = LexicalDocumentManager(
-        event_callback=None,  # No special event handling needed
+        event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,  # Enable WebSocket client mode for collaboration
         websocket_url="ws://localhost:8081"  # Connect to collaborative server
@@ -94,10 +107,22 @@ def sync_initialize_mcp_collaboration():
     """Synchronous initialization for module loading"""
     global document_manager
     
+    def handle_document_events(event_type: str, event_data: dict):
+        """Handle events from document models, especially BROADCAST_NEEDED"""
+        if event_type == "broadcast_needed" and document_manager.client_mode:
+            # Get the document that emitted the event
+            doc_id = event_data.get("doc_id")
+            if doc_id and doc_id in document_manager.models:
+                print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
+                # Extract broadcast data from the event - this contains the pre-built message
+                broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
+                # Call broadcast_change with the pre-built data
+                asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
+    
     # Create standard document manager with client mode enabled  
     # Connection will be established lazily when first async call is made
     document_manager = LexicalDocumentManager(
-        event_callback=None,
+        event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,
         websocket_url="ws://localhost:8081"

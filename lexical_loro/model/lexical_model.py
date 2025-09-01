@@ -3495,6 +3495,55 @@ class LexicalDocumentManager:
             print(f"❌ Error broadcasting change: {e}")
             import traceback
             print(f"❌ Full traceback: {traceback.format_exc()}")
+
+    async def broadcast_change_with_data(self, doc_id: str, broadcast_data: dict):
+        """Broadcast a change using pre-built data from BROADCAST_NEEDED event"""
+        print(f"📤 broadcast_change_with_data called: doc_id={doc_id}, client_mode={self.client_mode}")
+        
+        if not self.client_mode:
+            print(f"⚠️ Not in client mode, skipping broadcast")
+            return
+            
+        # Ensure connection is established
+        print(f"🔄 Ensuring connection is established...")
+        await self._ensure_connected()
+        
+        print(f"🔍 Connection status: connected={self.connected}, websocket={self.websocket is not None}")
+        
+        if not self.connected:
+            print(f"⚠️ Cannot broadcast - not connected to collaborative server")
+            return
+            
+        try:
+            print(f"📄 Using pre-built broadcast data for {doc_id}")
+            
+            # Decode the base64 snapshot back to bytes, then to list for JSON transmission
+            import base64
+            if "snapshot" in broadcast_data and isinstance(broadcast_data["snapshot"], str):
+                snapshot_bytes = base64.b64decode(broadcast_data["snapshot"])
+                snapshot_list = list(snapshot_bytes)
+                
+                # Create message using loro-update format with incremental data
+                message = {
+                    "type": "loro-update",
+                    "docId": doc_id,
+                    "senderId": self.client_id,
+                    "update": snapshot_list  # Send as update for incremental sync
+                }
+            else:
+                print(f"⚠️ No snapshot data in broadcast_data, skipping")
+                return
+                
+            print(f"📤 Sending broadcast message: type={message['type']}, docId={doc_id}, senderId={self.client_id}")
+            print(f"📤 Update size: {len(message['update'])} bytes")
+            
+            # Send the message via WebSocket
+            await self.websocket.send(json.dumps(message))
+            print(f"📤 DocumentManager sent: {message['type']}")
+            print(f"✅ DocumentManager broadcasted pre-built data for {doc_id}")
+                
+        except Exception as e:
+            print(f"❌ Failed to broadcast with pre-built data: {e}")
     
     def __repr__(self) -> str:
         """String representation showing managed documents"""
