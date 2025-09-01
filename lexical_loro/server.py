@@ -230,10 +230,25 @@ class LoroWebSocketServer:
                     await websocket.send(json.dumps({
                         "type": "initial-snapshot",
                         "snapshot": snapshot_data,
-                        "docId": doc_id
+                        "docId": doc_id,
+                        "hasData": True,
+                        "hasEvent": True,
+                        "hasSnapshot": True,
+                        "clientId": client_id,
+                        "dataLength": len(snapshot_bytes)
                     }))
                     logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot_bytes)} bytes) to client {client_id}")
                 else:
+                    # Send empty response with enhanced fields
+                    await websocket.send(json.dumps({
+                        "type": "initial-snapshot",
+                        "docId": doc_id,
+                        "hasData": False,
+                        "hasEvent": False,
+                        "hasSnapshot": False,
+                        "clientId": client_id,
+                        "dataLength": 0
+                    }))
                     logger.info(f"📄 No content in {doc_id} to send to client {client_id}")
                     
             except Exception as e:

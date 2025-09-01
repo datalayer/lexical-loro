@@ -621,7 +621,10 @@ class LexicalModel:
                     "docId": self.doc_id,
                     "snapshot": list(loro_snapshot),  # Use 'snapshot' field for snapshot data
                     "hasData": True,
-                    "hasEvent": False
+                    "hasEvent": True,  # ← ENHANCED: Now true for consistency
+                    "hasSnapshot": True,  # ← NEW: Explicit snapshot indicator
+                    "clientId": "crdt-system",  # ← ENHANCED: For consistency
+                    "dataLength": len(loro_snapshot)  # ← ENHANCED: For consistency
                 }
                 
                 # Emit BROADCAST_NEEDED event so the WebSocket server broadcasts it
@@ -2532,7 +2535,12 @@ class LexicalModel:
                     "response_data": {
                         "type": "initial-snapshot",
                         "snapshot": list(snapshot),
-                        "docId": self.doc_id
+                        "docId": self.doc_id,
+                        "hasData": True,
+                        "hasEvent": True,
+                        "hasSnapshot": True,
+                        "clientId": client_id,
+                        "dataLength": len(snapshot)
                     },
                     "snapshot_size": len(snapshot)
                 }
