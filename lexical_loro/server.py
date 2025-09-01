@@ -31,6 +31,10 @@ from .client import Client
 INITIAL_LEXICAL_JSON = """
 {"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Lexical with Loro","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something...","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"paragraph","version":1,"textFormat":0,"textStyle":""}],"direction":null,"format":"","indent":0,"type":"root","version":1}}
 """
+
+# Constants
+DEFAULT_LEXICAL_DOC_ID = 'lexical-shared-doc'
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -68,7 +72,7 @@ class LoroWebSocketServer:
         """
         # Provide initial content for lexical documents
         initial_content = None
-        if doc_id == 'lexical-shared-doc':
+        if doc_id == DEFAULT_LEXICAL_DOC_ID:
             initial_content = INITIAL_LEXICAL_JSON
         
         return self.document_manager.get_or_create_document(doc_id, initial_content)
@@ -212,7 +216,7 @@ class LoroWebSocketServer:
         Create documents with initial content and send snapshots.
         """
         # For known document types, create documents with initial content and send snapshots
-        for doc_id in ['shared-text', 'lexical-shared-doc']:
+        for doc_id in ['shared-text', DEFAULT_LEXICAL_DOC_ID]:
             try:
                 # Ensure document exists with initial content
                 self.get_document(doc_id)  # This will create with initial content if needed

@@ -25,6 +25,9 @@ from .client import Client
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_LEXICAL_DOC_ID = 'lexical-shared-doc'
+
 
 class MinimalLoroServer:
     """
@@ -174,18 +177,18 @@ class MinimalLoroServer:
             }))
             logger.info(f"📄 Sent {doc_id} snapshot to {client_id}")
             
-        # If no documents exist yet, still initialize the lexical-shared-doc for UI compatibility
+        # If no documents exist yet, still initialize the default lexical doc for UI compatibility
         if not self.document_manager.models:
-            model = self.get_document("lexical-shared-doc")
+            model = self.get_document(DEFAULT_LEXICAL_DOC_ID)
             # Get the JSON data as a dict, not a string
             snapshot_data = json.loads(model.to_json())
             
             await websocket.send(json.dumps({
                 "type": "initial-snapshot",
-                "docId": "lexical-shared-doc",
+                "docId": DEFAULT_LEXICAL_DOC_ID,
                 "data": snapshot_data
             }))
-            logger.info(f"📄 Sent default lexical-shared-doc snapshot to {client_id}")
+            logger.info(f"📄 Sent default {DEFAULT_LEXICAL_DOC_ID} snapshot to {client_id}")
     
     async def handle_message(self, client_id: str, message: str):
         """Route message to LexicalModel and handle response"""

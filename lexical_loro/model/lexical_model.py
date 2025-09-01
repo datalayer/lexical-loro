@@ -102,6 +102,9 @@ except ImportError:
 if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
 
+# Constants
+DEFAULT_LEXICAL_DOC_ID = 'lexical-shared-doc'
+
 
 class LexicalEventType(Enum):
     """Event types for LexicalModel communication with server"""
@@ -1043,16 +1046,9 @@ class LexicalModel:
         # Try containers in order of preference: 
         # 1. "content" (new simplified approach)
         # 2. container_id if provided (for backward compatibility)
-        # 3. Legacy container names
         containers_to_try = ["content"]
         if self.container_id and self.container_id != "content":
             containers_to_try.append(self.container_id)
-        
-        # Add common legacy container names
-        legacy_containers = ["lexical-shared-doc", "shared-text"]
-        for legacy in legacy_containers:
-            if legacy not in containers_to_try:
-                containers_to_try.append(legacy)
         
         found_content = False
         migration_needed = False
@@ -3522,10 +3518,8 @@ class LexicalDocumentManager:
     
     async def _register_for_default_document(self):
         """Register for the default document that the UI uses"""
-        try:
-            import json
-            
-            default_doc_id = "lexical-shared-doc"  # This is what the UI uses
+        try:            
+            default_doc_id = DEFAULT_LEXICAL_DOC_ID  # This is what the UI uses
             print(f"👁️ DocumentManager registering for document: {default_doc_id}")
             
             # Request snapshot to get latest state
@@ -3537,7 +3531,7 @@ class LexicalDocumentManager:
             
             # Skip ephemeral update for MCP clients to avoid Rust panic
             # MCP clients don't need awareness/cursor data since they're not interactive
-            print(f"👁️ DocumentManager registered for {default_doc_id} (MCP client - skipping awareness)")
+            print(f"👁️ DocumentManager registered for {default_doc_id}")
             
         except Exception as e:
             print(f"❌ Failed to register for default document: {e}")
