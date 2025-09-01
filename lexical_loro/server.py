@@ -253,7 +253,7 @@ class LoroWebSocketServer:
                 data["color"] = client.color
             
             # Delegate message handling to DocumentManager
-            response = self.document_manager.handle_message(doc_id, message_type, data, client_id)
+            response = await self.document_manager.handle_message(doc_id, message_type, data, client_id)
             
             # Log LexicalModel state after ephemeral updates
             ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]

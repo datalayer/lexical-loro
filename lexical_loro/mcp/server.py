@@ -360,7 +360,7 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
         }
         
         # Call through the message handling system to trigger collaborative sync
-        result = document_manager.handle_message(target_doc_id, "append-paragraph", message_data)
+        result = await document_manager.handle_message(target_doc_id, "append-paragraph", message_data)
         
         if not result.get("success"):
             raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")

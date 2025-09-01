@@ -86,6 +86,7 @@ USAGE PATTERNS:
 
 import json
 import time
+import asyncio
 from typing import Dict, Any, List, Optional, TYPE_CHECKING, Callable
 from enum import Enum
 try:
@@ -197,6 +198,9 @@ class LexicalModel:
         
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
+        
+        # Add operation lock to prevent concurrent CRDT modifications
+        self._operation_lock = asyncio.Lock()
         
         # Flag to prevent recursive operations during import/update
         self._import_in_progress = False
@@ -700,6 +704,45 @@ class LexicalModel:
                     except json.JSONDecodeError as e:
                         print(f"❌ Could not parse updated content as JSON: {e}")
                         print(f"📋 Content preview: {new_content[:200]}...")
+                        print(f"🔄 Attempting to recover from malformed JSON...")
+                        
+                        # Try to recover by using the current lexical_data if it's valid
+                        try:
+                            current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
+                            print(f"🔄 Using current lexical_data with {current_blocks} blocks")
+                            # Don't update if JSON is malformed - keep current state
+                        except Exception as recovery_error:
+                            print(f"❌ Could not recover, resetting to minimal state: {recovery_error}")
+                            # Reset to minimal valid state
+                            self.lexical_data = {
+                                "root": {
+                                    "children": [
+                                        {
+                                            "children": [
+                                                {
+                                                    "detail": 0,
+                                                    "format": 0,
+                                                    "mode": "normal",
+                                                    "style": "",
+                                                    "text": "Document recovered from error",
+                                                    "type": "text",
+                                                    "version": 1
+                                                }
+                                            ],
+                                            "direction": None,
+                                            "format": "",
+                                            "indent": 0,
+                                            "type": "paragraph",
+                                            "version": 1
+                                        }
+                                    ],
+                                    "direction": None,
+                                    "format": "",
+                                    "indent": 0,
+                                    "type": "root",
+                                    "version": 1
+                                }
+                            }
                 else:
                     print(f"📝 No content change detected")
             else:
@@ -1255,7 +1298,7 @@ class LexicalModel:
             print(f"❌ Lexical data structure: {self.lexical_data}")
             raise e
     
-    def append_block(self, block_detail: Dict[str, Any], block_type: str):
+    async def append_block(self, block_detail: Dict[str, Any], block_type: str):
         """
         Append a new block to the lexical model using SAFE incremental operations.
         
@@ -1373,25 +1416,49 @@ class LexicalModel:
             # This is the key missing piece - we need to update the CRDT so other clients can see the change
             print(f"🔄 SAFE append_block: Writing updated lexical_data to CRDT for collaboration")
             
-            try:
-                # Convert lexical_data to JSON and write it to the CRDT safely
-                lexical_json = json.dumps(self.lexical_data)
-                text_container = self.text_doc.get_text(self.container_id or "content")
+            # Protect CRDT operations with async lock to prevent race conditions
+            async with self._operation_lock:
+                print(f"🔒 SAFE append_block: Acquired operation lock for CRDT safety")
                 
-                # Clear and replace the container content safely
-                current_length = text_container.len_unicode
-                if current_length > 0:
-                    text_container.delete(0, current_length)
-                text_container.insert(0, lexical_json)
+                try:
+                    # Convert lexical_data to JSON and write it to the CRDT safely
+                    lexical_json = json.dumps(self.lexical_data)
+                    text_container = self.text_doc.get_text(self.container_id or "content")
+                    
+                    # Clear and replace the container content safely
+                    current_length = text_container.len_unicode
+                    if current_length > 0:
+                        try:
+                            text_container.delete(0, current_length)
+                        except Exception as delete_error:
+                            print(f"⚠️ Error during CRDT delete, attempting recovery: {delete_error}")
+                            # Try to recreate the container if it's corrupted
+                            try:
+                                # Force commit any pending changes
+                                self.text_doc.commit()
+                                # Try delete again after commit
+                                current_length = text_container.len_unicode
+                                if current_length > 0:
+                                    text_container.delete(0, current_length)
+                            except Exception as recovery_error:
+                                print(f"❌ Could not recover from CRDT corruption: {recovery_error}")
+                                print(f"🔄 Attempting to recreate text container...")
+                                # Last resort: create new text container  
+                                self.text_doc = loro.LoroDoc()
+                                text_container = self.text_doc.get_text("content")
+                    
+                    text_container.insert(0, lexical_json)
+                    
+                    # Commit the changes to make them visible to subscriptions
+                    self.text_doc.commit()
+                    print(f"✅ SAFE append_block: Successfully updated CRDT with {new_count} blocks")
+                    
+                except Exception as crdt_error:
+                    print(f"⚠️ SAFE append_block: CRDT write failed, using event-only mode: {crdt_error}")
+                    # Fall back to event-only approach if CRDT write fails
                 
-                # Commit the changes to make them visible to subscriptions
-                self.text_doc.commit()
-                print(f"✅ SAFE append_block: Successfully updated CRDT with {new_count} blocks")
-                
-            except Exception as crdt_error:
-                print(f"⚠️ SAFE append_block: CRDT write failed, using event-only mode: {crdt_error}")
-                # Fall back to event-only approach if CRDT write fails
-                
+                print(f"🔓 SAFE append_block: Released operation lock")
+            
             print(f"✅ SAFE append_block: Local and CRDT updated, other clients will receive via subscription")
             
             # COLLABORATIVE-SAFE: Use event-based propagation as backup
@@ -2183,7 +2250,7 @@ class LexicalModel:
     
     # Message Handling Methods
     
-    def handle_message(self, message_type: str, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+    async def handle_message(self, message_type: str, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Handle Loro-related message types directly within LexicalModel.
         
@@ -2210,7 +2277,7 @@ class LexicalModel:
                 return self._handle_snapshot_request(data, client_id)
             elif message_type == "append-paragraph":
                 print(f"➕ handle_message: Processing append-paragraph...")
-                return self._handle_append_paragraph(data, client_id)
+                return await self._handle_append_paragraph(data, client_id)
             else:
                 return {
                     "success": False,
@@ -2379,7 +2446,7 @@ class LexicalModel:
                 "message_type": "request-snapshot"
             }
     
-    def _handle_append_paragraph(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+    async def _handle_append_paragraph(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
         """Handle append-paragraph message type"""
         # IMMEDIATE DEBUG: Force flush to see if method is called
         import sys
@@ -2469,7 +2536,7 @@ class LexicalModel:
             # This prevents JSON corruption and Rust panics from wholesale CRDT operations
             try:
                 print(f"➕ _handle_append_paragraph: Calling append_block(text='{message_text}', type='paragraph')")
-                result = self.append_block(new_paragraph, "paragraph")
+                result = await self.append_block(new_paragraph, "paragraph")
                 print(f"➕ _handle_append_paragraph: append_block() returned: {result}")
             except Exception as append_error:
                 print(f"❌ _handle_append_paragraph: append_block() FAILED: {append_error}")
@@ -3095,7 +3162,7 @@ class LexicalDocumentManager:
         
         return wrapped_callback
     
-    def handle_message(self, doc_id: str, message_type: str, data: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
+    async def handle_message(self, doc_id: str, message_type: str, data: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
         """
         Handle a message for a specific document.
         
@@ -3119,7 +3186,7 @@ class LexicalDocumentManager:
         
         if message_type in document_message_types:
             print(f"🔄 DocumentManager: Routing '{message_type}' to model.handle_message()")
-            return model.handle_message(message_type, data, client_id)
+            return await model.handle_message(message_type, data, client_id)
         elif message_type in ephemeral_message_types:
             if client_id is None:
                 return {
@@ -3349,22 +3416,9 @@ class LexicalDocumentManager:
             }
             await self._send_message(snapshot_request)
             
-            # Send ephemeral update to register as a peer
-            awareness_message = {
-                "type": "ephemeral-update",
-                "docId": default_doc_id,
-                "data": {
-                    "anchor": None,
-                    "focus": None,
-                    "user": {
-                        "name": "MCP Client",
-                        "color": "#FF6B6B",
-                        "clientType": "MCP"
-                    }
-                }
-            }
-            await self._send_message(awareness_message)
-            print(f"👁️ DocumentManager registered awareness for {default_doc_id}")
+            # Skip ephemeral update for MCP clients to avoid Rust panic
+            # MCP clients don't need awareness/cursor data since they're not interactive
+            print(f"👁️ DocumentManager registered for {default_doc_id} (MCP client - skipping awareness)")
             
         except Exception as e:
             print(f"❌ Failed to register for default document: {e}")
