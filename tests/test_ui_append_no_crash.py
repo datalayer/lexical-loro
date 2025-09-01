@@ -9,7 +9,7 @@ import websockets
 import json
 import time
 import threading
-from lexical_loro.server import run_server
+from lexical_loro.server import main as run_server
 
 
 async def simulate_browser_client():
