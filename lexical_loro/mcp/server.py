@@ -68,20 +68,47 @@ class FastMCPWithCORS(FastMCP):
 mcp = FastMCPWithCORS(name="Lexical MCP Server", json_response=False, stateless_http=True)
 
 # Initialize document manager
-def initialize_mcp_collaboration():
-    """Initialize MCP server with standard LexicalDocumentManager"""
+async def initialize_mcp_collaboration():
+    """Initialize MCP server with standard LexicalDocumentManager in client mode"""
     global document_manager
     
-    # Create standard document manager with event callback for collaborative sync
+    # Create standard document manager with client mode enabled
+    # This will automatically connect to the collaborative WebSocket server
     document_manager = LexicalDocumentManager(
-        event_callback=None,  # No special event handling needed - use built-in collaborative features
-        ephemeral_timeout=300000
+        event_callback=None,  # No special event handling needed
+        ephemeral_timeout=300000,
+        client_mode=True,  # Enable WebSocket client mode for collaboration
+        websocket_url="ws://localhost:8081"  # Connect to collaborative server
     )
     
-    logger.info(f"🚀 MCP server initialized with standard LexicalDocumentManager")
+    # Start the client connection immediately when in async context
+    await document_manager.start_client_mode()
+    
+    logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")
+    logger.info(f"🔌 Client mode enabled: {document_manager.client_mode}")
+    logger.info(f"🔗 WebSocket URL: {document_manager.websocket_url}")
+    logger.info(f"✅ WebSocket client connection established: {document_manager.connected}")
 
-# Initialize with default settings (can be overridden)
-initialize_mcp_collaboration()
+# Initialize with default settings when NOT in async context
+def sync_initialize_mcp_collaboration():
+    """Synchronous initialization for module loading"""
+    global document_manager
+    
+    # Create standard document manager with client mode enabled  
+    # Connection will be established lazily when first async call is made
+    document_manager = LexicalDocumentManager(
+        event_callback=None,
+        ephemeral_timeout=300000,
+        client_mode=True,
+        websocket_url="ws://localhost:8081"
+    )
+    
+    logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")
+    logger.info(f"🔌 Client mode enabled: {document_manager.client_mode}")
+    logger.info(f"🔗 WebSocket URL: {document_manager.websocket_url}")
+
+# Use sync version for module initialization
+sync_initialize_mcp_collaboration()
 
 # Current document state
 current_document_id: Optional[str] = None
@@ -289,6 +316,7 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
         Using current doc: append_paragraph("Additional notes")
         Empty paragraph: append_paragraph("")
     """
+    logger.info(f"🚀🚀🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
     global current_document_id
     try:
         # Determine which document to use
@@ -311,6 +339,10 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
         
         if not result.get("success"):
             raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")
+        
+        # Note: Broadcasting is handled automatically by the document manager's 
+        # subscription system when in client mode. The WebSocket client receives
+        # and processes changes through the normal collaborative flow.
         
         # Get updated document structure for response
         model = document_manager.get_or_create_document(target_doc_id)

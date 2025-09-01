@@ -3019,17 +3019,28 @@ class LexicalDocumentManager:
     for the server to interact with multiple documents.
     """
     
-    def __init__(self, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000):
+    def __init__(self, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000, client_mode: bool = False, websocket_url: str = "ws://localhost:8081"):
         """
         Initialize the document manager.
         
         Args:
             event_callback: Callback function for events from any managed document
             ephemeral_timeout: Default ephemeral timeout for all documents
+            client_mode: If True, connect as WebSocket client to collaborative server
+            websocket_url: WebSocket server URL for client mode
         """
         self.models: Dict[str, LexicalModel] = {}
         self.event_callback = event_callback
         self.ephemeral_timeout = ephemeral_timeout
+        self.client_mode = client_mode
+        self.websocket_url = websocket_url
+        self.websocket = None
+        self.client_id = None
+        self.connected = False
+        self._connection_task = None
+        
+        # Note: WebSocket connection will be started lazily when first needed
+        # to avoid event loop issues during module initialization
     
     def get_or_create_document(self, doc_id: str, initial_content: Optional[str] = None) -> LexicalModel:
         """
@@ -3218,6 +3229,272 @@ class LexicalDocumentManager:
         doc_ids = list(self.models.keys())
         for doc_id in doc_ids:
             self.cleanup_document(doc_id)
+        
+        # Cleanup WebSocket connection if in client mode
+        if self.client_mode and (self.websocket or self._connection_task):
+            import asyncio
+            try:
+                # Cancel the connection task if it's still running
+                if self._connection_task and not self._connection_task.done():
+                    self._connection_task.cancel()
+                    
+                # Disconnect if connected
+                if self.websocket:
+                    asyncio.create_task(self._disconnect_client())
+            except Exception as e:
+                print(f"⚠️ Error cleaning up WebSocket connection: {e}")
+    
+    async def start_client_mode(self):
+        """Explicitly start client mode connection (call this when async environment is ready)"""
+        if self.client_mode and not self.connected and self._connection_task is None:
+            await self._ensure_connected()
+
+    async def _ensure_connected(self):
+        """Ensure WebSocket connection is established if in client mode"""
+        if not self.client_mode:
+            return
+            
+        if self.connected:
+            return
+            
+        if self._connection_task is None:
+            import asyncio
+            self._connection_task = asyncio.create_task(self._connect_as_client())
+            
+        # Wait for connection to complete
+        try:
+            await self._connection_task
+        except Exception as e:
+            print(f"❌ Failed to establish connection: {e}")
+            self._connection_task = None  # Reset for retry
+
+    async def _connect_as_client(self):
+        """Connect to collaborative server as WebSocket client"""
+        if not self.client_mode:
+            return
+            
+        try:
+            import websockets
+            import json
+            
+            print(f"🔌 DocumentManager connecting to {self.websocket_url} in client mode")
+            self.websocket = await websockets.connect(self.websocket_url)
+            self.connected = True
+            print(f"✅ DocumentManager connected as WebSocket client")
+            
+            # Start listening for messages
+            import asyncio
+            asyncio.create_task(self._listen_for_messages())
+            
+        except Exception as e:
+            print(f"❌ DocumentManager failed to connect as client: {e}")
+            self.connected = False
+    
+    async def _disconnect_client(self):
+        """Disconnect from collaborative server"""
+        if self.websocket:
+            await self.websocket.close()
+            self.connected = False
+            print("🔌 DocumentManager WebSocket client disconnected")
+    
+    async def _listen_for_messages(self):
+        """Listen for messages from collaborative server"""
+        try:
+            import json
+            async for message in self.websocket:
+                data = json.loads(message)
+                message_type = data.get("type")
+                
+                print(f"📨 DocumentManager received: {message_type} from {data.get('clientId', 'unknown')}")
+                
+                # Handle different message types
+                if message_type == "connection-established":
+                    self.client_id = data.get("clientId")
+                    print(f"✅ DocumentManager established with ID: {self.client_id}")
+                    await self._register_for_default_document()
+                
+                elif message_type == "welcome":
+                    self.client_id = data.get("clientId")
+                    print(f"👋 DocumentManager welcomed with ID: {self.client_id}")
+                    await self._register_for_default_document()
+                
+                elif message_type == "initial-snapshot":
+                    await self._handle_initial_snapshot(data)
+                
+                elif message_type == "loro-update":
+                    # Check if this update originated from us (echo prevention)
+                    sender_id = data.get("senderId") or data.get("clientId")
+                    if sender_id == self.client_id:
+                        print(f"🔄 DocumentManager ignoring echo update from self")
+                        continue
+                    
+                    await self._handle_loro_update(data)
+                
+        except Exception as e:
+            print(f"❌ DocumentManager WebSocket error: {e}")
+            self.connected = False
+    
+    async def _register_for_default_document(self):
+        """Register for the default document that the UI uses"""
+        try:
+            import json
+            
+            default_doc_id = "lexical-shared-doc"  # This is what the UI uses
+            print(f"👁️ DocumentManager registering for document: {default_doc_id}")
+            
+            # Request snapshot to get latest state
+            snapshot_request = {
+                "type": "request-snapshot",
+                "docId": default_doc_id
+            }
+            await self._send_message(snapshot_request)
+            
+            # Send ephemeral update to register as a peer
+            awareness_message = {
+                "type": "ephemeral-update",
+                "docId": default_doc_id,
+                "data": {
+                    "anchor": None,
+                    "focus": None,
+                    "user": {
+                        "name": "MCP Client",
+                        "color": "#FF6B6B",
+                        "clientType": "MCP"
+                    }
+                }
+            }
+            await self._send_message(awareness_message)
+            print(f"👁️ DocumentManager registered awareness for {default_doc_id}")
+            
+        except Exception as e:
+            print(f"❌ Failed to register for default document: {e}")
+    
+    async def _send_message(self, message):
+        """Send message to collaborative server"""
+        if self.websocket and self.connected:
+            try:
+                import json
+                await self.websocket.send(json.dumps(message))
+                print(f"📤 DocumentManager sent: {message.get('type', 'unknown')}")
+            except Exception as e:
+                print(f"❌ Failed to send message: {e}")
+    
+    async def _handle_initial_snapshot(self, data):
+        """Handle initial snapshot from collaborative server"""
+        try:
+            doc_id = data.get("docId")
+            snapshot_data = data.get("data") or data.get("snapshot")
+            
+            if doc_id and snapshot_data:
+                print(f"📄 DocumentManager received initial snapshot for {doc_id}")
+                
+                # Get or create the model and apply snapshot
+                model = self.get_or_create_document(doc_id)
+                
+                if isinstance(snapshot_data, list) and all(isinstance(x, int) for x in snapshot_data):
+                    # Binary snapshot
+                    binary_data = bytes(snapshot_data)
+                    model.import_snapshot(binary_data)
+                    print(f"📄 DocumentManager imported binary snapshot for {doc_id}")
+                else:
+                    # JSON snapshot
+                    if hasattr(model, 'apply_snapshot'):
+                        model.apply_snapshot(snapshot_data)
+                    print(f"📄 DocumentManager applied JSON snapshot for {doc_id}")
+                    
+        except Exception as e:
+            print(f"❌ Error handling initial snapshot: {e}")
+    
+    async def _handle_loro_update(self, data):
+        """Handle incremental Loro updates from other clients"""
+        try:
+            doc_id = data.get("docId")
+            update_data = data.get("update")
+            sender_id = data.get("senderId", "unknown")
+            
+            if not doc_id or not update_data:
+                print(f"⚠️ DocumentManager received incomplete loro-update")
+                return
+            
+            print(f"📄 DocumentManager applying loro-update for {doc_id} from {sender_id}")
+            
+            # Get the model and apply the update
+            if doc_id in self.models:
+                model = self.models[doc_id]
+                
+                # Convert update data back to bytes and apply
+                update_bytes = bytes(update_data)
+                model.text_doc.import_(update_bytes)
+                
+                print(f"✅ DocumentManager applied loro-update from {sender_id}")
+            else:
+                print(f"⚠️ DocumentManager no model found for doc_id: {doc_id}")
+                
+        except Exception as e:
+            print(f"❌ DocumentManager error handling loro-update: {e}")
+    
+    async def broadcast_change(self, doc_id: str, message_type: str = "document-update"):
+        """Broadcast a change to other clients when in client mode"""
+        print(f"📤 broadcast_change called: doc_id={doc_id}, message_type={message_type}, client_mode={self.client_mode}")
+        
+        if not self.client_mode:
+            print(f"⚠️ Not in client mode, skipping broadcast")
+            return
+            
+        # Ensure connection is established
+        print(f"🔄 Ensuring connection is established...")
+        await self._ensure_connected()
+        
+        print(f"🔍 Connection status: connected={self.connected}, websocket={self.websocket is not None}")
+        
+        if not self.connected:
+            print(f"⚠️ Cannot broadcast - not connected to collaborative server")
+            return
+            
+        try:
+            if doc_id in self.models:
+                model = self.models[doc_id]
+                print(f"📄 Found model for {doc_id}, creating broadcast message...")
+                
+                # Create broadcast message using loro-update format instead of snapshot
+                # This matches the format expected by the collaborative server
+                try:
+                    # Get the latest update from the model
+                    update_data = model.export_update()
+                    print(f"📄 Got update of {len(update_data) if update_data else 0} bytes")
+                    
+                    # Convert bytes to list for JSON serialization
+                    update_list = list(update_data) if update_data else []
+                    
+                    message = {
+                        "type": "loro-update",  # Use loro-update format for incremental sync
+                        "docId": doc_id,
+                        "senderId": self.client_id,
+                        "update": update_list  # Use update instead of snapshot
+                    }
+                except Exception as e:
+                    print(f"⚠️ Could not get update, falling back to snapshot: {e}")
+                    # Fallback to snapshot if update fails
+                    snapshot = model.get_snapshot()
+                    snapshot_data = list(snapshot) if snapshot else []
+                    
+                    message = {
+                        "type": "document-update",
+                        "docId": doc_id,
+                        "senderId": self.client_id,
+                        "snapshot": snapshot_data
+                    }
+                
+                print(f"📤 Sending broadcast message: type={message_type}, docId={doc_id}, senderId={self.client_id}")
+                await self._send_message(message)
+                print(f"✅ DocumentManager broadcasted {message_type} for {doc_id}")
+            else:
+                print(f"❌ No model found for doc_id: {doc_id}, available models: {list(self.models.keys())}")
+                
+        except Exception as e:
+            print(f"❌ Error broadcasting change: {e}")
+            import traceback
+            print(f"❌ Full traceback: {traceback.format_exc()}")
     
     def __repr__(self) -> str:
         """String representation showing managed documents"""
