@@ -400,9 +400,7 @@ class LexicalModel:
         Returns:
             A new LexicalModel instance with initialized Loro documents
         """
-        if loro is None:
-            raise ImportError("loro package is required for LexicalModel")
-        
+
         # Use provided document or create new one
         doc = loro_doc if loro_doc is not None else loro.LoroDoc()
         
@@ -3216,7 +3214,7 @@ class LexicalDocumentManager:
             client_mode: If True, connect as WebSocket client to collaborative server
             websocket_url: WebSocket server URL for client mode
         """
-        self.models: Dict[str, LexicalModel] = {}
+        self.documents: Dict[str, LexicalModel] = {}
         self.event_callback = event_callback
         self.ephemeral_timeout = ephemeral_timeout
         self.client_mode = client_mode
@@ -3240,7 +3238,7 @@ class LexicalDocumentManager:
         Returns:
             LexicalModel instance for the document
         """
-        if doc_id not in self.models:
+        if doc_id not in self.documents:
             # Create new document with manager's settings
             model = LexicalModel.create_document(
                 doc_id=doc_id,
@@ -3248,7 +3246,7 @@ class LexicalDocumentManager:
                 event_callback=self._wrap_event_callback(doc_id),
                 ephemeral_timeout=self.ephemeral_timeout
             )
-            self.models[doc_id] = model
+            self.documents[doc_id] = model
             
             # Notify about new document creation
             if self.event_callback:
@@ -3257,7 +3255,7 @@ class LexicalDocumentManager:
                     "model": model
                 })
         
-        return self.models[doc_id]
+        return self.documents[doc_id]
     
     def _wrap_event_callback(self, doc_id: str) -> Optional[Callable[[str, Dict[str, Any]], None]]:
         """
@@ -3348,9 +3346,9 @@ class LexicalDocumentManager:
         Returns:
             Document snapshot as bytes, or None if document doesn't exist
         """
-        if doc_id not in self.models:
+        if doc_id not in self.documents:
             return None
-        return self.models[doc_id].get_snapshot()
+        return self.documents[doc_id].get_snapshot()
     
     def list_documents(self) -> List[str]:
         """
@@ -3359,7 +3357,7 @@ class LexicalDocumentManager:
         Returns:
             List of document IDs
         """
-        return list(self.models.keys())
+        return list(self.documents.keys())
     
     def get_document_info(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -3371,10 +3369,10 @@ class LexicalDocumentManager:
         Returns:
             Document information dict, or None if document doesn't exist
         """
-        if doc_id not in self.models:
+        if doc_id not in self.documents:
             return None
             
-        model = self.models[doc_id]
+        model = self.documents[doc_id]
         return {
             "doc_id": doc_id,
             "content_length": len(str(model.lexical_data)),
@@ -3394,14 +3392,14 @@ class LexicalDocumentManager:
         Returns:
             True if document was cleaned up, False if it didn't exist
         """
-        if doc_id not in self.models:
+        if doc_id not in self.documents:
             return False
         
         # Clean up the model
-        self.models[doc_id].cleanup()
+        self.documents[doc_id].cleanup()
         
         # Remove from our tracking
-        del self.models[doc_id]
+        del self.documents[doc_id]
         
         # Notify about document removal
         if self.event_callback:
@@ -3413,7 +3411,7 @@ class LexicalDocumentManager:
     
     def cleanup(self):
         """Clean up all managed documents"""
-        doc_ids = list(self.models.keys())
+        doc_ids = list(self.documents.keys())
         for doc_id in doc_ids:
             self.cleanup_document(doc_id)
         
@@ -3525,8 +3523,8 @@ class LexicalDocumentManager:
         """Register for the first available document"""
         try:
             # Get the first available document or use a standard name
-            if self.models:
-                default_doc_id = list(self.models.keys())[0]
+            if self.documents:
+                default_doc_id = list(self.documents.keys())[0]
                 print(f"👁️ DocumentManager using first available document: {default_doc_id}")
             else:
                 # If no documents exist yet, we can't register for anything
@@ -3599,8 +3597,8 @@ class LexicalDocumentManager:
             print(f"📄 DocumentManager applying loro-update for {doc_id} from {sender_id}")
             
             # Get the model and apply the update
-            if doc_id in self.models:
-                model = self.models[doc_id]
+            if doc_id in self.documents:
+                model = self.documents[doc_id]
                 
                 # Convert update data back to bytes and apply
                 update_bytes = bytes(update_data)
@@ -3632,8 +3630,8 @@ class LexicalDocumentManager:
             return
             
         try:
-            if doc_id in self.models:
-                model = self.models[doc_id]
+            if doc_id in self.documents:
+                model = self.documents[doc_id]
                 print(f"📄 Found model for {doc_id}, creating broadcast message...")
                 
                 # Create broadcast message using loro-update format instead of snapshot
@@ -3669,7 +3667,7 @@ class LexicalDocumentManager:
                 await self._send_message(message)
                 print(f"✅ DocumentManager broadcasted {message_type} for {doc_id}")
             else:
-                print(f"❌ No model found for doc_id: {doc_id}, available models: {list(self.models.keys())}")
+                print(f"❌ No model found for doc_id: {doc_id}, available documents: {list(self.documents.keys())}")
                 
         except Exception as e:
             print(f"❌ Error broadcasting change: {e}")
@@ -3727,8 +3725,8 @@ class LexicalDocumentManager:
     
     def __repr__(self) -> str:
         """String representation showing managed documents"""
-        doc_count = len(self.models)
-        doc_list = list(self.models.keys())
+        doc_count = len(self.documents)
+        doc_list = list(self.documents.keys())
         return f"LexicalDocumentManager(documents={doc_count}, doc_ids={doc_list})"
     
     def __del__(self):

@@ -21,12 +21,12 @@ async def test_simple_append():
     
     # Check if lexical-shared-doc exists and get its current state
     shared_doc_id = "lexical-shared-doc"
-    if shared_doc_id in document_manager.models:
-        model = document_manager.models[shared_doc_id]
+    if shared_doc_id in document_manager.documents:
+        model = document_manager.documents[shared_doc_id]
         current_blocks = len(model.lexical_data.get('root', {}).get('children', []))
         print(f"📊 Document '{shared_doc_id}' currently has {current_blocks} blocks")
     else:
-        print(f"⚠️ Document '{shared_doc_id}' not found in models")
+        print(f"⚠️ Document '{shared_doc_id}' not found in documents")
     
     # Append a paragraph with explicit document ID
     test_text = "🚀 MCP append test - this should appear in browser!"
@@ -39,8 +39,8 @@ async def test_simple_append():
     await asyncio.sleep(2)
     
     # Check final state
-    if shared_doc_id in document_manager.models:
-        model = document_manager.models[shared_doc_id]
+    if shared_doc_id in document_manager.documents:
+        model = document_manager.documents[shared_doc_id]
         final_blocks = len(model.lexical_data.get('root', {}).get('children', []))
         print(f"📊 Document '{shared_doc_id}' now has {final_blocks} blocks")
     

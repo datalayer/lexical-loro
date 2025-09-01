@@ -18,7 +18,7 @@ from ..model.lexical_model import LexicalDocumentManager
 ###############################################################################
 
 
-DOC_ID = "lexical-shared-doc-2"
+DOC_ID = "lexical-shared-doc-3"
 
 WEBSOCKET_URL = f"ws://localhost:8081/{DOC_ID}"
 
@@ -82,11 +82,11 @@ async def initialize_mcp_collaboration():
     global document_manager
     
     def handle_document_events(event_type: str, event_data: dict):
-        """Handle events from document models, especially BROADCAST_NEEDED"""
+        """Handle events from document documents, especially BROADCAST_NEEDED"""
         if event_type == "broadcast_needed" and document_manager.client_mode:
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
-            if doc_id and doc_id in document_manager.models:
+            if doc_id and doc_id in document_manager.documents:
                 print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
                 # Extract broadcast data from the event - this contains the pre-built message
                 broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
@@ -116,11 +116,11 @@ def sync_initialize_mcp_collaboration():
     global document_manager
     
     def handle_document_events(event_type: str, event_data: dict):
-        """Handle events from document models, especially BROADCAST_NEEDED"""
+        """Handle events from document documents, especially BROADCAST_NEEDED"""
         if event_type == "broadcast_needed" and document_manager.client_mode:
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
-            if doc_id and doc_id in document_manager.models:
+            if doc_id and doc_id in document_manager.documents:
                 print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
                 # Extract broadcast data from the event - this contains the pre-built message
                 broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}

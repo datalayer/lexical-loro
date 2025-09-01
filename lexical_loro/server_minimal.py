@@ -165,7 +165,7 @@ class MinimalLoroServer:
     async def _send_initial_snapshots(self, websocket, client_id: str):
         """Send snapshots of existing documents to new client"""
         # Send snapshots for all existing documents
-        for doc_id in self.document_manager.models.keys():
+        for doc_id in self.document_manager.documents.keys():
             model = self.get_document(doc_id)
             # Get the JSON data as a dict, not a string
             snapshot_data = json.loads(model.to_json())
@@ -178,7 +178,7 @@ class MinimalLoroServer:
             logger.info(f"📄 Sent {doc_id} snapshot to {client_id}")
             
         # If no documents exist yet, still initialize the default lexical doc for UI compatibility
-        if not self.document_manager.models:
+        if not self.document_manager.documents:
             model = self.get_document(LEXICAL_DOC_ID)
             # Get the JSON data as a dict, not a string
             snapshot_data = json.loads(model.to_json())

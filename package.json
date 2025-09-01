@@ -50,7 +50,8 @@
     "test:js": "vitest run",
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",
     "test:py:coverage": "python3 -m pytest lexical_loro/tests/ --cov=. --cov-report=html --cov-report=term",
-    "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f"
+    "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f",
+    "watch:lib": "tsc -b -w"
   },
   "dependencies": {
     "loro-crdt": "^1.5.10",
@@ -75,6 +76,7 @@
     "@lexical/history": "^0.33.1",
     "@lexical/html": "^0.33.1",
     "@lexical/list": "^0.33.1",
+    "@lexical/mark": "^0.33.1",
     "@lexical/plain-text": "^0.33.1",
     "@lexical/rich-text": "^0.33.1",
     "@lexical/table": "^0.33.1",
