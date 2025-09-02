@@ -17,11 +17,13 @@ All document logic is handled by LexicalModel.
 import asyncio
 import json
 import logging
+import os
 import random
 import string
 import sys
 import time
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, Callable, Optional
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
 from .model.lexical_model import LexicalModel, LexicalDocumentManager
@@ -39,6 +41,50 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def default_load_model(doc_id: str) -> Optional[str]:
+    """
+    Default load_model implementation - returns initial content for new models.
+    
+    Args:
+        doc_id: Document ID to load
+        
+    Returns:
+        Initial content string or None for default initialization
+    """
+    return INITIAL_LEXICAL_JSON
+
+
+def default_save_model(doc_id: str, model: LexicalModel) -> bool:
+    """
+    Default save_model implementation - saves to local .models folder.
+    
+    Args:
+        doc_id: Document ID
+        model: LexicalModel instance to save
+        
+    Returns:
+        True if save successful, False otherwise
+    """
+    try:
+        # Create .models directory if it doesn't exist
+        models_dir = Path(".models")
+        models_dir.mkdir(exist_ok=True)
+        
+        # Save model as JSON file
+        model_file = models_dir / f"{doc_id}.json"
+        model_data = model.to_json()
+        
+        with open(model_file, 'w', encoding='utf-8') as f:
+            f.write(model_data)
+        
+        logger.info(f"💾 Saved model {doc_id} to {model_file}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to save model {doc_id}: {e}")
+        return False
+
+
 class LoroWebSocketServer:
     """
     Pure WebSocket Relay Server with Multi-Document Support
@@ -51,23 +97,31 @@ class LoroWebSocketServer:
     All document and ephemeral data management is delegated to LexicalDocumentManager.
     """
     
-    def __init__(self, port: int = 8081, host: str = "localhost"):
+    def __init__(self, port: int = 8081, host: str = "localhost", 
+                 load_model: Optional[Callable[[str], Optional[str]]] = None,
+                 save_model: Optional[Callable[[str, LexicalModel], bool]] = None):
         self.port = port
         self.host = host
         self.clients: Dict[str, Client] = {}
+        
+        # Model persistence functions
+        self.load_model = load_model or default_load_model
+        self.save_model = save_model or default_save_model
+        
         self.document_manager = LexicalDocumentManager(
             event_callback=self._on_document_event,
             ephemeral_timeout=300000  # 5 minutes ephemeral timeout
         )
         self.running = False
+        self._autosave_task: Optional[asyncio.Task] = None
     
     def get_document(self, doc_id: str) -> LexicalModel:
         """
         Get or create a document through the document manager.
-        Delegate to LexicalDocumentManager.
+        Uses the load_model function to get initial content.
         """
-        # Provide initial content for lexical models
-        initial_content = INITIAL_LEXICAL_JSON
+        # Try to load initial content using the load_model function
+        initial_content = self.load_model(doc_id)
         
         return self.document_manager.get_or_create_document(doc_id, initial_content)
 
@@ -232,6 +286,61 @@ class LoroWebSocketServer:
         except Exception as e:
             logger.error(f"❌ Error in broadcast handling: {e}")
     
+    async def _autosave_models(self):
+        """Periodically auto-save all models every 5 seconds"""
+        while self.running:
+            try:
+                await asyncio.sleep(5)  # Auto-save every 5 seconds
+                if self.running:
+                    doc_ids = self.document_manager.list_models()
+                    if doc_ids:
+                        logger.debug(f"🔄 Auto-saving {len(doc_ids)} models...")
+                        for doc_id in doc_ids:
+                            try:
+                                model = self.document_manager.get_or_create_document(doc_id)
+                                success = self.save_model(doc_id, model)
+                                if not success:
+                                    logger.warning(f"⚠️ Auto-save failed for model {doc_id}")
+                            except Exception as e:
+                                logger.error(f"❌ Error auto-saving model {doc_id}: {e}")
+                    
+            except asyncio.CancelledError:
+                logger.info("🛑 Auto-save task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"❌ Error in auto-save loop: {e}")
+        
+        logger.info("✅ Auto-save task stopped")
+    
+    def save_all_models(self) -> Dict[str, bool]:
+        """
+        Manually save all models using the save_model function.
+        
+        Returns:
+            Dictionary mapping doc_id to save success status
+        """
+        results = {}
+        doc_ids = self.document_manager.list_models()
+        
+        logger.info(f"💾 Manually saving {len(doc_ids)} models...")
+        
+        for doc_id in doc_ids:
+            try:
+                model = self.document_manager.get_or_create_document(doc_id)
+                success = self.save_model(doc_id, model)
+                results[doc_id] = success
+                
+                if success:
+                    logger.info(f"💾 Successfully saved model {doc_id}")
+                else:
+                    logger.warning(f"⚠️ Failed to save model {doc_id}")
+                    
+            except Exception as e:
+                logger.error(f"❌ Error saving model {doc_id}: {e}")
+                results[doc_id] = False
+        
+        return results
+    
     async def start(self):
         """Start the WebSocket server"""
         logger.info(f"🚀 Loro WebSocket relay starting on {self.host}:{self.port}")
@@ -248,8 +357,9 @@ class LoroWebSocketServer:
         ):
             logger.info(f"✅ Loro WebSocket relay running on ws://{self.host}:{self.port}")
             
-            # Start stats logging task
+            # Start background tasks
             stats_task = asyncio.create_task(self.log_stats())
+            self._autosave_task = asyncio.create_task(self._autosave_models())
             
             try:
                 # Keep the server running until interrupted
@@ -259,9 +369,20 @@ class LoroWebSocketServer:
                 logger.info("🛑 Server shutdown requested")
             finally:
                 self.running = False
+                
+                # Cancel background tasks
                 stats_task.cancel()
+                if self._autosave_task:
+                    self._autosave_task.cancel()
+                
                 try:
                     await stats_task
+                except asyncio.CancelledError:
+                    pass
+                
+                try:
+                    if self._autosave_task:
+                        await self._autosave_task
                 except asyncio.CancelledError:
                     pass
     
@@ -538,6 +659,28 @@ class LoroWebSocketServer:
         logger.info("🛑 Shutting down Loro WebSocket relay...")
         self.running = False
         
+        # Cancel auto-save task
+        if self._autosave_task:
+            self._autosave_task.cancel()
+            try:
+                await self._autosave_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Perform final save of all models
+        logger.info("💾 Performing final save of all models...")
+        doc_ids = self.document_manager.list_models()
+        for doc_id in doc_ids:
+            try:
+                model = self.document_manager.get_or_create_document(doc_id)
+                success = self.save_model(doc_id, model)
+                if success:
+                    logger.info(f"💾 Final save completed for model {doc_id}")
+                else:
+                    logger.warning(f"⚠️ Final save failed for model {doc_id}")
+            except Exception as e:
+                logger.error(f"❌ Error during final save of model {doc_id}: {e}")
+        
         # Close all client connections
         clients_to_close = list(self.clients.values())
         for client in clients_to_close:
@@ -556,7 +699,44 @@ class LoroWebSocketServer:
 
 async def main():
     """Main entry point"""
-    server = LoroWebSocketServer(8081)  # Use port 8081 to not conflict with Node.js server
+    # Example of custom load/save functions (uncomment to use)
+    
+    # def custom_load_model(doc_id: str) -> Optional[str]:
+    #     """Custom model loader - could load from database, API, etc."""
+    #     try:
+    #         # Example: Load from custom location
+    #         custom_file = Path(f"custom_models/{doc_id}.json")
+    #         if custom_file.exists():
+    #             with open(custom_file, 'r', encoding='utf-8') as f:
+    #                 return f.read()
+    #     except Exception as e:
+    #         logger.error(f"❌ Custom load failed for {doc_id}: {e}")
+    #     # Fall back to default initial content
+    #     return INITIAL_LEXICAL_JSON
+    
+    # def custom_save_model(doc_id: str, model: LexicalModel) -> bool:
+    #     """Custom model saver - could save to database, API, etc."""
+    #     try:
+    #         # Example: Save to custom location
+    #         custom_dir = Path("custom_models")
+    #         custom_dir.mkdir(exist_ok=True)
+    #         custom_file = custom_dir / f"{doc_id}.json"
+    #         
+    #         model_data = model.to_json()
+    #         with open(custom_file, 'w', encoding='utf-8') as f:
+    #             f.write(model_data)
+    #         logger.info(f"💾 Custom saved model {doc_id}")
+    #         return True
+    #     except Exception as e:
+    #         logger.error(f"❌ Custom save failed for {doc_id}: {e}")
+    #         return False
+    
+    # Create server with default functions (or pass custom ones)
+    server = LoroWebSocketServer(
+        port=8081,
+        # load_model=custom_load_model,  # Uncomment to use custom loader
+        # save_model=custom_save_model   # Uncomment to use custom saver
+    )
     
     try:
         await server.start()
