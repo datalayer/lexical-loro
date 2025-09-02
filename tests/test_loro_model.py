@@ -334,7 +334,7 @@ def test_document_structure():
         ("heading2", "Endpoints"),
         ("paragraph", "The following endpoints are available:"),
         ("heading3", "Document Operations"),
-        ("paragraph", "Create, read, update, and delete documents using these endpoints."),
+        ("paragraph", "Create, read, update, and delete models using these endpoints."),
         ("heading3", "Collaboration Features"),
         ("paragraph", "Real-time collaboration features for multiple users."),
         ("heading2", "Error Handling"),
@@ -491,13 +491,13 @@ def test_serialization():
     print("✓ All data verified successfully")
 
 
-def test_loro_documents():
-    """Test access to underlying Loro documents"""
+def test_loro_models():
+    """Test access to underlying Loro models"""
     print_section("Loro Document Integration")
     
     model = LoroModel()
     
-    print("\n1. Accessing Loro documents:")
+    print("\n1. Accessing Loro models:")
     text_doc = model.get_text_document()
     structured_doc = model.get_structured_document()
     
@@ -509,7 +509,7 @@ def test_loro_documents():
     model.add_block({"text": "Test content for Loro sync"}, "paragraph")
     
     # In a real implementation, you would check the Loro document contents
-    print("✓ Content added - Loro documents updated")
+    print("✓ Content added - Loro models updated")
     print("  (In production: both text and structured Loro docs are synchronized)")
     
     print("\n3. Document synchronization features:")
@@ -553,7 +553,7 @@ def showcase_real_world_usage():
         ("heading1", "API Reference"),
         ("paragraph", "Complete reference for the Lexical-Loro API."),
         ("heading2", "Class: LoroModel"),
-        ("paragraph", "Main class for managing lexical documents with Loro integration."),
+        ("paragraph", "Main class for managing lexical models with Loro integration."),
         ("heading3", "Methods"),
         ("paragraph", "add_block(block_detail, type) - Adds a new block to the document"),
         ("paragraph", "update_block(index, block_detail, type) - Updates an existing block"),
@@ -612,8 +612,8 @@ def run_all_tests():
         # Serialization
         test_serialization()
         
-        # Loro documents
-        test_loro_documents()
+        # Loro models
+        test_loro_models()
         
         # Real-world usage
         showcase_real_world_usage()

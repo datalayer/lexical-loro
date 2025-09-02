@@ -13,7 +13,7 @@ def test_server_model_integration():
     
     print("🧪 Testing LoroModel integration in server...")
     
-    # Check that models were created for lexical documents during initialization
+    # Check that models were created for lexical models during initialization
     print(f"📊 Initial state:")
     print(f"  - Documents: {list(server.loro_docs.keys())}")
     print(f"  - Models: {list(server.loro_models.keys())}")

@@ -33,3 +33,5 @@ lexical_loro/__version__.py
 *.njsproj
 *.sln
 *.sw?
+
+.models

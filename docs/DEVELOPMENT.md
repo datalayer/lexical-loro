@@ -205,7 +205,7 @@ import pdb; pdb.set_trace()
 ```bash
 # Use browser dev tools Performance tab
 # Profile WebSocket message handling
-# Monitor memory usage for large documents
+# Monitor memory usage for large models
 ```
 
 **Python Profiling:**

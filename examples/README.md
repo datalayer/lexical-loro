@@ -12,7 +12,7 @@ This directory contains practical examples demonstrating how to use LexicalModel
 
 Demonstrates basic LexicalModel usage without file persistence:
 
-- Creating documents in memory
+- Creating models in memory
 - Adding different types of blocks (headings, paragraphs)
 - Getting document statistics and information
 - JSON export capabilities
@@ -24,11 +24,11 @@ python examples/memory_only_example.py
 
 ### 2. File-based Sync (`file_sync_example.py`)
 
-Shows how to persist and load documents from files:
+Shows how to persist and load models from files:
 
-- Saving documents to JSON files
-- Loading documents from JSON files
-- Updating and re-saving documents
+- Saving models to JSON files
+- Loading models from JSON files
+- Updating and re-saving models
 - Batch file operations
 - Comparing document versions
 
@@ -173,18 +173,18 @@ from flask import Flask, request, jsonify
 from lexical_loro.model.lexical_model import LexicalModel
 
 app = Flask(__name__)
-documents = {}
+models = {}
 
-@app.route('/api/documents/<doc_id>')
+@app.route('/api/models/<doc_id>')
 def get_document(doc_id):
-    if doc_id not in documents:
-        documents[doc_id] = LexicalModel.create_document(doc_id)
-    return jsonify(json.loads(documents[doc_id].to_json()))
+    if doc_id not in models:
+        models[doc_id] = LexicalModel.create_document(doc_id)
+    return jsonify(json.loads(models[doc_id].to_json()))
 
-@app.route('/api/documents/<doc_id>/save')
+@app.route('/api/models/<doc_id>/save')
 def save_document(doc_id):
-    if doc_id in documents:
-        success = documents[doc_id].save_to_file(f'docs/{doc_id}.json')
+    if doc_id in models:
+        success = models[doc_id].save_to_file(f'docs/{doc_id}.json')
         return jsonify({'success': success})
     return jsonify({'error': 'Document not found'}), 404
 ```

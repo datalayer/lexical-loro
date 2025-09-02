@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Step 3: EphemeralStore integration into LexicalModel
+Test: EphemeralStore integration into LexicalModel
 """
 
 import sys
@@ -225,8 +225,8 @@ def test_error_handling():
     print("✅ Missing data error handling working")
 
 def run_all_tests():
-    """Run all Step 3 tests"""
-    print("🚀 Starting Step 3: EphemeralStore Integration Tests")
+    """Run all tests"""
+    print("🚀 Starting: EphemeralStore Integration Tests")
     print("=" * 60)
     
     try:
@@ -239,7 +239,7 @@ def run_all_tests():
         test_error_handling()
         
         print("\n" + "=" * 60)
-        print("🎉 All Step 3 tests PASSED!")
+        print("🎉 All tests PASSED!")
         print("✅ LexicalModel now has integrated EphemeralStore management")
         print("✅ handle_ephemeral_message() supports all required message types")
         print("✅ Ephemeral data broadcasting is properly structured")

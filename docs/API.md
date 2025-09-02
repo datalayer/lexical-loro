@@ -131,4 +131,4 @@ server = LoroWebSocketServer(port=8081, host="localhost")
 The server supports multiple document types with different IDs:
 - `shared-text`: Basic text collaboration
 - `lexical-shared-doc`: Rich text with Lexical  
-- Custom document IDs for multiple simultaneous documents
+- Custom document IDs for multiple simultaneous models

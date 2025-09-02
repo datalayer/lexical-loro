@@ -11,15 +11,15 @@ import loro
 
 class LoroModel:
     """
-    A class that implements two-way binding between Lexical data structure and Loro documents.
+    A class that implements two-way binding between Lexical data structure and Loro models.
     
-    Manages two Loro documents:
+    Manages two Loro models:
     1. A text document with serialized content
     2. A structured document that mirrors the lexical structure with LoroMap and LoroArray
     """
     
     def __init__(self):
-        # Initialize two Loro documents
+        # Initialize two Loro models
         self.text_doc = loro.LoroDoc()
         self.structured_doc = loro.LoroDoc()
         
@@ -38,11 +38,11 @@ class LoroModel:
             "version": "0.34.0"
         }
         
-        # Initialize Loro documents with the base structure
+        # Initialize Loro models with the base structure
         self._sync_to_loro()
     
     def _sync_to_loro(self):
-        """Sync the current lexical_data to both Loro documents"""
+        """Sync the current lexical_data to both Loro models"""
         # Update text document with serialized JSON
         text_data = self.text_doc.get_text("content")
         current_length = text_data.len_unicode
@@ -123,7 +123,7 @@ class LoroModel:
         self.lexical_data["root"]["children"].append(new_block)
         self.lexical_data["lastSaved"] = int(time.time() * 1000)
         
-        # Sync to Loro documents
+        # Sync to Loro models
         self._sync_to_loro()
     
     def get_blocks(self) -> List[Dict[str, Any]]:
@@ -515,7 +515,7 @@ def main():
         print(f"  • CRUD operations (Create, Read, Update, Delete)")
         print(f"  • JSON serialization and data exchange")
         print(f"  • Collaborative editing simulation")
-        print(f"  • Two-way binding with Loro documents")
+        print(f"  • Two-way binding with Loro models")
         
         print(f"\n🎯 Usage Patterns Shown:")
         print(f"  model = LoroModel()")

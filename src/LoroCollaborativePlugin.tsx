@@ -909,7 +909,10 @@ export function LoroCollaborativePlugin({
   const cursorTimestamps = useRef<Record<string, number>>({});
 
   const updateLoroFromLexical = useCallback((editorState: EditorState) => {
-    if (!loroTextRef.current) return;
+    if (!loroTextRef.current) {
+      console.warn('🚨 updateLoroFromLexical called but loroTextRef.current is null');
+      return;
+    }
     
     let editorStateJson = '';
     editorState.read(() => {
@@ -919,7 +922,18 @@ export function LoroCollaborativePlugin({
     });
     
     const currentLoroText = loroTextRef.current.toString();
-    if (currentLoroText === editorStateJson) return;
+    
+    console.log('🔄 updateLoroFromLexical triggered:', {
+      currentLength: currentLoroText.length,
+      newLength: editorStateJson.length,
+      hasChanged: currentLoroText !== editorStateJson,
+      isLocalChange: isLocalChange.current
+    });
+    
+    if (currentLoroText === editorStateJson) {
+      console.log('🔄 No changes detected, skipping update');
+      return;
+    }
 
     // Mark this as a local change
     isLocalChange.current = true;
@@ -930,6 +944,13 @@ export function LoroCollaborativePlugin({
       // Calculate the difference between current and new content
       const oldContent = currentLoroText;
       const newContent = editorStateJson;
+      
+      console.log('🔄 Incremental update starting:', {
+        oldLength: oldContent.length,
+        newLength: newContent.length,
+        oldStart: oldContent.substring(0, 100),
+        newStart: newContent.substring(0, 100)
+      });
       
       // Find common prefix and suffix to minimize changes
       let prefixEnd = 0;
@@ -949,11 +970,22 @@ export function LoroCollaborativePlugin({
         newSuffixStart--;
       }
       
+      console.log('🔄 Diff calculation:', {
+        prefixEnd,
+        suffixStart,
+        newSuffixStart,
+        deleteLength: suffixStart - prefixEnd,
+        insertLength: newSuffixStart - prefixEnd,
+        deleteText: oldContent.substring(prefixEnd, suffixStart),
+        insertText: newContent.substring(prefixEnd, newSuffixStart)
+      });
+      
       // Apply incremental changes
       if (prefixEnd < suffixStart) {
         // Delete the changed portion
         const deleteLength = suffixStart - prefixEnd;
         if (deleteLength > 0) {
+          console.log('🗑️ Deleting:', { position: prefixEnd, length: deleteLength });
           loroTextRef.current.delete(prefixEnd, deleteLength);
         }
       }
@@ -962,15 +994,37 @@ export function LoroCollaborativePlugin({
         // Insert the new content
         const insertText = newContent.substring(prefixEnd, newSuffixStart);
         if (insertText.length > 0) {
+          console.log('➕ Inserting:', { position: prefixEnd, text: insertText.substring(0, 100) });
           loroTextRef.current.insert(prefixEnd, insertText);
         }
       }
       
+      console.log('✅ Incremental update completed successfully');
+      
     } catch (error) {
-      console.warn('Error with incremental update, falling back to full replacement:', error);
-      // Fallback to full replacement if incremental update fails
-      loroTextRef.current.delete(0, currentLoroText.length);
-      loroTextRef.current.insert(0, editorStateJson);
+      console.warn('🚨 Error with incremental update, falling back to full replacement:', error);
+      console.warn('🚨 Error details:', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        currentLoroTextLength: currentLoroText.length,
+        newContentLength: editorStateJson.length
+      });
+      
+      // Check if the CRDT text container is still valid
+      if (!loroTextRef.current) {
+        console.error('🚨 CRDT text container is null during error recovery!');
+        return;
+      }
+      
+      try {
+        // Fallback to full replacement if incremental update fails
+        loroTextRef.current.delete(0, currentLoroText.length);
+        loroTextRef.current.insert(0, editorStateJson);
+        console.warn('🚨 Full replacement fallback completed successfully');
+      } catch (fallbackError) {
+        console.error('🚨 Even full replacement fallback failed:', fallbackError);
+        return;
+      }
     }
     
     // Send update to WebSocket server
@@ -1030,20 +1084,132 @@ export function LoroCollaborativePlugin({
 
       try {
         if (incoming && incoming.trim().length > 0) {
+          // DEBUG: Log the incoming content to see what's causing JSON parsing to fail
+          console.log('🔍 updateLexicalFromLoro incoming content length:', incoming.length);
+          console.log('🔍 updateLexicalFromLoro incoming preview:', incoming.slice(0, 200) + '...');
+          
           // Try to parse as Lexical EditorState JSON first
           try {
+            console.log('🔍 About to parse JSON - final length check:', incoming.length);
+            console.log('🔍 Content ending before parse:', '...' + incoming.slice(-200));
+            console.log('🔍 Content character codes near end:', incoming.slice(-10).split('').map(c => c.charCodeAt(0)));
+            
             const parsed = JSON.parse(incoming);
-            // Support both raw EditorState and wrapper { editorState: { ... } }
-            const stateLike = (parsed && typeof parsed === 'object' && parsed.editorState)
-              ? parsed.editorState
-              : parsed;
+            console.log('✅ JSON parsing successful, parsed type:', typeof parsed);
+            console.log('✅ Parsed structure:', {
+              hasRoot: !!parsed.root,
+              hasEditorState: !!parsed.editorState,
+              rootType: parsed.root?.type,
+              children: parsed.root?.children?.length
+            });
+            
+            // Only support direct Lexical EditorState format: {"root": {...}}
+            // This standardizes the format and prevents confusion between wrapped/unwrapped formats
+            const stateLike = parsed; // Always use the parsed object directly
             if (stateLike && typeof stateLike === 'object' && stateLike.root && stateLike.root.type === 'root') {
               const newEditorState = editor.parseEditorState(stateLike);
               editor.setEditorState(newEditorState);
               applied = true;
+              console.log('✅ Successfully applied JSON as Lexical state');
+            } else {
+              console.log('❌ JSON structure invalid for Lexical:', {
+                stateLike: typeof stateLike,
+                hasRoot: !!stateLike?.root,
+                rootType: stateLike?.root?.type
+              });
             }
-          } catch {
-            // Not JSON; will treat as plain text below
+          } catch (parseError) {
+            console.log('❌ JSON parsing failed:', parseError);
+            console.log('❌ Content that failed to parse:', incoming.slice(0, 500));
+            
+            // Extract error position for detailed analysis
+            const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+            const errorMatch = errorMessage.match(/position (\d+)/);
+            if (errorMatch) {
+              const errorPos = parseInt(errorMatch[1]);
+              console.log('❌ Error position analysis:', {
+                errorPosition: errorPos,
+                totalLength: incoming.length,
+                characterAtError: incoming[errorPos] || 'undefined',
+                charCodeAtError: incoming.charCodeAt(errorPos) || 'undefined',
+                contextBefore: incoming.slice(Math.max(0, errorPos - 50), errorPos),
+                contextAfter: incoming.slice(errorPos, errorPos + 50)
+              });
+            }
+            
+            // Check if this looks like JSON concatenation
+            if (incoming.includes('}{')) {
+              console.log('🚨 FOUND JSON CONCATENATION! Multiple JSON objects detected');
+              const jsonObjects = incoming.split('}{');
+              console.log('🚨 Number of concatenated objects:', jsonObjects.length);
+              
+              // Try to parse each JSON object and use the most complete/recent one
+              let bestParsedObject = null;
+              let bestObjectIndex = -1;
+              
+              for (let i = 0; i < jsonObjects.length; i++) {
+                try {
+                  let objectToTry;
+                  if (i === 0) {
+                    // First object: add closing brace
+                    objectToTry = jsonObjects[i] + '}';
+                  } else if (i === jsonObjects.length - 1) {
+                    // Last object: add opening brace
+                    objectToTry = '{' + jsonObjects[i];
+                  } else {
+                    // Middle objects: add both braces
+                    objectToTry = '{' + jsonObjects[i] + '}';
+                  }
+                  
+                  console.log(`🔧 Attempting to parse JSON object ${i}:`, objectToTry.slice(0, 100) + '...');
+                  const parsed = JSON.parse(objectToTry);
+                  
+                  // Check if this looks like a valid Lexical state
+                  const stateLike = (parsed && typeof parsed === 'object' && parsed.editorState)
+                    ? parsed.editorState
+                    : parsed;
+                  
+                  if (stateLike && typeof stateLike === 'object' && stateLike.root && stateLike.root.type === 'root') {
+                    console.log(`✅ Object ${i} has valid Lexical structure with ${stateLike.root.children?.length || 0} children`);
+                    
+                    // Prefer objects with more content (more children nodes)
+                    const childrenCount = stateLike.root.children?.length || 0;
+                    const previousBestCount = bestParsedObject?.root?.children?.length || 0;
+                    
+                    if (!bestParsedObject || childrenCount >= previousBestCount) {
+                      bestParsedObject = stateLike;
+                      bestObjectIndex = i;
+                      console.log(`🎯 Object ${i} is now the best candidate (${childrenCount} children vs ${previousBestCount})`);
+                    }
+                  } else {
+                    console.log(`❌ Object ${i} structure invalid for Lexical:`, {
+                      stateLike: typeof stateLike,
+                      hasRoot: !!stateLike?.root,
+                      rootType: stateLike?.root?.type
+                    });
+                  }
+                } catch (objectError) {
+                  console.log(`❌ Failed to parse JSON object ${i}:`, objectError);
+                }
+              }
+              
+              if (bestParsedObject) {
+                try {
+                  const newEditorState = editor.parseEditorState(bestParsedObject);
+                  editor.setEditorState(newEditorState);
+                  applied = true;
+                  console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as Lexical state (most complete)`);
+                } catch (applyError) {
+                  console.log('❌ Failed to apply best JSON object to editor:', applyError);
+                }
+              } else {
+                console.log('❌ No valid Lexical state found in any concatenated JSON object');
+              }
+            }
+            
+            if (!applied) {
+              // Not JSON; will treat as plain text below
+            }
           }
 
           if (!applied) {
@@ -1225,8 +1391,8 @@ export function LoroCollaborativePlugin({
   }, [editor, clientId, clientColor, docId]);
 
   useEffect(() => {
-    // Initialize Loro document and text object
-    loroTextRef.current = loroDocRef.current.getText(docId);
+    // Initialize Loro document and text object - always use "content" container
+    loroTextRef.current = loroDocRef.current.getText("content");
     
     // Only initialize awareness if it doesn't exist yet
     if (!awarenessRef.current) {
@@ -1932,6 +2098,16 @@ export function LoroCollaborativePlugin({
       if (!isLocalChange.current) {
         // This is a remote change, update Lexical editor
         const currentText = loroTextRef.current?.toString() || '';
+        console.log('🔍📥 CRDT subscription triggered - content length:', currentText.length);
+        console.log('🔍📥 CRDT content preview:', currentText.slice(0, 200) + '...');
+        console.log('🔍📥 CRDT content ending:', '...' + currentText.slice(-200));
+        
+        // Check if content is truncated (ends abruptly)
+        if (currentText.length > 100 && !currentText.endsWith('}')) {
+          console.error('🚨 CRDT content appears truncated - does not end with }');
+          console.error('🚨 Last 100 characters:', currentText.slice(-100));
+        }
+        
         updateLexicalFromLoro(editor, currentText);
       }
       // Force cursor re-render when document changes (content affects cursor positioning)
@@ -2091,7 +2267,50 @@ export function LoroCollaborativePlugin({
             if (data.type === 'loro-update' && data.docId === docId) {
               // Apply remote update to local document
               const update = new Uint8Array(data.update!);
+              
+              console.log('🔍📥 Processing loro-update:', {
+                updateSize: update.length,
+                docId: data.docId,
+                hasUpdate: !!data.update
+              });
+              
+              // Check CRDT content BEFORE import
+              const contentBefore = loroTextRef.current?.toString() || '';
+              console.log('🔍📥 CRDT content BEFORE import:', {
+                length: contentBefore.length,
+                preview: contentBefore.slice(0, 100) + '...',
+                ending: '...' + contentBefore.slice(-100)
+              });
+              
               loroDocRef.current.import(update);
+              
+              // Check CRDT content AFTER import
+              const contentAfter = loroTextRef.current?.toString() || '';
+              console.log('🔍📥 CRDT content AFTER import:', {
+                length: contentAfter.length,
+                preview: contentAfter.slice(0, 100) + '...',
+                ending: '...' + contentAfter.slice(-100),
+                lengthChanged: contentBefore.length !== contentAfter.length,
+                contentChanged: contentBefore !== contentAfter
+              });
+              
+              // Check for truncation
+              if (contentAfter.length > 100 && !contentAfter.endsWith('}')) {
+                console.error('🚨 CRDT content appears truncated after import - does not end with }');
+                console.error('🚨 Last 200 characters:', contentAfter.slice(-200));
+              }
+              
+              // Sync imported changes to Lexical editor
+              if (contentAfter && contentAfter.trim().length > 0 && contentBefore !== contentAfter) {
+                try {
+                  updateLexicalFromLoro(editor, contentAfter);
+                  console.log('✅ Successfully updated Lexical editor from loro-update');
+                } catch (e) {
+                  console.warn('⚠️ Could not update Lexical editor from loro-update:', e);
+                }
+              } else {
+                console.log('📝 No content change detected, skipping Lexical update');
+              }
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
               // Apply initial snapshot from server and immediately sync to Lexical
               const snapshot = new Uint8Array(data.snapshot!);
@@ -2106,18 +2325,9 @@ export function LoroCollaborativePlugin({
               
               // Immediately reflect the current Loro content into the editor after import
               try {
-                // For lexical-shared-doc, we need to get the structured JSON from the content container
-                let currentContent = '';
-                
-                try {
-                  // Try to get from 'content' container first (structured JSON)
-                  currentContent = loroDocRef.current.getText('content').toString();
-                  console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
-                } catch {
-                  // Fallback to docId container if content doesn't exist
-                  currentContent = loroDocRef.current.getText(docId).toString();
-                  console.log('📋 Fallback to docId container:', currentContent.slice(0, 100) + '...');
-                }
+                // Always use 'content' container for structured JSON (single container architecture)
+                const currentContent = loroDocRef.current.getText('content').toString();
+                console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
                 
                 if (currentContent && currentContent.trim().length > 0) {
                   updateLexicalFromLoro(editor, currentContent);
@@ -2346,7 +2556,7 @@ export function LoroCollaborativePlugin({
         wsRef.current.close();
       }
     };
-  }, [websocketUrl, docId, editor, onPeerIdChange, updateLexicalFromLoro]); // Include all dependencies
+  }, [websocketUrl, docId, editor, onPeerIdChange, onInitialization, updateLexicalFromLoro]); // Include all dependencies
 
   // Cleanup stale cursors periodically
   useEffect(() => {

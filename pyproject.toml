@@ -25,6 +25,9 @@ dependencies = [
     "websockets>=12.0",
     "click>=8.0.0",
     "loro>=0.18.0",
+    "mcp>=1.10.1",
+    "uvicorn>=0.23.1",
+    "starlette>=0.27",
 ]
 dynamic = ["version", "description", "authors", "keywords"]
 
@@ -51,6 +54,7 @@ Issues = "https://github.com/datalayer/lexical-loro/issues"
 
 [project.scripts]
 lexical-loro-server = "lexical_loro.cli:main"
+lexical-loro-mcp-server = "lexical_loro.mcp:main"
 
 [tool.hatch.version]
 source = "nodejs"

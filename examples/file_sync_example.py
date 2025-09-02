@@ -3,7 +3,7 @@
 Simple LexicalModel Example: File-based Sync
 
 This example demonstrates how to use LexicalModel with file persistence,
-including saving, loading, and updating documents on disk.
+including saving, loading, and updating models on disk.
 """
 
 import os
@@ -75,7 +75,7 @@ def main():
             print(f"   📏 Updated file size: {os.path.getsize(updated_file_path)} bytes")
         
         # Example 4: Compare original and updated
-        print("\n4. Comparing original and updated documents...")
+        print("\n4. Comparing original and updated models...")
         original_model = LexicalModel.load_from_file(file_path)
         updated_model = LexicalModel.load_from_file(updated_file_path)
         
@@ -108,7 +108,7 @@ def main():
         # Example 6: Batch operations
         print("\n6. Batch file operations...")
         
-        # Create multiple documents
+        # Create multiple models
         document_names = ["notes", "todo", "ideas", "draft"]
         created_files = []
         
@@ -122,10 +122,10 @@ def main():
                 created_files.append(doc_file)
                 print(f"   ✅ Created {doc_name}.json")
         
-        print(f"   📁 Created {len(created_files)} documents in batch")
+        print(f"   📁 Created {len(created_files)} models in batch")
         
-        # Load and display all documents
-        print("\n7. Loading all created documents...")
+        # Load and display all models
+        print("\n7. Loading all created models...")
         for file_path in created_files:
             filename = os.path.basename(file_path)
             doc = LexicalModel.load_from_file(file_path)

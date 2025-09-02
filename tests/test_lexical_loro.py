@@ -21,7 +21,7 @@ def test_server_initialization():
     server = LoroWebSocketServer(port=8082)
     assert server.port == 8082
     assert len(server.clients) == 0
-    assert len(server.loro_docs) > 0  # Should have default documents
+    assert len(server.loro_docs) > 0  # Should have default models
     assert not server.running
 
 
@@ -37,11 +37,11 @@ def test_client_initialization():
     assert client.selection is None
 
 
-def test_server_documents_initialization():
-    """Test that server initializes default documents"""
+def test_server_models_initialization():
+    """Test that server initializes default models"""
     server = LoroWebSocketServer()
     
-    # Check that default documents are created
+    # Check that default models are created
     expected_docs = [
         'shared-text', 
         'lexical-shared-doc'
@@ -51,7 +51,7 @@ def test_server_documents_initialization():
         assert doc_id in server.loro_docs
         assert doc_id in server.ephemeral_stores
     
-    # Verify the documents are properly initialized LoroDoc instances
+    # Verify the models are properly initialized LoroDoc instances
     assert len(server.loro_docs) == len(expected_docs)
     assert len(server.ephemeral_stores) == len(expected_docs)
 

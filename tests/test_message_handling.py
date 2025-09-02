@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Step 2: Message Handling Methods for LexicalModel
+Test: Message Handling Methods for LexicalModel
 
 Tests the new message handling capabilities:
 - LexicalModel.handle_message()
@@ -214,7 +214,7 @@ def test_message_response_format():
 
 def main():
     """Main test function"""
-    print("🚀 Testing Step 2: Message Handling Methods")
+    print("🚀 Testing: Message Handling Methods")
     print("=" * 50)
     
     try:
@@ -237,7 +237,7 @@ def main():
         test_message_response_format()
         
         print("\n" + "=" * 50)
-        print("🎉 All Step 2 tests completed successfully!")
+        print("🎉 All tests completed successfully!")
         
         # Show summary
         print(f"\n📋 Test Summary:")

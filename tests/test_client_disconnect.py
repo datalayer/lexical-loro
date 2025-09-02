@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test client disconnect handling in Step 3 LexicalModel
+Test client disconnect handling in LexicalModel
 """
 
 import sys

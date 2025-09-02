@@ -1,5 +1,5 @@
 """
-Test Step 4: Event System for Server Communication
+Test: Event System for Server Communication
 
 This test verifies that the LexicalModel correctly emits structured events
 instead of using simple callbacks, and that the server can handle these events.
@@ -10,7 +10,7 @@ import asyncio
 from unittest.mock import Mock, AsyncMock
 from lexical_loro.model.lexical_model import LexicalModel, LexicalEventType
 
-class TestStep4EventSystem:
+class TestEventSystem:
     def setup_method(self):
         """Set up test fixtures"""
         self.event_callback = Mock()

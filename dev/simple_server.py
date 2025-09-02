@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Step 2 Demo: Simplified Server Using LexicalModel Message Handling
+Demo: Simplified Server Using LexicalModel Message Handling
 
 This demonstrates how a server can now delegate Loro message handling 
 to LexicalModel instead of implementing it directly.
 
-Before Step 2: Server handled all Loro logic directly
-After Step 2: Server delegates to LexicalModel.handle_message()
+Before: Server handled all Loro logic directly
+After: Server delegates to LexicalModel.handle_message()
 """
 
 import json
@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from lexical_loro.model.lexical_model import LexicalModel
 
-# Simulate the simplified server structure after Step 2
+# Simulate the simplified server structure
 class SimplifiedServer:
     """
     Demonstration of how server code is simplified with LexicalModel message handling
@@ -86,8 +86,8 @@ class SimplifiedServer:
         """
         Simplified message handling - delegates Loro operations to LexicalModel
         
-        BEFORE Step 2: This method would be 100+ lines of Loro-specific logic
-        AFTER Step 2: This method is ~20 lines of delegation
+        BEFORE: This method would be 100+ lines of Loro-specific logic
+        AFTER: This method is ~20 lines of delegation
         """
         try:
             message_type = message_data.get("type")
@@ -159,9 +159,9 @@ class SimplifiedServer:
         }
         print(f"📤 Would send error to {client_id}: {error_response}")
 
-def demo_step2_simplification():
-    """Demonstrate the server simplification achieved in Step 2"""
-    print("🚀 Step 2 Demo: Simplified Server with LexicalModel Message Handling")
+def demo_simplification():
+    """Demonstrate the server simplification achieved"""
+    print("🚀 Demo: Simplified Server with LexicalModel Message Handling")
     print("=" * 70)
     
     # Create simplified server
@@ -223,7 +223,7 @@ def demo_step2_simplification():
             print(f"   📄 {doc_id}: {doc_info['lexical_blocks']} blocks, {doc_info['content_length']} chars")
         
         print("\n" + "=" * 70)
-        print("🎉 Step 2 Demo Complete!")
+        print("🎉 Demo Complete!")
         print("\n💡 Key Benefits Achieved:")
         print("   ✅ Server code simplified from 100+ lines to ~20 lines for Loro handling")
         print("   ✅ All Loro logic encapsulated in LexicalModel")
@@ -235,4 +235,4 @@ def demo_step2_simplification():
     asyncio.run(run_demo())
 
 if __name__ == "__main__":
-    demo_step2_simplification()
+    demo_simplification()

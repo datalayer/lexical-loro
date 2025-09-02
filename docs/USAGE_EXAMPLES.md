@@ -1,10 +1,10 @@
 # LoroModel Usage Examples
 
-This document provides comprehensive examples of how to use the `LoroModel` class for creating and managing collaborative documents with Lexical and Loro integration.
+This document provides comprehensive examples of how to use the `LoroModel` class for creating and managing collaborative models with Lexical and Loro integration.
 
 ## Overview
 
-The `LoroModel` class implements two-way binding between Lexical data structures and Loro documents, enabling real-time collaborative editing with conflict-free synchronization.
+The `LoroModel` class implements two-way binding between Lexical data structures and Loro models, enabling real-time collaborative editing with conflict-free synchronization.
 
 ## Basic Setup
 
@@ -165,11 +165,11 @@ with open('document.json', 'r') as f:
 ## 6. Loro Document Integration
 
 ```python
-# Access underlying Loro documents
+# Access underlying Loro models
 text_doc = model.get_text_document()        # Text-based Loro document
 structured_doc = model.get_structured_document()  # Structured Loro document
 
-# These documents are automatically synchronized when the model changes
+# These models are automatically synchronized when the model changes
 ```
 
 ## 7. Real-World Usage Patterns
@@ -351,7 +351,7 @@ def validate_document():
 
 ## Key Features Summary
 
-1. **Two-way binding**: Automatic synchronization between Lexical data and Loro documents
+1. **Two-way binding**: Automatic synchronization between Lexical data and Loro models
 2. **Rich text support**: Bold, italic, custom styling, and formatting
 3. **Hierarchical structure**: Support for headings (H1-H6) and paragraphs
 4. **CRUD operations**: Create, read, update, and delete blocks
@@ -367,6 +367,6 @@ def validate_document():
 3. **Validate indices**: Always check array bounds before updating or removing blocks
 4. **Use meaningful text**: Provide descriptive text content for better user experience
 5. **Handle errors**: Wrap JSON operations in try-catch blocks
-6. **Keep references**: Store references to Loro documents if you need direct access
+6. **Keep references**: Store references to Loro models if you need direct access
 
 This comprehensive guide demonstrates all the key features and usage patterns of the `LoroModel` class for collaborative document editing with Lexical and Loro integration.
