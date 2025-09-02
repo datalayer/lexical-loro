@@ -87,7 +87,7 @@ async def initialize_mcp_collaboration():
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
             if doc_id and doc_id in document_manager.models:
-                print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
+                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
                 # Extract broadcast data from the event - this contains the pre-built message
                 broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
                 # Call broadcast_change with the pre-built data
@@ -121,7 +121,7 @@ def sync_initialize_mcp_collaboration():
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
             if doc_id and doc_id in document_manager.models:
-                print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
+                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
                 # Extract broadcast data from the event - this contains the pre-built message
                 broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
                 # Call broadcast_change with the pre-built data

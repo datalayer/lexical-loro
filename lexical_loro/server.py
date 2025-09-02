@@ -17,7 +17,6 @@ All document logic is handled by LexicalModel.
 import asyncio
 import json
 import logging
-import os
 import random
 import string
 import sys
@@ -99,7 +98,8 @@ class LoroWebSocketServer:
     
     def __init__(self, port: int = 8081, host: str = "localhost", 
                  load_model: Optional[Callable[[str], Optional[str]]] = None,
-                 save_model: Optional[Callable[[str, LexicalModel], bool]] = None):
+                 save_model: Optional[Callable[[str, LexicalModel], bool]] = None,
+                 autosave_interval_sec: int = 5):
         self.port = port
         self.host = host
         self.clients: Dict[str, Client] = {}
@@ -107,6 +107,7 @@ class LoroWebSocketServer:
         # Model persistence functions
         self.load_model = load_model or default_load_model
         self.save_model = save_model or default_save_model
+        self.autosave_interval_sec = autosave_interval_sec  # Auto-save interval in seconds
         
         self.document_manager = LexicalDocumentManager(
             event_callback=self._on_document_event,
@@ -118,11 +119,15 @@ class LoroWebSocketServer:
     def get_document(self, doc_id: str) -> LexicalModel:
         """
         Get or create a document through the document manager.
-        Uses the load_model function to get initial content.
+        Uses the load_model function to get initial content only for new documents.
         """
-        # Try to load initial content using the load_model function
-        initial_content = self.load_model(doc_id)
+        # Check if document already exists
+        if doc_id in self.document_manager.models:
+            # Document exists, return it without calling load_model
+            return self.document_manager.models[doc_id]
         
+        # Document doesn't exist, load initial content and create it
+        initial_content = self.load_model(doc_id)
         return self.document_manager.get_or_create_document(doc_id, initial_content)
 
     def _extract_doc_id_from_websocket(self, websocket: WebSocketServerProtocol) -> str:
@@ -139,7 +144,6 @@ class LoroWebSocketServer:
         Raises ValueError if no valid document ID is found.
         """
         logger.info(f"🔍 _extract_doc_id_from_websocket called with websocket: {websocket}")
-        logger.info(f"🔍 WebSocket attributes: {dir(websocket)}")
         
         # The websockets library stores the path in different attributes
         path = None
@@ -287,22 +291,34 @@ class LoroWebSocketServer:
             logger.error(f"❌ Error in broadcast handling: {e}")
     
     async def _autosave_models(self):
-        """Periodically auto-save all models every 5 seconds"""
+        """Periodically auto-save all models at the configured interval"""
+        logger.info(f"🚀 Auto-save task started with interval: {self.autosave_interval_sec} seconds")
+        
         while self.running:
             try:
-                await asyncio.sleep(5)  # Auto-save every 5 seconds
+                await asyncio.sleep(self.autosave_interval_sec)  # Use configurable interval
                 if self.running:
                     doc_ids = self.document_manager.list_models()
+                    logger.debug(f"🔍 Auto-save check: found {len(doc_ids)} documents")
+                    
                     if doc_ids:
-                        logger.debug(f"🔄 Auto-saving {len(doc_ids)} models...")
+                        logger.info(f"🔄 Auto-saving {len(doc_ids)} models every {self.autosave_interval_sec} seconds...")
                         for doc_id in doc_ids:
                             try:
-                                model = self.document_manager.get_or_create_document(doc_id)
-                                success = self.save_model(doc_id, model)
-                                if not success:
-                                    logger.warning(f"⚠️ Auto-save failed for model {doc_id}")
+                                # Get existing model without triggering load (model already exists)
+                                if doc_id in self.document_manager.models:
+                                    model = self.document_manager.models[doc_id]
+                                    success = self.save_model(doc_id, model)
+                                    if success:
+                                        logger.info(f"💾 Auto-saved document: {doc_id}")
+                                    else:
+                                        logger.warning(f"⚠️ Auto-save failed for document: {doc_id}")
+                                else:
+                                    logger.warning(f"⚠️ Document {doc_id} not found during auto-save")
                             except Exception as e:
-                                logger.error(f"❌ Error auto-saving model {doc_id}: {e}")
+                                logger.error(f"❌ Error auto-saving document {doc_id}: {e}")
+                    else:
+                        logger.debug(f"🔍 No documents to auto-save")
                     
             except asyncio.CancelledError:
                 logger.info("🛑 Auto-save task cancelled")
@@ -326,17 +342,22 @@ class LoroWebSocketServer:
         
         for doc_id in doc_ids:
             try:
-                model = self.document_manager.get_or_create_document(doc_id)
-                success = self.save_model(doc_id, model)
-                results[doc_id] = success
-                
-                if success:
-                    logger.info(f"💾 Successfully saved model {doc_id}")
+                # Get existing model without triggering load (model already exists)
+                if doc_id in self.document_manager.models:
+                    model = self.document_manager.models[doc_id]
+                    success = self.save_model(doc_id, model)
+                    results[doc_id] = success
+                    
+                    if success:
+                        logger.info(f"💾 Manually saved document: {doc_id}")
+                    else:
+                        logger.warning(f"⚠️ Failed to save document: {doc_id}")
                 else:
-                    logger.warning(f"⚠️ Failed to save model {doc_id}")
+                    logger.warning(f"⚠️ Document {doc_id} not found during manual save")
+                    results[doc_id] = False
                     
             except Exception as e:
-                logger.error(f"❌ Error saving model {doc_id}: {e}")
+                logger.error(f"❌ Error saving document {doc_id}: {e}")
                 results[doc_id] = False
         
         return results
@@ -436,12 +457,14 @@ class LoroWebSocketServer:
             # Clean up client data in all managed models
             for doc_id in self.document_manager.list_models():
                 try:
-                    model = self.document_manager.get_or_create_document(doc_id)
-                    response = model.handle_client_disconnect(client_id)
-                    if response.get("success"):
-                        removed_keys = response.get("removed_keys", [])
-                        if removed_keys:
-                            logger.info(f"🧹 Cleaned up client {client_id} data in {doc_id}")
+                    # Get existing model without triggering load (model already exists)
+                    if doc_id in self.document_manager.models:
+                        model = self.document_manager.models[doc_id]
+                        response = model.handle_client_disconnect(client_id)
+                        if response.get("success"):
+                            removed_keys = response.get("removed_keys", [])
+                            if removed_keys:
+                                logger.info(f"🧹 Cleaned up client {client_id} data in {doc_id}")
                 except Exception as e:
                     logger.error(f"❌ Error cleaning up client {client_id} in {doc_id}: {e}")
             
@@ -672,12 +695,16 @@ class LoroWebSocketServer:
         doc_ids = self.document_manager.list_models()
         for doc_id in doc_ids:
             try:
-                model = self.document_manager.get_or_create_document(doc_id)
-                success = self.save_model(doc_id, model)
-                if success:
-                    logger.info(f"💾 Final save completed for model {doc_id}")
+                # Get existing model without triggering load (model already exists)
+                if doc_id in self.document_manager.models:
+                    model = self.document_manager.models[doc_id]
+                    success = self.save_model(doc_id, model)
+                    if success:
+                        logger.info(f"💾 Final save completed for model {doc_id}")
+                    else:
+                        logger.warning(f"⚠️ Final save failed for model {doc_id}")
                 else:
-                    logger.warning(f"⚠️ Final save failed for model {doc_id}")
+                    logger.warning(f"⚠️ Document {doc_id} not found during final save")
             except Exception as e:
                 logger.error(f"❌ Error during final save of model {doc_id}: {e}")
         
@@ -734,8 +761,9 @@ async def main():
     # Create server with default functions (or pass custom ones)
     server = LoroWebSocketServer(
         port=8081,
-        # load_model=custom_load_model,  # Uncomment to use custom loader
-        # save_model=custom_save_model   # Uncomment to use custom saver
+        load_model=default_load_model,
+        save_model=default_save_model,
+        autosave_interval_sec=5
     )
     
     try:
