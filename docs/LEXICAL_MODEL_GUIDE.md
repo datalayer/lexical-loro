@@ -69,7 +69,7 @@ print(f"Loaded document with {len(loaded_model.get_blocks())} blocks")
 
 ### LexicalModel
 
-The `LexicalModel` class is the main interface for working with Lexical documents. It manages:
+The `LexicalModel` class is the main interface for working with Lexical models. It manages:
 
 - **Lexical Data Structure**: The hierarchical document structure with blocks and text nodes
 - **Loro Integration**: CRDT-based synchronization for conflict-free collaboration
@@ -380,13 +380,13 @@ def create_meeting_notes_template():
     return model
 
 def batch_document_creation():
-    """Create multiple documents from template"""
+    """Create multiple models from template"""
     template = create_meeting_notes_template()
     
     # Save template
     template.save_to_file("meeting_template.json")
     
-    # Create multiple meeting documents
+    # Create multiple meeting models
     meetings = [
         "weekly_standup_2024_08_29",
         "project_review_2024_08_29", 
@@ -417,7 +417,7 @@ def batch_document_creation():
         if os.path.exists(file):
             os.remove(file)
 
-# Create templates and documents
+# Create templates and models
 batch_document_creation()
 ```
 
@@ -501,25 +501,25 @@ from flask import Flask, request, jsonify
 from lexical_loro.model.lexical_model import LexicalModel
 
 app = Flask(__name__)
-documents = {}
+models = {}
 
-@app.route('/api/documents/<doc_id>', methods=['GET'])
+@app.route('/api/models/<doc_id>', methods=['GET'])
 def get_document(doc_id):
-    if doc_id not in documents:
-        documents[doc_id] = LexicalModel.create_document(doc_id)
+    if doc_id not in models:
+        models[doc_id] = LexicalModel.create_document(doc_id)
     
     return jsonify({
-        "document": json.loads(documents[doc_id].to_json()),
-        "info": documents[doc_id].get_document_info()
+        "document": json.loads(models[doc_id].to_json()),
+        "info": models[doc_id].get_document_info()
     })
 
-@app.route('/api/documents/<doc_id>/blocks', methods=['POST'])
+@app.route('/api/models/<doc_id>/blocks', methods=['POST'])
 def add_block(doc_id):
-    if doc_id not in documents:
+    if doc_id not in models:
         return jsonify({"error": "Document not found"}), 404
     
     data = request.json
-    documents[doc_id].add_block(data.get("content", {}), data.get("type", "paragraph"))
+    models[doc_id].add_block(data.get("content", {}), data.get("type", "paragraph"))
     
     return jsonify({"success": True})
 ```

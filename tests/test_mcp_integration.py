@@ -111,7 +111,7 @@ class TestMCPIntegration:
 
     @pytest.mark.asyncio
     async def test_large_document_handling(self):
-        """Test handling of documents with many paragraphs"""
+        """Test handling of models with many paragraphs"""
         server = LexicalMCPServer()
         doc_id = "large-test-doc"
         

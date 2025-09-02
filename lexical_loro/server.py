@@ -46,7 +46,7 @@ class LoroWebSocketServer:
     This server is a thin relay that only handles:
     - WebSocket client connections
     - Message routing to LexicalDocumentManager
-    - Broadcasting responses from documents
+    - Broadcasting responses from models
     
     All document and ephemeral data management is delegated to LexicalDocumentManager.
     """
@@ -66,7 +66,7 @@ class LoroWebSocketServer:
         Get or create a document through the document manager.
         Delegate to LexicalDocumentManager.
         """
-        # Provide initial content for lexical documents
+        # Provide initial content for lexical models
         initial_content = INITIAL_LEXICAL_JSON
         
         return self.document_manager.get_or_create_document(doc_id, initial_content)
@@ -79,8 +79,8 @@ class LoroWebSocketServer:
         2. Path segments for specific patterns:
            - /api/spacer/v1/lexical/ws/{DOC_ID}
            - /{DOC_ID} (direct path)
-           - /ws/documents/{DOC_ID}
-           - /documents/{DOC_ID}
+           - /ws/models/{DOC_ID}
+           - /models/{DOC_ID}
         
         Raises ValueError if no valid document ID is found.
         """
@@ -139,10 +139,10 @@ class LoroWebSocketServer:
                 logger.info(f"📄 Document ID from Spacer API pattern: {doc_id}")
                 return doc_id
             
-            # Pattern 2: /ws/documents/{DOC_ID} or /documents/{DOC_ID}
-            elif len(path_segments) >= 2 and path_segments[-2] in ['documents', 'docs', 'doc']:
+            # Pattern 2: /ws/models/{DOC_ID} or /models/{DOC_ID}
+            elif len(path_segments) >= 2 and path_segments[-2] in ['models', 'docs', 'doc']:
                 doc_id = path_segments[-1]
-                logger.info(f"📄 Document ID from documents path: {doc_id}")
+                logger.info(f"📄 Document ID from models path: {doc_id}")
                 return doc_id
             
             # Pattern 3: /{DOC_ID} (direct path - last segment)
@@ -312,8 +312,8 @@ class LoroWebSocketServer:
             # Delegate client cleanup to DocumentManager
             logger.info(f"🧹 Cleaning up client {client_id}")
             
-            # Clean up client data in all managed documents
-            for doc_id in self.document_manager.list_documents():
+            # Clean up client data in all managed models
+            for doc_id in self.document_manager.list_models():
                 try:
                     model = self.document_manager.get_or_create_document(doc_id)
                     response = model.handle_client_disconnect(client_id)
@@ -525,8 +525,8 @@ class LoroWebSocketServer:
                             del self.clients[client_id]
                     
                     # Log basic stats - Use document manager
-                    doc_count = len(self.document_manager.list_documents())
-                    logger.info(f"📊 Relay stats: {len(self.clients)} clients, {doc_count} documents")
+                    doc_count = len(self.document_manager.list_models())
+                    logger.info(f"📊 Relay stats: {len(self.clients)} clients, {doc_count} models")
                     
             except asyncio.CancelledError:
                 break

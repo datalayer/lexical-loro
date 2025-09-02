@@ -24,13 +24,13 @@ class SimplifiedServer:
     
     def __init__(self):
         self.clients = {}
-        # Instead of managing loro_docs, loro_documents, ephemeral_stores separately,
+        # Instead of managing loro_docs, loro_models, ephemeral_stores separately,
         # we now just have a simple mapping of doc_id to LexicalModel
-        self.lexical_documents: Dict[str, 'LexicalModel'] = {}
+        self.lexical_models: Dict[str, 'LexicalModel'] = {}
     
     def get_or_create_model(self, doc_id: str) -> 'LexicalModel':
         """Get or create a LexicalModel for the given doc_id"""
-        if doc_id not in self.lexical_documents:
+        if doc_id not in self.lexical_models:
             # Import here to avoid circular dependencies in demo
             from lexical_loro.model.lexical_model import LexicalModel
             
@@ -69,14 +69,14 @@ class SimplifiedServer:
                 "version": "0.34.0"
             }
             
-            self.lexical_documents[doc_id] = LexicalModel.create_document(
+            self.lexical_models[doc_id] = LexicalModel.create_document(
                 doc_id, 
                 initial_content=initial_content,
                 change_callback=self._on_model_change
             )
             print(f"📄 Created LexicalModel for {doc_id}")
         
-        return self.lexical_documents[doc_id]
+        return self.lexical_models[doc_id]
     
     def _on_model_change(self, model):
         """Callback when a model changes"""
@@ -218,7 +218,7 @@ def demo_simplification():
         
         # Show final state
         print("📊 Final Server State:")
-        for doc_id, model in server.lexical_documents.items():
+        for doc_id, model in server.lexical_models.items():
             doc_info = model.get_document_info()
             print(f"   📄 {doc_id}: {doc_info['lexical_blocks']} blocks, {doc_info['content_length']} chars")
         

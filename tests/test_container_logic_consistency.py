@@ -16,8 +16,8 @@ from lexical_loro.model.lexical_model import LexicalModel
 class TestContainerLogicConsistency:
     """Test container logic consistency after simplification"""
 
-    def test_all_documents_use_content_container(self):
-        """Test that all documents consistently use 'content' as internal container"""
+    def test_all_models_use_content_container(self):
+        """Test that all models consistently use 'content' as internal container"""
         doc_ids = ['test-1', 'test-2', 'test-3', 'special-chars-!@#', 'numbers-123']
         
         for doc_id in doc_ids:
@@ -64,16 +64,16 @@ class TestContainerLogicConsistency:
 
     def test_no_special_case_container_names(self):
         """Test that no special case container names are used anymore"""
-        # Create documents with doc_ids that were previously special cases
+        # Create models with doc_ids that were previously special cases
         special_doc_ids = ['content', 'lexical-shared-doc', 'shared-text']
         
-        documents = {}
+        models = {}
         for doc_id in special_doc_ids:
-            documents[doc_id] = LexicalModel.create_document(doc_id, event_callback=None)
-            documents[doc_id].add_block({'text': f'Content for {doc_id}'}, 'paragraph')
+            models[doc_id] = LexicalModel.create_document(doc_id, event_callback=None)
+            models[doc_id].add_block({'text': f'Content for {doc_id}'}, 'paragraph')
         
         # All should use 'content' internally regardless of doc_id
-        for doc_id, doc in documents.items():
+        for doc_id, doc in models.items():
             doc_state = doc.text_doc.get_deep_value()
             assert 'content' in doc_state
             
@@ -197,7 +197,7 @@ class TestContainerLogicConsistency:
 
     def test_update_operations_consistency(self):
         """Test that update operations work consistently with simplified container logic"""
-        # Create two documents
+        # Create two models
         doc1 = LexicalModel.create_document('update-doc-1', event_callback=None)
         doc2 = LexicalModel.create_document('update-doc-2', event_callback=None)
         

@@ -202,7 +202,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       params: { doc_id: DOC_ID }
     },
     {
-      name: 'list_documents',
+      name: 'list_models',
       label: '📋 List Documents',
       params: {}
     },

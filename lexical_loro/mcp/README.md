@@ -1,6 +1,6 @@
 # Lexical MCP Server
 
-This module provides a Model Context Protocol (MCP) server for managing Lexical documents using the Loro collaborative editing backend.
+This module provides a Model Context Protocol (MCP) server for managing Lexical models using the Loro collaborative editing backend.
 
 ## Overview
 
@@ -62,7 +62,7 @@ python -m lexical_loro.mcp.server
 
 ### Integration
 
-The server uses the `LexicalDocumentManager` to handle multiple documents and the `LexicalModel` for document operations. Each document is managed as a separate Loro document with real-time collaboration capabilities.
+The server uses the `LexicalDocumentManager` to handle multiple models and the `LexicalModel` for document operations. Each document is managed as a separate Loro document with real-time collaboration capabilities.
 
 ## Architecture
 

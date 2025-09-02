@@ -158,7 +158,7 @@ If initialization fails, check:
 1. **WebSocket Connection**: Ensure server is running and accessible
 2. **Network Issues**: Check browser network tab for connection errors
 3. **CORS Settings**: Verify server allows cross-origin WebSocket connections
-4. **Document ID**: Ensure unique document IDs for different documents
+4. **Document ID**: Ensure unique document IDs for different models
 5. **Server Logs**: Enable debug logging on server side
 
 ```bash

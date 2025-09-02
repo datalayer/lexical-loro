@@ -2,7 +2,7 @@
 """
 Test suite for document isolation behavior.
 
-This module tests that multiple documents with different doc_ids are properly
+This module tests that multiple models with different doc_ids are properly
 isolated from each other, even though they all use "content" as the internal
 container name within their respective LoroDoc instances.
 """
@@ -16,8 +16,8 @@ class TestDocumentIsolation:
     """Test document isolation with multiple doc_ids"""
 
     def test_basic_document_isolation(self):
-        """Test that documents with different doc_ids are completely isolated"""
-        # Create two documents with different doc_ids
+        """Test that models with different doc_ids are completely isolated"""
+        # Create two models with different doc_ids
         doc1 = LexicalModel.create_document('doc-1', event_callback=None)
         doc2 = LexicalModel.create_document('doc-2', event_callback=None)
         
@@ -54,7 +54,7 @@ class TestDocumentIsolation:
         assert doc2_blocks[0]['type'] == 'heading1'
 
     def test_document_content_lengths_are_different(self):
-        """Test that documents with different content have different serialized lengths"""
+        """Test that models with different content have different serialized lengths"""
         doc1 = LexicalModel.create_document('length-test-1', event_callback=None)
         doc2 = LexicalModel.create_document('length-test-2', event_callback=None)
         
@@ -138,23 +138,23 @@ class TestDocumentIsolation:
         assert len(doc2.get_blocks()) == 1
         assert len(doc3.get_blocks()) == 1
 
-    def test_many_documents_isolation(self):
-        """Test isolation with many documents to ensure no memory leaks or cross-contamination"""
-        documents = {}
+    def test_many_models_isolation(self):
+        """Test isolation with many models to ensure no memory leaks or cross-contamination"""
+        models = {}
         
-        # Create 10 documents with different doc_ids
+        # Create 10 models with different doc_ids
         for i in range(10):
             doc_id = f'doc-{i:03d}'
-            documents[doc_id] = LexicalModel.create_document(doc_id, event_callback=None)
+            models[doc_id] = LexicalModel.create_document(doc_id, event_callback=None)
             
             # Add unique content to each
-            documents[doc_id].add_block({'text': f'Content for document {i}'}, 'paragraph')
-            documents[doc_id].add_block({'text': f'Second block for document {i}'}, 'heading1')
+            models[doc_id].add_block({'text': f'Content for document {i}'}, 'paragraph')
+            models[doc_id].add_block({'text': f'Second block for document {i}'}, 'heading1')
         
         # Verify each document has exactly the content we expect
         for i in range(10):
             doc_id = f'doc-{i:03d}'
-            doc = documents[doc_id]
+            doc = models[doc_id]
             
             blocks = doc.get_blocks()
             assert len(blocks) == 2
@@ -175,7 +175,7 @@ class TestDocumentIsolation:
             assert doc.container_id == doc_id
 
     def test_content_container_consistency(self):
-        """Test that all documents consistently use 'content' as internal container name"""
+        """Test that all models consistently use 'content' as internal container name"""
         doc1 = LexicalModel.create_document('container-test-1', event_callback=None)
         doc2 = LexicalModel.create_document('container-test-2', event_callback=None)
         

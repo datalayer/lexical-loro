@@ -20,7 +20,7 @@ async def test_with_websocket_connection():
     await asyncio.sleep(3)
     
     print(f"🔗 WebSocket connected: {document_manager.connected}")
-    print(f"📋 Available documents: {document_manager.list_documents()}")
+    print(f"📋 Available models: {document_manager.list_models()}")
     
     # Create or get the shared document 
     shared_doc_id = "lexical-shared-doc"

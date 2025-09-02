@@ -5,15 +5,15 @@ This directory contains comprehensive tests for verifying that the simplified co
 ## Test Files Overview
 
 ### 1. `test_document_isolation.py`
-Tests that multiple documents with different `doc_id` values are completely isolated from each other.
+Tests that multiple models with different `doc_id` values are completely isolated from each other.
 
 **Key Test Scenarios:**
-- ✅ **Basic document isolation** - Different doc_ids create separate documents
+- ✅ **Basic document isolation** - Different doc_ids create separate models
 - ✅ **Content length isolation** - Documents with different content have different serialized lengths  
 - ✅ **Modification isolation** - Changes to one document don't affect another
 - ✅ **Same doc_id returns same instance** - Requesting same doc_id multiple times returns same instance
-- ✅ **Many documents isolation** - Test with 10 documents to ensure no cross-contamination
-- ✅ **Content container consistency** - All documents use "content" internally but remain isolated
+- ✅ **Many models isolation** - Test with 10 models to ensure no cross-contamination
+- ✅ **Content container consistency** - All models use "content" internally but remain isolated
 
 ### 2. `test_server_document_management.py`
 Tests server-like document management scenarios with multiple clients and collaborative access patterns.
@@ -21,9 +21,9 @@ Tests server-like document management scenarios with multiple clients and collab
 **Key Test Scenarios:**
 - ✅ **Basic document manager** - Server-like document creation and retrieval
 - ✅ **Multiple clients same document** - Multiple clients working on the same document
-- ✅ **Clients on different documents** - Clients working on different documents simultaneously
+- ✅ **Clients on different models** - Clients working on different models simultaneously
 - ✅ **Client disconnect and reconnect** - Document persistence across client sessions
-- ✅ **High load scenario** - Managing 50 documents with 2-5 clients each
+- ✅ **High load scenario** - Managing 50 models with 2-5 clients each
 - ✅ **Concurrent modifications** - Multiple clients modifying the same document
 - ✅ **Memory efficiency** - Document instances are properly shared, not duplicated
 
@@ -31,7 +31,7 @@ Tests server-like document management scenarios with multiple clients and collab
 Tests that the simplified container logic (always using "content") works consistently across all operations.
 
 **Key Test Scenarios:**
-- ✅ **All documents use content container** - Every document consistently uses "content" internally
+- ✅ **All models use content container** - Every document consistently uses "content" internally
 - ✅ **Sync operations consistency** - All sync operations use "content" container
 - ✅ **No special case container names** - No legacy special cases for container names
 - ✅ **Container ID vs internal separation** - doc_id is separate from internal container name

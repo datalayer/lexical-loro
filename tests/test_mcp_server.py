@@ -182,8 +182,8 @@ class TestLexicalMCPServer:
         assert response_data["total_blocks"] == 2
 
     @pytest.mark.asyncio
-    async def test_multiple_documents(self, server):
-        """Test that multiple documents are handled independently"""
+    async def test_multiple_models(self, server):
+        """Test that multiple models are handled independently"""
         doc1_id = "test-doc-1"
         doc2_id = "test-doc-2"
         
@@ -199,7 +199,7 @@ class TestLexicalMCPServer:
             "text": "Document 2 content"
         })
         
-        # Verify both documents are independent
+        # Verify both models are independent
         doc1_result = await server._load_document({"doc_id": doc1_id})
         doc1_data = json.loads(doc1_result[0].text)
         

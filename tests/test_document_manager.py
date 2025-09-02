@@ -31,8 +31,8 @@ def test_document_manager():
     doc1_again = manager.get_or_create_document("test-doc-1")
     print(f"✅ Same document check: {doc1 is doc1_again}")
     
-    # Test listing documents
-    docs = manager.list_documents()
+    # Test listing models
+    docs = manager.list_models()
     print(f"✅ Documents: {docs}")
     
     # Test document info

@@ -76,7 +76,7 @@ The WebSocket server:
 1. User types in the text area
 2. Change is applied to local Loro document
 3. Document update is serialized and sent via WebSocket
-4. Other clients receive the update and apply it to their documents
+4. Other clients receive the update and apply it to their models
 5. UI is updated to reflect the changes
 
 ### Initial Content Synchronization
@@ -155,14 +155,14 @@ LexicalModel
 
 ### Network Optimization
 
-- **Delta Updates**: Only changes are transmitted, not full documents
+- **Delta Updates**: Only changes are transmitted, not full models
 - **Compression**: WebSocket messages can be compressed
 - **Batching**: Multiple rapid changes can be batched together
 
 ### Scalability
 
 - **Horizontal Scaling**: Multiple server instances with shared state
-- **Document Partitioning**: Large documents can be split into sections
+- **Document Partitioning**: Large models can be split into sections
 - **Connection Limits**: Server can handle hundreds of concurrent connections
 
 ## Security Considerations
@@ -177,7 +177,7 @@ LexicalModel
 
 - All communication is over WebSocket (can be secured with WSS)
 - Document content is not encrypted by default
-- Sensitive documents should use additional encryption
+- Sensitive models should use additional encryption
 
 ### Input Validation
 

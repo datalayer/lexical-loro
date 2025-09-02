@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo script showcasing LoroModel usage for building collaborative documents
+Demo script showcasing LoroModel usage for building collaborative models
 """
 
 import json
@@ -29,11 +29,11 @@ class LoroModel:
             "version": "0.34.0"
         }
         
-        # Initialize Loro documents with the base structure
+        # Initialize Loro models with the base structure
         self._sync_to_loro()
     
     def _sync_to_loro(self):
-        """Sync the current lexical_data to both Loro documents"""
+        """Sync the current lexical_data to both Loro models"""
         # Update text document with serialized JSON
         text_data = self.text_doc.get_text("content")
         current_length = text_data.len_unicode
@@ -103,7 +103,7 @@ class LoroModel:
         self.lexical_data["root"]["children"].append(new_block)
         self.lexical_data["lastSaved"] = int(time.time() * 1000)
         
-        # Sync to Loro documents
+        # Sync to Loro models
         self._sync_to_loro()
     
     def get_blocks(self) -> List[Dict[str, Any]]:
@@ -150,7 +150,7 @@ class LoroModel:
 
 
 class DocumentBuilder:
-    """Helper class to build documents with LoroModel"""
+    """Helper class to build models with LoroModel"""
     
     def __init__(self):
         self.model = LoroModel()
@@ -370,7 +370,7 @@ def demo_data_exchange():
         ("paragraph", "Documents can be exported to JSON format."),
         ("paragraph", "The JSON includes all formatting and structure."),
         ("heading2", "Import Features"),
-        ("paragraph", "JSON data can be imported to create identical documents.")
+        ("paragraph", "JSON data can be imported to create identical models.")
     ]
     
     for block_type, text in sample_content:
@@ -427,7 +427,7 @@ def main():
         
         print("\n🎉 All Demos Completed Successfully!")
         print("=" * 50)
-        print("\nSummary of created documents:")
+        print("\nSummary of created models:")
         print(f"  📝 Blog Post: {len(blog_model.get_blocks())} blocks")
         print(f"  🤝 Collaborative Notes: {len(collab_model.get_blocks())} blocks")
         print(f"  🔧 Operations Demo: {len(ops_model.get_blocks())} blocks")

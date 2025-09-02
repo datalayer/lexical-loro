@@ -135,7 +135,7 @@ def test_apply_update():
     """Test apply_update() method"""
     print("\n🧪 Testing apply_update()")
     
-    # Create two documents
+    # Create two models
     model_a = LexicalModel.create_document("update-test-a")
     model_b = LexicalModel.create_document("update-test-b")
     

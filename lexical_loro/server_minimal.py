@@ -48,14 +48,14 @@ class MinimalLoroServer:
         self.port = port
         self.host = host
         self.clients: Dict[str, Client] = {}
-        self.documents: Dict[str, LexicalModel] = {}
+        self.models: Dict[str, LexicalModel] = {}
     
     def get_document(self, doc_id: str) -> LexicalModel:
         """Get or create document using LexicalModel library"""
-        if doc_id not in self.documents:
+        if doc_id not in self.models:
             # Create document with appropriate initial content
             if 'lexical' in doc_id:
-                # For Lexical documents, start with structured JSON
+                # For Lexical models, start with structured JSON
                 initial_content = {
                     "editorState": {
                         "root": {
@@ -111,14 +111,14 @@ class MinimalLoroServer:
                     "source": "Minimal Server",
                     "version": "0.34.0"
                 }
-                self.documents[doc_id] = LexicalModel.from_json(json.dumps(initial_content), doc_id)
+                self.models[doc_id] = LexicalModel.from_json(json.dumps(initial_content), doc_id)
             else:
-                # For plain text documents
-                self.documents[doc_id] = LexicalModel.create_document(doc_id)
+                # For plain text models
+                self.models[doc_id] = LexicalModel.create_document(doc_id)
             
             logger.info(f"📄 Created document: {doc_id}")
         
-        return self.documents[doc_id]
+        return self.models[doc_id]
     
     async def start(self):
         """Start the minimal WebSocket server"""
@@ -163,9 +163,9 @@ class MinimalLoroServer:
             logger.info(f"🧹 Cleaned up client: {client_id} (total: {len(self.clients)})")
     
     async def _send_initial_snapshots(self, websocket, client_id: str):
-        """Send snapshots of existing documents to new client"""
-        # Send snapshots for all existing documents
-        for doc_id in self.document_manager.documents.keys():
+        """Send snapshots of existing models to new client"""
+        # Send snapshots for all existing models
+        for doc_id in self.document_manager.models.keys():
             model = self.get_document(doc_id)
             # Get the JSON data as a dict, not a string
             snapshot_data = json.loads(model.to_json())
@@ -177,8 +177,8 @@ class MinimalLoroServer:
             }))
             logger.info(f"📄 Sent {doc_id} snapshot to {client_id}")
             
-        # If no documents exist yet, still initialize the default lexical doc for UI compatibility
-        if not self.document_manager.documents:
+        # If no models exist yet, still initialize the default lexical doc for UI compatibility
+        if not self.document_manager.models:
             model = self.get_document(LEXICAL_DOC_ID)
             # Get the JSON data as a dict, not a string
             snapshot_data = json.loads(model.to_json())
@@ -314,13 +314,13 @@ class FastAPIMinimalServer:
     def __init__(self):
         from fastapi import FastAPI, WebSocket
         self.app = FastAPI()
-        self.documents: Dict[str, LexicalModel] = {}
+        self.models: Dict[str, LexicalModel] = {}
         
     def get_document(self, doc_id: str) -> LexicalModel:
         """Same document logic using LexicalModel"""
-        if doc_id not in self.documents:
-            self.documents[doc_id] = LexicalModel.create_document(doc_id)
-        return self.documents[doc_id]
+        if doc_id not in self.models:
+            self.models[doc_id] = LexicalModel.create_document(doc_id)
+        return self.models[doc_id]
         
     # @app.websocket("/ws")
     # async def websocket_endpoint(self, websocket: WebSocket):

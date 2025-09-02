@@ -82,11 +82,11 @@ async def initialize_mcp_collaboration():
     global document_manager
     
     def handle_document_events(event_type: str, event_data: dict):
-        """Handle events from document documents, especially BROADCAST_NEEDED"""
+        """Handle events from document models, especially BROADCAST_NEEDED"""
         if event_type == "broadcast_needed" and document_manager.client_mode:
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
-            if doc_id and doc_id in document_manager.documents:
+            if doc_id and doc_id in document_manager.models:
                 print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
                 # Extract broadcast data from the event - this contains the pre-built message
                 broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
@@ -116,11 +116,11 @@ def sync_initialize_mcp_collaboration():
     global document_manager
     
     def handle_document_events(event_type: str, event_data: dict):
-        """Handle events from document documents, especially BROADCAST_NEEDED"""
+        """Handle events from document models, especially BROADCAST_NEEDED"""
         if event_type == "broadcast_needed" and document_manager.client_mode:
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
-            if doc_id and doc_id in document_manager.documents:
+            if doc_id and doc_id in document_manager.models:
                 print(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
                 # Extract broadcast data from the event - this contains the pre-built message
                 broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
@@ -262,7 +262,7 @@ async def set_current_document(doc_id: str) -> str:
     Example Usage:
         Set working doc: set_current_document("project-notes")
         Create new context: set_current_document("new-draft-2024")
-        Switch documents: set_current_document("meeting-minutes")
+        Switch models: set_current_document("meeting-minutes")
 
     Workflow Benefits:
         1. Set current document once: set_current_document("my-doc")

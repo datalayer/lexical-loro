@@ -3,7 +3,7 @@
 Test suite for server-like document management behavior.
 
 This module tests scenarios that simulate how a server would manage multiple
-collaborative documents with different doc_ids, ensuring proper isolation
+collaborative models with different doc_ids, ensuring proper isolation
 and shared access patterns.
 """
 
@@ -16,16 +16,16 @@ class DocumentManager:
     """Simulates server-side document management"""
     
     def __init__(self):
-        self.documents = {}
+        self.models = {}
         self.client_connections = {}
     
     def get_or_create_document(self, doc_id):
         """Get existing document or create new one - simulates server behavior"""
-        if doc_id not in self.documents:
+        if doc_id not in self.models:
             loro_doc = loro.LoroDoc()
             model = LexicalModel.create_document(doc_id, event_callback=None, loro_doc=loro_doc)
-            self.documents[doc_id] = model
-        return self.documents[doc_id]
+            self.models[doc_id] = model
+        return self.models[doc_id]
     
     def connect_client(self, client_id, doc_id):
         """Simulate client connecting to a document"""
@@ -42,14 +42,14 @@ class DocumentManager:
             del self.client_connections[client_id]
     
     def get_document_stats(self):
-        """Get statistics about managed documents"""
+        """Get statistics about managed models"""
         return {
-            'total_documents': len(self.documents),
+            'total_models': len(self.models),
             'total_clients': len(self.client_connections),
-            'document_ids': list(self.documents.keys()),
+            'document_ids': list(self.models.keys()),
             'client_distribution': {doc_id: sum(1 for conn in self.client_connections.values() 
                                               if conn['doc_id'] == doc_id) 
-                                   for doc_id in self.documents.keys()}
+                                   for doc_id in self.models.keys()}
         }
 
 
@@ -60,9 +60,9 @@ class TestServerLikeDocumentManagement:
         """Test basic document manager functionality"""
         manager = DocumentManager()
         
-        # Initially no documents
+        # Initially no models
         stats = manager.get_document_stats()
-        assert stats['total_documents'] == 0
+        assert stats['total_models'] == 0
         assert stats['total_clients'] == 0
         
         # Create first document
@@ -78,7 +78,7 @@ class TestServerLikeDocumentManagement:
         assert doc1 is doc1_again
         
         stats = manager.get_document_stats()
-        assert stats['total_documents'] == 2
+        assert stats['total_models'] == 2
         assert 'project-alpha' in stats['document_ids']
         assert 'project-beta' in stats['document_ids']
 
@@ -106,15 +106,15 @@ class TestServerLikeDocumentManagement:
         
         # Verify client distribution stats
         stats = manager.get_document_stats()
-        assert stats['total_documents'] == 1
+        assert stats['total_models'] == 1
         assert stats['total_clients'] == 3
         assert stats['client_distribution']['shared-project'] == 3
 
-    def test_clients_on_different_documents(self):
-        """Test clients working on different documents simultaneously"""
+    def test_clients_on_different_models(self):
+        """Test clients working on different models simultaneously"""
         manager = DocumentManager()
         
-        # Connect clients to different documents
+        # Connect clients to different models
         alpha_doc = manager.connect_client('alice', 'project-alpha')
         beta_doc = manager.connect_client('bob', 'project-beta')
         gamma_doc = manager.connect_client('charlie', 'project-gamma')
@@ -162,7 +162,7 @@ class TestServerLikeDocumentManagement:
         
         # Document should still exist in manager
         stats = manager.get_document_stats()
-        assert stats['total_documents'] == 1
+        assert stats['total_models'] == 1
         assert stats['total_clients'] == 0
         
         # Same client reconnects
@@ -177,16 +177,16 @@ class TestServerLikeDocumentManagement:
         assert doc_other is doc_again  # Same document instance
 
     def test_high_load_scenario(self):
-        """Test managing many documents and clients simultaneously"""
+        """Test managing many models and clients simultaneously"""
         manager = DocumentManager()
         
-        # Create 50 documents with 2-5 clients each
-        documents_created = []
+        # Create 50 models with 2-5 clients each
+        models_created = []
         clients_created = []
         
         for doc_num in range(50):
             doc_id = f'doc-{doc_num:03d}'
-            documents_created.append(doc_id)
+            models_created.append(doc_id)
             
             # Connect 2-5 clients to this document
             client_count = (doc_num % 4) + 2  # 2-5 clients
@@ -200,11 +200,11 @@ class TestServerLikeDocumentManagement:
         
         # Verify final state
         stats = manager.get_document_stats()
-        assert stats['total_documents'] == 50
+        assert stats['total_models'] == 50
         assert stats['total_clients'] == len(clients_created)
         
         # Verify each document has expected content
-        for doc_id in documents_created:
+        for doc_id in models_created:
             doc = manager.get_or_create_document(doc_id)
             blocks = doc.get_blocks()
             
@@ -268,7 +268,7 @@ class TestServerLikeDocumentManagement:
         
         # Only one document should exist in manager
         stats = manager.get_document_stats()
-        assert stats['total_documents'] == 1
+        assert stats['total_models'] == 1
         assert stats['total_clients'] == 100
         assert stats['client_distribution']['efficiency-test'] == 100
 

@@ -13,28 +13,28 @@ def test_server_model_integration():
     
     print("🧪 Testing LoroModel integration in server...")
     
-    # Check that documents were created for lexical documents during initialization
+    # Check that models were created for lexical models during initialization
     print(f"📊 Initial state:")
     print(f"  - Documents: {list(server.loro_docs.keys())}")
-    print(f"  - Models: {list(server.loro_documents.keys())}")
+    print(f"  - Models: {list(server.loro_models.keys())}")
     
     # Verify that lexical-shared-doc has a corresponding model
     assert 'lexical-shared-doc' in server.loro_docs, "lexical-shared-doc should exist in loro_docs"
-    assert 'lexical-shared-doc' in server.loro_documents, "lexical-shared-doc should have a corresponding LoroModel"
+    assert 'lexical-shared-doc' in server.loro_models, "lexical-shared-doc should have a corresponding LoroModel"
     
     # Test the get_loro_model utility method
     model = server.get_loro_model('lexical-shared-doc')
     assert model is not None, "Should get a valid LoroModel"
-    assert server.loro_documents['lexical-shared-doc'] is model, "Should return the same model instance"
+    assert server.loro_models['lexical-shared-doc'] is model, "Should return the same model instance"
     
     # Test creating a new model for a non-existent document
     new_model = server.get_loro_model('new-lexical-doc')
     assert 'new-lexical-doc' in server.loro_docs, "Should create new document"
-    assert 'new-lexical-doc' in server.loro_documents, "Should create new model"
+    assert 'new-lexical-doc' in server.loro_models, "Should create new model"
     assert new_model is not None, "Should get a valid LoroModel for new document"
     
     # Test that the model is properly connected to the document
-    model = server.loro_documents['lexical-shared-doc']
+    model = server.loro_models['lexical-shared-doc']
     doc = server.loro_docs['lexical-shared-doc']
     
     # The model should have access to the document
