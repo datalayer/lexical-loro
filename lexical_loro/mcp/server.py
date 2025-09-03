@@ -18,14 +18,6 @@ from ..model.lexical_model import LexicalDocumentManager
 ###############################################################################
 
 
-DOC_ID = "lexical-shared-doc-3"
-
-WEBSOCKET_URL = f"ws://localhost:8081/{DOC_ID}"
-
-
-###############################################################################
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -77,7 +69,7 @@ class FastMCPWithCORS(FastMCP):
 mcp = FastMCPWithCORS(name="Lexical MCP Server", json_response=False, stateless_http=True)
 
 # Initialize document manager
-async def initialize_mcp_collaboration():
+async def initialize_mcp_collaboration(websocket_base_url: str):
     """Initialize MCP server with standard LexicalDocumentManager in client mode"""
     global document_manager
     
@@ -94,24 +86,23 @@ async def initialize_mcp_collaboration():
                 asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
     
     # Create standard document manager with client mode enabled
-    # This will automatically connect to the collaborative WebSocket server
+    # WebSocket connections will be created per document ID
     document_manager = LexicalDocumentManager(
         event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,  # Enable WebSocket client mode for collaboration
-        websocket_url=WEBSOCKET_URL  # Connect to collaborative server
+        websocket_base_url=websocket_base_url  # Base URL for WebSocket connections
     )
     
-    # Start the client connection immediately when in async context
+    # Start the client mode (connections will be created per document)
     await document_manager.start_client_mode()
     
     logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")
     logger.info(f"🔌 Client mode enabled: {document_manager.client_mode}")
-    logger.info(f"🔗 WebSocket URL: {document_manager.websocket_url}")
-    logger.info(f"✅ WebSocket client connection established: {document_manager.connected}")
+    logger.info(f"🔗 WebSocket base URL: {document_manager.websocket_base_url}")
 
 # Initialize with default settings when NOT in async context
-def sync_initialize_mcp_collaboration():
+def sync_initialize_mcp_collaboration(websocket_base_url: str):
     """Synchronous initialization for module loading"""
     global document_manager
     
@@ -128,20 +119,19 @@ def sync_initialize_mcp_collaboration():
                 asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
     
     # Create standard document manager with client mode enabled  
-    # Connection will be established lazily when first async call is made
+    # Connections will be established per document when needed
     document_manager = LexicalDocumentManager(
         event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,
-        websocket_url=WEBSOCKET_URL
+        websocket_base_url=websocket_base_url
     )
     
     logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")
     logger.info(f"🔌 Client mode enabled: {document_manager.client_mode}")
-    logger.info(f"🔗 WebSocket URL: {document_manager.websocket_url}")
+    logger.info(f"🔗 WebSocket base URL: {document_manager.websocket_base_url}")
 
-# Use sync version for module initialization
-sync_initialize_mcp_collaboration()
+# Default initialization will be deferred until server start
 
 
 def set_document_manager(manager: LexicalDocumentManager) -> None:
@@ -507,6 +497,13 @@ def server():
     help="The host to bind to for the Streamable HTTP transport. Ignored for stdio transport.",
 )
 @click.option(
+    "--websocket-url",
+    envvar="WEBSOCKET_URL", 
+    type=click.STRING,
+    default="ws://localhost:8081",
+    help="The base WebSocket URL for collaborative editing. Defaults to 'ws://localhost:8081'.",
+)
+@click.option(
     "--log-level",
     envvar="LOG_LEVEL",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
@@ -517,6 +514,7 @@ def start_command(
     transport: str,
     port: int,
     host: str,
+    websocket_url: str,
     log_level: str,
 ):
     """Start the Lexical Loro MCP server with a transport."""
@@ -527,7 +525,12 @@ def start_command(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # Initialize document manager with the provided websocket base URL
+    # Each document will have its own WebSocket connection: {base_url}/{doc_id}
+    sync_initialize_mcp_collaboration(websocket_url)
+    
     logger.info(f"Starting Lexical Loro MCP Server with transport: {transport}")
+    logger.info(f"WebSocket base URL: {websocket_url}")
     
     if transport == "stdio":
         mcp.run(transport="stdio")
