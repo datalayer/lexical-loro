@@ -2377,10 +2377,6 @@ export function LoroCollaborativePlugin({
               if (onInitialization) {
                 onInitialization(true);
               }
-              // Notify parent component about failed initialization
-              if (onInitialization) {
-                onInitialization(false);
-              }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore
               if (data.docId === docId && data.data) {
@@ -2542,6 +2538,10 @@ export function LoroCollaborativePlugin({
             }
           } catch (err) {
             console.error('Error processing WebSocket message in Lexical plugin:', err);
+            // Notify parent component about failed initialization
+            if (onInitialization) {
+              onInitialization(false);
+            }
           }
         };
 
