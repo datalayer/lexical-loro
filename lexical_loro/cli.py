@@ -37,7 +37,11 @@ def main(port: int, host: str, log_level: str):
     )
     
     # Create and start the server
-    server = LoroWebSocketServer(port=port, host=host)
+    server = LoroWebSocketServer(
+        port=port,
+        host=host,
+        autosave_interval_sec=60
+    )
     
     click.echo(f"🚀 Starting Lexical Loro relay server on {host}:{port}")
     click.echo(f"📋 Log level: {log_level}")

@@ -3539,21 +3539,21 @@ class LexicalDocumentManager:
             # Construct the WebSocket URL for this specific document
             document_url = f"{self.websocket_base_url}/{doc_id}"
             
-            logger.debug(f"🔌 DocumentManager connecting to {document_url} for doc '{doc_id}'")
+            logger.info(f"🔌 DocumentManager connecting to {document_url} for doc '{doc_id}'")
             
             self._ensure_websocket_client(doc_id)
             client_info = self.websocket_clients[doc_id]
             
             client_info["websocket"] = await websockets.connect(document_url)
             client_info["connected"] = True
-            logger.debug(f"✅ DocumentManager connected to WebSocket for doc '{doc_id}'")
-            
+            logger.info(f"✅ DocumentManager connected to WebSocket to {document_url} for doc '{doc_id}'")
+
             # Start listening for messages for this document
             import asyncio
             asyncio.create_task(self._listen_for_messages(doc_id))
             
         except Exception as e:
-            logger.debug(f"❌ DocumentManager failed to connect for doc '{doc_id}': {e}")
+            logger.error(f"❌ DocumentManager failed to connect to { document_url} for doc '{doc_id}': {e}")
             if doc_id in self.websocket_clients:
                 self.websocket_clients[doc_id]["connected"] = False
     

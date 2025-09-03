@@ -102,7 +102,7 @@ async def initialize_mcp_collaboration(websocket_base_url: str):
     logger.info(f"🔗 WebSocket base URL: {document_manager.websocket_base_url}")
 
 # Initialize with default settings when NOT in async context
-def sync_initialize_mcp_collaboration(websocket_base_url: str):
+def initialize_mcp_collaboration(websocket_base_url: str):
     """Synchronous initialization for module loading"""
     global document_manager
     
@@ -344,7 +344,7 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         Insert with doc: insert_paragraph(2, "Middle content", "my-doc")
     """
     try:
-        logger.info(f"🚀🚀🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{doc_id}'")
+        logger.info(f"🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{doc_id}'")
         logger.info(f"Inserting paragraph in document {doc_id} at index {index}")
         
         # Get or create the document
@@ -416,7 +416,7 @@ async def append_paragraph(text: str, doc_id: str) -> str:
         With emoji: append_paragraph("Final thoughts 🎉", "report-2024")
         Empty paragraph: append_paragraph("", "my-doc")
     """
-    logger.info(f"🚀🚀🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
+    logger.info(f"🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
     try:
         logger.info(f"Appending paragraph to document {doc_id}")
         
@@ -526,8 +526,8 @@ def start_command(
     )
     
     # Initialize document manager with the provided websocket base URL
-    # Each document will have its own WebSocket connection: {base_url}/{doc_id}
-    sync_initialize_mcp_collaboration(websocket_url)
+    # Each document will have its own WebSocket connection: {websocket_url}/{doc_id}
+    initialize_mcp_collaboration(websocket_url)
     
     logger.info(f"Starting Lexical Loro MCP Server with transport: {transport}")
     logger.info(f"WebSocket base URL: {websocket_url}")
