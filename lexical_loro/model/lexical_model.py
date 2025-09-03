@@ -85,6 +85,7 @@ USAGE PATTERNS:
 """
 
 import json
+import hashlib
 import logging
 import time
 import asyncio
@@ -234,6 +235,9 @@ class LexicalModel:
             "source": "Lexical Loro",
             "version": "0.34.0"
         }
+        
+        # Initialize change tracking for auto-save optimization
+        self._last_saved_hash = None  # Hash of the content when last saved
         
         # If we were given an existing text_doc, sync from it first
         if text_doc is not None:
@@ -2211,6 +2215,61 @@ class LexicalModel:
                 "container_id": self.container_id,
                 "error": str(e)
             }
+    
+    def _compute_content_hash(self) -> str:
+        """
+        Compute a SHA-256 hash of the current document content for change detection.
+        
+        This method creates a hash based only on the semantic content of the document
+        (the root structure and its children), excluding metadata like lastSaved timestamp
+        that changes frequently but doesn't represent actual content changes.
+        
+        Returns:
+            SHA-256 hash string of the document content
+        """
+        try:
+            # Create a normalized representation of the content for hashing
+            # Only include the semantic content, exclude metadata that changes frequently
+            content_for_hash = {
+                "root": self.lexical_data.get("root", {}),
+                "source": self.lexical_data.get("source", ""),
+                "version": self.lexical_data.get("version", "")
+            }
+            
+            # Convert to JSON with sorted keys for consistent hashing
+            content_json = json.dumps(content_for_hash, sort_keys=True, separators=(',', ':'))
+            
+            # Compute SHA-256 hash
+            hash_obj = hashlib.sha256(content_json.encode('utf-8'))
+            return hash_obj.hexdigest()
+            
+        except Exception as e:
+            logger.debug(f"❌ Error computing content hash: {e}")
+            # Return a timestamp-based fallback to ensure some change detection
+            return str(int(time.time() * 1000))
+    
+    def has_changed_since_last_save(self) -> bool:
+        """
+        Check if the document content has changed since the last save.
+        
+        Returns:
+            True if the document has changed since last save, False otherwise
+        """
+        current_hash = self._compute_content_hash()
+        if self._last_saved_hash is None:
+            # First time checking, consider it changed
+            return True
+        return current_hash != self._last_saved_hash
+    
+    def mark_as_saved(self) -> None:
+        """
+        Mark the current document state as saved by storing its content hash.
+        
+        This should be called after a successful save operation to prevent
+        unnecessary saves of unchanged documents.
+        """
+        self._last_saved_hash = self._compute_content_hash()
+        logger.debug(f"📌 Document marked as saved with hash: {self._last_saved_hash[:16]}...")
     
     # ==========================================
     # SERIALIZATION METHODS

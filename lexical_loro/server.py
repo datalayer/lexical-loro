@@ -42,15 +42,33 @@ logger = logging.getLogger(__name__)
 
 def default_load_model(doc_id: str) -> Optional[str]:
     """
-    Default load_model implementation - returns initial content for new models.
+    Default load_model implementation - loads from local .models folder or returns initial content.
     
     Args:
         doc_id: Document ID to load
         
     Returns:
-        Initial content string or None for default initialization
+        Content string from saved file, or initial content for new models
     """
-    return INITIAL_LEXICAL_JSON
+    try:
+        # Check if a saved model exists
+        models_dir = Path(".models")
+        model_file = models_dir / f"{doc_id}.json"
+        
+        if model_file.exists():
+            with open(model_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    logger.info(f"📂 Loaded existing model {doc_id} from {model_file}")
+                    return content
+        
+        # No existing file found, return initial content for new documents
+        logger.info(f"✨ Creating new model {doc_id} with initial content")
+        return INITIAL_LEXICAL_JSON
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Error loading model {doc_id}: {e}, using initial content")
+        return INITIAL_LEXICAL_JSON
 
 
 def default_save_model(doc_id: str, model: LexicalModel) -> bool:
@@ -126,9 +144,17 @@ class LoroWebSocketServer:
             # Document exists, return it without calling load_model
             return self.document_manager.models[doc_id]
         
-        # Document doesn't exist, load initial content and create it
+        # Document doesn't exist, load content and create it
         initial_content = self.load_model(doc_id)
-        return self.document_manager.get_or_create_document(doc_id, initial_content)
+        model = self.document_manager.get_or_create_document(doc_id, initial_content)
+        
+        # Mark the model as saved since we just loaded it from storage
+        # or created it with initial content. This prevents unnecessary
+        # saves of documents that haven't been modified yet.
+        model.mark_as_saved()
+        logger.debug(f"📌 Marked document {doc_id} as saved after loading/creation")
+        
+        return model
 
     def _extract_doc_id_from_websocket(self, websocket: WebSocketServerProtocol) -> str:
         """
@@ -303,20 +329,36 @@ class LoroWebSocketServer:
                     
                     if doc_ids:
                         logger.info(f"🔄 Auto-saving {len(doc_ids)} models every {self.autosave_interval_sec} seconds...")
+                        saved_count = 0
+                        unchanged_count = 0
                         for doc_id in doc_ids:
                             try:
                                 # Get existing model without triggering load (model already exists)
                                 if doc_id in self.document_manager.models:
                                     model = self.document_manager.models[doc_id]
-                                    success = self.save_model(doc_id, model)
-                                    if success:
-                                        logger.info(f"💾 Auto-saved document: {doc_id}")
+                                    
+                                    # Check if the document has changed since last save
+                                    if model.has_changed_since_last_save():
+                                        success = self.save_model(doc_id, model)
+                                        if success:
+                                            # Mark the model as saved to track the current state
+                                            model.mark_as_saved()
+                                            saved_count += 1
+                                            logger.info(f"💾 Auto-saved document: {doc_id}")
+                                        else:
+                                            logger.warning(f"⚠️ Auto-save failed for document: {doc_id}")
                                     else:
-                                        logger.warning(f"⚠️ Auto-save failed for document: {doc_id}")
+                                        unchanged_count += 1
+                                        logger.debug(f"⏭️ Skipping auto-save for unchanged document: {doc_id}")
                                 else:
                                     logger.warning(f"⚠️ Document {doc_id} not found during auto-save")
                             except Exception as e:
                                 logger.error(f"❌ Error auto-saving document {doc_id}: {e}")
+                        
+                        if saved_count > 0:
+                            logger.info(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                        elif unchanged_count > 0:
+                            logger.debug(f"ℹ️ Auto-save check: {unchanged_count} documents unchanged, none saved")
                     else:
                         logger.debug(f"🔍 No documents to auto-save")
                     
@@ -339,19 +381,32 @@ class LoroWebSocketServer:
         doc_ids = self.document_manager.list_models()
         
         logger.info(f"💾 Manually saving {len(doc_ids)} models...")
+        saved_count = 0
+        unchanged_count = 0
         
         for doc_id in doc_ids:
             try:
                 # Get existing model without triggering load (model already exists)
                 if doc_id in self.document_manager.models:
                     model = self.document_manager.models[doc_id]
-                    success = self.save_model(doc_id, model)
-                    results[doc_id] = success
                     
-                    if success:
-                        logger.info(f"💾 Manually saved document: {doc_id}")
+                    # Check if the document has changed since last save
+                    if model.has_changed_since_last_save():
+                        success = self.save_model(doc_id, model)
+                        results[doc_id] = success
+                        
+                        if success:
+                            # Mark the model as saved to track the current state
+                            model.mark_as_saved()
+                            saved_count += 1
+                            logger.info(f"💾 Manually saved document: {doc_id}")
+                        else:
+                            logger.warning(f"⚠️ Failed to save document: {doc_id}")
                     else:
-                        logger.warning(f"⚠️ Failed to save document: {doc_id}")
+                        # Document hasn't changed, consider it a successful "save"
+                        results[doc_id] = True
+                        unchanged_count += 1
+                        logger.debug(f"⏭️ Skipping manual save for unchanged document: {doc_id}")
                 else:
                     logger.warning(f"⚠️ Document {doc_id} not found during manual save")
                     results[doc_id] = False
@@ -360,6 +415,7 @@ class LoroWebSocketServer:
                 logger.error(f"❌ Error saving document {doc_id}: {e}")
                 results[doc_id] = False
         
+        logger.info(f"✅ Manual save completed: {saved_count} saved, {unchanged_count} unchanged")
         return results
     
     async def start(self):
@@ -703,20 +759,33 @@ class LoroWebSocketServer:
         # Perform final save of all models
         logger.info("💾 Performing final save of all models...")
         doc_ids = self.document_manager.list_models()
+        saved_count = 0
+        unchanged_count = 0
         for doc_id in doc_ids:
             try:
                 # Get existing model without triggering load (model already exists)
                 if doc_id in self.document_manager.models:
                     model = self.document_manager.models[doc_id]
-                    success = self.save_model(doc_id, model)
-                    if success:
-                        logger.info(f"💾 Final save completed for model {doc_id}")
+                    
+                    # Check if the document has changed since last save
+                    if model.has_changed_since_last_save():
+                        success = self.save_model(doc_id, model)
+                        if success:
+                            # Mark the model as saved to track the current state
+                            model.mark_as_saved()
+                            saved_count += 1
+                            logger.info(f"💾 Final save completed for model {doc_id}")
+                        else:
+                            logger.warning(f"⚠️ Final save failed for model {doc_id}")
                     else:
-                        logger.warning(f"⚠️ Final save failed for model {doc_id}")
+                        unchanged_count += 1
+                        logger.debug(f"⏭️ Skipping final save for unchanged document: {doc_id}")
                 else:
                     logger.warning(f"⚠️ Document {doc_id} not found during final save")
             except Exception as e:
                 logger.error(f"❌ Error during final save of model {doc_id}: {e}")
+        
+        logger.info(f"✅ Final save completed: {saved_count} saved, {unchanged_count} unchanged")
         
         # Close all client connections
         clients_to_close = list(self.clients.values())
