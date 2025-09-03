@@ -41,7 +41,7 @@
     "example:vite": "vite",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "tsx node-js/server.ts",
+    "server": "tsx dev/server.ts",
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
     "server:mcp": "python3 -m lexical_loro.mcp start --transport streamable-http --port 3001 --host 0.0.0.0",
