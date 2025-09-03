@@ -143,9 +143,6 @@ def sync_initialize_mcp_collaboration():
 # Use sync version for module initialization
 sync_initialize_mcp_collaboration()
 
-# Current document state
-current_document_id: Optional[str] = None
-
 
 def set_document_manager(manager: LexicalDocumentManager) -> None:
     """Set a custom document manager that extends LexicalDocumentManager.
@@ -237,74 +234,7 @@ async def load_document(doc_id: str) -> str:
 
 
 @mcp.tool()
-async def set_current_document(doc_id: str) -> str:
-    """Set the current document for subsequent operations that support optional doc_id.
-
-    This tool establishes a "working document" context that allows other tools
-    (append_paragraph, insert_paragraph, get_document_info) to operate without
-    explicitly specifying a doc_id parameter. This creates a more fluid workflow
-    when working primarily with a single document. The document is automatically
-    created if it doesn't exist.
-
-    Args:
-        doc_id: The unique identifier of the document to set as current working document.
-                Can be any string identifier. Document will be created if it doesn't exist.
-                Examples: "my-notes", "project-2024", "draft-document"
-
-    Returns:
-        str: JSON string containing:
-            - success: Boolean indicating operation success
-            - message: Confirmation message about the current document setting
-            - doc_id: The document identifier that was set as current
-            - container_id: Loro container ID for the document
-            - On error: success=False with error message and doc_id
-
-    Example Usage:
-        Set working doc: set_current_document("project-notes")
-        Create new context: set_current_document("new-draft-2024")
-        Switch models: set_current_document("meeting-minutes")
-
-    Workflow Benefits:
-        1. Set current document once: set_current_document("my-doc")
-        2. Work without doc_id: append_paragraph("First point")
-        3. Continue seamlessly: insert_paragraph(0, "Introduction")
-        4. Check status easily: get_document_info()
-
-    Note: The load_document tool always requires an explicit doc_id parameter
-    and is not affected by the current document setting.
-    """
-    global current_document_id
-    try:
-        logger.info(f"Setting current document to: {doc_id}")
-        
-        # Validate that the document exists or can be created
-        model = document_manager.get_or_create_document(doc_id)
-        
-        # Set the current document
-        current_document_id = doc_id
-        
-        result = {
-            "success": True,
-            "message": f"Current document set to: {doc_id}",
-            "doc_id": doc_id,
-            "container_id": model.container_id
-        }
-        
-        logger.info(f"Successfully set current document to {doc_id}")
-        return json.dumps(result, indent=2)
-        
-    except Exception as e:
-        logger.error(f"Error setting current document to {doc_id}: {e}")
-        error_result = {
-            "success": False,
-            "error": str(e),
-            "doc_id": doc_id
-        }
-        return json.dumps(error_result, indent=2)
-
-
-@mcp.tool()
-async def get_document_info(doc_id: Optional[str] = None) -> str:
+async def get_document_info(doc_id: str) -> str:
     """Retrieve comprehensive information and metadata about a Lexical document.
 
     This tool provides detailed information about a document's structure, content,
@@ -313,9 +243,7 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
     about document statistics before performing operations.
 
     Args:
-        doc_id: The unique identifier of the document to inspect (optional).
-                If not provided, uses the current document set via set_current_document.
-                Explicit doc_id takes precedence over current document setting.
+        doc_id: The unique identifier of the document to inspect (required).
 
     Returns:
         str: JSON string containing comprehensive document information:
@@ -330,7 +258,6 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
             - On error: success=False with error message and context
 
     Example Usage:
-        Check current doc: get_document_info()
         Check specific doc: get_document_info("project-notes")
         Inspect before editing: get_document_info("draft-2024")
 
@@ -340,18 +267,11 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
         - Version tracking and change monitoring
         - Debugging document state issues
     """
-    global current_document_id
     try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
-        
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
-        
-        logger.info(f"Getting document info for: {target_doc_id}")
+        logger.info(f"Getting document info for: {doc_id}")
         
         # Get or create the document
-        model = document_manager.get_or_create_document(target_doc_id)
+        model = document_manager.get_or_create_document(doc_id)
         
         # Get lexical data
         lexical_data = model.get_lexical_data()
@@ -365,7 +285,7 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
         
         result = {
             "success": True,
-            "doc_id": target_doc_id,
+            "doc_id": doc_id,
             "container_id": model.container_id,
             "total_blocks": len(children),
             "block_types": block_types,
@@ -374,16 +294,15 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
             "source": lexical_data.get("source")
         }
         
-        logger.info(f"Successfully retrieved document info for {target_doc_id}")
+        logger.info(f"Successfully retrieved document info for {doc_id}")
         return json.dumps(result, indent=2)
         
     except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error getting document info for {target_doc_id_for_error}: {e}")
+        logger.error(f"Error getting document info for {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": target_doc_id_for_error
+            "doc_id": doc_id
         }
         return json.dumps(error_result, indent=2)
 
@@ -391,7 +310,7 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
 ###############################################################################
 
 @mcp.tool()
-async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) -> str:
+async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
     """Insert a text paragraph at a specific position in a Lexical document.
 
     This tool inserts a new paragraph block at the specified index position within
@@ -408,9 +327,7 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
                If index exceeds document length, paragraph is appended at the end.
         text: The text content of the paragraph to insert. Can contain any UTF-8 text
               including emojis, special characters, and multi-line content.
-        doc_id: The unique identifier of the document (optional). If not provided,
-                uses the current document set via set_current_document. Explicit doc_id
-                takes precedence over current document.
+        doc_id: The unique identifier of the document (required).
 
     Returns:
         str: JSON string containing:
@@ -423,23 +340,15 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
             - On error: success=False with error message and context
 
     Example Usage:
-        Insert at beginning: insert_paragraph(0, "Introduction paragraph")
-        Insert with explicit doc: insert_paragraph(2, "Middle content", "my-doc")
-        Insert using current doc: insert_paragraph(1, "Second paragraph")
+        Insert at beginning: insert_paragraph(0, "Introduction paragraph", "my-doc")
+        Insert with doc: insert_paragraph(2, "Middle content", "my-doc")
     """
-    global current_document_id
     try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
-        
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
-        
-        logger.info(f"🚀🚀🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{target_doc_id}'")
-        logger.info(f"Inserting paragraph in document {target_doc_id} at index {index}")
+        logger.info(f"🚀🚀🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{doc_id}'")
+        logger.info(f"Inserting paragraph in document {doc_id} at index {index}")
         
         # Get or create the document
-        model = document_manager.get_or_create_document(target_doc_id)
+        model = document_manager.get_or_create_document(doc_id)
         
         # Create paragraph structure with message data 
         block_detail = {"text": text}
@@ -453,30 +362,29 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
         
         result = {
             "success": True,
-            "doc_id": target_doc_id,
+            "doc_id": doc_id,
             "action": "insert_paragraph",
             "index": index,
             "text": text,
             "total_blocks": total_blocks
         }
         
-        logger.info(f"Successfully inserted paragraph in document {target_doc_id} at index {index}")
+        logger.info(f"Successfully inserted paragraph in document {doc_id} at index {index}")
         return json.dumps(result, indent=2)
         
     except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error inserting paragraph in document {target_doc_id_for_error}: {e}")
+        logger.error(f"Error inserting paragraph in document {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": target_doc_id_for_error,
+            "doc_id": doc_id,
             "action": "insert_paragraph"
         }
         return json.dumps(error_result, indent=2)
 
 
 @mcp.tool()
-async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
+async def append_paragraph(text: str, doc_id: str) -> str:
     """Append a text paragraph to the end of a Lexical document.
 
     This tool adds a new paragraph block at the end of the specified document.
@@ -488,9 +396,7 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
         text: The text content of the paragraph to append. Supports any UTF-8 text
               including emojis, special characters, formatted content, and multi-line
               text. Empty strings are allowed and will create an empty paragraph block.
-        doc_id: The unique identifier of the document (optional). If not provided,
-                uses the current document set via set_current_document. Explicit doc_id
-                takes precedence over current document setting.
+        doc_id: The unique identifier of the document (required).
 
     Returns:
         str: JSON string containing:
@@ -502,21 +408,13 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
             - On error: success=False with error message and context information
 
     Example Usage:
-        Simple append: append_paragraph("This is my conclusion.")
-        With explicit doc: append_paragraph("Final thoughts", "report-2024")
-        Using current doc: append_paragraph("Additional notes")
-        Empty paragraph: append_paragraph("")
+        Simple append: append_paragraph("This is my conclusion.", "my-doc")
+        With emoji: append_paragraph("Final thoughts 🎉", "report-2024")
+        Empty paragraph: append_paragraph("", "my-doc")
     """
     logger.info(f"🚀🚀🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
-    global current_document_id
     try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
-        
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
-        
-        logger.info(f"Appending paragraph to document {target_doc_id}")
+        logger.info(f"Appending paragraph to document {doc_id}")
         
         # Use the collaborative document manager's handle_message system
         # This will trigger WebSocket broadcasts to other clients
@@ -526,7 +424,7 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
         }
         
         # Call through the message handling system to trigger collaborative sync
-        result = await document_manager.handle_message(target_doc_id, "append-paragraph", message_data)
+        result = await document_manager.handle_message(doc_id, "append-paragraph", message_data)
         
         if not result.get("success"):
             raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")
@@ -536,28 +434,27 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
         # and processes changes through the normal collaborative flow.
         
         # Get updated document structure for response
-        model = document_manager.get_or_create_document(target_doc_id)
+        model = document_manager.get_or_create_document(doc_id)
         lexical_data = model.get_lexical_data()
         total_blocks = len(lexical_data.get("root", {}).get("children", []))
         
         response_result = {
             "success": True,
-            "doc_id": target_doc_id,
+            "doc_id": doc_id,
             "action": "append_paragraph",
             "text": text,
             "total_blocks": total_blocks
         }
         
-        logger.info(f"Successfully appended paragraph to document {target_doc_id}")
+        logger.info(f"Successfully appended paragraph to document {doc_id}")
         return json.dumps(response_result, indent=2)
         
     except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error appending paragraph to document {target_doc_id_for_error}: {e}")
+        logger.error(f"Error appending paragraph to document {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": target_doc_id_for_error,
+            "doc_id": doc_id,
             "action": "append_paragraph"
         }
         return json.dumps(error_result, indent=2)
@@ -658,7 +555,6 @@ class LexicalMCPServer:
         self._insert_paragraph = self._wrap_legacy_tool(insert_paragraph)
         self._append_paragraph = self._wrap_legacy_tool(append_paragraph)
         self._get_document_info = self._wrap_legacy_tool(get_document_info)
-        self._set_current_document = self._wrap_legacy_tool(set_current_document)
     
     def _wrap_legacy_tool(self, tool_func):
         """Wrap new tool functions for legacy interface compatibility"""

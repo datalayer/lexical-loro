@@ -182,8 +182,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
 
   const mcpTools = [
     {
-      name: 'set_current_document',
-      label: '📝 Set Current Document',
+      name: 'load_document',
+      label: '📂 Load Document',
       params: { doc_id: DOC_ID }
     },
     {
@@ -197,18 +197,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       params: { doc_id: DOC_ID, index: 2, text: 'Inserted at index 2 via MCP!' }
     },
     {
-      name: 'get_document_data',
-      label: '📄 Get Document Data',
-      params: { doc_id: DOC_ID }
-    },
-    {
-      name: 'list_models',
-      label: '📋 List Documents',
-      params: {}
-    },
-    {
-      name: 'export_document',
-      label: '💾 Export Document',
+      name: 'get_document_info',
+      label: '📄 Get Document Info',
       params: { doc_id: DOC_ID }
     }
   ];
