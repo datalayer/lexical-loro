@@ -23,7 +23,7 @@ import { lexicalTheme } from './theme';
 import "./LexicalCollaborativeEditor.css";
 
 // Constants
-const DOC_ID = 'lexical-shared-doc-3';
+const DOC_ID = 'example-1';
 
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;

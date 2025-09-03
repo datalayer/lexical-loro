@@ -2246,6 +2246,18 @@ export function LoroCollaborativePlugin({
             }
           };
           stableOnSendMessageReady.current?.(sendMessageFn);
+          
+          // Request initial snapshot immediately after connection to ensure proper initialization
+          // This ensures the editor is ready for programmatic operations even before user types
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'request-snapshot',
+                docId: docId
+              }));
+              console.log('📞 Lexical editor requested initial snapshot on connection');
+            }
+          }, 100); // Small delay to ensure connection is fully established
         };
 
         ws.onmessage = (event) => {
@@ -2312,35 +2324,62 @@ export function LoroCollaborativePlugin({
                 console.log('📝 No content change detected, skipping Lexical update');
               }
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
-              // Apply initial snapshot from server and immediately sync to Lexical
-              const snapshot = new Uint8Array(data.snapshot!);
-              loroDocRef.current.import(snapshot);
+              // Handle initial snapshot from server
               hasReceivedInitialSnapshot.current = true;
-              console.log('📄 Lexical editor received and applied initial snapshot');
+              console.log('📄 Lexical editor received initial snapshot response');
               
-              // Notify parent component about successful initialization
+              // Check if there's actual snapshot data
+              if (data.snapshot && data.snapshot.length > 0) {
+                // Apply snapshot with actual data
+                const snapshot = new Uint8Array(data.snapshot);
+                loroDocRef.current.import(snapshot);
+                console.log('📄 Applied non-empty initial snapshot');
+                
+                // Immediately reflect the current Loro content into the editor after import
+                try {
+                  // Always use 'content' container for structured JSON (single container architecture)
+                  const currentContent = loroDocRef.current.getText('content').toString();
+                  console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
+                  
+                  if (currentContent && currentContent.trim().length > 0) {
+                    updateLexicalFromLoro(editor, currentContent);
+                    console.log('✅ Successfully updated Lexical editor from snapshot');
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
+                }
+              } else {
+                // No snapshot data - initialize with empty document
+                console.log('📄 No snapshot data available, initializing with empty document');
+                
+                // Initialize the CRDT document with a basic empty structure
+                try {
+                  const emptyContent = JSON.stringify({
+                    root: {
+                      children: [],
+                      direction: null,
+                      format: "",
+                      indent: 0,
+                      type: "root",
+                      version: 1
+                    }
+                  });
+                  
+                  // Set the content in the Loro document to establish baseline
+                  loroDocRef.current.getText('content').insert(0, emptyContent);
+                  console.log('📄 Initialized Loro document with empty structure');
+                } catch (e) {
+                  console.warn('⚠️ Could not initialize empty document structure:', e);
+                }
+              }
+              
+              // Notify parent component about successful initialization (even if empty)
               if (onInitialization) {
                 onInitialization(true);
               }
-              
-              // Immediately reflect the current Loro content into the editor after import
-              try {
-                // Always use 'content' container for structured JSON (single container architecture)
-                const currentContent = loroDocRef.current.getText('content').toString();
-                console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
-                
-                if (currentContent && currentContent.trim().length > 0) {
-                  updateLexicalFromLoro(editor, currentContent);
-                  console.log('✅ Successfully updated Lexical editor from snapshot');
-                } else {
-                  console.warn('⚠️ Empty content received from snapshot');
-                }
-              } catch (e) {
-                console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
-                // Notify parent component about failed initialization
-                if (onInitialization) {
-                  onInitialization(false);
-                }
+              // Notify parent component about failed initialization
+              if (onInitialization) {
+                onInitialization(false);
               }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore

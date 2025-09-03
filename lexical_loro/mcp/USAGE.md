@@ -4,6 +4,26 @@ This example demonstrates how to use the Lexical MCP Server with the three avail
 
 ## Available Tools
 
+You can try with eg
+
+```bash
+curl -X POST http://localhost:3001/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "append_paragraph",
+      "arguments": {
+        "text": "Test paragraph from MCP tool",
+        "doc_id": "example-1"
+      }
+    }
+  }'
+```
+
 ### 1. load_document
 Load a document by its unique identifier.
 

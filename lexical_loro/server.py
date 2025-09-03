@@ -482,10 +482,20 @@ class LoroWebSocketServer:
             
         try:
             # Ensure document exists with initial content
-            self.get_document(doc_id)  # This will create with initial content if needed
+            document = self.get_document(doc_id)  # This will create with initial content if needed
             
             # Now get the snapshot
             snapshot_bytes = self.document_manager.get_snapshot(doc_id)
+            
+            # Check if document has content - either in CRDT snapshot or lexical data
+            has_content = False
+            if snapshot_bytes and len(snapshot_bytes) > 0:
+                has_content = True
+            elif document and hasattr(document, 'lexical_data') and document.lexical_data:
+                # Even if CRDT snapshot is empty, check if document has lexical content
+                lexical_root = document.lexical_data.get("root", {})
+                children = lexical_root.get("children", [])
+                has_content = len(children) > 0
             
             if snapshot_bytes and len(snapshot_bytes) > 0:
                 # Convert bytes to list of integers for JSON serialization
@@ -502,17 +512,17 @@ class LoroWebSocketServer:
                 }))
                 logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot_bytes)} bytes) to client {client_id}")
             else:
-                # Send empty response with enhanced fields
+                # Even without CRDT snapshot, we can still send initial content if document exists
                 await websocket.send(json.dumps({
                     "type": "initial-snapshot",
                     "docId": doc_id,
-                    "hasData": False,
-                    "hasEvent": False,
-                    "hasSnapshot": False,
+                    "hasData": has_content,  # Based on content check, not just snapshot
+                    "hasEvent": has_content,  # Based on content check, not just snapshot
+                    "hasSnapshot": False,  # No CRDT snapshot available
                     "clientId": client_id,
                     "dataLength": 0
                 }))
-                logger.info(f"📄 No content in {doc_id} to send to client {client_id}")
+                logger.info(f"📄 Document {doc_id} has content={has_content} but no CRDT snapshot for client {client_id}")
                 
         except Exception as e:
             logger.error(f"❌ Error sending snapshot for {doc_id} to {client_id}: {e}")
@@ -763,7 +773,7 @@ async def main():
         port=8081,
         load_model=default_load_model,
         save_model=default_save_model,
-        autosave_interval_sec=5
+        autosave_interval_sec=60
     )
     
     try:
