@@ -186,10 +186,14 @@ async def load_document(doc_id: str) -> str:
     Returns the complete lexical data structure including all blocks, metadata, and
     container information for collaborative editing.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to load.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
-        doc_id: The unique identifier of the document to load. Can be any string
+        doc_id: The unique identifier of the document to load (REQUIRED). Can be any string
                that serves as a document identifier (e.g., "my-doc", "report-2024").
-               Documents are automatically created if they don't exist.
+               Documents are automatically created if they don't exist. You cannot omit
+               this parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing:
@@ -242,8 +246,12 @@ async def get_document_info(doc_id: str) -> str:
     understanding document composition, tracking changes, and getting quick insights
     about document statistics before performing operations.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to inspect.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
-        doc_id: The unique identifier of the document to inspect (required).
+        doc_id: The unique identifier of the document to inspect (REQUIRED). You cannot
+               omit this parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing comprehensive document information:
@@ -319,13 +327,17 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
     Uses the same SAFE incremental operations as append_paragraph to prevent
     race conditions and ensure collaborative stability.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to modify.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
         index: The zero-based index position where to insert the paragraph.
                Use 0 to insert at the beginning, or any valid index within the document.
                If index exceeds document length, paragraph is appended at the end.
         text: The text content of the paragraph to insert. Can contain any UTF-8 text
               including emojis, special characters, and multi-line content.
-        doc_id: The unique identifier of the document (required).
+        doc_id: The unique identifier of the document (REQUIRED). You cannot omit this
+               parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing:
@@ -390,11 +402,15 @@ async def append_paragraph(text: str, doc_id: str) -> str:
     inserting at the last position. The document uses Loro's collaborative editing
     backend, ensuring real-time synchronization across all connected clients.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to modify.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
         text: The text content of the paragraph to append. Supports any UTF-8 text
               including emojis, special characters, formatted content, and multi-line
               text. Empty strings are allowed and will create an empty paragraph block.
-        doc_id: The unique identifier of the document (required).
+        doc_id: The unique identifier of the document (REQUIRED). You cannot omit this
+               parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing:
