@@ -174,7 +174,7 @@ def get_document_manager() -> LexicalDocumentManager:
 
 
 ###############################################################################
-# Tools using FastMCP decorators
+# MCP Tools
 
 
 @mcp.tool()
@@ -306,8 +306,6 @@ async def get_document_info(doc_id: str) -> str:
         }
         return json.dumps(error_result, indent=2)
 
-
-###############################################################################
 
 @mcp.tool()
 async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
@@ -461,7 +459,7 @@ async def append_paragraph(text: str, doc_id: str) -> str:
 
 
 ###############################################################################
-# Commands using Click
+# Click Commands
 
 
 @click.group()
