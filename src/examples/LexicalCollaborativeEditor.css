@@ -20,7 +20,7 @@
 
 .lexical-editor-header h3 {
   margin: 0;
-  color: #1f2937;
+  color: #000000;
   font-size: 1.25rem;
   font-weight: 600;
 }
@@ -30,7 +30,7 @@
   align-items: center;
   gap: 15px;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #59595C;
 }
 
 .lexical-editor-info > span:last-child {
@@ -53,8 +53,8 @@
 }
 
 .status-indicator.connected {
-  background-color: #d1fae5;
-  color: #065f46;
+  background-color: #2ECC71;
+  color: #FFFFFF;
 }
 
 .status-indicator.disconnected {
@@ -63,8 +63,8 @@
 }
 
 .disconnect-button {
-  background-color: #ef4444;
-  color: white;
+  background-color: #59595C;
+  color: #FFFFFF;
   border: none;
   padding: 6px 12px;
   border-radius: 6px;
@@ -74,7 +74,7 @@
 }
 
 .disconnect-button:hover {
-  background-color: #dc2626;
+  background-color: #000000;
 }
 
 .disconnect-button:active {
@@ -91,8 +91,8 @@
 }
 
 .lexical-editor-container:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #1ABC9C;
+  box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.1);
 }
 
 .lexical-content-editable {
@@ -103,7 +103,7 @@
   tab-size: 1;
   outline: 0;
   padding: 16px;
-  caret-color: rgb(5, 5, 5);
+  caret-color: #000000;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   line-height: 1.6;
 }
@@ -133,7 +133,7 @@
 .lexical-editor-footer p {
   margin: 3px 0;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #59595C;
 }
 
 .lexical-editor-footer p:first-child {
@@ -169,7 +169,7 @@
 
 .editor-heading-h1 {
   font-size: 24px;
-  color: rgb(5, 5, 5);
+  color: #000000;
   font-weight: 400;
   margin: 0;
   margin-bottom: 12px;
@@ -178,7 +178,7 @@
 
 .editor-heading-h2 {
   font-size: 20px;
-  color: rgb(5, 5, 5);
+  color: #000000;
   font-weight: 400;
   margin: 0;
   margin-bottom: 10px;
@@ -187,7 +187,7 @@
 
 .editor-heading-h3 {
   font-size: 18px;
-  color: rgb(5, 5, 5);
+  color: #000000;
   font-weight: 400;
   margin: 0;
   margin-bottom: 8px;
@@ -196,7 +196,7 @@
 
 .editor-heading-h4 {
   font-size: 16px;
-  color: rgb(5, 5, 5);
+  color: #000000;
   font-weight: 400;
   margin: 0;
   margin-bottom: 6px;
@@ -205,7 +205,7 @@
 
 .editor-heading-h5 {
   font-size: 14px;
-  color: rgb(5, 5, 5);
+  color: #000000;
   font-weight: 400;
   margin: 0;
   margin-bottom: 4px;
@@ -261,7 +261,7 @@
 }
 
 .editor-link {
-  color: rgb(33, 111, 219);
+  color: #1ABC9C;
   text-decoration: none;
 }
 
@@ -309,13 +309,13 @@
 }
 
 .tab-button:hover {
-  color: #374151;
+  color: #59595C;
   background-color: #f9fafb;
 }
 
 .tab-button.active {
-  color: #3b82f6;
-  border-bottom-color: #3b82f6;
+  color: #1ABC9C;
+  border-bottom-color: #1ABC9C;
   background-color: #eff6ff;
 }
 
@@ -353,18 +353,18 @@
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
-  color: #374151;
+  color: #59595C;
   font-weight: 500;
 }
 
 .lexical-toolbar-button:hover {
   background-color: #e5e7eb;
-  color: #1f2937;
+  color: #000000;
 }
 
 .lexical-toolbar-button.active {
-  background-color: #3b82f6;
-  color: white;
+  background-color: #1ABC9C;
+  color: #FFFFFF;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
@@ -398,12 +398,15 @@
   padding: 4px 8px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  background-color: white;
+  background-color: #FFFFFF !important;
   font-size: 14px;
-  color: #374151;
+  color: #59595C !important;
   cursor: pointer;
   transition: all 0.2s ease;
   min-width: 120px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .lexical-toolbar-select:hover {
@@ -412,14 +415,97 @@
 
 .lexical-toolbar-select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 1px #3b82f6;
+  border-color: #1ABC9C;
+  box-shadow: 0 0 0 1px #1ABC9C;
+}
+
+/* Dropdown options styling */
+.lexical-toolbar-select option {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+  padding: 8px 12px;
+  border: none;
+}
+
+.lexical-toolbar-select option:hover {
+  background-color: #f0f8ff !important;
+  color: #000000 !important;
+}
+
+.lexical-toolbar-select option:selected {
+  background-color: #1ABC9C !important;
+  color: #FFFFFF !important;
+}
+
+.lexical-toolbar-select option:checked {
+  background-color: #1ABC9C !important;
+  color: #FFFFFF !important;
+}
+
+/* Additional specificity for dropdown options */
+select.lexical-toolbar-select option {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+select.lexical-toolbar-select option:hover {
+  background-color: #f0f8ff !important;
+  color: #000000 !important;
+}
+
+select.lexical-toolbar-select option:selected,
+select.lexical-toolbar-select option:checked {
+  background-color: #1ABC9C !important;
+  color: #FFFFFF !important;
+}
+
+/* Force all select elements in lexical editor to have proper styling */
+.lexical-collaborative-editor select,
+.lexical-collaborative-editor select option {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+/* MCP Tools Dropdown Styling */
+.mcp-tools-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: #FFFFFF;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 200px;
+  margin-top: 2px;
+}
+
+.mcp-tool-button {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background-color: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  color: #000000 !important;
+  transition: all 0.2s ease;
+}
+
+.mcp-tool-button:hover {
+  background-color: #f0f8ff !important;
+  color: #000000 !important;
+}
+
+.mcp-tool-button:not(:last-child) {
+  border-bottom: 1px solid #e5e7eb;
 }
 
 /* Update editor container to work with toolbar */
 .lexical-editor-container {
   position: relative;
-  background-color: #ffffff;
+  background-color: #FFFFFF;
   border: 2px solid #d1d5db;
   border-radius: 0 0 8px 8px; /* Remove top border radius when toolbar is present */
   min-height: 300px;

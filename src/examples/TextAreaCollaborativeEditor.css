@@ -22,7 +22,7 @@
 
 .editor-header h2 {
   margin: 0;
-  color: #1f2937;
+  color: #000000;
   font-size: 1.5rem;
   font-weight: 600;
 }
@@ -41,13 +41,13 @@
 }
 
 .status-indicator.connected {
-  background-color: #d1fae5;
-  color: #065f46;
+  background-color: #2ECC71;
+  color: #FFFFFF;
 }
 
 .status-indicator.disconnected {
-  background-color: #fee2e2;
-  color: #991b1b;
+  background-color: #59595C;
+  color: #FFFFFF;
 }
 
 .error-message {
@@ -59,8 +59,8 @@
 }
 
 .disconnect-button {
-  background-color: #ef4444;
-  color: white;
+  background-color: #59595C;
+  color: #FFFFFF;
   border: none;
   padding: 6px 12px;
   border-radius: 6px;
@@ -70,7 +70,7 @@
 }
 
 .disconnect-button:hover {
-  background-color: #dc2626;
+  background-color: #000000;
 }
 
 .disconnect-button:active {
@@ -98,7 +98,7 @@
   line-height: 1.5;
   resize: vertical;
   transition: border-color 0.2s ease;
-  background-color: #ffffff;
+  background-color: #FFFFFF;
 }
 
 /* Cursor and selection overlays */
@@ -115,7 +115,7 @@
 
 .remote-cursor {
   position: absolute;
-  background-color: #ff6b6b;
+  background-color: #1ABC9C;
   width: 2px;
   height: 20px;
   pointer-events: none;
@@ -128,7 +128,7 @@
   top: -22px;
   left: 0;
   background-color: inherit;
-  color: white;
+  color: #FFFFFF;
   padding: 2px 6px;
   font-size: 10px;
   border-radius: 3px;
@@ -139,7 +139,7 @@
 
 .remote-selection {
   position: absolute;
-  background-color: rgba(255, 107, 107, 0.2);
+  background-color: rgba(26, 188, 156, 0.2);
   pointer-events: none;
   z-index: 999;
   border-radius: 2px;
@@ -152,8 +152,8 @@
 
 .editor-textarea:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #1ABC9C;
+  box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.1);
 }
 
 .editor-textarea::placeholder {
@@ -171,7 +171,7 @@
 .editor-info p {
   margin: 5px 0;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #59595C;
 }
 
 .editor-info p:first-child {

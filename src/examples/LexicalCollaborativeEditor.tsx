@@ -294,8 +294,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                     className="mcp-tools-button"
                     title="MCP Tools"
                     style={{ 
-                      backgroundColor: '#4CAF50',
-                      color: 'white',
+                      backgroundColor: '#1ABC9C',
+                      color: '#FFFFFF',
                       border: 'none',
                       padding: '6px 12px',
                       borderRadius: '4px',
@@ -305,44 +305,15 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                     🔧 MCP Tools ▼
                   </button>
                   {showMcpDropdown && (
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        backgroundColor: 'white',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                        zIndex: 1000,
-                        minWidth: '200px',
-                        marginTop: '2px'
-                      }}
-                    >
-                      {mcpTools.map((tool, index) => (
+                    <div className="mcp-tools-dropdown">
+                      {mcpTools.map((tool) => (
                         <button
                           key={tool.name}
                           onClick={() => {
                             callMcpTool(tool.name, tool.params);
                             setShowMcpDropdown(false);
                           }}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            padding: '8px 12px',
-                            border: 'none',
-                            backgroundColor: 'transparent',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            borderBottom: index < mcpTools.length - 1 ? '1px solid #eee' : 'none'
-                          }}
-                          onMouseOver={(e) => {
-                            (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-                          }}
-                          onMouseOut={(e) => {
-                            (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                          }}
+                          className="mcp-tool-button"
                           title={`Call MCP tool: ${tool.name}`}
                         >
                           {tool.label}

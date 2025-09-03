@@ -18,8 +18,8 @@
   text-align: center;
   margin-bottom: 2rem;
   padding: 2rem 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #1ABC9C 0%, #16A085 100%);
+  color: #FFFFFF;
   border-radius: 12px;
   margin: -2rem -2rem 2rem -2rem;
   padding: 3rem 2rem;
@@ -48,7 +48,7 @@
 .websocket-config label {
   display: block;
   font-weight: 600;
-  color: #374151;
+  color: #59595C;
   margin-bottom: 0.5rem;
 }
 
@@ -63,8 +63,8 @@
 
 .websocket-config input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #1ABC9C;
+  box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.1);
 }
 
 main {
