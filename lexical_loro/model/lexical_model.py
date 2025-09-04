@@ -4178,12 +4178,16 @@ class LexicalDocumentManager:
                     # Binary snapshot
                     binary_data = bytes(snapshot_data)
                     model.import_snapshot(binary_data)
-                    logger.debug(f"📄 DocumentManager imported binary snapshot for {doc_id}")
+                    # Sync lexical_data after importing binary snapshot
+                    model._sync_from_loro()
+                    logger.debug(f"📄 DocumentManager imported binary snapshot for {doc_id} and synced lexical_data")
                 else:
                     # JSON snapshot
                     if hasattr(model, 'apply_snapshot'):
                         model.apply_snapshot(snapshot_data)
-                    logger.debug(f"📄 DocumentManager applied JSON snapshot for {doc_id}")
+                        # Sync lexical_data after applying JSON snapshot
+                        model._sync_from_loro()
+                    logger.debug(f"📄 DocumentManager applied JSON snapshot for {doc_id} and synced lexical_data")
                     
         except Exception as e:
             logger.debug(f"❌ Failed to handle initial snapshot for {doc_id}: {e}")
@@ -4208,7 +4212,11 @@ class LexicalDocumentManager:
                 update_bytes = bytes(update_data)
                 model.text_doc.import_(update_bytes)
                 
-                logger.debug(f"✅ DocumentManager applied loro-update from {sender_id}")
+                # CRITICAL: After importing CRDT update, sync the lexical_data structure
+                # This ensures the JSON structure is updated with the new CRDT state
+                model._sync_from_loro()
+                
+                logger.debug(f"✅ DocumentManager applied loro-update from {sender_id} and synced lexical_data")
             else:
                 logger.debug(f"⚠️ DocumentManager no model found for doc_id: {doc_id}")
                 

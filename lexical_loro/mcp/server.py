@@ -271,10 +271,18 @@ async def get_document_info(doc_id: str) -> str:
         # Get or create the document
         model = document_manager.get_or_create_document(doc_id)
         
+        # Log client mode status for debugging
+        if document_manager.client_mode:
+            client_info = document_manager.websocket_clients.get(doc_id, {})
+            is_connected = client_info.get("connected", False)
+            client_id = client_info.get("client_id", "unknown")
+            logger.info(f"📡 MCP Client Mode: connected={is_connected}, client_id={client_id}")
+        else:
+            logger.info(f"📍 MCP Standalone Mode: reading local state only")
+        
         # DIRECT LOCAL READ: Get lexical data directly from the local model
-        # This does NOT use WebSocket communication - it reads from the local LexicalModel instance
-        # that the MCP server maintains in memory. This ensures we get the current state without
-        # network latency or WebSocket connection issues.
+        # In client mode, this model should be automatically kept in sync with the WebSocket server
+        # through incremental updates, so we can trust the current local state
         lexical_data = model.get_lexical_data()
         children = lexical_data.get("root", {}).get("children", [])
         
