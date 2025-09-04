@@ -356,6 +356,10 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         # Insert the paragraph at the specified index using SAFE operations
         result = await model.add_block_at_index(index, block_detail, "paragraph")
         
+        # TIMING FIX: Add small delay to ensure broadcast reaches frontend before returning
+        # This prevents the issue where UI doesn't update until second operation
+        await asyncio.sleep(0.1)  # 100ms should be enough for WebSocket message delivery
+        
         # Get updated document structure  
         lexical_data = model.get_lexical_data()
         total_blocks = len(lexical_data.get("root", {}).get("children", []))
@@ -436,6 +440,10 @@ async def append_paragraph(text: str, doc_id: str) -> str:
         # Note: Broadcasting is handled automatically by the document manager's 
         # subscription system when in client mode. The WebSocket client receives
         # and processes changes through the normal collaborative flow.
+        
+        # TIMING FIX: Add small delay to ensure broadcast reaches frontend before returning
+        # This prevents the issue where UI doesn't update until second operation
+        await asyncio.sleep(0.1)  # 100ms should be enough for WebSocket message delivery
         
         # Get updated document structure for response
         model = document_manager.get_or_create_document(doc_id)

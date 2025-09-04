@@ -309,10 +309,10 @@ class LexicalModel:
         
         # DEBUG: Check current state before creating snapshot
         current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
-        logger.debug(f"🔄 _create_broadcast_data: Creating snapshot with {current_blocks} blocks", flush=True)
+        logger.debug(f"🔄 _create_broadcast_data: Creating snapshot with {current_blocks} blocks")
         
         snapshot_bytes = self.get_snapshot()
-        logger.debug(f"🔄 _create_broadcast_data: Snapshot size: {len(snapshot_bytes)} bytes", flush=True)
+        logger.debug(f"🔄 _create_broadcast_data: Snapshot size: {len(snapshot_bytes)} bytes")
         
         broadcast_data = {
             "type": event_type,
@@ -2647,28 +2647,28 @@ class LexicalModel:
         """Handle append-paragraph message type"""
         # IMMEDIATE DEBUG: Force flush to see if method is called
         import sys
-        logger.debug(f"🚨 _handle_append_paragraph: METHOD CALLED!", flush=True)
+        logger.debug(f"🚨 _handle_append_paragraph: METHOD CALLED!")
         sys.stdout.flush()
         
         # DEBUG: Check data parameter type and content
-        logger.debug(f"🔍 _handle_append_paragraph: data type = {type(data)}", flush=True)
-        logger.debug(f"🔍 _handle_append_paragraph: data = {data}", flush=True)
+        logger.debug(f"🔍 _handle_append_paragraph: data type = {type(data)}")
+        logger.debug(f"🔍 _handle_append_paragraph: data = {data}")
         sys.stdout.flush()
         
         # TYPE SAFETY: Check if data is actually a string (this would cause the error)
         if isinstance(data, str):
-            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is a string, not a dict!", flush=True)
-            logger.error(f"❌ _handle_append_paragraph: String data = '{data}'", flush=True)
+            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is a string, not a dict!")
+            logger.error(f"❌ _handle_append_paragraph: String data = '{data}'")
             sys.stdout.flush()
             try:
                 # Try to parse it as JSON
                 import json
                 data = json.loads(data)
-                logger.info(f"✅ _handle_append_paragraph: Successfully parsed string data as JSON", flush=True)
-                logger.debug(f"✅ _handle_append_paragraph: Parsed data = {data}", flush=True)
+                logger.info(f"✅ _handle_append_paragraph: Successfully parsed string data as JSON")
+                logger.debug(f"✅ _handle_append_paragraph: Parsed data = {data}")
                 sys.stdout.flush()
             except json.JSONDecodeError as e:
-                logger.error(f"❌ _handle_append_paragraph: Failed to parse string data as JSON: {e}", flush=True)
+                logger.error(f"❌ _handle_append_paragraph: Failed to parse string data as JSON: {e}")
                 sys.stdout.flush()
                 return {
                     "success": False,
@@ -2676,7 +2676,7 @@ class LexicalModel:
                     "message_type": "append-paragraph"
                 }
         elif not isinstance(data, dict):
-            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is neither string nor dict: {type(data)}", flush=True)
+            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is neither string nor dict: {type(data)}")
             sys.stdout.flush()
             return {
                 "success": False,
@@ -2685,68 +2685,68 @@ class LexicalModel:
             }
         
         try:
-            logger.debug(f"🔍 _handle_append_paragraph: About to call data.get('message', 'Hello')", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: About to call data.get('message', 'Hello')")
             sys.stdout.flush()
             message_text = data.get("message", "Hello")
-            logger.debug(f"🔍 _handle_append_paragraph: message_text = '{message_text}'", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: message_text = '{message_text}'")
             sys.stdout.flush()
             
             logger.debug(f"➕ _handle_append_paragraph: STARTING - message='{message_text}', client={client_id or 'unknown'}")
             
             # Log current state - DEBUG LEXICAL_DATA ACCESS
-            logger.debug(f"🔍 _handle_append_paragraph: About to access self.lexical_data", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: About to access self.lexical_data")
             sys.stdout.flush()
             
             try:
-                logger.debug(f"🔍 _handle_append_paragraph: self.lexical_data type = {type(self.lexical_data)}", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: self.lexical_data type = {type(self.lexical_data)}")
                 sys.stdout.flush()
                 
                 root_data = self.lexical_data.get("root", {})
-                logger.debug(f"🔍 _handle_append_paragraph: root_data type = {type(root_data)}", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: root_data type = {type(root_data)}")
                 sys.stdout.flush()
                 
                 children_data = root_data.get("children", [])
-                logger.debug(f"🔍 _handle_append_paragraph: children_data type = {type(children_data)}", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: children_data type = {type(children_data)}")
                 sys.stdout.flush()
                 
-                logger.debug(f"🔍 _handle_append_paragraph: About to call len(children_data)", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: About to call len(children_data)")
                 sys.stdout.flush()
                 blocks_current = len(children_data)
-                logger.debug(f"� _handle_append_paragraph: len() returned {blocks_current}", flush=True)
+                logger.debug(f"� _handle_append_paragraph: len() returned {blocks_current}")
                 sys.stdout.flush()
                 
                 logger.debug(f"�📊 _handle_append_paragraph: Current lexical_data has {blocks_current} blocks")
             except Exception as data_error:
-                logger.debug(f"❌ _handle_append_paragraph: Error accessing lexical_data: {data_error}", flush=True)
-                logger.debug(f"❌ _handle_append_paragraph: lexical_data = {self.lexical_data}", flush=True)
+                logger.debug(f"❌ _handle_append_paragraph: Error accessing lexical_data: {data_error}")
+                logger.debug(f"❌ _handle_append_paragraph: lexical_data = {self.lexical_data}")
                 sys.stdout.flush()
                 raise data_error
             
-            logger.debug(f"🔍 _handle_append_paragraph: Successfully accessed data, continuing...", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: Successfully accessed data, continuing...")
             sys.stdout.flush()
             
             # COLLABORATIVE FIX: Don't sync manually when subscriptions are active
             # The subscription system keeps lexical_data current automatically
-            logger.debug(f"🔍 _handle_append_paragraph: About to check subscription status", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: About to check subscription status")
             sys.stdout.flush()
             
-            logger.debug(f"🔍 _handle_append_paragraph: self._text_doc_subscription = {self._text_doc_subscription}", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: self._text_doc_subscription = {self._text_doc_subscription}")
             sys.stdout.flush()
             
             if self._text_doc_subscription is not None:
-                logger.debug(f"✅ _handle_append_paragraph: Using current data (subscription mode - no sync needed)", flush=True)
-                logger.debug(f"✅ _handle_append_paragraph: Subscription keeps data current, avoiding sync to prevent race conditions", flush=True)
+                logger.debug(f"✅ _handle_append_paragraph: Using current data (subscription mode - no sync needed)")
+                logger.debug(f"✅ _handle_append_paragraph: Subscription keeps data current, avoiding sync to prevent race conditions")
                 sys.stdout.flush()
             else:
-                logger.debug(f"🔄 _handle_append_paragraph: No subscription - syncing from CRDT", flush=True)
+                logger.debug(f"🔄 _handle_append_paragraph: No subscription - syncing from CRDT")
                 sys.stdout.flush()
                 # Only sync when there's no subscription (standalone mode)
                 self._sync_from_loro()
                 blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
-                logger.debug(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks", flush=True)
+                logger.debug(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks")
                 sys.stdout.flush()
             
-            logger.debug(f"🔍 _handle_append_paragraph: Subscription check completed", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: Subscription check completed")
             sys.stdout.flush()
             
             # Create the paragraph structure
