@@ -324,15 +324,15 @@ async def get_document_info(doc_id: str) -> str:
         
         # Create a readable summary
         summary = f"""
-� DOCUMENT INFO for '{doc_id}' - MCP Local Model State
+*** DOCUMENT INFO for '{doc_id}' - MCP Local Model State
 {'='*70}
 
-📊 SUMMARY:
+SUMMARY:
 - Total Blocks: {len(children)}
 - Block Types: {dict(block_types)}
 - Container ID: {model.container_id}
 
-📝 CONTENT PREVIEW:
+CONTENT PREVIEW:
 """
         for preview in content_preview[:10]:  # Show first 10 blocks
             summary += f"  {preview}\n"
@@ -341,20 +341,20 @@ async def get_document_info(doc_id: str) -> str:
             summary += f"  ... and {len(content_preview) - 10} more blocks\n"
         
         summary += f"""
-🌳 DOCUMENT TREE STRUCTURE:
+DOCUMENT TREE STRUCTURE:
 {_format_lexical_tree(lexical_data)}
 
-🔧 TECHNICAL DETAILS:
+TECHNICAL DETAILS:
 - Document Version: {lexical_data.get("version", "N/A")}
 - Last Saved: {lexical_data.get("lastSaved", "N/A")}
 - Source: {lexical_data.get("source", "N/A")}
 
-💻 LOCAL MODEL VALIDATION:
+LOCAL MODEL VALIDATION:
 The above data is read directly from the MCP server's local LexicalModel instance.
 This confirms the local model state is current and matches what should be displayed
 in the frontend after collaborative operations.
 
-📄 FULL JSON DOCUMENT:
+FULL JSON DOCUMENT:
 {json.dumps(lexical_data, indent=2)}
 """
         
@@ -368,7 +368,7 @@ in the frontend after collaborative operations.
             "error": str(e),
             "doc_id": doc_id
         }
-        return f"❌ Failed to get document info for {doc_id}: {str(e)}"
+        return f"ERROR: Failed to get document info for {doc_id}: {str(e)}"
 
 
 def _format_lexical_tree(lexical_data: dict, indent: str = "") -> str:
@@ -376,13 +376,13 @@ def _format_lexical_tree(lexical_data: dict, indent: str = "") -> str:
     tree = ""
     root = lexical_data.get("root", {})
     
-    tree += f"{indent}📄 root (type: {root.get('type', 'unknown')})\n"
+    tree += f"{indent}* root (type: {root.get('type', 'unknown')})\n"
     
     children = root.get("children", [])
     for i, child in enumerate(children):
         is_last = i == len(children) - 1
-        connector = "└── " if is_last else "├── "
-        next_indent = indent + ("    " if is_last else "│   ")
+        connector = "+-- " if is_last else "|-- "
+        next_indent = indent + ("    " if is_last else "|   ")
         
         child_type = child.get("type", "unknown")
         tree += f"{indent}{connector}[{i}] {child_type}"
@@ -396,7 +396,7 @@ def _format_lexical_tree(lexical_data: dict, indent: str = "") -> str:
                     text_content += text_node.get("text", "")
             if text_content:
                 preview = text_content[:50] + "..." if len(text_content) > 50 else text_content
-                tree += f" → \"{preview}\""
+                tree += f" -> \"{preview}\""
         
         tree += "\n"
         
