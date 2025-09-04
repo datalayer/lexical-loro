@@ -48,6 +48,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   const [showMcpDropdown, setShowMcpDropdown] = useState(false);
   const [mcpStatus, setMcpStatus] = useState<string>('');
+  const [documentContent, setDocumentContent] = useState<any>(null);
+  const [showDocumentTree, setShowDocumentTree] = useState(true);
   const disconnectRef = useRef<(() => void) | null>(null);
   const sendMessageRef = useRef<((message: any) => void) | null>(null);
   const mcpDropdownRef = useRef<HTMLDivElement>(null);
@@ -173,8 +175,40 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       setMcpStatus(`${toolName}: ${resultText}`);
       console.log(`MCP ${toolName} result:`, result);
       
-      // Clear status after 3 seconds
-      setTimeout(() => setMcpStatus(''), 3000);
+      // Update document content if this was get_document_info or any document-modifying operation
+      if (toolName === 'get_document_info' && result.result && result.result.content && result.result.content.length > 0) {
+        try {
+          const content = JSON.parse(result.result.content[0].text);
+          if (content.content) {
+            setDocumentContent(content.content);
+          }
+        } catch (error) {
+          console.error('Failed to parse document content:', error);
+        }
+      } else if (['append_paragraph', 'insert_paragraph', 'load_document'].includes(toolName)) {
+        // Refresh document content after modifying operations
+        setTimeout(async () => {
+          try {
+            const docResult = await callMcpTool('get_document_info', { doc_id: DOC_ID });
+            if (docResult?.result?.content?.[0]?.text) {
+              const content = JSON.parse(docResult.result.content[0].text);
+              if (content.content) {
+                setDocumentContent(content.content);
+              }
+            }
+          } catch (error) {
+            console.error('Failed to refresh document content:', error);
+          }
+        }, 500); // Small delay to ensure the operation has completed
+      }
+      
+      // Keep status displayed permanently for get_document_info, clear after 3 seconds for others
+      if (toolName === 'get_document_info') {
+        // Don't auto-clear for document info - user can see the persistent data in the tree below
+      } else {
+        // Clear status after 3 seconds for other operations
+        setTimeout(() => setMcpStatus(''), 3000);
+      }
       
       return result;
     } catch (error) {
@@ -182,17 +216,93 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       setMcpStatus(errorMsg);
       console.error('MCP tool error:', error);
       
-      // Clear error after 5 seconds
+      // Clear error after 5 seconds for all tools
       setTimeout(() => setMcpStatus(''), 5000);
     }
   }, [isInitialized]);
 
+  // Auto-load document content when initialized
+  useEffect(() => {
+    if (isInitialized) {
+      const loadContent = async () => {
+        try {
+          const result = await callMcpTool('get_document_info', { doc_id: DOC_ID });
+          if (result?.result?.content?.[0]?.text) {
+            const content = JSON.parse(result.result.content[0].text);
+            if (content.content) {
+              setDocumentContent(content.content);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load document content:', error);
+        }
+      };
+      loadContent();
+    }
+  }, [isInitialized, callMcpTool]);
+
+  // JSON Tree Component
+  const JsonTree = ({ data, level = 0 }: { data: any, level?: number }) => {
+    const [collapsed, setCollapsed] = useState(level > 2);
+    
+    if (data === null) return <span style={{ color: '#999' }}>null</span>;
+    if (data === undefined) return <span style={{ color: '#999' }}>undefined</span>;
+    if (typeof data === 'string') return <span style={{ color: '#22863a' }}>"{data}"</span>;
+    if (typeof data === 'number') return <span style={{ color: '#005cc5' }}>{data}</span>;
+    if (typeof data === 'boolean') return <span style={{ color: '#d73a49' }}>{String(data)}</span>;
+    
+    if (Array.isArray(data)) {
+      if (data.length === 0) return <span>[]</span>;
+      return (
+        <div>
+          <span 
+            onClick={() => setCollapsed(!collapsed)} 
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+          >
+            {collapsed ? '▶' : '▼'} [{data.length}]
+          </span>
+          {!collapsed && (
+            <div style={{ marginLeft: '20px', borderLeft: '1px solid #ddd', paddingLeft: '10px' }}>
+              {data.map((item, index) => (
+                <div key={index}>
+                  <span style={{ color: '#666' }}>{index}:</span> <JsonTree data={item} level={level + 1} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    if (typeof data === 'object') {
+      const keys = Object.keys(data);
+      if (keys.length === 0) return <span>{'{}'}</span>;
+      return (
+        <div>
+          <span 
+            onClick={() => setCollapsed(!collapsed)} 
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+          >
+            {collapsed ? '▶' : '▼'} {'{'}
+          </span>
+          {!collapsed && (
+            <div style={{ marginLeft: '20px', borderLeft: '1px solid #ddd', paddingLeft: '10px' }}>
+              {keys.map((key) => (
+                <div key={key}>
+                  <span style={{ color: '#032f62' }}>{key}:</span> <JsonTree data={data[key]} level={level + 1} />
+                </div>
+              ))}
+            </div>
+          )}
+          {!collapsed && <span>{'}'}</span>}
+        </div>
+      );
+    }
+    
+    return <span>{String(data)}</span>;
+  };
+
   const mcpTools = [
-    {
-      name: 'load_document',
-      label: '📂 Load Document',
-      params: { doc_id: DOC_ID }
-    },
     {
       name: 'append_paragraph',
       label: '➕ Append Paragraph (MCP)',
@@ -389,6 +499,96 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
         )}
         <p>Document ID: {DOC_ID}</p>
         <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
+        
+        {/* Document JSON Tree */}
+        {showDocumentTree && (
+          <div style={{
+            marginTop: '20px',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #dee2e6',
+            borderRadius: '8px',
+            maxHeight: '400px',
+            overflowY: 'auto'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '10px',
+              borderBottom: '1px solid #dee2e6',
+              paddingBottom: '8px'
+            }}>
+              <div>
+                <h4 style={{ margin: 0, color: '#495057' }}>Document Structure</h4>
+                <small style={{ color: '#6c757d', fontSize: '11px' }}>
+                  📡 Data source: MCP Server Local Model (not WebSocket)
+                </small>
+              </div>
+              <div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const result = await callMcpTool('get_document_info', { doc_id: DOC_ID });
+                      if (result?.result?.content?.[0]?.text) {
+                        const content = JSON.parse(result.result.content[0].text);
+                        if (content.content) {
+                          setDocumentContent(content.content);
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to refresh document content:', error);
+                    }
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    marginRight: '8px'
+                  }}
+                >
+                  🔄 Refresh
+                </button>
+                <button
+                  onClick={() => setShowDocumentTree(!showDocumentTree)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {showDocumentTree ? '🔽 Hide' : '▶️ Show'}
+                </button>
+              </div>
+            </div>
+            {documentContent ? (
+              <div style={{ 
+                fontFamily: 'Monaco, "Lucida Console", monospace',
+                fontSize: '12px',
+                lineHeight: '1.4'
+              }}>
+                <JsonTree data={documentContent} />
+              </div>
+            ) : (
+              <div style={{ 
+                textAlign: 'center', 
+                color: '#6c757d',
+                fontStyle: 'italic',
+                padding: '20px'
+              }}>
+                {isInitialized ? 'Click refresh to load document structure' : 'Waiting for initialization...'}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

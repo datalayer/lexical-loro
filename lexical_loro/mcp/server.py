@@ -271,7 +271,10 @@ async def get_document_info(doc_id: str) -> str:
         # Get or create the document
         model = document_manager.get_or_create_document(doc_id)
         
-        # Get lexical data directly from the local model
+        # DIRECT LOCAL READ: Get lexical data directly from the local model
+        # This does NOT use WebSocket communication - it reads from the local LexicalModel instance
+        # that the MCP server maintains in memory. This ensures we get the current state without
+        # network latency or WebSocket connection issues.
         lexical_data = model.get_lexical_data()
         children = lexical_data.get("root", {}).get("children", [])
         
