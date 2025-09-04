@@ -2262,7 +2262,18 @@ export function LoroCollaborativePlugin({
 
         ws.onmessage = (event) => {
           try {
+            // VERY PROMINENT LOGGING - This should appear for EVERY message received
+            console.log('🟢🟢🟢 WEBSOCKET MESSAGE RECEIVED 🟢🟢🟢');
+            console.log('Raw event.data:', event.data);
+            console.log('Event type:', typeof event.data);
+            console.log('Event length:', event.data?.length || 'N/A');
+            
             const data: LoroMessage = JSON.parse(event.data);
+            
+            console.log('🟢🟢🟢 PARSED MESSAGE DATA 🟢🟢🟢');
+            console.log('Message type:', data.type);
+            console.log('Document ID:', data.docId);
+            console.log('Full parsed data:', data);
             
             // Prominent log for ALL incoming messages with safe preview
             const preview = typeof event.data === 'string' ? (event.data as string).slice(0, 300) + ((event.data as string).length > 300 ? '…' : '') : '';
@@ -2376,6 +2387,49 @@ export function LoroCollaborativePlugin({
               // Notify parent component about successful initialization (even if empty)
               if (onInitialization) {
                 onInitialization(true);
+              }
+            } else if (data.type === 'document-update' && data.docId === docId) {
+              // Handle document update broadcasts (e.g., from append-paragraph operations)
+              console.log('📄 Lexical editor received document-update broadcast');
+              
+              // Check if there's snapshot data
+              if (data.snapshot && data.snapshot.length > 0) {
+                try {
+                  let snapshotBytes: Uint8Array;
+                  
+                  // Handle different snapshot formats
+                  if (typeof data.snapshot === 'string') {
+                    // Base64 encoded string (from document-update)
+                    const base64Decoded = atob(data.snapshot);
+                    snapshotBytes = new Uint8Array(
+                      base64Decoded.split('').map(char => char.charCodeAt(0))
+                    );
+                  } else {
+                    // Already a Uint8Array (from initial-snapshot)
+                    snapshotBytes = new Uint8Array(data.snapshot);
+                  }
+                  
+                  console.log('📄 Applying document-update snapshot:', {
+                    originalLength: data.snapshot.length,
+                    decodedLength: snapshotBytes.length
+                  });
+                  
+                  // Apply snapshot to local document
+                  loroDocRef.current.import(snapshotBytes);
+                  
+                  // Update the Lexical editor with the new content
+                  const updatedContent = loroDocRef.current.getText('content').toString();
+                  console.log('📋 Got updated content from document-update:', updatedContent.slice(0, 100) + '...');
+                  
+                  if (updatedContent && updatedContent.trim().length > 0) {
+                    updateLexicalFromLoro(editor, updatedContent);
+                    console.log('✅ Successfully updated Lexical editor from document-update');
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Could not apply document-update snapshot:', e);
+                }
+              } else {
+                console.log('📄 No snapshot data in document-update message');
               }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore

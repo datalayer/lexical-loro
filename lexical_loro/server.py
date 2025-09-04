@@ -272,8 +272,12 @@ class LoroWebSocketServer:
         Server only handles broadcasting, no document logic.
         """
         try:
+            logger.debug(f"🔔 _on_document_event: Received event_type='{event_type}'")
+            logger.debug(f"🔔 _on_document_event: event_data keys: {list(event_data.keys())}")
+            
             if event_type in ["ephemeral_changed", "broadcast_needed"]:
                 # Schedule async broadcasting
+                logger.debug(f"📡 _on_document_event: Scheduling broadcast for event_type='{event_type}'")
                 self._schedule_broadcast(event_data)
                 
             elif event_type == "document_changed":
@@ -307,14 +311,25 @@ class LoroWebSocketServer:
     async def _handle_broadcast(self, event_data: dict):
         """Handle broadcasting from model events"""
         try:
+            logger.debug(f"📡 _handle_broadcast: Processing broadcast")
+            logger.debug(f"📡 _handle_broadcast: event_data keys: {list(event_data.keys())}")
+            
             broadcast_data = event_data.get("broadcast_data")
             client_id = event_data.get("client_id")
             
+            logger.debug(f"📡 _handle_broadcast: broadcast_data exists: {broadcast_data is not None}")
+            logger.debug(f"📡 _handle_broadcast: client_id: {client_id}")
+            
             if broadcast_data and client_id:
+                logger.info(f"📡 Broadcasting message to other clients (sender: {client_id})")
                 await self.broadcast_to_other_clients(client_id, broadcast_data)
+            else:
+                logger.warning(f"📡 _handle_broadcast: Missing data - broadcast_data: {broadcast_data is not None}, client_id: {client_id}")
                 
         except Exception as e:
             logger.error(f"❌ Error in broadcast handling: {e}")
+            import traceback
+            logger.error(f"❌ Broadcast error traceback: {traceback.format_exc()}")
     
     async def _autosave_models(self):
         """Periodically auto-save all models at the configured interval"""
@@ -670,6 +685,11 @@ class LoroWebSocketServer:
             message_type = data.get("type")
             doc_id = data.get("docId")
             
+            # DEBUG: Log data type and content for append-paragraph messages
+            if message_type == "append-paragraph":
+                logger.debug(f"🔍 SERVER: append-paragraph data type = {type(data)}")
+                logger.debug(f"🔍 SERVER: append-paragraph data = {data}")
+            
             logger.info(f"📨 Processing message from client {client_id}:")
             logger.info(f"   Type: '{message_type}'")
             logger.info(f"   Document: '{doc_id}'")
@@ -783,22 +803,31 @@ class LoroWebSocketServer:
         Pure broadcasting function - no document logic.
         """
         total_clients = len(self.clients)
-        if total_clients <= 1:
-            logger.debug(f"📡 No broadcast needed: only {total_clients} client(s) connected")
-            return
         
         message_type = message.get("type", "unknown")
         doc_id = message.get("docId", "unknown")
-        target_count = total_clients - 1  # Exclude sender
         
         logger.info(f"📡 Broadcasting message from {sender_id}:")
         logger.info(f"   Type: '{message_type}'")
         logger.info(f"   Document: '{doc_id}'")
-        logger.info(f"   Target clients: {target_count}")
+        logger.info(f"   Total clients: {total_clients}")
+        logger.info(f"   All client IDs: {list(self.clients.keys())}")
+        
+        if total_clients == 0:
+            logger.warning(f"📡 No clients connected - cannot broadcast")
+            return
+        
+        # For document updates like append-paragraph, we should broadcast to ALL clients
+        # including the sender, so their editor gets updated too
+        should_include_sender = message_type in ["document-update", "snapshot"]
+        target_count = total_clients if should_include_sender else total_clients - 1
+        
+        logger.info(f"   Target clients: {target_count} (include sender: {should_include_sender})")
         
         message_str = json.dumps(message)
         message_size = len(message_str)
-        logger.debug(f"   Message size: {message_size} bytes")
+        logger.info(f"   Message size: {message_size} bytes")
+        logger.debug(f"   Message preview: {message_str[:200]}...")
         
         failed_clients = []
         successful_sends = 0
@@ -807,23 +836,29 @@ class LoroWebSocketServer:
         clients_copy = dict(self.clients)
         
         for client_id, client in clients_copy.items():
-            if client_id != sender_id:
-                try:
-                    # Check if websocket is still valid before sending
-                    # For websockets.ServerConnection, check if it's closed instead of open
-                    if hasattr(client.websocket, 'closed') and client.websocket.closed:
-                        logger.warning(f"⚠️ Skipping broadcast to closed connection: {client_id}")
-                        failed_clients.append(client_id)
-                    else:
-                        await client.websocket.send(message_str)
-                        successful_sends += 1
-                        logger.debug(f"📤 Broadcasted to client {client_id}")
-                except (websockets.exceptions.ConnectionClosed, Exception) as e:
-                    error_type = type(e).__name__
-                    logger.warning(f"⚠️ Broadcast failed to client {client_id}:")
-                    logger.warning(f"   Error type: {error_type}")
-                    logger.warning(f"   Error: {e}")
+            # Skip sender only if we shouldn't include them
+            if not should_include_sender and client_id == sender_id:
+                logger.debug(f"   ⏭️ Skipping sender {client_id}")
+                continue
+            
+            try:
+                logger.debug(f"   📤 Attempting to send to client {client_id}")
+                # Check if websocket is still valid before sending
+                # For websockets.ServerConnection, check if it's closed instead of open
+                if hasattr(client.websocket, 'closed') and client.websocket.closed:
+                    logger.warning(f"⚠️ Skipping broadcast to closed connection: {client_id}")
                     failed_clients.append(client_id)
+                else:
+                    await client.websocket.send(message_str)
+                    successful_sends += 1
+                    sender_note = " (sender)" if client_id == sender_id else ""
+                    logger.info(f"   ✅ Successfully sent to client {client_id}{sender_note}")
+            except (websockets.exceptions.ConnectionClosed, Exception) as e:
+                error_type = type(e).__name__
+                logger.warning(f"⚠️ Broadcast failed to client {client_id}:")
+                logger.warning(f"   Error type: {error_type}")
+                logger.warning(f"   Error: {e}")
+                failed_clients.append(client_id)
         
         # Remove failed clients safely
         for client_id in failed_clients:

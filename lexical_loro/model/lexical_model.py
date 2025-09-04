@@ -1310,7 +1310,7 @@ class LexicalModel:
             logger.debug(f"❌ Lexical data structure: {self.lexical_data}")
             raise e
     
-    async def append_block(self, block_detail: Dict[str, Any], block_type: str):
+    async def append_block(self, block_detail: Dict[str, Any], block_type: str, client_id: Optional[str] = None):
         """
         Append a new block to the lexical model using SAFE incremental operations.
         
@@ -1486,9 +1486,13 @@ class LexicalModel:
             # This allows the CRDT system to handle synchronization properly without conflicts
             logger.debug("✨ SAFE append_block: Using event-based propagation for synchronization")
             
-            # Emit broadcast event for this change
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-                            self._create_broadcast_data("document-update"))
+            # Emit broadcast event for this change - FIXED: Include client_id
+            logger.debug(f"🔄 SAFE append_block: Emitting BROADCAST_NEEDED with client_id='{client_id}'")
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "message_type": "append-block",
+                "broadcast_data": self._create_broadcast_data("document-update"),
+                "client_id": client_id or "append-block-system"
+            })
             
             logger.debug(f"✅ SAFE append_block: Broadcasted document update successfully")
             
@@ -2433,7 +2437,13 @@ class LexicalModel:
             Dict with response information including any broadcast data needed
         """
         logger.debug(f"📨 LexicalModel.handle_message: RECEIVED {message_type} from client {client_id or 'unknown'}")
-        logger.debug(f"📨 LexicalModel.handle_message: data keys: {list(data.keys()) if data else 'None'}")
+        logger.debug(f"📨 LexicalModel.handle_message: data type = {type(data)}")
+        logger.debug(f"📨 LexicalModel.handle_message: data keys: {list(data.keys()) if isinstance(data, dict) else 'NOT A DICT'}")
+        
+        # DEBUG: Extra logging for append-paragraph
+        if message_type == "append-paragraph":
+            logger.debug(f"🔍 LEXICAL_MODEL: append-paragraph data type = {type(data)}")
+            logger.debug(f"🔍 LEXICAL_MODEL: append-paragraph data = {data}")
         
         try:
             if message_type == "loro-update":
@@ -2628,10 +2638,39 @@ class LexicalModel:
         logger.debug(f"🚨 _handle_append_paragraph: METHOD CALLED!", flush=True)
         sys.stdout.flush()
         
-        # DEBUG: Check data parameter
+        # DEBUG: Check data parameter type and content
         logger.debug(f"🔍 _handle_append_paragraph: data type = {type(data)}", flush=True)
         logger.debug(f"🔍 _handle_append_paragraph: data = {data}", flush=True)
         sys.stdout.flush()
+        
+        # TYPE SAFETY: Check if data is actually a string (this would cause the error)
+        if isinstance(data, str):
+            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is a string, not a dict!", flush=True)
+            logger.error(f"❌ _handle_append_paragraph: String data = '{data}'", flush=True)
+            sys.stdout.flush()
+            try:
+                # Try to parse it as JSON
+                import json
+                data = json.loads(data)
+                logger.info(f"✅ _handle_append_paragraph: Successfully parsed string data as JSON", flush=True)
+                logger.debug(f"✅ _handle_append_paragraph: Parsed data = {data}", flush=True)
+                sys.stdout.flush()
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ _handle_append_paragraph: Failed to parse string data as JSON: {e}", flush=True)
+                sys.stdout.flush()
+                return {
+                    "success": False,
+                    "error": f"Invalid data format: expected dict, got string that couldn't be parsed as JSON: {e}",
+                    "message_type": "append-paragraph"
+                }
+        elif not isinstance(data, dict):
+            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is neither string nor dict: {type(data)}", flush=True)
+            sys.stdout.flush()
+            return {
+                "success": False,
+                "error": f"Invalid data format: expected dict, got {type(data)}",
+                "message_type": "append-paragraph"
+            }
         
         try:
             logger.debug(f"🔍 _handle_append_paragraph: About to call data.get('message', 'Hello')", flush=True)
@@ -2710,8 +2749,8 @@ class LexicalModel:
             # SAFE OPERATION: Use append_block instead of destructive add_block
             # This prevents JSON corruption and Rust panics from wholesale CRDT operations
             try:
-                logger.debug(f"➕ _handle_append_paragraph: Calling append_block(text='{message_text}', type='paragraph')")
-                result = await self.append_block(new_paragraph, "paragraph")
+                logger.debug(f"➕ _handle_append_paragraph: Calling append_block(text='{message_text}', type='paragraph', client_id='{client_id}')")
+                result = await self.append_block(new_paragraph, "paragraph", client_id)
                 logger.debug(f"➕ _handle_append_paragraph: append_block() returned: {result}")
             except Exception as append_error:
                 logger.debug(f"❌ _handle_append_paragraph: append_block() FAILED: {append_error}")
@@ -2730,16 +2769,8 @@ class LexicalModel:
             doc_info = self.get_document_info()
             
             # COLLABORATIVE-SAFE: The append_block method already handles broadcasting properly
-            # But we ensure one more broadcast for MCP clients to receive the updated content
-            logger.debug("LoroModel: Ensuring additional broadcast for MCP append-paragraph")
-            
-            # Check what we're broadcasting
-            blocks_final = len(self.lexical_data.get("root", {}).get("children", []))
-            logger.debug(f"🔄 _handle_append_paragraph: About to broadcast with {blocks_final} blocks")
-            
-            # Emit broadcast event to notify WebSocket clients
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-            self._create_broadcast_data("document-update"))
+            # No need for additional broadcast since append_block() now emits its own event with client_id
+            logger.debug("✅ _handle_append_paragraph: append_block() handled broadcasting, no duplicate needed")
             
             return {
                 "success": True,
@@ -3354,7 +3385,13 @@ class LexicalDocumentManager:
             Response from the document's message handler
         """
         logger.debug(f"🔍 DocumentManager.handle_message: CALLED with message_type='{message_type}', doc_id='{doc_id}', client_id='{client_id}'")
-        logger.debug(f"🔍 DocumentManager.handle_message: data keys: {list(data.keys()) if data else 'None'}")
+        logger.debug(f"🔍 DocumentManager.handle_message: data type = {type(data)}")
+        logger.debug(f"🔍 DocumentManager.handle_message: data keys: {list(data.keys()) if isinstance(data, dict) else 'NOT A DICT'}")
+        
+        # DEBUG: Extra logging for append-paragraph
+        if message_type == "append-paragraph":
+            logger.debug(f"🔍 DOCUMENT_MANAGER: append-paragraph data type = {type(data)}")
+            logger.debug(f"🔍 DOCUMENT_MANAGER: append-paragraph data = {data}")
         
         model = self.get_or_create_document(doc_id)
         
