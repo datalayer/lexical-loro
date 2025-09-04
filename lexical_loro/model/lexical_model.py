@@ -1740,7 +1740,7 @@ class LexicalModel:
                 "block_type": block_type
             }
 
-    async def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str):
+    async def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str, client_id: Optional[str] = None):
         """
         Insert a new block at a specific index using SAFE incremental operations.
         
@@ -1902,9 +1902,13 @@ class LexicalModel:
             # This allows the CRDT system to handle synchronization properly without conflicts
             logger.debug("✨ SAFE add_block_at_index: Using event-based propagation for synchronization")
             
-            # Emit broadcast event for this change
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-                            self._create_broadcast_data("document-update"))
+            # Emit broadcast event for this change - FIXED: Include client_id
+            logger.debug(f"🔄 SAFE add_block_at_index: Emitting BROADCAST_NEEDED with client_id='{client_id}'")
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "message_type": "insert-block", 
+                "broadcast_data": self._create_broadcast_data("document-update"),
+                "client_id": client_id or "insert-block-system"
+            })
             
             logger.debug(f"✅ SAFE add_block_at_index: Broadcasted document update successfully")
             
@@ -3227,8 +3231,8 @@ class LexicalModel:
             
             # Use add_block_at_index which correctly updates the CRDT
             try:
-                logger.debug(f"📝 _handle_insert_paragraph: Calling add_block_at_index(index={index}, text='{message_text}', type='paragraph')")
-                result = await self.add_block_at_index(index, new_paragraph, "paragraph")
+                logger.debug(f"📝 _handle_insert_paragraph: Calling add_block_at_index(index={index}, text='{message_text}', type='paragraph', client_id='{client_id}')")
+                result = await self.add_block_at_index(index, new_paragraph, "paragraph", client_id)
                 logger.debug(f"📝 _handle_insert_paragraph: add_block_at_index() returned: {result}")
             except Exception as insert_error:
                 logger.debug(f"❌ _handle_insert_paragraph: add_block_at_index() FAILED: {insert_error}")
