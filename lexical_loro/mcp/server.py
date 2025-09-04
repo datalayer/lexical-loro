@@ -79,11 +79,11 @@ async def initialize_mcp_collaboration(websocket_base_url: str):
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
             if doc_id and doc_id in document_manager.models:
-                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
-                # Extract broadcast data from the event - this contains the pre-built message
-                broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
-                # Call broadcast_change with the pre-built data
-                asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
+                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}' - SKIPPING automatic broadcast")
+                # CRITICAL FIX: Do NOT broadcast automatically from events
+                # This creates race conditions with explicit MCP function broadcasts
+                # The MCP functions will handle broadcasting explicitly after operations complete
+                logger.debug(f"🔥 MCP: Event-based broadcasting disabled - MCP functions handle broadcasting explicitly")
     
     # Create standard document manager with client mode enabled
     # WebSocket connections will be created per document ID
@@ -112,11 +112,11 @@ def initialize_mcp_collaboration(websocket_base_url: str):
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
             if doc_id and doc_id in document_manager.models:
-                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
-                # Extract broadcast data from the event - this contains the pre-built message
-                broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
-                # Call broadcast_change with the pre-built data
-                asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
+                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}' - SKIPPING automatic broadcast")
+                # CRITICAL FIX: Do NOT broadcast automatically from events
+                # This creates race conditions with explicit MCP function broadcasts
+                # The MCP functions will handle broadcasting explicitly after operations complete
+                logger.debug(f"🔥 MCP: Event-based broadcasting disabled - MCP functions handle broadcasting explicitly")
     
     # Create standard document manager with client mode enabled  
     # Connections will be established per document when needed
@@ -271,29 +271,84 @@ async def get_document_info(doc_id: str) -> str:
         # Get or create the document
         model = document_manager.get_or_create_document(doc_id)
         
-        # Get lexical data
+        # Get lexical data directly from the local model
         lexical_data = model.get_lexical_data()
         children = lexical_data.get("root", {}).get("children", [])
         
         # Count different block types
         block_types = {}
-        for child in children:
+        content_preview = []
+        
+        for i, child in enumerate(children):
             block_type = child.get("type", "unknown")
             block_types[block_type] = block_types.get(block_type, 0) + 1
+            
+            # Extract text content for preview
+            if block_type == "paragraph":
+                text_content = ""
+                child_children = child.get("children", [])
+                for text_node in child_children:
+                    if text_node.get("type") == "text":
+                        text_content += text_node.get("text", "")
+                content_preview.append(f"Block {i}: [{block_type}] '{text_content[:100]}{'...' if len(text_content) > 100 else ''}'")
+            else:
+                content_preview.append(f"Block {i}: [{block_type}] (non-text content)")
         
+        # Build comprehensive info including the full lexical document structure
         result = {
             "success": True,
             "doc_id": doc_id,
             "container_id": model.container_id,
             "total_blocks": len(children),
             "block_types": block_types,
+            "content_preview": content_preview,
             "last_saved": lexical_data.get("lastSaved"),
             "version": lexical_data.get("version"),
-            "source": lexical_data.get("source")
+            "source": lexical_data.get("source"),
+            "local_model_state": {
+                "description": "Complete local Lexical document structure from MCP server",
+                "lexical_data": lexical_data
+            }
         }
         
+        # Create a readable summary
+        summary = f"""
+� DOCUMENT INFO for '{doc_id}' - MCP Local Model State
+{'='*70}
+
+📊 SUMMARY:
+- Total Blocks: {len(children)}
+- Block Types: {dict(block_types)}
+- Container ID: {model.container_id}
+
+📝 CONTENT PREVIEW:
+"""
+        for preview in content_preview[:10]:  # Show first 10 blocks
+            summary += f"  {preview}\n"
+        
+        if len(content_preview) > 10:
+            summary += f"  ... and {len(content_preview) - 10} more blocks\n"
+        
+        summary += f"""
+🌳 DOCUMENT TREE STRUCTURE:
+{_format_lexical_tree(lexical_data)}
+
+🔧 TECHNICAL DETAILS:
+- Document Version: {lexical_data.get("version", "N/A")}
+- Last Saved: {lexical_data.get("lastSaved", "N/A")}
+- Source: {lexical_data.get("source", "N/A")}
+
+💻 LOCAL MODEL VALIDATION:
+The above data is read directly from the MCP server's local LexicalModel instance.
+This confirms the local model state is current and matches what should be displayed
+in the frontend after collaborative operations.
+
+📄 FULL JSON DOCUMENT:
+{json.dumps(lexical_data, indent=2)}
+"""
+        
         logger.info(f"Successfully retrieved document info for {doc_id}")
-        return json.dumps(result, indent=2)
+        return summary
         
     except Exception as e:
         logger.error(f"Error getting document info for {doc_id}: {e}")
@@ -302,7 +357,55 @@ async def get_document_info(doc_id: str) -> str:
             "error": str(e),
             "doc_id": doc_id
         }
-        return json.dumps(error_result, indent=2)
+        return f"❌ Failed to get document info for {doc_id}: {str(e)}"
+
+
+def _format_lexical_tree(lexical_data: dict, indent: str = "") -> str:
+    """Format the lexical document as a tree structure"""
+    tree = ""
+    root = lexical_data.get("root", {})
+    
+    tree += f"{indent}📄 root (type: {root.get('type', 'unknown')})\n"
+    
+    children = root.get("children", [])
+    for i, child in enumerate(children):
+        is_last = i == len(children) - 1
+        connector = "└── " if is_last else "├── "
+        next_indent = indent + ("    " if is_last else "│   ")
+        
+        child_type = child.get("type", "unknown")
+        tree += f"{indent}{connector}[{i}] {child_type}"
+        
+        # Add content preview for text-containing blocks
+        if child_type == "paragraph":
+            text_content = ""
+            child_children = child.get("children", [])
+            for text_node in child_children:
+                if text_node.get("type") == "text":
+                    text_content += text_node.get("text", "")
+            if text_content:
+                preview = text_content[:50] + "..." if len(text_content) > 50 else text_content
+                tree += f" → \"{preview}\""
+        
+        tree += "\n"
+        
+        # Recursively format children if they exist
+        child_children = child.get("children", [])
+        if child_children and child_type != "paragraph":  # Don't recurse into paragraph text nodes
+            for j, grandchild in enumerate(child_children):
+                is_last_grandchild = j == len(child_children) - 1
+                grandchild_connector = "└── " if is_last_grandchild else "├── "
+                grandchild_type = grandchild.get("type", "unknown")
+                tree += f"{next_indent}{grandchild_connector}{grandchild_type}"
+                
+                if grandchild_type == "text":
+                    text = grandchild.get("text", "")
+                    if text:
+                        preview = text[:30] + "..." if len(text) > 30 else text
+                        tree += f" → \"{preview}\""
+                tree += "\n"
+    
+    return tree
 
 
 @mcp.tool()
@@ -347,52 +450,63 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         logger.info(f"🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{doc_id}'")
         logger.info(f"Inserting paragraph in document {doc_id} at index {index}")
         
-        # Get or create the document
-        model = document_manager.get_or_create_document(doc_id)
-        
-        # FIRST CALL FIX: Ensure WebSocket connection is established for new documents
-        # This is critical for the first MCP call to work properly
+        # WEBSOCKET APPROACH: Send the exact same message that would work for collaborative editing
+        # This ensures we use the exact same code path as collaborative editing
         if document_manager.client_mode:
-            logger.info(f"🔄 Ensuring WebSocket connection is established for document {doc_id}")
+            logger.info(f"🔄 Using WebSocket approach - sending insert-paragraph message")
+            
+            # Ensure WebSocket connection is established
             await document_manager._ensure_connected(doc_id)
-        
-        # Use the same message handling system as append_paragraph for consistency
-        # This prevents JSON corruption from wholesale CRDT operations
-        message_data = {
-            "message": text,  # Use "message" field as expected by LexicalModel
-            "index": index    # Specify the index for insertion
-        }
-        
-        # Call through the message handling system to trigger collaborative sync
-        result = await document_manager.handle_message(doc_id, "insert-paragraph", message_data)
-        
-        if not result.get("success"):
-            raise Exception(f"Failed to insert paragraph: {result.get('error', 'Unknown error')}")
-        
-        # TIMING FIX: Add small delay to ensure broadcast reaches frontend before returning
-        # This prevents the issue where UI doesn't update until second operation
-        await asyncio.sleep(0.1)  # 100ms should be enough for WebSocket message delivery
-        
-        # EXPLICIT BROADCAST: Force an immediate WebSocket broadcast to ensure UI updates
-        # Use incremental updates for better CRDT efficiency
-        if document_manager.client_mode:
-            await document_manager.broadcast_change(doc_id, prefer_incremental=True)
-        
-        # Get updated document structure from result
-        total_blocks = result.get("document_info", {}).get("total_blocks", 0)
-        
-        result = {
-            "success": True,
-            "doc_id": doc_id,
-            "action": "insert_paragraph",
-            "index": index,
-            "text": text,
-            "total_blocks": total_blocks
-        }
-        
-        logger.info(f"Successfully inserted paragraph in document {doc_id} at index {index}")
-        # Return a simple success message instead of JSON dump
-        return f"✅ Successfully inserted paragraph at index {index} in document {doc_id}. Total blocks: {total_blocks}"
+            
+            # Get the WebSocket connection for this document
+            ws_client_info = document_manager.websocket_clients.get(doc_id)
+            if ws_client_info and ws_client_info["websocket"] and ws_client_info["connected"]:
+                # Send the message format for insert-paragraph
+                websocket_message = {
+                    "type": "insert-paragraph",
+                    "docId": doc_id,
+                    "message": text,
+                    "index": index
+                }
+                
+                logger.info(f"📤 Sending WebSocket message: {websocket_message}")
+                await ws_client_info["websocket"].send(json.dumps(websocket_message))
+                logger.info(f"✅ WebSocket message sent successfully")
+                
+                # Wait for the server to process the message and broadcast
+                await asyncio.sleep(0.2)  # Give more time for processing and broadcast
+                
+                # Get updated document structure for response
+                model = document_manager.get_or_create_document(doc_id)
+                lexical_data = model.get_lexical_data()
+                total_blocks = len(lexical_data.get("root", {}).get("children", []))
+                
+                logger.info(f"✅ Successfully inserted paragraph via WebSocket to document {doc_id}")
+                return f"✅ Successfully inserted paragraph at index {index} in document {doc_id}. Total blocks: {total_blocks}"
+            else:
+                logger.error(f"❌ No WebSocket connection available for document {doc_id}")
+                raise Exception("WebSocket connection not available")
+        else:
+            # Fallback to direct method for server mode
+            logger.info(f"🔄 Using direct method approach (server mode)")
+            
+            # Use the same message handling system as append_paragraph for consistency
+            message_data = {
+                "message": text,  # Use "message" field as expected by LexicalModel
+                "index": index    # Specify the index for insertion
+            }
+            
+            # Call through the message handling system to trigger collaborative sync
+            result = await document_manager.handle_message(doc_id, "insert-paragraph", message_data)
+            
+            if not result.get("success"):
+                raise Exception(f"Failed to insert paragraph: {result.get('error', 'Unknown error')}")
+            
+            # Get updated document structure from result
+            total_blocks = result.get("document_info", {}).get("total_blocks", 0)
+            
+            logger.info(f"Successfully inserted paragraph in document {doc_id} at index {index}")
+            return f"✅ Successfully inserted paragraph at index {index} in document {doc_id}. Total blocks: {total_blocks}"
         
     except Exception as e:
         logger.error(f"Error inserting paragraph in document {doc_id}: {e}")
@@ -443,55 +557,64 @@ async def append_paragraph(text: str, doc_id: str) -> str:
     try:
         logger.info(f"Appending paragraph to document {doc_id}")
         
-        # FIRST CALL FIX: Ensure document exists and WebSocket connection is established
-        # This is critical for the first MCP call to work properly
-        model = document_manager.get_or_create_document(doc_id)
+        # WEBSOCKET APPROACH: Send the exact same message that the button sends
+        # This ensures we use the exact same code path as collaborative editing
         if document_manager.client_mode:
-            logger.info(f"🔄 Ensuring WebSocket connection is established for document {doc_id}")
+            logger.info(f"🔄 Using WebSocket approach - sending append-paragraph message")
+            
+            # Ensure WebSocket connection is established
             await document_manager._ensure_connected(doc_id)
-        
-        # Use the collaborative document manager's handle_message system
-        # This will trigger WebSocket broadcasts to other clients
-        message_data = {
-            "message": text,  # Use "message" field as expected by LexicalModel
-            "position": "end"  # append at the end
-        }
-        
-        # Call through the message handling system to trigger collaborative sync
-        result = await document_manager.handle_message(doc_id, "append-paragraph", message_data)
-        
-        if not result.get("success"):
-            raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")
-        
-        # Note: Broadcasting is handled automatically by the document manager's 
-        # subscription system when in client mode. The WebSocket client receives
-        # and processes changes through the normal collaborative flow.
-        
-        # TIMING FIX: Add small delay to ensure broadcast reaches frontend before returning
-        # This prevents the issue where UI doesn't update until second operation
-        await asyncio.sleep(0.1)  # 100ms should be enough for WebSocket message delivery
-        
-        # EXPLICIT BROADCAST: Force an immediate WebSocket broadcast to ensure UI updates
-        # Use incremental updates for better CRDT efficiency
-        if document_manager.client_mode:
-            await document_manager.broadcast_change(doc_id, prefer_incremental=True)
-        
-        # Get updated document structure for response
-        model = document_manager.get_or_create_document(doc_id)
-        lexical_data = model.get_lexical_data()
-        total_blocks = len(lexical_data.get("root", {}).get("children", []))
-        
-        response_result = {
-            "success": True,
-            "doc_id": doc_id,
-            "action": "append_paragraph",
-            "text": text,
-            "total_blocks": total_blocks
-        }
-        
-        logger.info(f"Successfully appended paragraph to document {doc_id}")
-        # Return a simple success message instead of JSON dump
-        return f"✅ Successfully appended paragraph to document {doc_id}. Total blocks: {total_blocks}"
+            
+            # Get the WebSocket connection for this document
+            ws_client_info = document_manager.websocket_clients.get(doc_id)
+            if ws_client_info and ws_client_info["websocket"] and ws_client_info["connected"]:
+                # Send the exact same message format that the button uses
+                websocket_message = {
+                    "type": "append-paragraph",
+                    "docId": doc_id,
+                    "message": text
+                }
+                
+                logger.info(f"📤 Sending WebSocket message: {websocket_message}")
+                await ws_client_info["websocket"].send(json.dumps(websocket_message))
+                logger.info(f"✅ WebSocket message sent successfully")
+                
+                # Wait for the server to process the message and broadcast
+                await asyncio.sleep(0.2)  # Give more time for processing and broadcast
+                
+                # Get updated document structure for response
+                model = document_manager.get_or_create_document(doc_id)
+                lexical_data = model.get_lexical_data()
+                total_blocks = len(lexical_data.get("root", {}).get("children", []))
+                
+                logger.info(f"✅ Successfully appended paragraph via WebSocket to document {doc_id}")
+                return f"✅ Successfully appended paragraph to document {doc_id}. Total blocks: {total_blocks}"
+            else:
+                logger.error(f"❌ No WebSocket connection available for document {doc_id}")
+                raise Exception("WebSocket connection not available")
+        else:
+            # Fallback to direct method for server mode
+            logger.info(f"� Using direct method approach (server mode)")
+            
+            # Use the collaborative document manager's handle_message system
+            message_data = {
+                "message": text,  # Use "message" field as expected by LexicalModel
+                "position": "end"  # append at the end
+            }
+            
+            # Call through the message handling system to trigger collaborative sync
+            result = await document_manager.handle_message(doc_id, "append-paragraph", message_data)
+            
+            if not result.get("success"):
+                raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")
+            
+            # Get updated document structure for response
+            model = document_manager.get_or_create_document(doc_id)
+            lexical_data = model.get_lexical_data()
+            total_blocks = len(lexical_data.get("root", {}).get("children", []))
+            
+            logger.info(f"Successfully appended paragraph to document {doc_id}")
+            return f"✅ Successfully appended paragraph to document {doc_id}. Total blocks: {total_blocks}"
         
     except Exception as e:
         logger.error(f"Error appending paragraph to document {doc_id}: {e}")

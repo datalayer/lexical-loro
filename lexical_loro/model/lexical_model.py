@@ -92,7 +92,7 @@ import asyncio
 from typing import Dict, Any, List, Optional, TYPE_CHECKING, Callable
 from enum import Enum
 import loro
-from loro import ExportMode, EphemeralStore, EphemeralStoreEvent
+from loro import ExportMode, EphemeralStore, EphemeralStoreEvent, VersionVector
 
 if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
@@ -2289,19 +2289,22 @@ class LexicalModel:
         Returns:
             Optional[bytes]: Update bytes if available, None otherwise
         """
+        logger.info(f"🔧 export_update CALLED - checking for incremental updates...")
         try:
             if ExportMode is None:
-                logger.debug("Warning: ExportMode not available")
+                logger.info("⚠️ Warning: ExportMode not available")
                 return None
             
             # Try to get incremental updates from Loro
             try:
                 # Get current state - prefer version vector for sync accuracy
                 current_vv = self.text_doc.state_vv
-                logger.debug(f"🔄 Current state version vector: {current_vv}")
+                logger.info(f"🔄 Current state version vector: {current_vv}")
+                logger.info(f"🔄 Last broadcast version: {self._last_broadcast_version}")
                 
                 # If we have a last broadcast version, try to get updates since then
                 if self._last_broadcast_version is not None:
+                    logger.info(f"🔄 Trying incremental update from last broadcast version...")
                     try:
                         # Use ExportMode.Updates with version vector for precise incremental updates
                         # This follows Loro best practices for collaborative sync
@@ -2309,32 +2312,90 @@ class LexicalModel:
                         update_data = self.text_doc.export(update_mode)
                         
                         if update_data and len(update_data) > 0:
-                            logger.debug(f"✅ Got incremental update: {len(update_data)} bytes")
-                            logger.debug(f"📊 Update efficiency: incremental vs snapshot size ratio")
+                            logger.info(f"✅ Got incremental update: {len(update_data)} bytes")
                             return update_data
                         else:
-                            logger.debug("ℹ️ No updates since last broadcast (empty result)")
+                            logger.info("ℹ️ No updates since last broadcast (empty result)")
                             return None
                             
                     except Exception as e:
-                        logger.debug(f"⚠️ ExportMode.Updates failed: {e}")
+                        logger.info(f"⚠️ ExportMode.Updates failed: {e}")
                         
                         # Fallback: check if there are actual changes using version vectors
                         try:
                             # Compare current state with last broadcast state
                             if current_vv != self._last_broadcast_version:
-                                logger.debug("ℹ️ Changes detected but incremental export failed - falling back to snapshot")
+                                logger.info("ℹ️ Changes detected but incremental export failed - falling back to snapshot")
                                 return None
                             else:
-                                logger.debug("ℹ️ No changes detected via version vector comparison")
+                                logger.info("ℹ️ No changes detected via version vector comparison")
                                 return None
                         except Exception as e2:
-                            logger.debug(f"⚠️ Version comparison also failed: {e2}")
-                
-                # No previous version tracked - this is typical for first broadcast
-                # Return None to trigger snapshot export in get_broadcast_data
-                logger.debug("ℹ️ No previous version tracked - will use snapshot for initial broadcast")
-                return None
+                            logger.info(f"⚠️ Version comparison also failed: {e2}")
+                else:
+                    # No previous version tracked - for incremental updates, get all changes from beginning
+                    # According to Loro docs, omitting 'from' should give all operations
+                    try:
+                        logger.info("🔄 No previous version tracked - getting all operations as incremental update")
+                        
+                        # Try different approaches to get incremental updates from the beginning
+                        update_data = None
+                        
+                        # Method 1: Use Updates mode with no 'from' parameter (should give all ops)
+                        try:
+                            logger.info("🔄 Trying Updates mode with no 'from' parameter...")
+                            update_mode = ExportMode.Updates()
+                            update_data = self.text_doc.export(update_mode)
+                            if update_data and len(update_data) > 0:
+                                logger.info(f"✅ Method 1 success: Got {len(update_data)} bytes from Updates()")
+                            else:
+                                logger.info("⚠️ Method 1: Updates() returned empty/None")
+                                update_data = None
+                        except Exception as e:
+                            logger.info(f"⚠️ Method 1 failed: {e}")
+                        
+                        # Method 2: If method 1 failed, try with empty version vector
+                        if not update_data:
+                            try:
+                                logger.info("🔄 Trying Updates mode with empty version vector...")
+                                empty_vv = VersionVector({})
+                                update_mode = ExportMode.Updates(from_=empty_vv)
+                                update_data = self.text_doc.export(update_mode)
+                                if update_data and len(update_data) > 0:
+                                    logger.info(f"✅ Method 2 success: Got {len(update_data)} bytes with empty VV")
+                                else:
+                                    logger.info("⚠️ Method 2: Updates(empty_vv) returned empty/None")
+                                    update_data = None
+                            except Exception as e:
+                                logger.info(f"⚠️ Method 2 failed: {e}")
+                        
+                        # Method 3: Try using oplog_frontiers (start of document)
+                        if not update_data:
+                            try:
+                                logger.info("🔄 Trying Updates mode with oplog frontiers...")
+                                oplog_frontiers = self.text_doc.oplog_frontiers()
+                                # Convert frontiers to version vector
+                                start_vv = self.text_doc.frontiersToVV(oplog_frontiers)
+                                update_mode = ExportMode.Updates(from_=start_vv)
+                                update_data = self.text_doc.export(update_mode)
+                                if update_data and len(update_data) > 0:
+                                    logger.info(f"✅ Method 3 success: Got {len(update_data)} bytes with oplog frontiers")
+                                else:
+                                    logger.info("⚠️ Method 3: Updates(oplog_frontiers) returned empty/None")
+                                    update_data = None
+                            except Exception as e:
+                                logger.info(f"⚠️ Method 3 failed: {e}")
+                        
+                        if update_data and len(update_data) > 0:
+                            logger.info(f"✅ Successfully got incremental update: {len(update_data)} bytes")
+                            return update_data
+                        else:
+                            logger.info("⚠️ All methods failed to get incremental update")
+                            return None
+                            
+                    except Exception as e:
+                        logger.info(f"⚠️ Getting incremental updates failed: {e}")
+                        return None
                 
             except AttributeError as e:
                 # Version vector or export methods not available in this Loro version
@@ -2359,14 +2420,18 @@ class LexicalModel:
         Returns:
             Dictionary with message_type and update/snapshot data, or None if no changes
         """
+        logger.info(f"🔧 get_broadcast_data CALLED - prefer_incremental={prefer_incremental}, use_case={use_case}")
         try:
             # Get recommendation based on use case
             recommended_type = self.get_export_recommendation(use_case)
+            logger.info(f"🔧 Recommended message type: {recommended_type}")
             
             # For real-time sync, try incremental updates first
             if prefer_incremental and recommended_type == "loro-update":
+                logger.info(f"🔧 Attempting incremental update (prefer_incremental={prefer_incremental}, recommended={recommended_type})")
                 # Try to get incremental update first
                 update_data = self.export_update()
+                logger.info(f"🔧 export_update returned: {type(update_data)} (length: {len(update_data) if update_data else 'None'})")
                 if update_data:
                     # Update the last broadcast version for next incremental update
                     try:
@@ -2375,14 +2440,20 @@ class LexicalModel:
                     except:
                         pass  # Version tracking not available
                     
+                    logger.info(f"✅ Returning loro-update message with {len(update_data)} bytes")
                     return {
                         "message_type": "loro-update",
                         "update": update_data.hex() if isinstance(update_data, bytes) else update_data,
                         "doc_id": self.doc_id,
                         "use_case": use_case
                     }
+                else:
+                    logger.info(f"⚠️ export_update returned None, falling back to snapshot")
+            else:
+                logger.info(f"🔧 Skipping incremental update (prefer_incremental={prefer_incremental}, recommended={recommended_type})")
             
             # Fallback to snapshot or use snapshot by design
+            logger.info(f"🔧 Falling back to snapshot export...")
             snapshot_data = self.get_snapshot()
             if snapshot_data:
                 # Update the last broadcast version for future incremental updates
@@ -2394,6 +2465,7 @@ class LexicalModel:
                 
                 message_type = "snapshot" if recommended_type in ["snapshot", "shallow-snapshot"] else "snapshot"
                 
+                logger.info(f"✅ Returning {message_type} message with {len(snapshot_data) if snapshot_data else 'None'} bytes")
                 return {
                     "message_type": message_type, 
                     "snapshot": snapshot_data.hex() if isinstance(snapshot_data, bytes) else snapshot_data,
@@ -3153,13 +3225,13 @@ class LexicalModel:
             blocks_before = len(self.lexical_data.get("root", {}).get("children", []))
             logger.debug(f"📝 _handle_insert_paragraph: About to call insert_block_at_index() with {blocks_before} blocks at index {index}")
             
-            # Use insert_block_at_index instead of the unsafe add_block_at_index
+            # Use add_block_at_index which correctly updates the CRDT
             try:
-                logger.debug(f"📝 _handle_insert_paragraph: Calling insert_block_at_index(index={index}, text='{message_text}', type='paragraph', client_id='{client_id}')")
-                result = await self.insert_block_at_index(index, new_paragraph, "paragraph", client_id)
-                logger.debug(f"📝 _handle_insert_paragraph: insert_block_at_index() returned: {result}")
+                logger.debug(f"📝 _handle_insert_paragraph: Calling add_block_at_index(index={index}, text='{message_text}', type='paragraph')")
+                result = await self.add_block_at_index(index, new_paragraph, "paragraph")
+                logger.debug(f"📝 _handle_insert_paragraph: add_block_at_index() returned: {result}")
             except Exception as insert_error:
-                logger.debug(f"❌ _handle_insert_paragraph: insert_block_at_index() FAILED: {insert_error}")
+                logger.debug(f"❌ _handle_insert_paragraph: add_block_at_index() FAILED: {insert_error}")
                 return {
                     "success": False,
                     "error": f"Failed to insert paragraph: {insert_error}",

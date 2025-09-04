@@ -2287,14 +2287,15 @@ export function LoroCollaborativePlugin({
               preview
             });
             
-            if (data.type === 'loro-update' && data.docId === docId) {
-              // Apply remote update to local document
-              const update = new Uint8Array(data.update!);
+            if ((data.type === 'loro-update' || data.type === 'snapshot') && data.docId === docId) {
+              // Apply remote update or snapshot to local document
+              const update = new Uint8Array(data.update || data.snapshot!);
               
-              console.log('🔍📥 Processing loro-update:', {
+              console.log(`🔍📥 Processing ${data.type}:`, {
                 updateSize: update.length,
                 docId: data.docId,
-                hasUpdate: !!data.update
+                hasUpdate: !!(data.update || data.snapshot),
+                messageType: data.type
               });
               
               // Check CRDT content BEFORE import
@@ -2327,9 +2328,9 @@ export function LoroCollaborativePlugin({
               if (contentAfter && contentAfter.trim().length > 0 && contentBefore !== contentAfter) {
                 try {
                   updateLexicalFromLoro(editor, contentAfter);
-                  console.log('✅ Successfully updated Lexical editor from loro-update');
+                  console.log(`✅ Successfully updated Lexical editor from ${data.type}`);
                 } catch (e) {
-                  console.warn('⚠️ Could not update Lexical editor from loro-update:', e);
+                  console.warn(`⚠️ Could not update Lexical editor from ${data.type}:`, e);
                 }
               } else {
                 console.log('📝 No content change detected, skipping Lexical update');
