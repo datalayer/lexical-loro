@@ -1619,6 +1619,127 @@ class LexicalModel:
                 "snapshot": self.get_snapshot()
             })
     
+    async def insert_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str, client_id: Optional[str] = None):
+        """
+        Insert a new block at a specific index using SAFE incremental operations.
+        
+        This method implements the same safe approach as append_block, but for insertion
+        at a specific index. It uses event-based propagation instead of destructive
+        CRDT wholesale operations.
+        
+        Args:
+            index: Index where to insert the block (0-based)
+            block_detail: Dictionary containing block details (text, formatting, etc.)
+            block_type: Type of block (paragraph, heading1, heading2, etc.)
+            client_id: Optional client ID for tracking
+            
+        Returns:
+            Dict containing operation results with success status, block counts, etc.
+        """
+        try:
+            logger.debug(f"✨ SAFE insert_block_at_index: Adding '{block_type}' block at index {index}")
+            
+            # Get blocks before adding
+            old_count = len(self.lexical_data["root"]["children"])
+            
+            # Map block types to lexical types
+            type_mapping = {
+                "paragraph": "paragraph",
+                "heading1": "heading1",
+                "heading2": "heading2",
+                "heading3": "heading3",
+                "heading4": "heading4",
+                "heading5": "heading5",
+                "heading6": "heading6",
+            }
+            
+            lexical_type = type_mapping.get(block_type, "paragraph")
+            
+            # Create the block structure
+            new_block = {
+                "children": [],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": lexical_type,
+                "version": 1
+            }
+            
+            # Add heading tag if it's a heading
+            if block_type.startswith("heading"):
+                new_block["tag"] = f"h{block_type[-1]}"  # Extract number from heading1, heading2, etc.
+            elif lexical_type == "paragraph":
+                # Paragraphs don't need a tag
+                pass
+            
+            # Add text content if provided
+            if "text" in block_detail:
+                text_node = {
+                    "detail": 0,
+                    "format": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "text": block_detail["text"],
+                    "type": "text",
+                    "version": 1
+                }
+                
+                # Apply any formatting from block_detail
+                if "format" in block_detail:
+                    text_node["format"] = block_detail["format"]
+                if "style" in block_detail:
+                    text_node["style"] = block_detail["style"]
+                if "detail" in block_detail:
+                    text_node["detail"] = block_detail["detail"]
+                if "mode" in block_detail:
+                    text_node["mode"] = block_detail["mode"]
+                
+                new_block["children"].append(text_node)
+            
+            # Add any additional properties from block_detail
+            for key, value in block_detail.items():
+                if key not in ["text", "format", "style", "detail", "mode"]:  # These are handled above
+                    new_block[key] = value
+            
+            # Ensure index is within valid range
+            children = self.lexical_data["root"]["children"]
+            if index < 0:
+                index = 0
+            elif index > len(children):
+                index = len(children)
+            
+            # SAFE OPERATION: Only modify local lexical_data structure
+            children.insert(index, new_block)
+            self.lexical_data["lastSaved"] = int(time.time() * 1000)
+            
+            new_count = len(children)
+            logger.debug(f"✅ SAFE insert_block_at_index: Added block to lexical_data at index {index}: {old_count} -> {new_count} blocks")
+            
+            # Use event-based propagation instead of destructive CRDT sync
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "type": "document-update", 
+                "docId": self.doc_id,
+                "snapshot": self.get_snapshot()
+            })
+            
+            return {
+                "success": True,
+                "blocks_before": old_count,
+                "blocks_after": new_count,
+                "index": index,
+                "block_type": block_type,
+                "text": block_detail.get("text", "")
+            }
+            
+        except Exception as e:
+            logger.debug(f"❌ Error in insert_block_at_index: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "index": index,
+                "block_type": block_type
+            }
+
     async def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str):
         """
         Insert a new block at a specific index using SAFE incremental operations.
@@ -2651,6 +2772,9 @@ class LexicalModel:
             elif message_type == "append-paragraph":
                 logger.debug(f"➕ handle_message: Processing append-paragraph...")
                 return await self._handle_append_paragraph(data, client_id)
+            elif message_type == "insert-paragraph":
+                logger.debug(f"📝 handle_message: Processing insert-paragraph...")
+                return await self._handle_insert_paragraph(data, client_id)
             else:
                 return {
                     "success": False,
@@ -2980,6 +3104,94 @@ class LexicalModel:
                 "success": False,
                 "error": str(e),
                 "message_type": "append-paragraph"
+            }
+    
+    async def _handle_insert_paragraph(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """Handle insert-paragraph message type"""
+        logger.debug(f"📝 _handle_insert_paragraph: METHOD CALLED!")
+        
+        # TYPE SAFETY: Check if data is actually a string (this would cause the error)
+        if isinstance(data, str):
+            logger.error(f"❌ _handle_insert_paragraph: CRITICAL ERROR - data is a string, not a dict!")
+            try:
+                import json
+                data = json.loads(data)
+                logger.info(f"✅ _handle_insert_paragraph: Successfully parsed string data as JSON")
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ _handle_insert_paragraph: Failed to parse string data as JSON: {e}")
+                return {
+                    "success": False,
+                    "error": f"Invalid data format: expected dict, got string that couldn't be parsed as JSON: {e}",
+                    "message_type": "insert-paragraph"
+                }
+        elif not isinstance(data, dict):
+            return {
+                "success": False,
+                "error": f"Invalid data format: expected dict, got {type(data)}",
+                "message_type": "insert-paragraph"
+            }
+        
+        try:
+            message_text = data.get("message", "Hello")
+            index = data.get("index", 0)
+            
+            logger.debug(f"📝 _handle_insert_paragraph: STARTING - message='{message_text}', index={index}, client={client_id or 'unknown'}")
+            
+            # Sync data if not in subscription mode
+            if self._text_doc_subscription is not None:
+                logger.debug(f"✅ _handle_insert_paragraph: Using current data (subscription mode)")
+            else:
+                logger.debug(f"🔄 _handle_insert_paragraph: No subscription - syncing from CRDT")
+                self._sync_from_loro()
+            
+            # Create the paragraph structure
+            new_paragraph = {
+                "text": message_text
+            }
+            
+            # Get blocks before adding
+            blocks_before = len(self.lexical_data.get("root", {}).get("children", []))
+            logger.debug(f"📝 _handle_insert_paragraph: About to call insert_block_at_index() with {blocks_before} blocks at index {index}")
+            
+            # Use insert_block_at_index instead of the unsafe add_block_at_index
+            try:
+                logger.debug(f"📝 _handle_insert_paragraph: Calling insert_block_at_index(index={index}, text='{message_text}', type='paragraph', client_id='{client_id}')")
+                result = await self.insert_block_at_index(index, new_paragraph, "paragraph", client_id)
+                logger.debug(f"📝 _handle_insert_paragraph: insert_block_at_index() returned: {result}")
+            except Exception as insert_error:
+                logger.debug(f"❌ _handle_insert_paragraph: insert_block_at_index() FAILED: {insert_error}")
+                return {
+                    "success": False,
+                    "error": f"Failed to insert paragraph: {insert_error}",
+                    "message_type": "insert-paragraph"
+                }
+            
+            # Get updated counts
+            blocks_after = len(self.lexical_data.get("root", {}).get("children", []))
+            logger.debug(f"📝 _handle_insert_paragraph: COMPLETED - blocks: {blocks_before} -> {blocks_after}")
+            
+            # Get document info for response
+            doc_info = {
+                "total_blocks": blocks_after,
+                "doc_id": self.doc_id
+            }
+            
+            return {
+                "success": True,
+                "message_type": "insert-paragraph",
+                "blocks_before": blocks_before,
+                "blocks_after": blocks_after,
+                "added_text": message_text,
+                "index": index,
+                "document_info": doc_info
+            }
+            
+        except Exception as e:
+            logger.debug(f"❌ Error in _handle_insert_paragraph: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "insert-paragraph"
             }
     
     # ==========================================
@@ -3589,7 +3801,7 @@ class LexicalDocumentManager:
         model = self.get_or_create_document(doc_id)
         
         # Route to appropriate handler based on message type
-        document_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
+        document_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph", "insert-paragraph"]
         ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
         
         if message_type in document_message_types:

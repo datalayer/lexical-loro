@@ -350,11 +350,24 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         # Get or create the document
         model = document_manager.get_or_create_document(doc_id)
         
-        # Create paragraph structure with message data 
-        block_detail = {"text": text}
+        # FIRST CALL FIX: Ensure WebSocket connection is established for new documents
+        # This is critical for the first MCP call to work properly
+        if document_manager.client_mode:
+            logger.info(f"🔄 Ensuring WebSocket connection is established for document {doc_id}")
+            await document_manager._ensure_connected(doc_id)
         
-        # Insert the paragraph at the specified index using SAFE operations
-        result = await model.add_block_at_index(index, block_detail, "paragraph")
+        # Use the same message handling system as append_paragraph for consistency
+        # This prevents JSON corruption from wholesale CRDT operations
+        message_data = {
+            "message": text,  # Use "message" field as expected by LexicalModel
+            "index": index    # Specify the index for insertion
+        }
+        
+        # Call through the message handling system to trigger collaborative sync
+        result = await document_manager.handle_message(doc_id, "insert-paragraph", message_data)
+        
+        if not result.get("success"):
+            raise Exception(f"Failed to insert paragraph: {result.get('error', 'Unknown error')}")
         
         # TIMING FIX: Add small delay to ensure broadcast reaches frontend before returning
         # This prevents the issue where UI doesn't update until second operation
@@ -365,9 +378,8 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         if document_manager.client_mode:
             await document_manager.broadcast_change(doc_id, prefer_incremental=True)
         
-        # Get updated document structure  
-        lexical_data = model.get_lexical_data()
-        total_blocks = len(lexical_data.get("root", {}).get("children", []))
+        # Get updated document structure from result
+        total_blocks = result.get("document_info", {}).get("total_blocks", 0)
         
         result = {
             "success": True,
@@ -430,6 +442,13 @@ async def append_paragraph(text: str, doc_id: str) -> str:
     logger.info(f"🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
     try:
         logger.info(f"Appending paragraph to document {doc_id}")
+        
+        # FIRST CALL FIX: Ensure document exists and WebSocket connection is established
+        # This is critical for the first MCP call to work properly
+        model = document_manager.get_or_create_document(doc_id)
+        if document_manager.client_mode:
+            logger.info(f"🔄 Ensuring WebSocket connection is established for document {doc_id}")
+            await document_manager._ensure_connected(doc_id)
         
         # Use the collaborative document manager's handle_message system
         # This will trigger WebSocket broadcasts to other clients
