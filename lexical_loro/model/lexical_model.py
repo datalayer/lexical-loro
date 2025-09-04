@@ -574,14 +574,20 @@ class LexicalModel:
                     if target_matches:
                         logger.debug(f"LoroModel: Applying text diff for {target_str}")
                         self._apply_text_diff(container_diff.diff)
-                        # Auto-sync after receiving changes - schedule async operation
-                        import asyncio
-                        try:
-                            loop = asyncio.get_event_loop()
-                            loop.create_task(self._auto_sync_on_change())
-                        except RuntimeError:
-                            # No event loop running, skip async operation
-                            logger.debug("LoroModel: No event loop available, skipping auto-sync")
+                        
+                        # Only auto-sync if this is NOT a remote update to prevent feedback loops
+                        if not getattr(self, '_processing_remote_update', False):
+                            logger.debug("LoroModel: Local change detected, triggering auto-sync")
+                            # Auto-sync after receiving changes - schedule async operation
+                            import asyncio
+                            try:
+                                loop = asyncio.get_event_loop()
+                                loop.create_task(self._auto_sync_on_change())
+                            except RuntimeError:
+                                # No event loop running, skip async operation
+                                logger.debug("LoroModel: No event loop available, skipping auto-sync")
+                        else:
+                            logger.debug("LoroModel: Remote update detected, skipping auto-sync to prevent feedback loop")
                     else:
                         logger.debug(f"LoroModel: Ignoring diff for {target_str} (not our container)")
                         
@@ -2054,8 +2060,9 @@ class LexicalModel:
                 logger.debug("Warning: Empty snapshot provided")
                 return False
             
-            # Set flag to prevent recursive operations during import
+            # Set flags to prevent recursive operations during import
             self._import_in_progress = True
+            self._processing_remote_update = True  # NEW: Flag to prevent auto-sync feedback loops
             
             try:
                 # Import the snapshot into our text document
@@ -2072,12 +2079,14 @@ class LexicalModel:
                 return True
                 
             finally:
-                # Always clear the flag, even if an error occurs
+                # Always clear the flags, even if an error occurs
                 self._import_in_progress = False
+                self._processing_remote_update = False
             
         except Exception as e:
             logger.debug(f"❌ Error importing snapshot: {e}")
             self._import_in_progress = False  # Make sure flag is cleared on error
+            self._processing_remote_update = False  # Clear remote update flag on error
             return False
     
     def apply_update(self, update_bytes: bytes) -> bool:
@@ -2101,8 +2110,9 @@ class LexicalModel:
             blocks_before_import = len(self.lexical_data.get("root", {}).get("children", []))
             logger.debug(f"📊 apply_update: BEFORE import - lexical_data has {blocks_before_import} blocks")
             
-            # Set flag to prevent recursive operations during import
+            # Set flags to prevent recursive operations during import
             self._import_in_progress = True
+            self._processing_remote_update = True  # NEW: Flag to prevent auto-sync feedback loops
             
             try:
                 # Apply the update to our text document
@@ -2132,12 +2142,14 @@ class LexicalModel:
                 return True
                 
             finally:
-                # Always clear the flag, even if an error occurs
+                # Always clear the flags, even if an error occurs
                 self._import_in_progress = False
+                self._processing_remote_update = False
             
         except Exception as e:
             logger.debug(f"❌ Error applying update: {e}")
             self._import_in_progress = False  # Make sure flag is cleared on error
+            self._processing_remote_update = False  # Clear remote update flag on error
             return False
     
     def export_update(self) -> Optional[bytes]:

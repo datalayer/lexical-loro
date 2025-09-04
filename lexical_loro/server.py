@@ -701,7 +701,10 @@ class LoroWebSocketServer:
                 logger.debug(f"   Update data size: {len(update_data)} bytes")
             elif message_type == "ephemeral-update":
                 ephemeral_data = data.get("data", {})
-                logger.debug(f"   Ephemeral data keys: {list(ephemeral_data.keys())}")
+                if isinstance(ephemeral_data, dict):
+                    logger.debug(f"   Ephemeral data keys: {list(ephemeral_data.keys())}")
+                else:
+                    logger.debug(f"   Ephemeral data type: {type(ephemeral_data)}, length: {len(ephemeral_data) if hasattr(ephemeral_data, '__len__') else 'N/A'}")
             elif message_type == "snapshot":
                 snapshot_data = data.get("snapshot", [])
                 logger.debug(f"   Snapshot data size: {len(snapshot_data)} bytes")
