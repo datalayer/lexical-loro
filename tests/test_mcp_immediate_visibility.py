@@ -24,7 +24,7 @@ async def test_immediate_mcp_visibility():
     print()
     print("📋 Step 2: Getting fresh document 'test-immediate'...")
     doc_model = manager.get_or_create_document('test-immediate')
-    initial_blocks = doc_model.get_block_count()
+    initial_blocks = len(doc_model.get_blocks())
     print(f"📊 Initial blocks: {initial_blocks}")
     
     # First MCP operation
@@ -42,7 +42,7 @@ async def test_immediate_mcp_visibility():
     )
     
     # Check immediately after first operation
-    blocks_after_first = doc_model.get_block_count()
+    blocks_after_first = len(doc_model.get_blocks())
     print(f"📊 Blocks after FIRST operation: {blocks_after_first}")
     print(f"📊 Change: {initial_blocks} -> {blocks_after_first}")
     
@@ -76,7 +76,7 @@ async def test_immediate_mcp_visibility():
     )
     
     # Check after second operation
-    blocks_after_second = doc_model.get_block_count()
+    blocks_after_second = len(doc_model.get_blocks())
     print(f"📊 Blocks after SECOND operation: {blocks_after_second}")
     print(f"📊 Full progression: {initial_blocks} -> {blocks_after_first} -> {blocks_after_second}")
     

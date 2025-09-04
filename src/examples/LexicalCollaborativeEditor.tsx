@@ -96,6 +96,13 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
 
   // MCP helper functions
   const callMcpTool = useCallback(async (toolName: string, params: any = {}) => {
+    // Guard: Don't allow MCP calls until the system is fully initialized
+    if (!isInitialized) {
+      setMcpStatus(`${toolName} failed: System not yet initialized`);
+      setTimeout(() => setMcpStatus(''), 3000);
+      return;
+    }
+
     try {
       setMcpStatus(`Calling ${toolName}...`);
       
@@ -178,7 +185,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       // Clear error after 5 seconds
       setTimeout(() => setMcpStatus(''), 5000);
     }
-  }, []);
+  }, [isInitialized]);
 
   const mcpTools = [
     {
@@ -292,19 +299,21 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                   <button 
                     onClick={() => setShowMcpDropdown(!showMcpDropdown)}
                     className="mcp-tools-button"
-                    title="MCP Tools"
+                    title={isInitialized ? "MCP Tools" : "MCP Tools (waiting for initialization...)"}
                     style={{ 
-                      backgroundColor: '#1ABC9C',
+                      backgroundColor: isInitialized ? '#1ABC9C' : '#95a5a6',
                       color: '#FFFFFF',
                       border: 'none',
                       padding: '6px 12px',
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: isInitialized ? 'pointer' : 'not-allowed',
+                      opacity: isInitialized ? 1 : 0.7
                     }}
+                    disabled={!isInitialized}
                   >
-                    🔧 MCP Tools ▼
+                    🔧 MCP Tools {isInitialized ? '▼' : '⏳'}
                   </button>
-                  {showMcpDropdown && (
+                  {showMcpDropdown && isInitialized && (
                     <div className="mcp-tools-dropdown">
                       {mcpTools.map((tool) => (
                         <button
@@ -326,19 +335,6 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             )}
           </div>
           <span>Powered by Lexical + Loro CRDT</span>
-          {mcpStatus && (
-            <div style={{ 
-              marginTop: '8px', 
-              padding: '4px 8px', 
-              backgroundColor: mcpStatus.includes('failed') ? '#ffebee' : '#e8f5e8',
-              color: mcpStatus.includes('failed') ? '#c62828' : '#2e7d32',
-              borderRadius: '4px',
-              fontSize: '12px',
-              border: `1px solid ${mcpStatus.includes('failed') ? '#ffcdd2' : '#c8e6c9'}`
-            }}>
-              MCP: {mcpStatus}
-            </div>
-          )}
         </div>
       </div>
       
@@ -377,6 +373,20 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       </LexicalComposer>
       
       <div className="lexical-editor-footer">
+        {mcpStatus && (
+          <div style={{ 
+            marginBottom: '10px', 
+            padding: '8px 12px', 
+            backgroundColor: mcpStatus.includes('failed') ? '#ffebee' : '#e8f5e8',
+            color: mcpStatus.includes('failed') ? '#c62828' : '#2e7d32',
+            borderRadius: '6px',
+            fontSize: '13px',
+            border: `1px solid ${mcpStatus.includes('failed') ? '#ffcdd2' : '#c8e6c9'}`,
+            fontWeight: '500'
+          }}>
+            MCP: {mcpStatus}
+          </div>
+        )}
         <p>Document ID: {DOC_ID}</p>
         <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
       </div>

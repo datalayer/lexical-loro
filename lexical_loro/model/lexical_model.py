@@ -198,6 +198,12 @@ class LexicalModel:
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
         
+        # Track last known version/frontier for incremental updates
+        # Using both Version Vector (for sync) and Frontiers (for efficiency)
+        self._last_broadcast_version = None  # Version Vector for precise tracking
+        self._last_broadcast_frontiers = None  # Frontiers for compact checkpoints
+        self._pending_updates = []  # Store incremental updates since last broadcast
+        
         # Add operation lock to prevent concurrent CRDT modifications
         self._operation_lock = asyncio.Lock()
         
@@ -2156,9 +2162,8 @@ class LexicalModel:
         """
         Export any pending changes as an update that can be broadcast to other clients.
         
-        Note: In Loro, updates are generated automatically when changes are made.
-        This method is provided for consistency but may return None if no changes 
-        are pending or if the update mechanism works differently.
+        Uses Loro's update export mode for efficient incremental synchronization.
+        Follows best practices from Loro documentation for collaborative editing.
         
         Returns:
             Optional[bytes]: Update bytes if available, None otherwise
@@ -2168,19 +2173,195 @@ class LexicalModel:
                 logger.debug("Warning: ExportMode not available")
                 return None
             
-            # Try to export updates - this may not be the standard Loro pattern
-            # as updates are typically generated automatically during changes
-            
-            # For now, we'll return None and rely on the subscription mechanism
-            # to handle broadcasting via the change_callback
-            
-            # In a full implementation, this might track changes and export deltas
-            logger.debug("ℹ️ export_update called - relying on subscription mechanism for updates")
-            return None
+            # Try to get incremental updates from Loro
+            try:
+                # Get current state - prefer version vector for sync accuracy
+                current_vv = self.text_doc.state_vv
+                logger.debug(f"🔄 Current state version vector: {current_vv}")
+                
+                # If we have a last broadcast version, try to get updates since then
+                if self._last_broadcast_version is not None:
+                    try:
+                        # Use ExportMode.Updates with version vector for precise incremental updates
+                        # This follows Loro best practices for collaborative sync
+                        update_mode = ExportMode.Updates(from_=self._last_broadcast_version)
+                        update_data = self.text_doc.export(update_mode)
+                        
+                        if update_data and len(update_data) > 0:
+                            logger.debug(f"✅ Got incremental update: {len(update_data)} bytes")
+                            logger.debug(f"📊 Update efficiency: incremental vs snapshot size ratio")
+                            return update_data
+                        else:
+                            logger.debug("ℹ️ No updates since last broadcast (empty result)")
+                            return None
+                            
+                    except Exception as e:
+                        logger.debug(f"⚠️ ExportMode.Updates failed: {e}")
+                        
+                        # Fallback: check if there are actual changes using version vectors
+                        try:
+                            # Compare current state with last broadcast state
+                            if current_vv != self._last_broadcast_version:
+                                logger.debug("ℹ️ Changes detected but incremental export failed - falling back to snapshot")
+                                return None
+                            else:
+                                logger.debug("ℹ️ No changes detected via version vector comparison")
+                                return None
+                        except Exception as e2:
+                            logger.debug(f"⚠️ Version comparison also failed: {e2}")
+                
+                # No previous version tracked - this is typical for first broadcast
+                # Return None to trigger snapshot export in get_broadcast_data
+                logger.debug("ℹ️ No previous version tracked - will use snapshot for initial broadcast")
+                return None
+                
+            except AttributeError as e:
+                # Version vector or export methods not available in this Loro version
+                logger.debug(f"ℹ️ Incremental update methods not available: {e}")
+                return None
             
         except Exception as e:
             logger.debug(f"❌ Error exporting update: {e}")
             return None
+
+    def get_broadcast_data(self, prefer_incremental: bool = True, use_case: str = "sync") -> Optional[Dict[str, Any]]:
+        """
+        Get data suitable for broadcasting to other clients.
+        
+        This is the main method that MCP server should call to get broadcast data.
+        Follows Loro best practices for different use cases.
+        
+        Args:
+            prefer_incremental: If True, tries to get incremental updates first
+            use_case: The intended use case ("sync", "persistence", "startup")
+            
+        Returns:
+            Dictionary with message_type and update/snapshot data, or None if no changes
+        """
+        try:
+            # Get recommendation based on use case
+            recommended_type = self.get_export_recommendation(use_case)
+            
+            # For real-time sync, try incremental updates first
+            if prefer_incremental and recommended_type == "loro-update":
+                # Try to get incremental update first
+                update_data = self.export_update()
+                if update_data:
+                    # Update the last broadcast version for next incremental update
+                    try:
+                        self._last_broadcast_version = self.text_doc.state_vv
+                        self._last_broadcast_frontiers = self.text_doc.frontiers()
+                    except:
+                        pass  # Version tracking not available
+                    
+                    return {
+                        "message_type": "loro-update",
+                        "update": update_data.hex() if isinstance(update_data, bytes) else update_data,
+                        "doc_id": self.doc_id,
+                        "use_case": use_case
+                    }
+            
+            # Fallback to snapshot or use snapshot by design
+            snapshot_data = self.get_snapshot()
+            if snapshot_data:
+                # Update the last broadcast version for future incremental updates
+                try:
+                    self._last_broadcast_version = self.text_doc.state_vv
+                    self._last_broadcast_frontiers = self.text_doc.frontiers()
+                except:
+                    pass  # Version tracking not available
+                
+                message_type = "snapshot" if recommended_type in ["snapshot", "shallow-snapshot"] else "snapshot"
+                
+                return {
+                    "message_type": message_type, 
+                    "snapshot": snapshot_data.hex() if isinstance(snapshot_data, bytes) else snapshot_data,
+                    "doc_id": self.doc_id,
+                    "use_case": use_case
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"❌ Error getting broadcast data: {e}")
+            return None
+
+    def mark_version_as_broadcast(self):
+        """
+        Mark the current version as having been broadcast.
+        
+        Tracks both Version Vector (for precise sync) and Frontiers (for efficiency).
+        This helps optimize future incremental update exports.
+        """
+        try:
+            # Track Version Vector for precise incremental updates
+            self._last_broadcast_version = self.text_doc.state_vv
+            
+            # Also track Frontiers for efficient checkpoints (optional)
+            try:
+                self._last_broadcast_frontiers = self.text_doc.frontiers()
+                logger.debug(f"📝 Marked version as broadcast - VV: {self._last_broadcast_version}")
+                logger.debug(f"📝 Frontiers: {self._last_broadcast_frontiers}")
+            except:
+                # Frontiers may not be available in all Loro versions
+                logger.debug(f"📝 Marked version as broadcast (VV only): {self._last_broadcast_version}")
+                
+        except Exception as e:
+            logger.debug(f"⚠️ Could not mark version as broadcast: {e}")
+
+    def has_changes_since_last_broadcast(self) -> bool:
+        """
+        Check if there are changes since the last broadcast.
+        
+        Uses Version Vector comparison for precise change detection.
+        
+        Returns:
+            True if there are changes to broadcast, False otherwise
+        """
+        try:
+            if self._last_broadcast_version is None:
+                return True  # No previous broadcast, so there are changes
+            
+            # Use Version Vector for precise comparison
+            current_version = self.text_doc.state_vv
+            has_changes = current_version != self._last_broadcast_version
+            
+            if has_changes:
+                logger.debug(f"📊 Changes detected: {current_version} != {self._last_broadcast_version}")
+            
+            return has_changes
+            
+        except Exception as e:
+            logger.debug(f"⚠️ Could not check for changes: {e}")
+            return True  # Assume changes exist if we can't check
+
+    def get_export_recommendation(self, use_case: str = "sync") -> str:
+        """
+        Get the recommended export mode based on use case.
+        
+        Following Loro best practices:
+        - Updates: For real-time sync between collaborators
+        - Snapshot: For persistence/backup 
+        - Shallow Snapshot: For fast startup with minimal history
+        
+        Args:
+            use_case: "sync", "persistence", "startup", or "relay"
+            
+        Returns:
+            Recommended message type: "loro-update", "snapshot", or "shallow-snapshot"
+        """
+        recommendations = {
+            "sync": "loro-update",      # Real-time collaboration
+            "persistence": "snapshot",   # Full backup with history
+            "startup": "shallow-snapshot",  # Fast loading
+            "relay": "loro-update",     # Server relay (OpLog only)
+            "backup": "snapshot",       # Complete backup
+            "checkpoint": "snapshot"    # Full state checkpoint
+        }
+        
+        recommended = recommendations.get(use_case, "loro-update")
+        logger.debug(f"📋 Export recommendation for '{use_case}': {recommended}")
+        return recommended
     
     def get_document_info(self) -> Dict[str, Any]:
         """
@@ -3524,19 +3705,24 @@ class LexicalDocumentManager:
         for doc_id in doc_ids:
             self.cleanup_document(doc_id)
         
-        # Cleanup WebSocket connection if in client mode
-        if self.client_mode and (self.websocket or self._connection_task):
+        # Cleanup WebSocket connections if in client mode
+        if self.client_mode and self.websocket_clients:
             import asyncio
             try:
-                # Cancel the connection task if it's still running
-                if self._connection_task and not self._connection_task.done():
-                    self._connection_task.cancel()
-                    
-                # Disconnect if connected
-                if self.websocket:
-                    asyncio.create_task(self._disconnect_client())
+                # Disconnect all WebSocket connections
+                for doc_id, client_info in self.websocket_clients.items():
+                    if client_info.get("connected", False):
+                        # Cancel the connection task if it's still running
+                        if client_info.get("connection_task") and not client_info["connection_task"].done():
+                            client_info["connection_task"].cancel()
+                        
+                        # Mark as disconnected
+                        client_info["connected"] = False
+                        
+                # Clear all WebSocket clients
+                self.websocket_clients.clear()
             except Exception as e:
-                logger.debug(f"⚠️ Error cleaning up WebSocket connection: {e}")
+                logger.debug(f"⚠️ Error cleaning up WebSocket connections: {e}")
     
     def _ensure_websocket_client(self, doc_id: str):
         """Ensure a WebSocket client entry exists for the document"""
@@ -3741,9 +3927,9 @@ class LexicalDocumentManager:
         except Exception as e:
             logger.debug(f"❌ DocumentManager error handling loro-update for {doc_id}: {e}")
     
-    async def broadcast_change(self, doc_id: str, message_type: str = "document-update"):
+    async def broadcast_change(self, doc_id: str, message_type: str = "loro-update", prefer_incremental: bool = True, use_case: str = "sync"):
         """Broadcast a change to other clients when in client mode"""
-        logger.debug(f"📤 broadcast_change called: doc_id={doc_id}, message_type={message_type}, client_mode={self.client_mode}")
+        logger.debug(f"📤 broadcast_change called: doc_id={doc_id}, message_type={message_type}, use_case={use_case}, client_mode={self.client_mode}")
         
         if not self.client_mode:
             logger.debug(f"⚠️ Not in client mode, skipping broadcast")
@@ -3752,9 +3938,6 @@ class LexicalDocumentManager:
         # Ensure connection is established for this document
         logger.debug(f"🔄 Ensuring connection is established for doc '{doc_id}'...")
         await self._ensure_connected(doc_id)
-        
-        client_info = self.websocket_clients.get(doc_id, {})
-        logger.debug(f"🔍 Connection status for {doc_id}: connected={client_info.get('connected', False)}, websocket={client_info.get('websocket') is not None}")
         
         client_info = self.websocket_clients.get(doc_id, {})
         if not client_info.get("connected", False):
@@ -3766,40 +3949,63 @@ class LexicalDocumentManager:
                 model = self.models[doc_id]
                 logger.debug(f"📄 Found model for {doc_id}, creating broadcast message...")
                 
-                # Create broadcast message using loro-update format instead of snapshot
-                # This matches the format expected by the collaborative server
-                try:
-                    # Get the latest update from the model
-                    update_data = model.export_update()
-                    logger.debug(f"📄 Got update of {len(update_data) if update_data else 0} bytes")
-                    
-                    # Convert bytes to list for JSON serialization
-                    update_list = list(update_data) if update_data else []
-                    
-                    message = {
-                        "type": "loro-update",  # Use loro-update format for incremental sync
-                        "docId": doc_id,
-                        "senderId": client_info.get("client_id"),
-                        "update": update_list  # Use update instead of snapshot
-                    }
-                except Exception as e:
-                    logger.debug(f"⚠️ Could not get update, falling back to snapshot: {e}")
-                    # Fallback to snapshot if update fails
-                    snapshot = model.get_snapshot()
-                    snapshot_data = list(snapshot) if snapshot else []
-                    
-                    message = {
-                        "type": "document-update",
-                        "docId": doc_id,
-                        "senderId": client_info.get("client_id"),
-                        "snapshot": snapshot_data
-                    }
+                # Use the enhanced get_broadcast_data method with use case optimization
+                broadcast_data = model.get_broadcast_data(prefer_incremental=prefer_incremental, use_case=use_case)
                 
-                logger.debug(f"📤 Sending broadcast message: type={message_type}, docId={doc_id}, senderId={client_info.get('client_id')}")
+                if not broadcast_data:
+                    logger.debug(f"ℹ️ No broadcast data available (no changes to send)")
+                    return
+                
+                # Extract the message type from broadcast_data (loro-update or snapshot)
+                detected_message_type = broadcast_data.get("message_type", message_type)
+                logger.debug(f"📄 Using message type: {detected_message_type} (optimized for {use_case})")
+                
+                # Prepare message based on the detected type
+                if detected_message_type == "loro-update" and "update" in broadcast_data:
+                    # Send incremental update
+                    update_data = broadcast_data["update"]
+                    if isinstance(update_data, str):
+                        # Convert hex string back to bytes list for JSON
+                        update_bytes = bytes.fromhex(update_data)
+                        update_list = list(update_bytes)
+                    else:
+                        update_list = list(update_data) if isinstance(update_data, bytes) else update_data
+                    
+                    message = {
+                        "type": "loro-update",
+                        "docId": doc_id,
+                        "senderId": client_info.get("client_id"),
+                        "update": update_list
+                    }
+                    logger.debug(f"📤 Sending incremental update: {len(update_list)} bytes")
+                    
+                elif detected_message_type == "snapshot" and "snapshot" in broadcast_data:
+                    # Send snapshot as fallback
+                    snapshot_data = broadcast_data["snapshot"] 
+                    if isinstance(snapshot_data, str):
+                        # Convert hex string back to bytes list for JSON
+                        snapshot_bytes = bytes.fromhex(snapshot_data)
+                        snapshot_list = list(snapshot_bytes)
+                    else:
+                        snapshot_list = list(snapshot_data) if isinstance(snapshot_data, bytes) else snapshot_data
+                    
+                    message = {
+                        "type": "snapshot",
+                        "docId": doc_id,
+                        "senderId": client_info.get("client_id"),
+                        "snapshot": snapshot_list
+                    }
+                    logger.debug(f"📤 Sending snapshot: {len(snapshot_list)} bytes")
+                    
+                else:
+                    logger.debug(f"❌ Invalid broadcast data: {broadcast_data}")
+                    return
+                
+                logger.debug(f"📤 Sending broadcast message: type={message_type}, docId={doc_id}")
                 await self._send_message(doc_id, message)
                 logger.debug(f"✅ DocumentManager broadcasted {message_type} for {doc_id}")
             else:
-                logger.debug(f"❌ No model found for doc_id: {doc_id}, available models: {list(self.models.keys())}")
+                logger.debug(f"❌ No model found for doc_id: {doc_id}")
                 
         except Exception as e:
             logger.debug(f"❌ Error broadcasting change for {doc_id}: {e}")
@@ -3863,4 +4069,5 @@ class LexicalDocumentManager:
     
     def __del__(self):
         """Cleanup when manager is destroyed"""
+
         self.cleanup()

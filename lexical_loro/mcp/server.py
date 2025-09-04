@@ -360,6 +360,11 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         # This prevents the issue where UI doesn't update until second operation
         await asyncio.sleep(0.1)  # 100ms should be enough for WebSocket message delivery
         
+        # EXPLICIT BROADCAST: Force an immediate WebSocket broadcast to ensure UI updates
+        # Use incremental updates for better CRDT efficiency
+        if document_manager.client_mode:
+            await document_manager.broadcast_change(doc_id, prefer_incremental=True)
+        
         # Get updated document structure  
         lexical_data = model.get_lexical_data()
         total_blocks = len(lexical_data.get("root", {}).get("children", []))
@@ -374,7 +379,8 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
         }
         
         logger.info(f"Successfully inserted paragraph in document {doc_id} at index {index}")
-        return json.dumps(result, indent=2)
+        # Return a simple success message instead of JSON dump
+        return f"✅ Successfully inserted paragraph at index {index} in document {doc_id}. Total blocks: {total_blocks}"
         
     except Exception as e:
         logger.error(f"Error inserting paragraph in document {doc_id}: {e}")
@@ -384,7 +390,8 @@ async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
             "doc_id": doc_id,
             "action": "insert_paragraph"
         }
-        return json.dumps(error_result, indent=2)
+        # Return a simple error message instead of JSON dump
+        return f"❌ Failed to insert paragraph at index {index} in document {doc_id}: {str(e)}"
 
 
 @mcp.tool()
@@ -445,6 +452,11 @@ async def append_paragraph(text: str, doc_id: str) -> str:
         # This prevents the issue where UI doesn't update until second operation
         await asyncio.sleep(0.1)  # 100ms should be enough for WebSocket message delivery
         
+        # EXPLICIT BROADCAST: Force an immediate WebSocket broadcast to ensure UI updates
+        # Use incremental updates for better CRDT efficiency
+        if document_manager.client_mode:
+            await document_manager.broadcast_change(doc_id, prefer_incremental=True)
+        
         # Get updated document structure for response
         model = document_manager.get_or_create_document(doc_id)
         lexical_data = model.get_lexical_data()
@@ -459,7 +471,8 @@ async def append_paragraph(text: str, doc_id: str) -> str:
         }
         
         logger.info(f"Successfully appended paragraph to document {doc_id}")
-        return json.dumps(response_result, indent=2)
+        # Return a simple success message instead of JSON dump
+        return f"✅ Successfully appended paragraph to document {doc_id}. Total blocks: {total_blocks}"
         
     except Exception as e:
         logger.error(f"Error appending paragraph to document {doc_id}: {e}")
@@ -469,7 +482,8 @@ async def append_paragraph(text: str, doc_id: str) -> str:
             "doc_id": doc_id,
             "action": "append_paragraph"
         }
-        return json.dumps(error_result, indent=2)
+        # Return a simple error message instead of JSON dump
+        return f"❌ Failed to append paragraph to document {doc_id}: {str(e)}"
 
 
 ###############################################################################
