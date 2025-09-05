@@ -15,8 +15,9 @@ import {
 import { $setBlocksType } from '@lexical/selection';
 import { $createHeadingNode } from '@lexical/rich-text';
 import { $createCodeNode } from '@lexical/code';
-import { $createCounterNode } from './CounterNode';
 import { INSERT_TABLE_COMMAND } from '@lexical/table';
+import { $createCounterNode } from './CounterNode';
+import { $createYouTubeNode } from './YouTubeNode';
 
 interface LexicalToolbarProps {
   className?: string;
@@ -99,6 +100,31 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
         return;
       }
       
+      if (blockType === 'youtube') {
+        // Prompt user for YouTube video ID or URL
+        const input = prompt('Enter YouTube video ID or URL:');
+        if (input) {
+          // Extract video ID from URL if a full URL is provided
+          let videoID = input;
+          const urlMatch = input.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/);
+          if (urlMatch) {
+            videoID = urlMatch[1];
+          }
+          
+          if (videoID) {
+            editor.update(() => {
+              const selection = $getSelection();
+              if ($isRangeSelection(selection)) {
+                const node = $createYouTubeNode(videoID);
+                selection.insertNodes([node]);
+              }
+            });
+          }
+        }
+        setBlockType('paragraph');
+        return;
+      }
+      
       if (blockType !== 'paragraph' && blockType !== 'h1' && blockType !== 'code') {
         return;
       }
@@ -136,6 +162,7 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
           <option value="code">Code</option>
           <option value="table">Table (5x5)</option>
           <option value="counter">Counter</option>
+          <option value="youtube">YouTube</option>
         </select>
       </div>
       

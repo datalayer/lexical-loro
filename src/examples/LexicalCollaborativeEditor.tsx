@@ -17,7 +17,9 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import LoroCollaborativePlugin from '../LoroCollaborativePlugin';
+import { LoroCollaborativePlugin } from '../LoroCollaborativePlugin';
+import { YouTubeNode } from './YouTubeNode';
+import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
@@ -365,18 +367,19 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     theme: lexicalTheme,
     onError,
     nodes: [
-      HeadingNode,
-      ListNode,
-      ListItemNode,
-      QuoteNode,
-      CodeNode,
-      CodeHighlightNode,
-      TableNode,
-      TableCellNode,
-      TableRowNode,
       AutoLinkNode,
-      LinkNode,
+      CodeHighlightNode,
+      CodeNode,
       CounterNode,
+      HeadingNode,
+      LinkNode,
+      ListItemNode,
+      ListNode,
+      QuoteNode,
+      TableCellNode,
+      TableNode,
+      TableRowNode,
+      YouTubeNode,
     ],
   };
 
@@ -502,8 +505,6 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-          <HistoryPlugin />
-          <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin
             websocketUrl={`${websocketUrl}/${DOC_ID}`}
 //            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/${DOC_ID}"
@@ -519,6 +520,13 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               sendMessageRef.current = sendMessageFn;
             }}
           />
+          {isInitialized && (
+            <>
+              <HistoryPlugin />
+              <YouTubePlugin />
+              <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
+            </>
+          )}
         </div>
       </LexicalComposer>
       

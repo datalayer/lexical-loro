@@ -196,52 +196,7 @@ function $ensureAllNodesHaveStableIds(): void {
   }
   
   traverse(root);
-}/**
- * LoroCollaborativePlugin - Enhanced Cursor Management
- * 
- * IMPROVEMENTS IMPLEMENTED based on Loro Cursor documentation and YJS SyncCursors patterns:
- * 
- * 1. Enhanced CursorAwareness class with Loro document reference
- *    - Added loroDoc parameter for proper cursor operations
- *    - Provides framework for stable cursor positioning
- * 
- * 2. Added createCursorFromLexicalPoint method
- *    - Inspired by YJS SyncCursors createRelativePosition pattern
- *    - Creates stable Loro cursors from Lexical selection points
- *    - Replaces approximation with proper cursor positioning
- * 
- * 3. Added getStableCursorPosition method  
- *    - Inspired by YJS SyncCursors createAbsolutePosition pattern
- *    - Converts Loro cursors back to stable positions
- *    - Provides better positioning than current approximations
- * 
- * 4. Enhanced cursor side information support
- *    - Added anchorSide and focusSide to stable cursor data
- *    - Follows Loro Cursor documentation patterns for precise positioning
- *    - Equivalent to YJS RelativePosition side information
- * 
- * 5. Improved cursor creation with framework for better methods
- *    - Added TODO comments showing enhanced cursor creation approach
- *    - Framework ready for using createCursorFromLexicalPoint
- *    - Maintains backward compatibility while providing upgrade path
- * 
- * 6. Enhanced remote cursor processing
- *    - Added support for cursor side information in stable cursor data
- *    - Provides framework for direct Loro cursor conversion
- *    - Better handling of cursor position stability across edits
- * 
- * TECHNICAL APPROACH:
- * - Loro Cursor type is equivalent to YJS RelativePosition (as documented)
- * - Stable positions survive document edits (like YJS RelativePosition)
- * - Cursor side information provides precise positioning
- * - Framework supports proper createRelativePosition/createAbsolutePosition patterns
- * 
- * NEXT STEPS for full implementation:
- * - Implement calculateGlobalPosition method with proper document traversal
- * - Add convertGlobalPositionToLexical helper function
- * - Enable the enhanced cursor creation methods by uncommenting TODO sections
- * - Complete the direct Loro cursor conversion path
- */
+}
 
 interface CursorProps {
   peerId: string;
@@ -839,17 +794,6 @@ interface RemoteCursor {
   };
 }
 
-interface LoroCollaborativePluginProps {
-  websocketUrl: string;
-  docId: string;
-  onConnectionChange?: (connected: boolean) => void;
-  onPeerIdChange?: (peerId: string) => void;
-  onDisconnectReady?: (disconnectFn: () => void) => void;
-  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
-  onInitialization?: (success: boolean) => void;
-  onSendMessageReady?: (sendMessageFn: (message: any) => void) => void;
-}
-
 interface LoroMessage {
   type: string;
   update?: number[];
@@ -878,6 +822,63 @@ interface LoroMessage {
   addedBy?: string;
 }
 
+interface LoroCollaborativePluginProps {
+  websocketUrl: string;
+  docId: string;
+  onConnectionChange?: (connected: boolean) => void;
+  onPeerIdChange?: (peerId: string) => void;
+  onDisconnectReady?: (disconnectFn: () => void) => void;
+  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
+  onInitialization?: (success: boolean) => void;
+  onSendMessageReady?: (sendMessageFn: (message: any) => void) => void;
+}
+
+/**
+ * LoroCollaborativePlugin - Enhanced Cursor Management
+ * 
+ * IMPROVEMENTS IMPLEMENTED based on Loro Cursor documentation and YJS SyncCursors patterns:
+ * 
+ * 1. Enhanced CursorAwareness class with Loro document reference
+ *    - Added loroDoc parameter for proper cursor operations
+ *    - Provides framework for stable cursor positioning
+ * 
+ * 2. Added createCursorFromLexicalPoint method
+ *    - Inspired by YJS SyncCursors createRelativePosition pattern
+ *    - Creates stable Loro cursors from Lexical selection points
+ *    - Replaces approximation with proper cursor positioning
+ * 
+ * 3. Added getStableCursorPosition method  
+ *    - Inspired by YJS SyncCursors createAbsolutePosition pattern
+ *    - Converts Loro cursors back to stable positions
+ *    - Provides better positioning than current approximations
+ * 
+ * 4. Enhanced cursor side information support
+ *    - Added anchorSide and focusSide to stable cursor data
+ *    - Follows Loro Cursor documentation patterns for precise positioning
+ *    - Equivalent to YJS RelativePosition side information
+ * 
+ * 5. Improved cursor creation with framework for better methods
+ *    - Added TODO comments showing enhanced cursor creation approach
+ *    - Framework ready for using createCursorFromLexicalPoint
+ *    - Maintains backward compatibility while providing upgrade path
+ * 
+ * 6. Enhanced remote cursor processing
+ *    - Added support for cursor side information in stable cursor data
+ *    - Provides framework for direct Loro cursor conversion
+ *    - Better handling of cursor position stability across edits
+ * 
+ * TECHNICAL APPROACH:
+ * - Loro Cursor type is equivalent to YJS RelativePosition (as documented)
+ * - Stable positions survive document edits (like YJS RelativePosition)
+ * - Cursor side information provides precise positioning
+ * - Framework supports proper createRelativePosition/createAbsolutePosition patterns
+ * 
+ * NEXT STEPS for full implementation:
+ * - Implement calculateGlobalPosition method with proper document traversal
+ * - Add convertGlobalPositionToLexical helper function
+ * - Enable the enhanced cursor creation methods by uncommenting TODO sections
+ * - Complete the direct Loro cursor conversion path
+ */
 export function LoroCollaborativePlugin({ 
   websocketUrl, 
   docId,
@@ -901,6 +902,9 @@ export function LoroCollaborativePlugin({
   const [clientId, setClientId] = useState<string>('');
   const [clientColor, setClientColor] = useState<string>('');
   const peerIdRef = useRef<string>(''); // Changed from numericPeerIdRef to handle string IDs
+  
+  // Incremental update error state
+  const [incrementalUpdateError, setIncrementalUpdateError] = useState<string | null>(null);
   
   // Version vector state for optimized updates
   const [lastSentVersionVector, setLastSentVersionVector] = useState<VersionVector | null>(null);
@@ -1020,6 +1024,15 @@ export function LoroCollaborativePlugin({
       // Instead, log the error and continue with incremental-only approach
       console.error('🚨 Incremental update failed - skipping wholesale fallback to maintain CRDT consistency');
       console.error('🚨 This maintains collaborative editing integrity by avoiding destructive operations');
+      
+      // Set error state to show red banner
+      setIncrementalUpdateError(`Incremental update failed: ${error instanceof Error ? error.message : String(error)}`);
+      
+      // Clear error after 5 seconds
+      setTimeout(() => {
+        setIncrementalUpdateError(null);
+      }, 5000);
+      
       return;
     }
     
@@ -3281,12 +3294,37 @@ export function LoroCollaborativePlugin({
 
   // Use React portal for cursor rendering
   return (
-    <CursorsContainer 
-      remoteCursors={remoteCursors}
-      getPositionFromLexicalPosition={getPositionFromLexicalPosition}
-      clientId={clientId}
-      editor={editor}
-    />
+    <>
+      {/* Red banner for incremental update errors */}
+      {incrementalUpdateError && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: '#dc3545',
+            color: 'white',
+            padding: '8px 16px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            zIndex: 9999,
+            borderBottom: '2px solid #a02834',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+          }}
+        >
+          ⚠️ Incremental Update Failed: {incrementalUpdateError}
+        </div>
+      )}
+      
+      <CursorsContainer 
+        remoteCursors={remoteCursors}
+        getPositionFromLexicalPosition={getPositionFromLexicalPosition}
+        clientId={clientId}
+        editor={editor}
+      />
+    </>
   );
 }
 
