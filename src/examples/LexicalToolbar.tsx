@@ -19,6 +19,9 @@ import { INSERT_TABLE_COMMAND } from '@lexical/table';
 import { $createCounterNode } from './CounterNode';
 import { $createYouTubeNode } from './YouTubeNode';
 
+// Default YouTube video URL - can be easily changed here
+const DEFAULT_YOUTUBE_URL = 'https://www.youtube.com/watch?v=Eb1JFC2_lLc';
+
 interface LexicalToolbarProps {
   className?: string;
 }
@@ -101,25 +104,17 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
       }
       
       if (blockType === 'youtube') {
-        // Prompt user for YouTube video ID or URL
-        const input = prompt('Enter YouTube video ID or URL:');
-        if (input) {
-          // Extract video ID from URL if a full URL is provided
-          let videoID = input;
-          const urlMatch = input.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/);
-          if (urlMatch) {
-            videoID = urlMatch[1];
-          }
-          
-          if (videoID) {
-            editor.update(() => {
-              const selection = $getSelection();
-              if ($isRangeSelection(selection)) {
-                const node = $createYouTubeNode(videoID);
-                selection.insertNodes([node]);
-              }
-            });
-          }
+        // Extract video ID from the default YouTube URL
+        const urlMatch = DEFAULT_YOUTUBE_URL.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/);
+        if (urlMatch) {
+          const videoID = urlMatch[1];
+          editor.update(() => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              const node = $createYouTubeNode(videoID);
+              selection.insertNodes([node]);
+            }
+          });
         }
         setBlockType('paragraph');
         return;
