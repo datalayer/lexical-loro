@@ -19,7 +19,6 @@ import {
   $isElementNode,
   $isLineBreakNode,
   $createTextNode,
-  createState,
   $getState,
   $setState
 } from 'lexical';
@@ -28,21 +27,22 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { LoroDoc, LoroText, Cursor, EphemeralStore } from 'loro-crdt';
 import type { EphemeralStoreEvent, PeerID, VersionVector } from 'loro-crdt';
 import { applyDifferentialUpdate } from './DiffMerge';
+import { stableNodeIdState } from './stableNodeState';
+
+// ============================================================================
+// DIFFERENTIAL UPDATE CONFIGURATION
+// ============================================================================
+
+/**
+ * Control flag for differential updates to prevent decorator node reloading.
+ * When true, uses sophisticated differential merging instead of wholesale setEditorState.
+ * This prevents YouTube/Counter decorator nodes from reloading during collaborative editing.
+ */
+const USE_DIFFERENTIAL_UPDATE = false;
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
 // ============================================================================
-
-/**
- * NodeState configuration for storing stable UUIDs in Lexical nodes.
- * This replaces the unstable NodeKey system for cursor positioning.
- * 
- * Based on Lexical NodeState documentation:
- * https://lexical.dev/docs/concepts/node-state
- */
-const stableNodeIdState = createState('stable-node-id', {
-  parse: (v: unknown) => typeof v === 'string' ? v : undefined,
-});
 
 /**
  * Generate a stable UUID for nodes
@@ -1141,15 +1141,23 @@ export function LoroCollaborativePlugin({
             const stateLike = parsed; // Always use the parsed object directly
             if (stateLike && typeof stateLike === 'object' && stateLike.root && stateLike.root.type === 'root') {
               // Use differential updates to prevent YouTube nodes from reloading
-              const success = applyDifferentialUpdate(editor, stateLike, 'WebSocket update');
-              if (success) {
-                applied = true;
-                console.log('✅ Successfully applied JSON as differential Lexical state update');
+              if (USE_DIFFERENTIAL_UPDATE) {
+                const success = applyDifferentialUpdate(editor, stateLike, 'WebSocket update');
+                if (success) {
+                  applied = true;
+                  console.log('✅ Successfully applied JSON as differential Lexical state update');
+                } else {
+                  console.log('❌ Differential update failed, falling back to setEditorState');
+                  const newEditorState = editor.parseEditorState(stateLike);
+                  editor.setEditorState(newEditorState);
+                  applied = true;
+                }
               } else {
-                console.log('❌ Differential update failed, falling back to setEditorState');
+                // Fallback to wholesale setEditorState when differential updates disabled
                 const newEditorState = editor.parseEditorState(stateLike);
                 editor.setEditorState(newEditorState);
                 applied = true;
+                console.log('✅ Applied JSON using setEditorState (differential updates disabled)');
               }
             } else {
               console.log('❌ JSON structure invalid for Lexical:', {
@@ -1236,15 +1244,23 @@ export function LoroCollaborativePlugin({
               if (bestParsedObject) {
                 try {
                   // Use differential updates for concatenated JSON recovery too
-                  const success = applyDifferentialUpdate(editor, bestParsedObject, 'JSON recovery');
-                  if (success) {
-                    applied = true;
-                    console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as differential update (most complete)`);
+                  if (USE_DIFFERENTIAL_UPDATE) {
+                    const success = applyDifferentialUpdate(editor, bestParsedObject, 'JSON recovery');
+                    if (success) {
+                      applied = true;
+                      console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as differential update (most complete)`);
+                    } else {
+                      console.log('❌ Differential update failed in JSON recovery, falling back to setEditorState');
+                      const newEditorState = editor.parseEditorState(bestParsedObject);
+                      editor.setEditorState(newEditorState);
+                      applied = true;
+                    }
                   } else {
-                    console.log('❌ Differential update failed in JSON recovery, falling back to setEditorState');
+                    // Fallback to wholesale setEditorState when differential updates disabled
                     const newEditorState = editor.parseEditorState(bestParsedObject);
                     editor.setEditorState(newEditorState);
                     applied = true;
+                    console.log(`✅ Applied JSON object ${bestObjectIndex} using setEditorState (differential updates disabled)`);
                   }
                 } catch (applyError) {
                   console.log('❌ Failed to apply best JSON object to editor:', applyError);
