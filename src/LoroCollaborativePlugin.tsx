@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   $createParagraphNode,
@@ -309,15 +309,32 @@ interface CursorsContainerProps {
   editor: LexicalEditor;
 }
 
-const CursorsContainer: React.FC<CursorsContainerProps> = ({ 
+interface CursorsContainerRef {
+  update: (cursors: Record<PeerID, RemoteCursor>) => void;
+}
+
+const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsContainerProps>(({ 
   remoteCursors, 
   getPositionFromLexicalPosition, 
   clientId,
   editor
-}) => {
+}, ref) => {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   // Keep last known good positions to avoid snapping to x=0 when mapping fails
   const lastCursorStateRef = useRef<Record<string, { position: { top: number; left: number }, offset: number }>>({});
+  
+  // Internal state to hold the current cursor data
+  const [internalCursors, setInternalCursors] = useState<Record<PeerID, RemoteCursor>>(remoteCursors);
+  
+  // Expose update method through ref
+  useImperativeHandle(ref, () => ({
+    update: (cursors: Record<PeerID, RemoteCursor>) => {
+      setInternalCursors(cursors);
+    }
+  }), []);
+  
+  // Use internal cursors instead of props for rendering
+  const cursorsToRender = internalCursors;
 
   useEffect(() => {
     // Create or get the cursor overlay container
@@ -355,11 +372,11 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
   }
 
   console.log('🎯 Rendering cursors via React portal:', {
-    remoteCursorsCount: Object.keys(remoteCursors).length,
+    remoteCursorsCount: Object.keys(cursorsToRender).length,
     clientId
   });
 
-  const cursors = Object.values(remoteCursors)
+  const cursors = Object.values(cursorsToRender)
     .map(remoteCursor => {
       const { peerId, anchor, focus, user } = remoteCursor;
       if (!anchor) {
@@ -530,7 +547,9 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
     <>{cursors}</>,
     portalContainer
   );
-};
+});
+
+CursorsContainer.displayName = 'CursorsContainer';
 
 class CursorAwareness {
   private ephemeralStore: EphemeralStore;
@@ -899,7 +918,17 @@ export function LoroCollaborativePlugin({
   
   // Cursor awareness system
   const awarenessRef = useRef<CursorAwareness | null>(null);
-  const [remoteCursors, setRemoteCursors] = useState<Record<PeerID, RemoteCursor>>({});
+  // Use a ref instead of state to avoid triggering full plugin re-renders
+  const remoteCursorsRef = useRef<Record<PeerID, RemoteCursor>>({});
+  // Cursor overlay manager - handles rendering without triggering full plugin re-renders
+  const cursorOverlayRef = useRef<{ update: (cursors: Record<PeerID, RemoteCursor>) => void } | null>(null);
+  
+  // Update remote cursors and trigger only overlay re-render
+  const updateRemoteCursors = useCallback((newCursors: Record<PeerID, RemoteCursor>) => {
+    remoteCursorsRef.current = newCursors;
+    cursorOverlayRef.current?.update(newCursors);
+  }, []);
+  
   const [clientId, setClientId] = useState<string>('');
   const [clientColor, setClientColor] = useState<string>('');
   const peerIdRef = useRef<string>(''); // Changed from numericPeerIdRef to handle string IDs
@@ -910,7 +939,7 @@ export function LoroCollaborativePlugin({
   // Version vector state for optimized updates
   const [lastSentVersionVector, setLastSentVersionVector] = useState<VersionVector | null>(null);
   const isConnectingRef = useRef<boolean>(false);
-  const [forceUpdate, setForceUpdate] = useState(0); // Force cursor re-render
+  // Remove forceUpdate state - no longer needed
   const cursorTimestamps = useRef<Record<string, number>>({});
 
   const updateLoroFromLexical = useCallback((editorState: EditorState) => {
@@ -1538,12 +1567,10 @@ export function LoroCollaborativePlugin({
                 // Only remove if the peer is truly no longer in the awareness state
                 if (!currentPeerIds.includes(peerId)) {
                   console.log('👁️ ✅ Confirmed removal - peer not in current state:', peerId);
-                  setRemoteCursors(prev => {
-                    const updated = { ...prev };
-                    delete updated[peerId as PeerID];
-                    console.log('👁️ Removed peer from remote cursors:', peerId);
-                    return updated;
-                  });
+                  const updated = { ...remoteCursorsRef.current };
+                  delete updated[peerId as PeerID];
+                  updateRemoteCursors(updated);
+                  console.log('👁️ Removed peer from remote cursors:', peerId);
                   
                   // Clear cursor timestamps
                   delete cursorTimestamps.current[peerId];
@@ -2060,7 +2087,7 @@ export function LoroCollaborativePlugin({
           cursorTimestamps.current[peerId] = now;
         });
         
-        setRemoteCursors(remoteCursorsData);
+        updateRemoteCursors(remoteCursorsData);
         
         // Call awareness change callback for UI display (include ALL users, including self)
         if (stableOnAwarenessChange.current) {
@@ -2081,8 +2108,7 @@ export function LoroCollaborativePlugin({
           stableOnAwarenessChange.current(awarenessData);
         }
         
-        // Force cursor re-render when remote cursors change
-        setForceUpdate(prev => prev + 1);
+        // No more setForceUpdate - overlay handles its own re-rendering
       }
     };
     
@@ -2099,16 +2125,12 @@ export function LoroCollaborativePlugin({
     // Set up the remote cursor callback
     awarenessRef.current.setRemoteCursorCallback((peerId: PeerID, cursor: RemoteCursor) => {
       console.log('🎯 Remote cursor callback triggered:', peerId, cursor);
-      setRemoteCursors(prev => {
-        const updated = {
-          ...prev,
-          [peerId]: cursor
-        };
-        console.log('🎯 Updated remote cursors state:', updated);
-        // Force cursor re-render
-        setForceUpdate(updateVal => updateVal + 1);
-        return updated;
-      });
+      const updated = {
+        ...remoteCursorsRef.current,
+        [peerId]: cursor
+      };
+      console.log('🎯 Updated remote cursors state:', updated);
+      updateRemoteCursors(updated);
     });
     
     // Subscribe to Loro document changes
@@ -2128,8 +2150,6 @@ export function LoroCollaborativePlugin({
         
         updateLexicalFromLoro(editor, currentText);
       }
-      // Force cursor re-render when document changes (content affects cursor positioning)
-      setForceUpdate(prev => prev + 1);
     });
 
     // Subscribe to Lexical editor changes with debouncing
@@ -2169,7 +2189,7 @@ export function LoroCollaborativePlugin({
       unsubscribe();
       removeEditorListener();
     };
-  }, [editor, docId, updateLoroFromLexical, updateLexicalFromLoro, clientId]);
+  }, [editor, docId, updateLoroFromLexical, updateLexicalFromLoro, clientId, updateRemoteCursors]);
 
   // Connection retry state
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -2570,19 +2590,14 @@ export function LoroCollaborativePlugin({
                 console.log('🧹 Forcing cleanup of disconnected client:', disconnectedClientId);
                 
                 // Remove from remote cursors immediately
-                setRemoteCursors(prev => {
-                  const updated = { ...prev };
-                  console.log('🧹 Current remote cursors before cleanup:', prev);
-                  delete updated[disconnectedClientId as PeerID];
-                  console.log('🧹 Removed disconnected client from remote cursors, new state:', updated);
-                  return updated;
-                });
+                const updated = { ...remoteCursorsRef.current };
+                console.log('🧹 Current remote cursors before cleanup:', remoteCursorsRef.current);
+                delete updated[disconnectedClientId as PeerID];
+                console.log('🧹 Removed disconnected client from remote cursors, new state:', updated);
+                updateRemoteCursors(updated);
                 
                 // Clear from timestamps
                 delete cursorTimestamps.current[disconnectedClientId];
-                
-                // Force awareness refresh
-                setForceUpdate(prev => prev + 1);
                 
                 console.log('🧹 Completed immediate cleanup for disconnected client');
               } else {
@@ -2671,7 +2686,7 @@ export function LoroCollaborativePlugin({
         wsRef.current.close();
       }
     };
-  }, [websocketUrl, docId, editor, onPeerIdChange, onInitialization, updateLexicalFromLoro]); // Include all dependencies
+  }, [websocketUrl, docId, editor, onPeerIdChange, onInitialization, updateLexicalFromLoro, updateRemoteCursors]); // Include all dependencies
 
   // Cleanup stale cursors periodically
   useEffect(() => {
@@ -2679,26 +2694,26 @@ export function LoroCollaborativePlugin({
       const now = Date.now();
       const staleThreshold = 10000; // 10 seconds
       
-      setRemoteCursors(prev => {
-        const updated = { ...prev };
-        let hasChanges = false;
-        
-        Object.keys(updated).forEach(peerId => {
-          const lastSeen = cursorTimestamps.current[peerId] || 0;
-          if (now - lastSeen > staleThreshold) {
-            console.log('🧹 Removing stale cursor for peer:', peerId, 'last seen:', now - lastSeen, 'ms ago');
-            delete updated[peerId as PeerID];
-            delete cursorTimestamps.current[peerId];
-            hasChanges = true;
-          }
-        });
-        
-        return hasChanges ? updated : prev;
+      const updated = { ...remoteCursorsRef.current };
+      let hasChanges = false;
+      
+      Object.keys(updated).forEach(peerId => {
+        const lastSeen = cursorTimestamps.current[peerId] || 0;
+        if (now - lastSeen > staleThreshold) {
+          console.log('🧹 Removing stale cursor for peer:', peerId, 'last seen:', now - lastSeen, 'ms ago');
+          delete updated[peerId as PeerID];
+          delete cursorTimestamps.current[peerId];
+          hasChanges = true;
+        }
       });
+      
+      if (hasChanges) {
+        updateRemoteCursors(updated);
+      }
     }, 2000); // Check every 2 seconds
     
     return () => clearInterval(cleanupInterval);
-  }, []);
+  }, [updateRemoteCursors]);
 
   // Track selection changes for collaborative cursors using Awareness
   useEffect(() => {
@@ -2770,12 +2785,6 @@ export function LoroCollaborativePlugin({
 
     return removeUpdateListener;
   }, [editor, updateCursorAwareness]);
-
-  // Force cursor re-rendering when remote cursors change
-  useEffect(() => {
-    // This effect will trigger whenever forceUpdate changes
-    console.log('🔄 Forcing cursor re-render due to remote cursor changes');
-  }, [forceUpdate]);
 
   // Get the Lexical editor element and its parent for overlay positioning
   const getEditorElement = useCallback(() => {
@@ -3269,7 +3278,7 @@ export function LoroCollaborativePlugin({
   useEffect(() => {
     const handleScroll = () => {
       console.log('🔄 Scroll detected, forcing cursor re-render');
-      setForceUpdate(prev => prev + 1); // Use existing force update mechanism
+      // Cursor overlay will handle its own re-rendering through the ref
     };
 
     // Listen to scroll events on window and any scrollable containers
@@ -3297,11 +3306,11 @@ export function LoroCollaborativePlugin({
         }
       }
     };
-  }, [setForceUpdate, getEditorElement]);
+  }, [getEditorElement]);
 
   console.log('🎬 LoroCollaborativePlugin component render called', {
-    remoteCursorsCount: Object.keys(remoteCursors).length,
-    remoteCursorsPeerIds: Object.keys(remoteCursors),
+    remoteCursorsCount: Object.keys(remoteCursorsRef.current).length,
+    remoteCursorsPeerIds: Object.keys(remoteCursorsRef.current),
     clientId: clientId,
     peerIdRef: peerIdRef.current,
     editorElementExists: !!getEditorElement()
@@ -3334,7 +3343,8 @@ export function LoroCollaborativePlugin({
       )}
       
       <CursorsContainer 
-        remoteCursors={remoteCursors}
+        ref={cursorOverlayRef}
+        remoteCursors={remoteCursorsRef.current}
         getPositionFromLexicalPosition={getPositionFromLexicalPosition}
         clientId={clientId}
         editor={editor}
