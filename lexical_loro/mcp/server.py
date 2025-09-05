@@ -27,6 +27,43 @@ document_manager: Optional[LexicalDocumentManager] = None
 
 
 ###############################################################################
+# Helper function for ensuring document synchronization
+
+async def _ensure_document_synced(doc_id: str):
+    """Ensure document is properly synchronized with WebSocket server before reading"""
+    model = document_manager.get_or_create_document(doc_id)
+    
+    if document_manager.client_mode:
+        client_info = document_manager.websocket_clients.get(doc_id, {})
+        is_connected = client_info.get("connected", False)
+        
+        # Log document state before sync
+        lexical_data = model.get_lexical_data()
+        children_count = len(lexical_data.get("root", {}).get("children", []))
+        logger.info(f"📊 Document '{doc_id}' before sync: {children_count} blocks")
+        
+        if not is_connected:
+            logger.info(f"🔄 MCP waiting for initial connection and sync for doc '{doc_id}'...")
+            await document_manager._ensure_connected(doc_id)
+            
+            # Give more time for the initial snapshot to be processed
+            # This includes connection establishment, registration, snapshot request, and processing
+            import asyncio
+            await asyncio.sleep(1.0)  # Increased from 0.5s to ensure reliable sync
+            
+            # Log document state after sync
+            lexical_data_after = model.get_lexical_data()
+            children_count_after = len(lexical_data_after.get("root", {}).get("children", []))
+            logger.info(f"📊 Document '{doc_id}' after sync: {children_count_after} blocks")
+            
+            logger.info(f"✅ MCP initial sync completed for doc '{doc_id}'")
+        else:
+            logger.info(f"✅ MCP document '{doc_id}' already connected, using current state")
+    
+    return model
+
+
+###############################################################################
 # MCP Server with CORS
 
 class FastMCPWithCORS(FastMCP):
@@ -200,8 +237,8 @@ async def load_document(doc_id: str) -> str:
     try:
         logger.info(f"Loading document: {doc_id}")
         
-        # Get or create the document using the document manager
-        model = document_manager.get_or_create_document(doc_id)
+        # Ensure document is properly synchronized before reading
+        model = await _ensure_document_synced(doc_id)
         
         # Get the lexical data from the model
         lexical_data = model.get_lexical_data()
@@ -268,8 +305,8 @@ async def get_document_info(doc_id: str) -> str:
     try:
         logger.info(f"Getting document info for: {doc_id}")
         
-        # Get or create the document
-        model = document_manager.get_or_create_document(doc_id)
+        # Ensure document is properly synchronized before reading
+        model = await _ensure_document_synced(doc_id)
         
         # Log client mode status for debugging
         if document_manager.client_mode:
