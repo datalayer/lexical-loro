@@ -5,6 +5,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
@@ -37,6 +38,44 @@ interface LexicalCollaborativeEditorProps {
 // or throw them as needed.
 function onError(error: Error) {
   console.error('Lexical error:', error);
+}
+
+// Component that renders the reload button in a portal outside the editor
+function ReloadStatePlugin() {
+  const [editor] = useLexicalComposerContext();
+  
+  const handleReloadState = useCallback(() => {
+    console.log('🔄 Reload State button clicked - reading and setting lexical state');
+    
+    editor.update(() => {
+      const editorState = editor.getEditorState();
+      console.log('📊 Current editor state:', editorState.toJSON());
+      
+      // Read the current state and immediately set it again
+      // This simulates what MCP operations do that cause YouTube nodes to reload
+      const currentStateJSON = editorState.toJSON();
+      
+      // Schedule a state update with the same content
+      setTimeout(() => {
+        console.log('🔄 Setting the same state back to editor...');
+        const newEditorState = editor.parseEditorState(JSON.stringify(currentStateJSON));
+        editor.setEditorState(newEditorState);
+        console.log('✅ State reload completed - YouTube nodes should have reloaded if this is the issue');
+      }, 100);
+    });
+  }, [editor]);
+
+  // Add the button to the UI through a global reference
+  React.useEffect(() => {
+    // Store the handler globally so it can be called from outside
+    (window as any).reloadEditorState = handleReloadState;
+    
+    return () => {
+      delete (window as any).reloadEditorState;
+    };
+  }, [handleReloadState]);
+
+  return null; // This plugin doesn't render anything directly
 }
 
 export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProps> = ({
@@ -448,6 +487,29 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                 >
                   ➕ Append Paragraph
                 </button>
+                <button 
+                  onClick={() => {
+                    // Call the global reload function that has access to the editor
+                    if ((window as any).reloadEditorState) {
+                      (window as any).reloadEditorState();
+                    } else {
+                      console.warn('Reload state function not available - editor not initialized');
+                    }
+                  }}
+                  className="reload-state-button"
+                  title="Reload editor state (test YouTube node reloading)"
+                  style={{ 
+                    marginLeft: '8px',
+                    backgroundColor: '#ff9500',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 Reload State
+                </button>
                 <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block', marginLeft: '8px' }}>
                   <button 
                     onClick={() => setShowMcpDropdown(!showMcpDropdown)}
@@ -525,6 +587,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               <HistoryPlugin />
               <YouTubePlugin />
               <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
+              <ReloadStatePlugin />
             </>
           )}
         </div>
