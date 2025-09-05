@@ -27,6 +27,7 @@ import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc, LoroText, Cursor, EphemeralStore } from 'loro-crdt';
 import type { EphemeralStoreEvent, PeerID, VersionVector } from 'loro-crdt';
+import { applyDifferentialUpdate } from './DiffMerge';
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
@@ -1110,10 +1111,17 @@ export function LoroCollaborativePlugin({
             // This standardizes the format and prevents confusion between wrapped/unwrapped formats
             const stateLike = parsed; // Always use the parsed object directly
             if (stateLike && typeof stateLike === 'object' && stateLike.root && stateLike.root.type === 'root') {
-              const newEditorState = editor.parseEditorState(stateLike);
-              editor.setEditorState(newEditorState);
-              applied = true;
-              console.log('✅ Successfully applied JSON as Lexical state');
+              // Use differential updates to prevent YouTube nodes from reloading
+              const success = applyDifferentialUpdate(editor, stateLike, 'WebSocket update');
+              if (success) {
+                applied = true;
+                console.log('✅ Successfully applied JSON as differential Lexical state update');
+              } else {
+                console.log('❌ Differential update failed, falling back to setEditorState');
+                const newEditorState = editor.parseEditorState(stateLike);
+                editor.setEditorState(newEditorState);
+                applied = true;
+              }
             } else {
               console.log('❌ JSON structure invalid for Lexical:', {
                 stateLike: typeof stateLike,
@@ -1198,10 +1206,17 @@ export function LoroCollaborativePlugin({
               
               if (bestParsedObject) {
                 try {
-                  const newEditorState = editor.parseEditorState(bestParsedObject);
-                  editor.setEditorState(newEditorState);
-                  applied = true;
-                  console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as Lexical state (most complete)`);
+                  // Use differential updates for concatenated JSON recovery too
+                  const success = applyDifferentialUpdate(editor, bestParsedObject, 'JSON recovery');
+                  if (success) {
+                    applied = true;
+                    console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as differential update (most complete)`);
+                  } else {
+                    console.log('❌ Differential update failed in JSON recovery, falling back to setEditorState');
+                    const newEditorState = editor.parseEditorState(bestParsedObject);
+                    editor.setEditorState(newEditorState);
+                    applied = true;
+                  }
                 } catch (applyError) {
                   console.log('❌ Failed to apply best JSON object to editor:', applyError);
                 }
