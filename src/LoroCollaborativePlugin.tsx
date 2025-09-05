@@ -1016,15 +1016,11 @@ export function LoroCollaborativePlugin({
         return;
       }
       
-      try {
-        // Fallback to full replacement if incremental update fails
-        loroTextRef.current.delete(0, currentLoroText.length);
-        loroTextRef.current.insert(0, editorStateJson);
-        console.warn('🚨 Full replacement fallback completed successfully');
-      } catch (fallbackError) {
-        console.error('🚨 Even full replacement fallback failed:', fallbackError);
-        return;
-      }
+      // REMOVED: Wholesale delete/insert fallback to ensure pure incremental updates
+      // Instead, log the error and continue with incremental-only approach
+      console.error('🚨 Incremental update failed - skipping wholesale fallback to maintain CRDT consistency');
+      console.error('🚨 This maintains collaborative editing integrity by avoiding destructive operations');
+      return;
     }
     
     // Send update to WebSocket server
@@ -1045,15 +1041,9 @@ export function LoroCollaborativePlugin({
         docId: docId
       }));
 
-      // Also send a snapshot occasionally to keep server state updated
-      if (Math.random() < 0.1) { // 10% chance to send snapshot
-        const snapshot = loroDocRef.current.export({ mode: "snapshot" });
-        wsRef.current.send(JSON.stringify({
-          type: 'snapshot',
-          snapshot: Array.from(snapshot),
-          docId: docId
-        }));
-      }
+      // NOTE: Removed snapshot sending to ensure pure incremental updates
+      // The system now relies entirely on loro-update messages for collaboration
+      // Initial snapshots are still sent by the server for new client connections
     }
 
     // Reset the flag after a delay to prevent infinite loops
@@ -2539,19 +2529,10 @@ export function LoroCollaborativePlugin({
                 }
               }, 150); // Slightly different delay than text editor
             } else if (data.type === 'snapshot-request' && data.docId === docId) {
-              // Another client is requesting a snapshot, send ours if we have content
-              editor.getEditorState().read(() => {
-                const currentText = $getRoot().getTextContent();
-                if (currentText.length > 0) {
-                  const snapshot = loroDocRef.current.export({ mode: "snapshot" });
-                  ws.send(JSON.stringify({
-                    type: 'snapshot',
-                    snapshot: Array.from(snapshot),
-                    docId: docId
-                  }));
-                  console.log('📄 Lexical editor sent snapshot in response to request');
-                }
-              });
+              // REMOVED: Snapshot response to maintain pure incremental updates
+              // Instead, let the requesting client get updates through normal loro-update flow
+              console.log('📄 Lexical editor received snapshot request - ignoring to maintain incremental-only updates');
+              console.log('📄 Requesting client will receive updates through normal loro-update messages');
             } else if (data.type === 'client-disconnect') {
               // Handle explicit client disconnect notifications
               console.log('📢 Received client disconnect notification:', data);

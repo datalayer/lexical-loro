@@ -820,9 +820,10 @@ class LoroWebSocketServer:
             logger.warning(f"📡 No clients connected - cannot broadcast")
             return
         
-        # For document updates like append-paragraph, we should broadcast to ALL clients
+        # For document updates, we should broadcast to ALL clients
         # including the sender, so their editor gets updated too
-        should_include_sender = message_type in ["document-update", "snapshot"]
+        # NOTE: Removed 'snapshot' from broadcast list as we now use pure incremental updates
+        should_include_sender = message_type in ["document-update", "loro-update"]
         target_count = total_clients if should_include_sender else total_clients - 1
         
         logger.info(f"   Target clients: {target_count} (include sender: {should_include_sender})")
