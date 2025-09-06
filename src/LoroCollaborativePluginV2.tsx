@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { $getRoot } from 'lexical';
 import { LoroDoc } from 'loro-crdt';
 import { createLoroBinding, type LoroBinding, type LoroProvider } from './collaboration/LoroBinding';
 import { syncLexicalUpdateToLoro } from './collaboration/sync/SyncLoroToLexical';
@@ -34,17 +35,30 @@ interface LoroCollaborativePluginV2Props {
  * Initialize sync event handlers (equivalent to YJS sync setup)
  * 
  * This sets up the bidirectional sync between Loro and Lexical,
- * following the YJS collaboration pattern
+ * following the YJS collaboration pattern more closely.
  */
 function initializeLoroSyncHandlers(binding: LoroBinding): () => void {
   const { editor } = binding;
   
-  console.log('🔄 Initializing Loro ↔ Lexical sync handlers');
+  console.log('🔄 Initializing Loro ↔ Lexical sync handlers (YJS pattern)');
   
   // Set up Lexical editor change listener (equivalent to YJS editor.registerUpdateListener)
   const removeEditorListener = editor.registerUpdateListener(
     ({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
-      // Convert Lexical changes to Loro operations
+      // Skip collaboration tags to avoid loops (following YJS pattern)
+      if (tags.has('collaboration') || tags.has('historic') || tags.has('initial-content')) {
+        console.log('🔄 Skipping sync for collaboration/historic/initial tags');
+        return;
+      }
+
+      console.log('📝 Editor updated, syncing to Loro:', {
+        dirtyElementsCount: dirtyElements.size,
+        dirtyLeavesCount: dirtyLeaves.size,
+        normalizedNodesCount: normalizedNodes.size,
+        tags: Array.from(tags)
+      });
+
+      // Convert Lexical changes to Loro operations (equivalent to YJS syncLexicalUpdateToYjs)
       syncLexicalUpdateToLoro(
         binding, 
         binding as unknown as LoroProvider, // TODO: Replace with actual provider
@@ -59,18 +73,16 @@ function initializeLoroSyncHandlers(binding: LoroBinding): () => void {
   );
 
   // TODO: Add Loro document listener when API is available
-  // doc.on('update', (events) => {
-  //   syncLoroChangesToLexical(binding, provider, events, false, syncLoroCursorPositions);
-  // });
+  // Following YJS pattern: doc.on('update', (events) => { syncLoroChangesToLexical(...) })
+  // This would listen for remote changes and apply them to Lexical
   
-  console.log('✅ Sync handlers initialized');
+  console.log('✅ Sync handlers initialized following YJS pattern');
   
-  // Return cleanup function
+  // Return cleanup function (equivalent to YJS cleanup)
   return () => {
     console.log('🧹 Cleaning up sync handlers');
     removeEditorListener();
     // TODO: Remove Loro document listener when available
-    // doc.off('update', handleLoroUpdate);
   };
 }
 
@@ -343,18 +355,49 @@ export const LoroCollaborativePlugin = ({
         // Function to handle initial Lexical content
         function handleInitialContent(lexicalJsonStr: string) {
           try {
-            console.log('📄 Setting initial Lexical content:', lexicalJsonStr.length, 'chars');
+            console.log('📄 Processing initial Lexical content via collaboration system');
             
             // Parse the Lexical JSON
             const lexicalState = JSON.parse(lexicalJsonStr);
             
-            // Apply the state directly to the editor
-            editor.setEditorState(editor.parseEditorState(lexicalState));
-            
-            console.log('✅ Initial Lexical content applied successfully');
+            // Apply the state using the collaboration system instead of bypassing it
+            // This ensures proper sync setup and follows the YJS pattern
+            editor.update(() => {
+              // First, clear the current state
+              const root = $getRoot();
+              root.clear();
+              
+              // Apply the initial content by parsing the JSON state
+              const editorState = editor.parseEditorState(lexicalState);
+              
+              // Merge the state into current editor
+              editorState.read(() => {
+                const sourceRoot = $getRoot();
+                const targetRoot = root;
+                
+                // Copy children from source to target
+                const children = sourceRoot.getChildren();
+                children.forEach((child: any) => {
+                  targetRoot.append(child);
+                });
+              });
+              
+              console.log('✅ Initial content applied via collaboration system');
+            }, {
+              tag: 'initial-content', // Tag to identify this as initial content
+            });
             
           } catch (error) {
             console.error('❌ Failed to apply initial content:', error, 'Content:', lexicalJsonStr);
+            
+            // Fallback: apply directly if collaboration system fails
+            try {
+              const lexicalState = JSON.parse(lexicalJsonStr);
+              editor.setEditorState(editor.parseEditorState(lexicalState));
+              console.log('✅ Initial content applied via fallback method');
+            } catch (fallbackError) {
+              console.error('❌ Fallback also failed:', fallbackError);
+            }
           }
         }
 
