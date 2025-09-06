@@ -3,8 +3,9 @@
  * Distributed under the terms of the MIT License.
  */
 
-export type { LoroBinding, ClientID, LoroProvider } from './LoroBinding';
+export type { LoroBinding, ClientID, LoroAwareness, LoroUserState } from './LoroBinding';
 export { createLoroBinding } from './LoroBinding';
+export type { LoroProvider } from './LoroProvider';
 export { createLoroProvider } from './LoroProvider';
 export type { LoroCollabNode } from './nodes/LoroCollabNode';
 export { LoroCollabElementNode } from './nodes/LoroCollabElementNode';

@@ -4,10 +4,11 @@
  */
 
 import type { LoroDoc } from 'loro-crdt';
+import type { LoroAwareness } from './LoroBinding';
 
 /**
  * Provider interface for Loro collaboration.
- * Similar to YJS Provider but adapted for Loro WebSocket communication.
+ * Following YJS Provider pattern with Loro-specific adaptations.
  */
 export interface LoroProvider {
   doc: LoroDoc;
@@ -15,6 +16,7 @@ export interface LoroProvider {
   websocketUrl: string;
   docId: string;
   clientId: string;
+  awareness?: LoroAwareness; // YJS-style awareness for user presence
 
   /**
    * Connect to the collaboration server
@@ -27,10 +29,10 @@ export interface LoroProvider {
   disconnect(): void;
 
   /**
-   * Register event listeners
+   * Register event listeners (YJS-style events)
    */
-  on(event: 'connect' | 'disconnect' | 'sync' | 'update', callback: (data?: any) => void): void;
-  off(event: 'connect' | 'disconnect' | 'sync' | 'update', callback: (data?: any) => void): void;
+  on(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload', callback: (data?: any) => void): void;
+  off(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload', callback: (data?: any) => void): void;
 
   /**
    * Send an update to other clients

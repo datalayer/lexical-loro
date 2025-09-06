@@ -8,59 +8,19 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { 
   $getRoot, 
   $createParagraphNode,
-  COLLABORATION_TAG,
-  HISTORIC_TAG,
   HISTORY_MERGE_TAG
 } from 'lexical';
-import type { LexicalEditor, EditorState, NodeKey } from 'lexical';
-import { LoroDoc, LoroTree } from 'loro-crdt';
+import type { LexicalEditor } from 'lexical';
+import { LoroDoc } from 'loro-crdt';
 
-// Loro binding types (equivalent to YJS binding)  
-export interface LoroBinding {
-  editor: LexicalEditor;
-  doc: LoroDoc;
-  clientID: string;
-  root: LoroTree; // Using LoroTree as equivalent to YJS XmlText (better for hierarchical structure)
-  collabNodeMap: Map<NodeKey, any>; // Will hold collaboration nodes
-  cursors: Map<string, any>; // Cursor positions (Loro Cursor equivalent to YJS RelativePosition)
-  cursorsContainer: HTMLElement | null;
-}
-
-// Enhanced provider interface (equivalent to YJS Provider)
-export interface LoroProvider {
-  doc: LoroDoc;
-  connected: boolean;
-  awareness?: any; // TODO: Implement proper awareness when Loro API is available
-  connect: () => Promise<void> | void;
-  disconnect: () => void;
-  on: (event: string, callback: (...args: any[]) => void) => void;
-  off: (event: string, callback: (...args: any[]) => void) => void;
-}
-
-/**
- * Create Loro binding (equivalent to YJS createBinding)
- */
-function createLoroBinding(
-  editor: LexicalEditor,
-  _provider: LoroProvider,
-  _docId: string,
-  doc: LoroDoc,
-  collabNodeMap: Map<NodeKey, any>,
-  cursors: Map<string, any>
-): LoroBinding {
-  // Create or get the root tree container (equivalent to YJS XmlText, better for hierarchical structure)
-  const rootTree = doc.getTree('root');
-  
-  return {
-    editor,
-    doc,
-    clientID: doc.peerIdStr, // Use Loro's peer ID
-    root: rootTree,
-    collabNodeMap,
-    cursors,
-    cursorsContainer: null,
-  };
-}
+// Import proper collaboration architecture (equivalent to YJS structure)
+import { 
+  createLoroBinding, 
+  createLoroProvider,
+  syncLexicalToLoro,
+  type LoroBinding, 
+  type LoroProvider 
+} from './collaboration';
 
 // Types for peer information
 export interface PeerInfo {
@@ -84,136 +44,56 @@ interface LoroCollaborativePluginV2Props {
 }
 
 /**
- * Initialize sync event handlers (equivalent to YJS sync setup)
+ * Initialize sync event handlers using collaboration architecture
  */
 function initializeLoroSyncHandlers(binding: LoroBinding, provider: LoroProvider): () => void {
   const { editor } = binding;
   
-  console.log('🔄 Initializing Loro ↔ Lexical sync handlers (YJS pattern)');
+  console.log('🔄 Initializing Loro ↔ Lexical sync handlers using collaboration architecture');
   
-  // Set up Lexical editor change listener (equivalent to YJS editor.registerUpdateListener)
+  // Set up Lexical editor change listener using the proper sync function
   const removeEditorListener = editor.registerUpdateListener(
     ({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
-      // Skip collaboration tags to avoid loops (following YJS pattern)
-      if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) {
+      // Skip collaboration tags to avoid loops
+      if (tags.has('collaboration') || tags.has('historic')) {
         console.log('🔄 Skipping sync for collaboration/historic tags');
         return;
       }
 
-      console.log('📝 Editor updated, syncing to Loro:', {
-        dirtyElementsCount: dirtyElements.size,
-        dirtyLeavesCount: dirtyLeaves.size,
-        normalizedNodesCount: normalizedNodes.size,
-        tags: Array.from(tags)
-      });
+      console.log('📝 Editor updated, syncing to Loro using collaboration architecture');
 
-      // Convert Lexical changes to Loro operations (equivalent to YJS syncLexicalUpdateToYjs)
-      syncLexicalUpdateToLoro(
+      // Convert Lexical data types to what sync functions expect
+      const dirtyElementsSet = new Set(dirtyElements.keys());
+      const dirtyLeavesSet = new Set(dirtyLeaves);
+      const normalizedNodesSet = new Set(normalizedNodes);
+      const tagsSet = new Set(tags);
+
+      // Use the proper sync function from collaboration architecture
+      syncLexicalToLoro(
         binding, 
         provider,
         prevEditorState, 
         editorState, 
-        dirtyElements, 
-        dirtyLeaves,
-        normalizedNodes,
-        tags
+        dirtyElementsSet, 
+        dirtyLeavesSet,
+        normalizedNodesSet,
+        tagsSet
       );
     }
   );
 
-  // TODO: Add Loro document listener when API is available
-  // Following YJS pattern: doc.on('update', (events) => { syncLoroChangesToLexical(...) })
+  // TODO: Add Loro document listener to use syncLoroToLexical
   // This would listen for remote changes and apply them to Lexical
+  // doc.on('update', (events) => { syncLoroToLexical(binding, provider, events) })
   
-  console.log('✅ Sync handlers initialized following YJS pattern');
+  console.log('✅ Sync handlers initialized using collaboration architecture');
   
-  // Return cleanup function (equivalent to YJS cleanup)
+  // Return cleanup function
   return () => {
     console.log('🧹 Cleaning up sync handlers');
     removeEditorListener();
     // TODO: Remove Loro document listener when available
   };
-}
-
-/**
- * Sync Loro changes to Lexical (equivalent to YJS syncYjsChangesToLexical)
- * This handles incremental updates from remote clients
- * TODO: Will be used when Loro event listeners are implemented
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function syncLoroChangesToLexical(_binding: LoroBinding, _events: any[]): void {
-  const { editor } = _binding;
-  // Note: currentEditorState would be used for selection recovery like in YJS
-  // const currentEditorState = editor._editorState;
-
-  editor.update(
-    () => {
-      // Process Loro events and apply incremental changes
-      for (const event of _events) {
-        // TODO: Implement incremental update logic based on Loro events
-        // This should handle text insertions, deletions, node changes, etc.
-        console.log('🔄 Processing Loro event:', event);
-      }
-
-      // Handle selection and cursor synchronization
-      // TODO: Implement Loro cursor synchronization (equivalent to YJS RelativePosition)
-      
-    },
-    {
-      // Use collaboration tag to prevent feedback loops
-      tag: COLLABORATION_TAG,
-      skipTransforms: true,
-      onUpdate: () => {
-        // Ensure root has at least one paragraph (YJS pattern)
-        editor.update(() => {
-          const root = $getRoot();
-          if (root.getChildrenSize() === 0) {
-            root.append($createParagraphNode());
-          }
-        });
-      },
-    },
-  );
-}
-
-/**
- * Sync Lexical changes to Loro (equivalent to YJS syncLexicalUpdateToYjs)
- * This handles local changes and converts them to Loro operations
- */
-function syncLexicalUpdateToLoro(
-  _binding: LoroBinding,
-  _provider: LoroProvider,
-  _prevEditorState: EditorState,
-  currEditorState: EditorState,
-  dirtyElements: Map<NodeKey, boolean>,
-  dirtyLeaves: Set<NodeKey>,
-  normalizedNodes: Set<NodeKey>,
-  tags: Set<string>
-): void {
-  // Skip if this update came from collaboration to avoid loops
-  if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) {
-    if (normalizedNodes.size > 0) {
-      // TODO: Handle normalization merge conflicts like YJS
-      console.log('🔄 Handling normalization conflicts for', normalizedNodes.size, 'nodes');
-    }
-    return;
-  }
-
-  // Convert Lexical changes to Loro operations
-  currEditorState.read(() => {
-    if (dirtyElements.has('root')) {
-      // TODO: Sync root changes to Loro Tree
-      console.log('🔄 Syncing root changes to Loro Tree');
-      // Use binding.root (LoroTree) to apply changes
-    }
-
-    // TODO: Sync selection changes to Loro awareness/cursors
-    // Use provider.awareness and Loro cursors
-    console.log('🔄 Syncing selection to Loro (TODO: implement cursor sync)');
-  });
-  
-  // Placeholder to use other parameters until full implementation
-  console.log('📝 Processed', dirtyLeaves.size, 'dirty leaves from previous state');
 }
 
 /**
@@ -305,20 +185,12 @@ export const LoroCollaborativePlugin = ({
         const loroDoc = new LoroDoc();
         loroDocRef.current = loroDoc;
 
-        // Create enhanced provider with awareness (following YJS pattern)
-        const provider: LoroProvider = {
-          doc: loroDoc,
-          connected: false,
-          awareness: undefined, // TODO: Implement proper awareness when Loro API is available
-          connect: async () => {
-            console.log('🔌 Provider connect called');
-          },
-          disconnect: () => {
-            console.log('🔌 Provider disconnect called');
-          },
-          on: () => {}, 
-          off: () => {}, 
-        };
+        // Create proper provider using collaboration architecture
+        const provider = createLoroProvider(
+          websocketUrl,
+          docId,
+          loroDoc
+        );
 
         // Create Loro binding for collaboration (equivalent to YJS binding)
         const binding = createLoroBinding(

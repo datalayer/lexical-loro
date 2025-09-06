@@ -4,7 +4,8 @@
  */
 
 import type { EditorState, NodeKey, NodeMap, BaseSelection } from 'lexical';
-import type { LoroBinding, LoroProvider } from '../LoroBinding';
+import type { LoroBinding } from '../LoroBinding';
+import type { LoroProvider } from '../LoroProvider';
 import type { LoroEvent } from 'loro-crdt';
 
 import { 

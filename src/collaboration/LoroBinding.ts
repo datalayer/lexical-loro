@@ -6,6 +6,7 @@
 import type { LexicalEditor, NodeKey } from 'lexical';
 import type { LoroDoc, LoroTree, TreeID, Cursor, LoroText, LoroMap } from 'loro-crdt';
 import type { LoroCollabNode } from './nodes/LoroCollabNode';
+import type { LoroProvider } from './LoroProvider';
 import { LoroCollabElementNode } from './nodes/LoroCollabElementNode';
 
 export type ClientID = string;
@@ -16,17 +17,6 @@ export type LoroTreeNode = {
   fractionalIndex: string; 
   meta: LoroMap; 
 };
-
-// Provider interface (matching YJS Provider pattern)
-export interface LoroProvider {
-  doc: LoroDoc;
-  connected: boolean;
-  awareness?: LoroAwareness; // Loro equivalent of YJS awareness
-  connect?(): void | Promise<void>;
-  disconnect?(): void;
-  on(event: 'sync' | 'status' | 'update' | 'reload', callback: (...args: any[]) => void): void;
-  off(event: 'sync' | 'status' | 'update' | 'reload', callback: (...args: any[]) => void): void;
-}
 
 // Awareness interface (equivalent to YJS awareness)
 export interface LoroAwareness {

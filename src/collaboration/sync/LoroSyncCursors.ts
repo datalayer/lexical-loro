@@ -4,7 +4,8 @@
  */
 
 import type { BaseSelection, NodeKey, Point } from 'lexical';
-import type { LoroBinding, LoroProvider, LoroUserState, ClientID } from '../LoroBinding';
+import type { LoroBinding, LoroUserState, ClientID } from '../LoroBinding';
+import type { LoroProvider } from '../LoroProvider';
 import type { Cursor } from 'loro-crdt';
 
 import {
