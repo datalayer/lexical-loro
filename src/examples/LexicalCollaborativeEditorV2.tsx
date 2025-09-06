@@ -102,7 +102,8 @@ export function LexicalCollaborativeEditorV2({
   // onInitialization // TODO: Wire up when LoroCollaborationPlugin supports it
 }: LexicalCollaborativeEditorV2Props) {
   const [connected, setConnected] = useState(false);
-  const [peerId, setPeerId] = useState<string>('');
+  const [websocketClientId, setWebSocketClientId] = useState<string>('');
+  const [loroPeerId, setLoroPeerId] = useState<string>('');
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   // const [isInitialized, setIsInitialized] = useState(false); // TODO: Implement when supported
 
@@ -112,9 +113,14 @@ export function LexicalCollaborativeEditorV2({
     onConnectionChange?.(newConnected);
   }, [onConnectionChange]);
 
-  // Handle peer ID changes
-  const handlePeerIdChange = useCallback((newPeerId: string) => {
-    setPeerId(newPeerId);
+  // Handle WebSocket client ID changes
+  const handleWebSocketClientIdChange = useCallback((newWebSocketClientId: string) => {
+    setWebSocketClientId(newWebSocketClientId);
+  }, []);
+
+  // Handle Loro peer ID changes
+  const handleLoroPeerIdChange = useCallback((newLoroPeerId: string) => {
+    setLoroPeerId(newLoroPeerId);
   }, []);
 
   // Handle awareness/peer list changes  
@@ -189,7 +195,7 @@ export function LexicalCollaborativeEditorV2({
                 {connected ? 'Connected' : 'Disconnected'}
               </span>
             </span>
-            {peerId && (
+            {loroPeerId && (
               <div style={{ 
                 marginLeft: '15px', 
                 fontSize: '11px', 
@@ -204,7 +210,7 @@ export function LexicalCollaborativeEditorV2({
               }}>
                 <span style={{ fontSize: '10px' }}>🆔</span>
                 <span style={{ fontFamily: 'monospace', fontSize: '10px' }}>
-                  {peerId.split('_').pop() || peerId.slice(-4)}
+                  {loroPeerId.slice(-6)}
                 </span>
               </div>
             )}
@@ -259,7 +265,7 @@ export function LexicalCollaborativeEditorV2({
                           opacity: 0.7,
                           fontSize: '10px'
                         }}>
-                          {peer.peerId.slice(-4)}
+                          {peer.peerId.slice(-6)}
                         </span>
                       )}
                     </div>
@@ -324,7 +330,8 @@ export function LexicalCollaborativeEditorV2({
             shouldBootstrap={true}
             username="V2User"
             cursorColor="#3366cc"
-            onWebSocketClientIdChange={handlePeerIdChange}
+            onWebSocketClientIdChange={handleWebSocketClientIdChange}
+            onLoroPeerIdChange={handleLoroPeerIdChange}
             onAwarenessChange={handleAwarenessChange}
           />
         </div>

@@ -400,11 +400,15 @@ class LoroWebSocketServerV2:
             for peer_id in document.clients:
                 # Use Loro peer ID if available, otherwise fall back to WebSocket client ID
                 loro_peer_id = document.client_loro_peer_ids.get(peer_id, peer_id)
+                # For current user detection: if both peers have Loro IDs, compare them; otherwise compare WebSocket IDs
+                current_client_loro_id = document.client_loro_peer_ids.get(client_id, client_id)
+                is_current_user = loro_peer_id == current_client_loro_id
+                
                 peer_list.append({
                     "id": loro_peer_id,  # Use Loro peer ID as primary ID
-                    "clientId": peer_id,  # Keep WebSocket client ID for compatibility
+                    "websocketClientId": peer_id,  # Keep WebSocket client ID for debugging
                     "displayId": loro_peer_id if loro_peer_id != peer_id else (peer_id.split('_')[-1] if '_' in peer_id else peer_id[:8]),
-                    "isCurrentUser": peer_id == client_id
+                    "isCurrentUser": is_current_user
                 })
             
             welcome_message = {
