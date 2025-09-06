@@ -22,8 +22,8 @@ import { LoroDoc } from 'loro-crdt';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
-import { LoroCollaborationPluginV2 } from '../LoroCollaborationPluginV2';
 import { createLoroProvider, type LoroProvider, LORO_CONNECTED_COMMAND } from '../collaboration';
+import { LoroCollaborationPluginV2 } from '../LoroCollaborationPluginV2';
 
 import "./LexicalCollaborativeEditor.css";
 

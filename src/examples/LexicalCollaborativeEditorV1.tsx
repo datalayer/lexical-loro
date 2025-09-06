@@ -18,9 +18,9 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborationPluginV1 } from '../LoroCollaborationPluginV1';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
+import { LoroCollaborationPluginV1 } from '../LoroCollaborationPluginV1';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
