@@ -18,7 +18,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborativePlugin, PeerInfo } from '../LoroCollaborativePluginV2';
+import { LoroCollaborativePluginV3, PeerInfo } from '../LoroCollaborativePluginV3';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
@@ -219,8 +219,8 @@ export function LexicalCollaborativeEditorV2({
           {/* Debug plugin inside Lexical context */}
           <DebugPlugin />
           
-          {/* NEW: Use V2 plugin that follows YJS pattern */}
-          <LoroCollaborativePlugin
+          {/* V3: Use improved plugin following YJS pattern */}
+          <LoroCollaborativePluginV3
             id="collaborative-editor"
             websocketUrl={websocketUrl || WEBSOCKET_URL_V2}
             docId={DOC_ID}
