@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
@@ -25,7 +25,7 @@ import { lexicalTheme } from './theme';
 
 // Import our Loro collaboration infrastructure (following YJS pattern)
 import { LoroCollaborationPlugin } from '../LoroCollaborationPlugin';
-import { createLoroProvider, type LoroProvider } from '../collaboration';
+import { createLoroProvider, type LoroProvider, LORO_CONNECTED_COMMAND } from '../collaboration';
 
 import "./LexicalCollaborativeEditor.css";
 
@@ -39,23 +39,36 @@ interface LexicalCollaborativeEditorV2Props {
   onInitialization?: (success: boolean) => void;
 }
 
-// Provider factory (following YJS pattern)
-const providerFactory = (id: string, loroDocMap: Map<string, LoroDoc>): LoroProvider => {
-  console.log('🏭 Creating Loro provider for document:', id);
-  
-  // Get or create document for this ID (following YJS pattern)
-  let doc = loroDocMap.get(id);
-  if (!doc) {
-    doc = new LoroDoc();
-    loroDocMap.set(id, doc);
-  }
-  
-  return createLoroProvider(WEBSOCKET_URL_V2, id, doc);
-};
-
 // Catch any errors that occur during Lexical updates and log them
 function onError(error: Error) {
   console.error('Lexical error:', error);
+}
+
+// Component that listens to connection status changes
+function ConnectionStatusPlugin({
+  onConnectionChange,
+}: {
+  onConnectionChange?: (connected: boolean) => void;
+}) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    const unregister = editor.registerCommand(
+      LORO_CONNECTED_COMMAND,
+      (connected: boolean) => {
+        console.log('🔌 Connection status changed:', connected);
+        onConnectionChange?.(connected);
+        return false; // Allow other listeners
+      },
+      1 // Priority
+    );
+
+    return () => {
+      unregister();
+    };
+  }, [editor, onConnectionChange]);
+
+  return null;
 }
 
 // Component that renders debug information
@@ -88,13 +101,36 @@ function DebugPlugin() {
 export function LexicalCollaborativeEditorV2({
   websocketUrl = WEBSOCKET_URL_V2,
   onConnectionChange,
-  onInitialization
+  // onInitialization // TODO: Wire up when LoroCollaborationPlugin supports it
 }: LexicalCollaborativeEditorV2Props) {
   const [connected, setConnected] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
+  // const [isInitialized, setIsInitialized] = useState(false); // TODO: Implement when supported
 
-  // TODO: Wire up connection and initialization callbacks when LoroCollaborationPlugin supports them
-  // For now, these are received but not used since the plugin doesn't expose these events
+  // Handle connection status changes from the collaboration plugin
+  const handleConnectionChange = useCallback((newConnected: boolean) => {
+    setConnected(newConnected);
+    onConnectionChange?.(newConnected);
+  }, [onConnectionChange]);
+
+  // Handle initialization (for future use when plugin supports it)
+  // const handleInitialization = useCallback((success: boolean) => {
+  //   setIsInitialized(success);
+  //   onInitialization?.(success);
+  // }, [onInitialization]);
+
+  // Provider factory that uses the websocketUrl parameter (following YJS pattern)
+  const providerFactory = useCallback((id: string, loroDocMap: Map<string, LoroDoc>): LoroProvider => {
+    console.log('🏭 Creating Loro provider for document:', id, 'URL:', websocketUrl);
+    
+    // Get or create document for this ID (following YJS pattern)
+    let doc = loroDocMap.get(id);
+    if (!doc) {
+      doc = new LoroDoc();
+      loroDocMap.set(id, doc);
+    }
+    
+    return createLoroProvider(websocketUrl, id, doc);
+  }, [websocketUrl]);
 
   // Editor configuration
   const initialConfig = {
@@ -130,7 +166,7 @@ export function LexicalCollaborativeEditorV2({
             </span>
             <button
               className="disconnect-button"
-              onClick={() => console.log('🔍 V2 Debug - Connected:', connected, 'Initialized:', isInitialized)}
+              onClick={() => console.log('🔍 V2 Debug - Connected:', connected)}
               style={{ marginLeft: '10px' }}
             >
               🔍 Debug Info
@@ -163,6 +199,9 @@ export function LexicalCollaborativeEditorV2({
           {/* Debug plugin inside Lexical context */}
           <DebugPlugin />
           
+          {/* Connection status listener */}
+          <ConnectionStatusPlugin onConnectionChange={handleConnectionChange} />
+          
           <LoroCollaborationPlugin
             id={DOC_ID}
             providerFactory={providerFactory}
@@ -178,7 +217,7 @@ export function LexicalCollaborativeEditorV2({
         <p>• Uses incremental updates instead of full editor state replacement</p>
         <p>• Prevents decorator nodes (YouTube, Counter) from reloading during collaboration</p>
         <p>• Follows the YJS collaboration pattern for better performance</p>
-        <p>• {isInitialized ? '✅ Initialized successfully' : '⏳ Initializing...'}</p>
+        <p>• Connection status: {connected ? '✅ Connected' : '⏳ Connecting...'}</p>
       </div>
     </div>
   );

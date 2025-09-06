@@ -75,12 +75,14 @@ export function createLoroProvider(
         websocket.onopen = () => {
           provider.connected = true;
           emit('connect');
+          emit('status', { status: 'connected' }); // For compatibility with useLoroCollaboration
           resolve();
         };
 
         websocket.onclose = () => {
           provider.connected = false;
           emit('disconnect');
+          emit('status', { status: 'disconnected' }); // For compatibility with useLoroCollaboration
         };
 
         websocket.onerror = (error) => {
@@ -110,6 +112,7 @@ export function createLoroProvider(
         websocket = null;
       }
       provider.connected = false;
+      emit('status', { status: 'disconnected' }); // For compatibility with useLoroCollaboration
     },
 
     on(event, callback) {
