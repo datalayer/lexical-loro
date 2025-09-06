@@ -29,10 +29,10 @@ export interface LoroProvider {
   disconnect(): void;
 
   /**
-   * Register event listeners (YJS-style events)
+   * Register event listeners (YJS-style events + Loro-specific events)
    */
-  on(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload', callback: (data?: any) => void): void;
-  off(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload', callback: (data?: any) => void): void;
+  on(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload' | 'initial-content' | 'welcome', callback: (data?: any) => void): void;
+  off(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload' | 'initial-content' | 'welcome', callback: (data?: any) => void): void;
 
   /**
    * Send an update to other clients
@@ -92,12 +92,24 @@ export function createLoroProvider(
         websocket.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
+            console.log('📨 Received WebSocket message:', message.type, message);
+            
             if (message.type === 'update' && message.update) {
               // Convert base64 update to Uint8Array and apply
               const updateBytes = new Uint8Array(
                 atob(message.update).split('').map(c => c.charCodeAt(0))
               );
               provider.applyUpdate(updateBytes);
+            } else if (message.type === 'initial-content' && message.content) {
+              // Handle initial content from server (Lexical JSON state)
+              console.log('📋 Received initial content from server');
+              emit('initial-content', { content: message.content });
+            } else if (message.type === 'welcome') {
+              // Handle welcome message
+              console.log('👋 Welcome message received:', message.message);
+              emit('welcome', message);
+            } else {
+              console.log('❓ Unknown message type:', message.type);
             }
           } catch (error) {
             console.error('❌ Failed to process WebSocket message:', error);

@@ -160,10 +160,24 @@ export function useLoroCollaboration(
       isReloadingDoc.current = true;
     };
 
+    // Provider initial content handler
+    const onInitialContent = ({ content }: { content: string }) => {
+      console.log('📋 Received initial content, applying to editor');
+      try {
+        // Parse the JSON content and set as editor state
+        const editorState = editor.parseEditorState(content);
+        editor.setEditorState(editorState);
+        console.log('✅ Initial content applied successfully');
+      } catch (error) {
+        console.error('❌ Failed to apply initial content:', error);
+      }
+    };
+
     // Register provider event listeners (following YJS pattern)
     provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
     provider.on('sync', onSync);
+    provider.on('initial-content', onInitialContent);
     
     // Register awareness events (when awareness system is implemented)
     if (awareness) {
