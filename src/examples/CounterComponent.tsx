@@ -1,108 +1,234 @@
-/*
- * Copyright (c) 2023-2025 Datalayer, Inc.
- * Distributed under the terms of the MIT License.
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { $getNodeByKey, $getState, $setState, type LexicalEditor, type NodeKey } from 'lexical';
-import { CounterNode } from './CounterNode';
-import { counterValueState } from './counterState';
+import type {NodeKey} from 'lexical';
+import type {JSX} from 'react';
 
-export function CounterComponent({ editor, nodeKey }: { editor: LexicalEditor; nodeKey: NodeKey }) {
-  const [value, setValue] = useState<number>(0);
+import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
+import {useLexicalNodeSelection} from '@lexical/react/useLexicalNodeSelection';
+import {mergeRegister} from '@lexical/utils';
+import {
+  $getNodeByKey,
+  $getSelection,
+  $isNodeSelection,
+  CLICK_COMMAND,
+  COMMAND_PRIORITY_LOW,
+  KEY_BACKSPACE_COMMAND,
+  KEY_DELETE_COMMAND,
+  SELECTION_CHANGE_COMMAND,
+} from 'lexical';
+import {useCallback, useEffect, useRef} from 'react';
 
-  // On mount, sync with NodeState or node property
-  useEffect(() => {
-    editor.getEditorState().read(() => {
-      const node = $getNodeByKey(nodeKey) as CounterNode | null;
-      if (!node) return;
+import {$isCounterNode, type CounterNode} from './CounterNode';
 
-      // Prefer NodeState if present
-      const stateVal = $getState(node, counterValueState);
-      const initial = typeof stateVal === 'number' ? stateVal : node.getCount();
-      setValue(initial);
-    });
-  }, [editor, nodeKey]);
+export default function CounterComponent({
+  value,
+  nodeKey,
+}: {
+  value: number;
+  nodeKey: NodeKey;
+}): JSX.Element {
+  const [editor] = useLexicalComposerContext();
+  const [isSelected, setSelected, clearSelection] =
+    useLexicalNodeSelection(nodeKey);
+  const ref = useRef<HTMLDivElement>(null);
 
-  const update = useCallback(
-    (delta: number) => {
-      editor.update(() => {
-        const node = $getNodeByKey(nodeKey) as CounterNode | null;
-        if (!node) return;
-        const currentState = $getState(node, counterValueState);
-        const current = typeof currentState === 'number' ? currentState : node.getCount();
-        const next = current + delta;
-        node.setCount(next);
-        $setState(node, counterValueState, next);
-        setValue(next);
-      });
+  const withCounterNode = (
+    cb: (node: CounterNode) => void,
+    onUpdate?: () => void,
+  ): void => {
+    editor.update(
+      () => {
+        const node = $getNodeByKey(nodeKey);
+        if ($isCounterNode(node)) {
+          cb(node);
+        }
+      },
+      {onUpdate},
+    );
+  };
+
+  const onDelete = useCallback(
+    (payload: KeyboardEvent) => {
+      if (isSelected && $isNodeSelection($getSelection())) {
+        const event: KeyboardEvent = payload;
+        event.preventDefault();
+        const node = $getNodeByKey(nodeKey);
+        if ($isCounterNode(node)) {
+          node.remove();
+          return true;
+        }
+      }
+      return false;
     },
-    [editor, nodeKey]
+    [isSelected, nodeKey],
   );
 
-  const reset = useCallback(() => {
-    editor.update(() => {
-      const node = $getNodeByKey(nodeKey) as CounterNode | null;
-      if (!node) return;
-      node.setCount(0);
-      $setState(node, counterValueState, 0);
-      setValue(0);
+  const onIncrement = useCallback(() => {
+    withCounterNode((node) => {
+      node.increment();
     });
-  }, [editor, nodeKey]);
+  }, []);
 
-  const styles = useMemo(
-    () => ({
-      wrapper: { display: 'flex', alignItems: 'center', gap: '8px' },
-      label: {
-        fontFamily: 'monospace',
-        fontWeight: 700,
-        padding: '2px 6px',
-        background: '#fff',
-        border: '1px solid #ddd',
-        borderRadius: '4px',
-      },
-      minus: {
-        padding: '2px 8px',
-        borderRadius: '4px',
-        border: '1px solid #d32f2f',
-        background: 'linear-gradient(90deg, #ffebee 60%, #ffcdd2 100%)',
-        color: '#b71c1c',
-        fontWeight: 'bold',
-        boxShadow: '0 0 4px #d32f2f44',
-        cursor: 'pointer',
-      },
-      plus: {
-        padding: '2px 8px',
-        borderRadius: '4px',
-        border: '1px solid #388e3c',
-        background: 'linear-gradient(90deg, #e8f5e9 60%, #a5d6a7 100%)',
-        color: '#1b5e20',
-        fontWeight: 'bold',
-        boxShadow: '0 0 4px #388e3c44',
-        cursor: 'pointer',
-      },
-      reset: {
-        padding: '2px 8px',
-        borderRadius: '4px',
-        border: '1px solid #ccc',
-        background: '#e3e3e3',
-        color: '#333',
-        cursor: 'pointer',
-      },
-    }),
-    []
+  const onDecrement = useCallback(() => {
+    withCounterNode((node) => {
+      node.decrement();
+    });
+  }, []);
+
+  const onReset = useCallback(() => {
+    withCounterNode((node) => {
+      node.setValue(0);
+    });
+  }, []);
+
+  const onClick = useCallback(
+    (payload: MouseEvent) => {
+      const event = payload;
+      if (event.target === ref.current) {
+        if (event.shiftKey) {
+          setSelected(!isSelected);
+        } else {
+          clearSelection();
+          setSelected(true);
+        }
+        return true;
+      }
+      return false;
+    },
+    [isSelected, setSelected, clearSelection],
   );
+
+  useEffect(() => {
+    return mergeRegister(
+      editor.registerCommand<MouseEvent>(
+        CLICK_COMMAND,
+        onClick,
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(
+        KEY_DELETE_COMMAND,
+        onDelete,
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(
+        KEY_BACKSPACE_COMMAND,
+        onDelete,
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        () => {
+          if ($isNodeSelection($getSelection())) {
+            return false;
+          }
+          clearSelection();
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    );
+  }, [clearSelection, editor, onClick, onDelete]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        clearSelection();
+      }
+    };
+
+    if (isSelected) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [clearSelection, isSelected]);
 
   return (
-    <div style={styles.wrapper as React.CSSProperties}>
-      <button type="button" style={styles.minus as React.CSSProperties} onClick={() => update(-1)}>
+    <div
+      className={`counter-component ${isSelected ? 'selected' : ''}`}
+      ref={ref}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '8px 12px',
+        border: '1px solid #ccc',
+        borderRadius: '4px',
+        backgroundColor: isSelected ? '#e3f2fd' : '#f9f9f9',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        userSelect: 'none',
+        cursor: 'pointer',
+      }}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDecrement();
+        }}
+        style={{
+          background: '#dc3545',
+          color: 'white',
+          border: 'none',
+          borderRadius: '3px',
+          padding: '4px 8px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 'bold',
+        }}
+        title="Decrement">
         -
       </button>
-      <span style={styles.label as React.CSSProperties}>Counter: {value}</span>
-      <button type="button" style={styles.plus as React.CSSProperties} onClick={() => update(+1)}>
+      <span
+        style={{
+          minWidth: '24px',
+          textAlign: 'center',
+          fontWeight: 'bold',
+        }}>
+        {value}
+      </span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onIncrement();
+        }}
+        style={{
+          background: '#28a745',
+          color: 'white',
+          border: 'none',
+          borderRadius: '3px',
+          padding: '4px 8px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 'bold',
+        }}
+        title="Increment">
         +
       </button>
-      <button type="button" style={styles.reset as React.CSSProperties} onClick={reset}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onReset();
+        }}
+        style={{
+          background: '#6c757d',
+          color: 'white',
+          border: 'none',
+          borderRadius: '3px',
+          padding: '4px 8px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          marginLeft: '4px',
+        }}
+        title="Reset to 0 (demonstrates NodeState)">
         R
       </button>
     </div>

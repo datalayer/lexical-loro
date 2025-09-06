@@ -1,101 +1,76 @@
-/*
- * Copyright (c) 2023-2025 Datalayer, Inc.
- * Distributed under the terms of the MIT License.
- */
+import type {LexicalNode} from 'lexical';
+import type {JSX} from 'react';
 
 import {
-  DecoratorNode,
-  type EditorConfig,
-  type LexicalEditor,
-  type NodeKey,
+  $getState,
   $setState,
+  createState,
+  DecoratorNode,
 } from 'lexical';
-import { CounterComponent } from './CounterComponent';
-import { counterValueState } from './counterState';
+import * as React from 'react';
 
-// NodeState imported from separate module to keep React Fast Refresh happy
+const CounterComponent = React.lazy(() => import('./CounterComponent'));
 
-export type SerializedCounterNode = {
-  type: 'counter';
-  version: 1;
-  count: number;
-};
+export const counterValueState = createState('counterValue', {
+  parse: (v) => (typeof v === 'number' ? v : 0),
+});
 
 export class CounterNode extends DecoratorNode<JSX.Element> {
-  __count: number;
-
-  static getType(): string {
-    return 'counter';
+  $config() {
+    return this.config('counter', {
+      extends: DecoratorNode,
+      stateConfigs: [{flat: true, stateConfig: counterValueState}],
+    });
   }
 
-  static clone(node: CounterNode): CounterNode {
-    return new CounterNode(node.__count, node.__key);
+  getValue(): number {
+    return $getState(this, counterValueState);
   }
 
-  static importJSON(json: SerializedCounterNode): CounterNode {
-    const node = new CounterNode(json.count);
-    // Also hydrate NodeState for consistency
-    try {
-      $setState(node, counterValueState, json.count);
-  } catch { /* no-op */ }
-    return node;
+  setValue(value: number): this {
+    return $setState(this, counterValueState, value);
   }
 
-  exportJSON(): SerializedCounterNode {
-    return {
-      type: 'counter',
-      version: 1,
-      count: this.__count,
-    };
+  increment(): this {
+    return $setState(this, counterValueState, prev => prev + 1);
   }
 
-  constructor(count = 0, key?: NodeKey) {
-    super(key);
-    this.__count = count;
+  decrement(): this {
+    return $setState(this, counterValueState, prev => prev - 1);
   }
 
-  // Block-level
-  isInline(): boolean {
+  createDOM(): HTMLElement {
+    const div = document.createElement('div');
+    div.className = 'counter-node';
+    return div;
+  }
+
+  updateDOM(): false {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
-    const elem = document.createElement('div');
-    elem.className = 'counter-node';
-    elem.style.display = 'block';
-    elem.style.padding = '8px';
-    elem.style.margin = '8px 0';
-    elem.style.border = '1px solid #ddd';
-    elem.style.borderRadius = '6px';
-    elem.style.background = '#fafafa';
-    return elem;
+  decorate(): JSX.Element {
+    return (
+      <React.Suspense fallback={<div>Loading...</div>}>
+        <CounterComponent
+          value={this.getValue()}
+          nodeKey={this.getKey()}
+        />
+      </React.Suspense>
+    );
   }
 
-  updateDOM(): boolean {
-    return false; // Controlled by React in decorate()
-  }
-
-  getCount(): number {
-    return this.__count;
-  }
-
-  setCount(count: number): void {
-    const writable = this.getWritable();
-    writable.__count = count;
-  }
-
-  decorate(editor: LexicalEditor): JSX.Element {
-    return <CounterComponent editor={editor} nodeKey={this.getKey()} />;
+  isIsolated(): true {
+    return true;
   }
 }
 
-export function $createCounterNode(initial = 0): CounterNode {
-  return new CounterNode(initial);
-}
-
-export function $isCounterNode(node: unknown): node is CounterNode {
+export function $isCounterNode(
+  node: LexicalNode | null | undefined,
+): node is CounterNode {
   return node instanceof CounterNode;
 }
 
-// React component now lives in CounterComponent.tsx
+export function $createCounterNode(value: number = 0): CounterNode {
+  return new CounterNode().setValue(value);
+}
