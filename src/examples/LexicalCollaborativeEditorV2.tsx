@@ -18,7 +18,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborativePluginV2, PeerInfo } from '../LoroCollaborativePluginV2';
+import { LoroCollaborativePlugin, PeerInfo } from '../LoroCollaborativePluginV2';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
@@ -86,10 +86,10 @@ export function LexicalCollaborativeEditorV2({
   }, [onConnectionChange]);
 
   // Handle initialization
-  const handleInitialization = useCallback((initialized: boolean) => {
-    console.log(`🚀 Initialization: ${initialized ? 'success' : 'failed'}`);
-    setIsInitialized(initialized);
-    onInitialization?.(initialized);
+  const handleInitialization = useCallback((doc: any) => {
+    console.log(`🚀 Initialization: doc received`, doc);
+    setIsInitialized(true);
+    onInitialization?.(true);
   }, [onInitialization]);
 
   // Handle peer ID changes
@@ -104,11 +104,30 @@ export function LexicalCollaborativeEditorV2({
     setPeerCount(newPeerCount);
   }, []);
 
-  // Handle peers list changes
-  const handlePeersChange = useCallback((newPeers: PeerInfo[]) => {
-    console.log(`👥 Peers changed:`, newPeers);
-    setPeers(newPeers);
-  }, []);
+  // Handle peers list changes with detailed logging
+  const handlePeersChange = useCallback((newPeers: Array<{ id: string; clientId: string; isYou?: boolean; displayId?: string; isCurrentUser?: boolean }>) => {
+    console.log('👥 Peers changed - Current peer ID:', peerId);
+    console.log('👥 Received peers:', newPeers);
+    
+    // Convert to PeerInfo format for state
+    const peerInfos: PeerInfo[] = newPeers.map(peer => ({
+      id: peer.id,
+      clientId: peer.clientId,
+      displayId: peer.displayId || peer.id.split('_')[-1] || peer.id.slice(0, 8),
+      isCurrentUser: peer.isCurrentUser || !!peer.isYou,
+      isYou: peer.isYou
+    }));
+    
+    peerInfos.forEach((peer, index) => {
+      console.log(`👥 Peer ${index}:`, {
+        id: peer.id,
+        displayId: peer.displayId,
+        isCurrentUser: peer.isCurrentUser,
+        isYou: peer.isYou
+      });
+    });
+    setPeers(peerInfos);
+  }, [peerId]);
 
   // Editor configuration
   const initialConfig = {
@@ -201,7 +220,8 @@ export function LexicalCollaborativeEditorV2({
           <DebugPlugin />
           
           {/* NEW: Use V2 plugin that follows YJS pattern */}
-          <LoroCollaborativePluginV2
+          <LoroCollaborativePlugin
+            id="collaborative-editor"
             websocketUrl={websocketUrl || WEBSOCKET_URL_V2}
             docId={DOC_ID}
             onConnectionChange={handleConnectionChange}

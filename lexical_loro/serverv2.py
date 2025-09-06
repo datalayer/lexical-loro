@@ -81,6 +81,7 @@ class LoroDocumentV2:
         self.loro_doc = LoroDoc()
         self.loro_text = self.loro_doc.get_text("root")
         self.clients: Set[str] = set()
+        self.client_loro_peer_ids: Dict[str, str] = {}  # Map WebSocket client ID -> Loro peer ID
         self.created_at = time.time()
         self.last_modified = time.time()
         
@@ -117,12 +118,26 @@ class LoroDocumentV2:
         """Add a client to this document"""
         self.clients.add(client_id)
         logger.info(f"👤 Client {client_id} joined document {self.doc_id} ({len(self.clients)} total)")
+        logger.debug(f"📊 Current clients in {self.doc_id}: {list(self.clients)}")
     
     def remove_client(self, client_id: str):
         """Remove a client from this document"""
-        self.clients.discard(client_id)
-        logger.info(f"👤 Client {client_id} left document {self.doc_id} ({len(self.clients)} remaining)")
+        if client_id in self.clients:
+            self.clients.discard(client_id)
+            # Also remove from Loro peer ID mapping
+            if client_id in self.client_loro_peer_ids:
+                del self.client_loro_peer_ids[client_id]
+            logger.info(f"👤 Client {client_id} left document {self.doc_id} ({len(self.clients)} remaining)")
+            logger.debug(f"📊 Remaining clients in {self.doc_id}: {list(self.clients)}")
+        else:
+            logger.warning(f"⚠️ Tried to remove client {client_id} but it wasn't in document {self.doc_id}")
         return len(self.clients) == 0  # Return True if document is now empty
+    
+    def register_loro_peer_id(self, client_id: str, loro_peer_id: str):
+        """Register the Loro peer ID for a WebSocket client"""
+        self.client_loro_peer_ids[client_id] = loro_peer_id
+        logger.info(f"🆔 Registered Loro peer ID {loro_peer_id} for client {client_id}")
+        logger.debug(f"🗂️ Client-Loro mapping: {self.client_loro_peer_ids}")
     
     def get_snapshot(self) -> bytes:
         """Get the current snapshot of the document"""
@@ -187,28 +202,74 @@ class LoroWebSocketServerV2:
     
     def _extract_doc_id_from_path(self, path: str) -> str:
         """
-        Extract document ID from WebSocket path
-        Supports: /docId, /ws/docId, /documents/docId
+        Extract document ID from WebSocket path.
+        Supports patterns like:
+        - /collaboration/example-v2-doc
+        - /documents/docId
+        - /ws/docId
+        - /docId
         """
+        logger.debug(f"🔍 Extracting doc ID from path: '{path}'")
+        
         if not path or path == "/":
+            logger.debug(f"🔍 Empty path, using default")
             return "default"
         
-        # Remove leading slash and split
-        segments = [s for s in path.strip("/").split("/") if s]
-        
-        if not segments:
+        try:
+            # Parse query string from path if present
+            from urllib.parse import urlparse, parse_qs
+            parsed_url = urlparse(path)
+            query_params = parse_qs(parsed_url.query)
+            
+            # Check for docId or doc_id parameter first
+            if 'docId' in query_params and query_params['docId']:
+                doc_id = query_params['docId'][0]
+                logger.debug(f"🔍 Document ID from query param 'docId': {doc_id}")
+                return doc_id
+            elif 'doc_id' in query_params and query_params['doc_id']:
+                doc_id = query_params['doc_id'][0]
+                logger.debug(f"🔍 Document ID from query param 'doc_id': {doc_id}")
+                return doc_id
+            
+            # Parse path segments
+            path_to_parse = parsed_url.path or path
+            segments = [s for s in path_to_parse.strip("/").split("/") if s]
+            logger.debug(f"🔍 Path segments: {segments}")
+            
+            if not segments:
+                logger.debug(f"🔍 No segments, using default")
+                return "default"
+            
+            # Pattern: /collaboration/{DOC_ID}
+            if len(segments) >= 2 and segments[0] == "collaboration":
+                doc_id = segments[1]
+                logger.debug(f"🔍 Collaboration pattern, using: {doc_id}")
+                return doc_id
+            
+            # Pattern: /ws/{DOC_ID} or /documents/{DOC_ID}
+            if len(segments) >= 2 and segments[0] in ["ws", "documents", "docs"]:
+                doc_id = segments[1]
+                logger.debug(f"🔍 Known prefix pattern, using: {doc_id}")
+                return doc_id
+            
+            # Single segment - use as doc ID
+            if len(segments) == 1:
+                doc_id = segments[0]
+                logger.debug(f"🔍 Single segment, using: {doc_id}")
+                return doc_id
+            
+            # Multiple segments - use last one
+            doc_id = segments[-1]
+            logger.debug(f"🔍 Multiple segments, using last: {doc_id}")
+            return doc_id
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error parsing path '{path}': {e}")
+            # Fallback to simple parsing
+            segments = [s for s in path.strip("/").split("/") if s]
+            if segments:
+                return segments[-1]
             return "default"
-        
-        # If path is just the doc ID
-        if len(segments) == 1:
-            return segments[0]
-        
-        # If path is /ws/docId or /documents/docId
-        if len(segments) == 2 and segments[0] in ["ws", "documents", "docs"]:
-            return segments[1]
-        
-        # Default to the last segment
-        return segments[-1]
     
     def _load_initial_content(self, doc_id: str) -> str:
         """Load initial content for a document"""
@@ -259,11 +320,32 @@ class LoroWebSocketServerV2:
     
     async def handle_client(self, websocket):
         """Handle a new client connection"""
-        # Extract path from websocket object
-        path = websocket.path if hasattr(websocket, 'path') else '/default'
-        
         client_id = self.generate_client_id()
-        doc_id = self._extract_doc_id_from_path(path)
+        
+        # Extract path from websocket object (like server.py does)
+        path = getattr(websocket, 'path', None)
+        if not path:
+            # Try alternative attributes
+            if hasattr(websocket, 'request_uri'):
+                path = websocket.request_uri
+            elif hasattr(websocket, 'uri'):
+                path = websocket.uri
+            elif hasattr(websocket, 'request') and hasattr(websocket.request, 'path'):
+                path = websocket.request.path
+        
+        logger.debug(f"🔍 Extracted path from websocket: '{path}'")
+        
+        try:
+            doc_id = self._extract_doc_id_from_path(path)
+        except Exception as e:
+            logger.error(f"❌ Failed to extract document ID from path '{path}': {e}")
+            await websocket.send(json.dumps({
+                "type": "error", 
+                "message": f"Invalid path: {path}",
+                "code": "INVALID_PATH"
+            }))
+            await websocket.close()
+            return
         
         logger.info(f"🔌 New connection: client {client_id} -> document {doc_id} (path: {path})")
         
@@ -280,9 +362,12 @@ class LoroWebSocketServerV2:
             # Create peer list for initial messages
             peer_list = []
             for peer_id in document.clients:
+                # Use Loro peer ID if available, otherwise fall back to WebSocket client ID
+                loro_peer_id = document.client_loro_peer_ids.get(peer_id, peer_id)
                 peer_list.append({
-                    "id": peer_id,
-                    "displayId": peer_id.split('_')[-1] if '_' in peer_id else peer_id[:8],
+                    "id": loro_peer_id,  # Use Loro peer ID as primary ID
+                    "clientId": peer_id,  # Keep WebSocket client ID for compatibility
+                    "displayId": loro_peer_id if loro_peer_id != peer_id else (peer_id.split('_')[-1] if '_' in peer_id else peer_id[:8]),
                     "isCurrentUser": peer_id == client_id
                 })
             
@@ -336,6 +421,8 @@ class LoroWebSocketServerV2:
                 await self.handle_loro_update(client_id, doc_id, data["update"])
             elif msg_type == "cursor" and "cursor" in data:
                 await self.handle_cursor_update(client_id, doc_id, data["cursor"])
+            elif msg_type == "registerLoroPeerId" and "loroPeerId" in data:
+                await self.handle_register_loro_peer_id(client_id, doc_id, data["loroPeerId"])
             else:
                 logger.warning(f"⚠️ Unknown message type: {msg_type}")
                 
@@ -388,6 +475,22 @@ class LoroWebSocketServerV2:
         except Exception as e:
             logger.error(f"❌ Error handling cursor update: {e}")
     
+    async def handle_register_loro_peer_id(self, client_id: str, doc_id: str, loro_peer_id: str):
+        """Handle registration of a Loro peer ID for a WebSocket client"""
+        try:
+            if doc_id not in self.documents:
+                logger.warning(f"⚠️ Cannot register Loro peer ID: document {doc_id} not found")
+                return
+            
+            document = self.documents[doc_id]
+            document.register_loro_peer_id(client_id, loro_peer_id)
+            
+            # Broadcast updated peer list with Loro peer IDs to all clients
+            await self.broadcast_peer_update(doc_id)
+            
+        except Exception as e:
+            logger.error(f"❌ Error registering Loro peer ID: {e}")
+    
     async def broadcast_update(self, sender_id: str, doc_id: str, update_b64: str):
         """Broadcast a Loro update to all clients except the sender"""
         message = {
@@ -434,19 +537,29 @@ class LoroWebSocketServerV2:
     async def broadcast_peer_update(self, doc_id: str, exclude_client: str = None):
         """Broadcast peer list update to all clients in a document"""
         if doc_id not in self.documents:
+            logger.warning(f"⚠️ Cannot broadcast peer update: document {doc_id} not found")
             return
         
         document = self.documents[doc_id]
         peer_count = len(document.clients)
         
-        # Create peer list with truncated IDs for display
+        logger.info(f"📢 Broadcasting peer update for document {doc_id}: {peer_count} peers")
+        logger.debug(f"📊 Active clients in {doc_id}: {list(document.clients)}")
+        
+        # Create peer list with truncated IDs for display (use copy to avoid race conditions)
+        clients_copy = list(document.clients)
         peer_list = []
-        for client_id in document.clients:
+        for client_id in clients_copy:
+            # Use Loro peer ID if available, otherwise fall back to WebSocket client ID
+            loro_peer_id = document.client_loro_peer_ids.get(client_id, client_id)
             peer_list.append({
-                "id": client_id,
-                "displayId": client_id.split('_')[-1] if '_' in client_id else client_id[:8],
+                "id": loro_peer_id,  # Use Loro peer ID as primary ID
+                "clientId": client_id,  # Keep WebSocket client ID for compatibility
+                "displayId": loro_peer_id if loro_peer_id != client_id else (client_id.split('_')[-1] if '_' in client_id else client_id[:8]),
                 "isCurrentUser": False  # Will be set by client
             })
+        
+        logger.debug(f"📋 Peer list being sent: {peer_list}")
         
         # Create peer update message
         message = json.dumps({
@@ -456,38 +569,61 @@ class LoroWebSocketServerV2:
             "peers": peer_list
         })
         
-        # Send to all clients in this document
-        for client_id in document.clients:
+        # Send to all clients in this document (create a copy to avoid iteration issues)
+        clients_copy = list(document.clients)
+        sent_count = 0
+        for client_id in clients_copy:
             if client_id != exclude_client and client_id in self.clients:
                 try:
                     await self.clients[client_id].send(message)
+                    sent_count += 1
+                    logger.debug(f"📤 Sent peer update to client {client_id}")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to send peer update to {client_id}: {e}")
+        
+        logger.info(f"📡 Peer update sent to {sent_count} clients (excluding {exclude_client})")
     
     async def cleanup_client(self, client_id: str):
         """Clean up a disconnected client"""
+        logger.info(f"🧹 Starting cleanup for client {client_id}")
+        
+        # Check if client was already cleaned up
+        if client_id not in self.clients and client_id not in self.client_to_doc:
+            logger.info(f"⚠️ Client {client_id} already cleaned up, skipping")
+            return
+        
         doc_id = self.client_to_doc.get(client_id)
+        logger.debug(f"📋 Client {client_id} was in document: {doc_id}")
         
         # Remove from document
         if doc_id and doc_id in self.documents:
             document = self.documents[doc_id]
+            logger.debug(f"📊 Before removal - Document {doc_id} has {len(document.clients)} clients: {list(document.clients)}")
             is_empty = document.remove_client(client_id)
             
             # Notify remaining clients about peer count change
             if not is_empty:
+                logger.info(f"📢 Broadcasting peer update to remaining clients in {doc_id}")
                 await self.broadcast_peer_update(doc_id)
             
             # If document has no more clients, save and optionally remove it
             if is_empty:
+                logger.info(f"📄 Document {doc_id} is now empty, saving...")
                 self._save_document(doc_id, document)
                 # Optionally remove empty documents after some time
                 # For now, keep them in memory
         
         # Remove client references
-        self.clients.pop(client_id, None)
-        self.client_to_doc.pop(client_id, None)
+        if client_id in self.clients:
+            self.clients.pop(client_id, None)
+            logger.debug(f"🗑️ Removed client {client_id} from server client list")
         
-        logger.info(f"🧹 Cleaned up client {client_id}")
+        if client_id in self.client_to_doc:
+            self.client_to_doc.pop(client_id, None)
+            logger.debug(f"🗑️ Removed client {client_id} from doc mapping")
+        
+        logger.info(f"✅ Finished cleanup for client {client_id}")
+        logger.debug(f"📊 Server now has {len(self.clients)} total clients: {list(self.clients.keys())}")
     
     def generate_client_id(self) -> str:
         """Generate a unique client ID"""

@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc } from 'loro-crdt';
 import { createLoroBinding, type LoroBinding } from './collaboration/LoroBinding';
@@ -12,42 +12,66 @@ import { initializeSyncHandlers } from './collaboration/sync/SyncLoroToLexical';
 // Types for peer information
 export interface PeerInfo {
   id: string;
+  clientId: string;
   displayId: string;
   isCurrentUser: boolean;
+  isYou?: boolean;
 }
 
 // Types for the new collaborative plugin
 interface LoroCollaborativePluginV2Props {
-  websocketUrl: string;
+  id: string;
   docId: string;
+  websocketUrl?: string;
   onConnectionChange?: (connected: boolean) => void;
-  onInitialization?: (initialized: boolean) => void;
+  onInitialization?: (doc: LoroDoc) => void;
   onPeerIdChange?: (peerId: string) => void;
-  onPeerCountChange?: (peerCount: number) => void;
-  onPeersChange?: (peers: PeerInfo[]) => void;
+  onPeerCountChange?: (count: number) => void;
+  onPeersChange?: (peers: Array<{ id: string; clientId: string; isYou?: boolean }>) => void;
 }
 
 /**
  * New LoroCollaborativePlugin that follows the YJS pattern
  * This version uses incremental updates instead of full editor state replacement
  */
-export function LoroCollaborativePluginV2({
-  websocketUrl,
+export const LoroCollaborativePlugin = ({
+  // id is required by interface but not used
+  id: _id, // eslint-disable-line @typescript-eslint/no-unused-vars
   docId,
+  websocketUrl = 'ws://localhost:8083',
   onConnectionChange,
   onInitialization,
   onPeerIdChange,
   onPeerCountChange,
-  onPeersChange
-}: LoroCollaborativePluginV2Props) {
+  onPeersChange,
+}: LoroCollaborativePluginV2Props) => {
   const [editor] = useLexicalComposerContext();
-  const [initialized, setInitialized] = useState(false);
+  const initializedRef = useRef(false);
+  
+  // Use refs to store callbacks to avoid dependency issues
+  const callbacksRef = useRef({
+    onConnectionChange,
+    onInitialization,
+    onPeerIdChange,
+    onPeerCountChange,
+    onPeersChange,
+  });
+  
+  // Update refs when callbacks change
+  callbacksRef.current = {
+    onConnectionChange,
+    onInitialization,
+    onPeerIdChange,
+    onPeerCountChange,
+    onPeersChange,
+  };
   
   // Refs to store collaboration objects
   const loroDocRef = useRef<LoroDoc | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
   const bindingRef = useRef<LoroBinding | null>(null);
   const syncCleanupRef = useRef<(() => void) | null>(null);
+  const connectingRef = useRef<boolean>(false);
   
   // Initialize the collaboration system
   useEffect(() => {
@@ -74,6 +98,23 @@ export function LoroCollaborativePluginV2({
         );
         bindingRef.current = binding;
 
+        // Helper function to process peer list and mark current user
+        function processPeerList(peers: PeerInfo[], currentLoroPeerId: string): PeerInfo[] {
+          console.log('🔍 Processing peers - Current Loro peer ID:', currentLoroPeerId, 'Peers:', peers);
+          const processedPeers = peers.map(peer => {
+            // Now compare with Loro peer IDs since server sends them as the primary ID
+            const isCurrentUser = peer.id === currentLoroPeerId;
+            console.log(`🔍 Peer ${peer.id} === ${currentLoroPeerId}? ${isCurrentUser}`);
+            return {
+              ...peer,
+              isCurrentUser,
+              isYou: isCurrentUser
+            };
+          });
+          console.log('🔍 Final processed peers:', processedPeers);
+          return processedPeers;
+        }
+
         // Initialize sync handlers (equivalent to YJS sync setup)
         const syncCleanup = initializeSyncHandlers(binding);
         syncCleanupRef.current = syncCleanup;
@@ -83,13 +124,30 @@ export function LoroCollaborativePluginV2({
         console.log('🔌 Connecting to V2 server:', wsUrl);
         
         function connectWebSocket() {
+          // Prevent multiple concurrent connection attempts
+          if (connectingRef.current || websocketRef.current?.readyState === WebSocket.CONNECTING) {
+            console.log('🔄 Already connecting, skipping...');
+            return;
+          }
+          
+          connectingRef.current = true;
           const websocket = new WebSocket(wsUrl);
           websocketRef.current = websocket;
 
           websocket.onopen = () => {
-            console.log('✅ V2 WebSocket connected');
-            onConnectionChange?.(true);
-            onPeerIdChange?.(loroDoc.peerIdStr);
+            console.log('✅ V2 WebSocket connected to:', wsUrl);
+            console.log('🆔 Client peer ID:', loroDoc.peerIdStr);
+            connectingRef.current = false;
+            callbacksRef.current.onConnectionChange?.(true);
+            callbacksRef.current.onPeerIdChange?.(loroDoc.peerIdStr);
+            
+            // Send Loro peer ID to server for proper identification
+            console.log('📤 Registering Loro peer ID with server:', loroDoc.peerIdStr, 'for doc:', docId);
+            websocket.send(JSON.stringify({
+              type: 'registerLoroPeerId',
+              docId: docId,
+              loroPeerId: loroDoc.peerIdStr
+            }));
             
             // Clear any reconnect timer
             if (reconnectTimer) {
@@ -98,31 +156,46 @@ export function LoroCollaborativePluginV2({
             }
           };
 
-          websocket.onclose = () => {
-            console.log('❌ V2 WebSocket disconnected');
-            onConnectionChange?.(false);
+          websocket.onerror = (error) => {
+            console.error('❌ V2 WebSocket error:', error);
+            connectingRef.current = false;
+          };
+
+          websocket.onclose = (event) => {
+            console.log('❌ V2 WebSocket disconnected:', event.code, event.reason);
+            connectingRef.current = false;
+            callbacksRef.current.onConnectionChange?.(false);
             
-            // Attempt to reconnect after 2 seconds
-            if (!reconnectTimer) {
-              reconnectTimer = setTimeout(() => {
-                console.log('🔄 Attempting to reconnect...');
-                connectWebSocket();
-              }, 2000);
+            // Only attempt to reconnect if this is the current websocket and it wasn't closed intentionally
+            if (websocket === websocketRef.current && event.code !== 1000) {
+              if (!reconnectTimer) {
+                console.log('🔄 Attempting to reconnect in 2 seconds...');
+                reconnectTimer = setTimeout(() => {
+                  reconnectTimer = null;
+                  if (websocketRef.current === websocket) {
+                    console.log('🔄 Reconnecting...');
+                    connectWebSocket();
+                  }
+                }, 2000);
+              }
             }
           };
 
           websocket.onmessage = (event) => {
             try {
               const message = JSON.parse(event.data);
-              console.log('📨 V2 Received message:', message.type);
+              console.log('📨 V2 Received message:', message.type, message);
 
               if (message.type === 'welcome') {
-                console.log('👋 Welcome message received:', message);
+                console.log('👋 Welcome message - peer count:', message.peerCount, 'peers:', message.peers);
+                console.log('🔍 RAW Welcome peers received:', message.peers?.map((p: any) => ({ id: p.id, clientId: p.clientId, isCurrentUser: p.isCurrentUser })));
                 if (message.peerCount !== undefined) {
-                  onPeerCountChange?.(message.peerCount);
+                  callbacksRef.current.onPeerCountChange?.(message.peerCount);
                 }
                 if (message.peers) {
-                  onPeersChange?.(message.peers);
+                  const processedPeers = processPeerList(message.peers, loroDoc.peerIdStr);
+                  console.log('👥 Processed welcome peers:', processedPeers);
+                  callbacksRef.current.onPeersChange?.(processedPeers);
                 }
                 
               } else if (message.type === 'snapshot' && message.snapshot) {
@@ -130,24 +203,28 @@ export function LoroCollaborativePluginV2({
                 handleSnapshot(message.snapshot);
                 
                 if (message.peerCount !== undefined) {
-                  onPeerCountChange?.(message.peerCount);
+                  callbacksRef.current.onPeerCountChange?.(message.peerCount);
                 }
                 if (message.peers) {
-                  onPeersChange?.(message.peers);
+                  const processedPeers = processPeerList(message.peers, loroDoc.peerIdStr);
+                  callbacksRef.current.onPeersChange?.(processedPeers);
                 }
                 
-                if (!initialized) {
-                  setInitialized(true);
-                  onInitialization?.(true);
+                if (!initializedRef.current) {
+                  initializedRef.current = true;
+                  callbacksRef.current.onInitialization?.(loroDoc);
                 }
                 
               } else if (message.type === 'peerUpdate') {
-                console.log('👥 Peer update:', message.peerCount, 'peers');
+                console.log('👥 Peer update - count:', message.peerCount, 'peers:', message.peers);
+                console.log('🔍 RAW PeerUpdate peers received:', message.peers?.map((p: any) => ({ id: p.id, clientId: p.clientId, isCurrentUser: p.isCurrentUser })));
                 if (message.peerCount !== undefined) {
-                  onPeerCountChange?.(message.peerCount);
+                  callbacksRef.current.onPeerCountChange?.(message.peerCount);
                 }
                 if (message.peers) {
-                  onPeersChange?.(message.peers);
+                  const processedPeers = processPeerList(message.peers, loroDoc.peerIdStr);
+                  console.log('👥 Processed peer update:', processedPeers);
+                  callbacksRef.current.onPeersChange?.(processedPeers);
                 }
                 
               } else if (message.type === 'update' && message.update) {
@@ -155,18 +232,25 @@ export function LoroCollaborativePluginV2({
                 handleIncrementalUpdate(message.update);
               }
             } catch (error) {
-              console.error('❌ Failed to process V2 message:', error);
+              console.error('❌ Failed to process V2 message:', error, 'Raw message:', event.data);
             }
           };
 
           websocket.onerror = (error) => {
             console.error('❌ V2 WebSocket error:', error);
+            connectingRef.current = false;
           };
         }
 
         // Function to handle snapshot from server
         function handleSnapshot(snapshotB64: string) {
           try {
+            // Check if this is mock data
+            if (snapshotB64 === 'bW9ja19zbmFwc2hvdF9kYXRh') { // base64 for "mock_snapshot_data"
+              console.log('📄 Received mock snapshot, skipping import');
+              return;
+            }
+            
             // Decode base64 snapshot
             const snapshotBytes = Uint8Array.from(atob(snapshotB64), c => c.charCodeAt(0));
             
@@ -182,7 +266,7 @@ export function LoroCollaborativePluginV2({
             // This is where we would use the collaboration infrastructure
             
           } catch (error) {
-            console.error('❌ Failed to apply snapshot:', error);
+            console.error('❌ Failed to apply snapshot:', error, 'Snapshot data:', snapshotB64);
           }
         }
 
@@ -273,12 +357,18 @@ export function LoroCollaborativePluginV2({
             syncCleanupRef.current = null;
           }
           
+          // Clear reconnect timer
           if (reconnectTimer) {
             clearTimeout(reconnectTimer);
+            reconnectTimer = null;
           }
           
+          // Reset connection state
+          connectingRef.current = false;
+          
+          // Close websocket
           if (websocketRef.current) {
-            websocketRef.current.close();
+            websocketRef.current.close(1000, 'Component unmounting'); // Normal closure
             websocketRef.current = null;
           }
           
@@ -296,10 +386,10 @@ export function LoroCollaborativePluginV2({
     return () => {
       cleanup?.();
     };
-  }, [editor, websocketUrl, docId, onConnectionChange, onInitialization, onPeerIdChange, onPeerCountChange, onPeersChange, initialized]);
+  }, [editor, websocketUrl, docId]); // Removed callbacks to prevent infinite loops
 
   // This plugin doesn't render anything - it just handles collaboration
   return null;
 }
 
-export default LoroCollaborativePluginV2;
+export default LoroCollaborativePlugin;
