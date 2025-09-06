@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2023-2025 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
 """
 Standalone showcase of LoroModel functionality
 This script demonstrates all the key features without external dependencies

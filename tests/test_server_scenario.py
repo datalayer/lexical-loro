@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2023-2025 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
 
 """
 Test that reproduces the exact server scenario to identify the sync issue.

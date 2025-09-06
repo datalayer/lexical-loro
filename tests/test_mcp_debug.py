@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2023-2025 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
 """
 Debug script to test MCP append paragraph flow with comprehensive logging.
 This reproduces the issue where MCP operations fail on first attempt.
