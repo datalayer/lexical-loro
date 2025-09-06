@@ -49,6 +49,7 @@
     "server:py:v2": "python3 -m lexical_loro.cli serverv2",
     "server:py:v2:dev": "python3 -m lexical_loro.cli serverv2",
     "server:mcp": "python3 -m lexical_loro.mcp start --transport streamable-http --port 3001 --host 0.0.0.0",
+    "stop": "pkill -f 'tsx dev/node-server.ts' || true; pkill -f 'python3 -m lexical_loro.cli' || true; pkill -f 'python3 -m lexical_loro.mcp' || true; pkill -f 'vite' || true",
     "test": "vitest",
     "test:js": "vitest run",
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",

@@ -332,14 +332,17 @@
   border: 1px solid #d1d5db;
   border-bottom: none;
   border-radius: 8px 8px 0 0;
-  gap: 4px;
+  gap: 12px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
 }
 
 .lexical-toolbar-group {
   display: flex;
   gap: 2px;
   align-items: center;
-  margin-right: 12px;
+  margin-right: 8px;
 }
 
 .lexical-toolbar-button {
@@ -407,16 +410,19 @@
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-}
-
-.lexical-toolbar-select:hover {
-  border-color: #9ca3af;
+  position: relative;
+  z-index: 100;
 }
 
 .lexical-toolbar-select:focus {
   outline: none;
   border-color: #1ABC9C;
   box-shadow: 0 0 0 1px #1ABC9C;
+  z-index: 1000;
+}
+
+.lexical-toolbar-select:hover {
+  border-color: #9ca3af;
 }
 
 /* Dropdown options styling */
@@ -425,6 +431,8 @@
   color: #000000 !important;
   padding: 8px 12px;
   border: none;
+  position: relative;
+  z-index: 1001;
 }
 
 .lexical-toolbar-select option:hover {

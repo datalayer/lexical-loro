@@ -57,7 +57,7 @@ def serverv1(port: int, host: str, log_level: str):
 
 
 @cli.command()
-@click.option("--port", "-p", default=8082, help="Port to run the server on (default: 8082)")
+@click.option("--port", "-p", default=8083, help="Port to run the server on (default: 8083)")
 @click.option("--host", "-h", default="localhost", help="Host to bind to (default: localhost)")
 @click.option("--log-level", "-l", default="INFO", 
               type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),

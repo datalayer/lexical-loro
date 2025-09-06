@@ -27,9 +27,10 @@ import "./LexicalCollaborativeEditor.css";
 
 // Constants
 const DOC_ID = 'example-v2-doc';
-const WEBSOCKET_URL_V2 = 'ws://localhost:8082/collaboration';
+const WEBSOCKET_URL_V2 = 'ws://localhost:8083/collaboration';
 
 interface LexicalCollaborativeEditorV2Props {
+  websocketUrl?: string;
   onConnectionChange?: (connected: boolean) => void;
   onInitialization?: (success: boolean) => void;
 }
@@ -67,6 +68,7 @@ function DebugPlugin() {
 }
 
 export function LexicalCollaborativeEditorV2({
+  websocketUrl,
   onConnectionChange,
   onInitialization
 }: LexicalCollaborativeEditorV2Props) {
@@ -163,7 +165,7 @@ export function LexicalCollaborativeEditorV2({
           
           {/* NEW: Use V2 plugin that follows YJS pattern */}
           <LoroCollaborativePluginV2
-            websocketUrl={WEBSOCKET_URL_V2}
+            websocketUrl={websocketUrl || WEBSOCKET_URL_V2}
             docId={DOC_ID}
             onConnectionChange={handleConnectionChange}
             onInitialization={handleInitialization}

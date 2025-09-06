@@ -24,8 +24,8 @@ function App() {
   // Determine WebSocket URL based on selected server and active tab
   const getWebsocketUrl = () => {
     if (activeTab === 'lexical-v2') {
-      // V2 tab always uses the V2 server (port 8082)
-      return 'ws://localhost:8082'
+      // V2 tab always uses the V2 server (port 8083) with collaboration path
+      return 'ws://localhost:8083/collaboration'
     }
     
     // V1 tabs use the selected server
@@ -69,7 +69,7 @@ function App() {
           )}
         </h1>
         <p>Choose between Node.js or Python servers, and simple text area or rich text Lexical editor - all powered by Loro CRDT</p>
-        <p><strong>V2 Editor:</strong> Uses incremental updates on Python V2 server (port 8082) to prevent decorator node reloading</p>
+        <p><strong>V2 Editor:</strong> Uses incremental updates on Python V2 server (port 8083) to prevent decorator node reloading</p>
       </header>
       
       <main>
@@ -87,7 +87,7 @@ function App() {
             borderRadius: '4px', 
             marginBottom: '20px' 
           }}>
-            <strong>🚀 V2 Mode:</strong> This tab uses the Python V2 server (ws://localhost:8082) 
+            <strong>🚀 V2 Mode:</strong> This tab uses the Python V2 server (ws://localhost:8083) 
             with incremental updates. Server selection above only affects V1 tabs.
           </div>
         )}
@@ -140,6 +140,7 @@ function App() {
             )}
             {activeTab === 'lexical-v2' && (
               <LexicalCollaborativeEditorV2
+                websocketUrl={websocketUrl}
                 onConnectionChange={handleConnectionChange}
                 onInitialization={handleInitializationChange}
               />
