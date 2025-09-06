@@ -18,16 +18,19 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborativePlugin, PeerInfo } from '../LoroCollaborativePluginV2';
+import { LoroDoc } from 'loro-crdt';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
 
+// Import our Loro collaboration infrastructure (following YJS pattern)
+import { LoroCollaborationPlugin } from '../LoroCollaborationPlugin';
+import { createLoroProvider, type LoroProvider } from '../collaboration';
+
 import "./LexicalCollaborativeEditor.css";
 
-// Constants
+// Constants  
 const DOC_ID = 'example-v2-doc';
-
 const WEBSOCKET_URL_V2 = 'ws://localhost:8083/collaboration';
 
 interface LexicalCollaborativeEditorV2Props {
@@ -35,6 +38,20 @@ interface LexicalCollaborativeEditorV2Props {
   onConnectionChange?: (connected: boolean) => void;
   onInitialization?: (success: boolean) => void;
 }
+
+// Provider factory (following YJS pattern)
+const providerFactory = (id: string, loroDocMap: Map<string, LoroDoc>): LoroProvider => {
+  console.log('🏭 Creating Loro provider for document:', id);
+  
+  // Get or create document for this ID (following YJS pattern)
+  let doc = loroDocMap.get(id);
+  if (!doc) {
+    doc = new LoroDoc();
+    loroDocMap.set(id, doc);
+  }
+  
+  return createLoroProvider(WEBSOCKET_URL_V2, id, doc);
+};
 
 // Catch any errors that occur during Lexical updates and log them
 function onError(error: Error) {
@@ -69,66 +86,15 @@ function DebugPlugin() {
 }
 
 export function LexicalCollaborativeEditorV2({
-  websocketUrl,
+  websocketUrl = WEBSOCKET_URL_V2,
   onConnectionChange,
   onInitialization
 }: LexicalCollaborativeEditorV2Props) {
   const [connected, setConnected] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [peerId, setPeerId] = useState<string>('');
-  const [peerCount, setPeerCount] = useState<number>(0);
-  const [peers, setPeers] = useState<PeerInfo[]>([]);
 
-  // Handle connection changes
-  const handleConnectionChange = useCallback((connected: boolean) => {
-    console.log(`🔌 Connection changed: ${connected ? 'connected' : 'disconnected'}`);
-    setConnected(connected);
-    onConnectionChange?.(connected);
-  }, [onConnectionChange]);
-
-  // Handle initialization
-  const handleInitialization = useCallback((doc: any) => {
-    console.log(`🚀 Initialization: doc received`, doc);
-    setIsInitialized(true);
-    onInitialization?.(true);
-  }, [onInitialization]);
-
-  // Handle peer ID changes
-  const handlePeerIdChange = useCallback((newPeerId: string) => {
-    console.log(`👤 Peer ID changed: ${newPeerId}`);
-    setPeerId(newPeerId);
-  }, []);
-
-  // Handle peer count changes
-  const handlePeerCountChange = useCallback((newPeerCount: number) => {
-    console.log(`👥 Peer count changed: ${newPeerCount}`);
-    setPeerCount(newPeerCount);
-  }, []);
-
-  // Handle peers list changes with detailed logging
-  const handlePeersChange = useCallback((newPeers: Array<{ id: string; clientId: string; isYou?: boolean; displayId?: string; isCurrentUser?: boolean }>) => {
-    console.log('👥 Peers changed - Current peer ID:', peerId);
-    console.log('👥 Received peers:', newPeers);
-    
-    // Convert to PeerInfo format for state
-    const peerInfos: PeerInfo[] = newPeers.map(peer => ({
-      id: peer.id,
-      clientId: peer.clientId,
-      displayId: peer.displayId || peer.id.split('_')[-1] || peer.id.slice(0, 8),
-      isCurrentUser: peer.isCurrentUser || !!peer.isYou,
-      isYou: peer.isYou
-    }));
-    
-    peerInfos.forEach((peer, index) => {
-      console.log(`👥 Peer ${index}:`, {
-        id: peer.id,
-        displayId: peer.displayId,
-        isCurrentUser: peer.isCurrentUser,
-        isYou: peer.isYou
-      });
-    });
-    setPeers(peerInfos);
-  }, [peerId]);
+  // TODO: Wire up connection and initialization callbacks when LoroCollaborationPlugin supports them
+  // For now, these are received but not used since the plugin doesn't expose these events
 
   // Editor configuration
   const initialConfig = {
@@ -162,38 +128,14 @@ export function LexicalCollaborativeEditorV2({
             <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
               {connected ? '🟢 Connected' : '🔴 Disconnected'}
             </span>
-            {peerId && <span>👤 Peer: {peerId.slice(0, 8)}</span>}
-            {peerCount > 0 && <span>👥 Peers: {peerCount}</span>}
             <button
               className="disconnect-button"
-              onClick={() => console.log('🔍 V2 Debug - Connected:', connected, 'Initialized:', isInitialized, 'Peer:', peerId, 'Count:', peerCount, 'Peers:', peers)}
+              onClick={() => console.log('🔍 V2 Debug - Connected:', connected, 'Initialized:', isInitialized)}
               style={{ marginLeft: '10px' }}
             >
               🔍 Debug Info
             </button>
           </div>
-          {peers.length > 0 && (
-            <div className="peers-list" style={{ marginTop: '10px' }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Active Users:</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {peers.map((peer) => (
-                  <div 
-                    key={peer.id} 
-                    style={{ 
-                      padding: '4px 8px',
-                      backgroundColor: peer.isCurrentUser ? '#1ABC9C' : '#f3f4f6',
-                      color: peer.isCurrentUser ? '#FFFFFF' : '#666',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      border: peer.isCurrentUser ? 'none' : '1px solid #d1d5db'
-                    }}
-                  >
-                    {peer.isCurrentUser ? '👤 You' : `👥 ${peer.displayId}`}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -221,16 +163,12 @@ export function LexicalCollaborativeEditorV2({
           {/* Debug plugin inside Lexical context */}
           <DebugPlugin />
           
-          {/* V3: Use improved plugin following YJS pattern */}
-          <LoroCollaborativePlugin
-            id="collaborative-editor"
-            websocketUrl={websocketUrl || WEBSOCKET_URL_V2}
-            docId={DOC_ID}
-            onConnectionChange={handleConnectionChange}
-            onInitialization={handleInitialization}
-            onPeerIdChange={handlePeerIdChange}
-            onPeerCountChange={handlePeerCountChange}
-            onPeersChange={handlePeersChange}
+          <LoroCollaborationPlugin
+            id={DOC_ID}
+            providerFactory={providerFactory}
+            shouldBootstrap={true}
+            username="V2User"
+            cursorColor="#3366cc"
           />
         </div>
       </LexicalComposer>

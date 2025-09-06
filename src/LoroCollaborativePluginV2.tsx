@@ -161,6 +161,9 @@ function clearEditorSkipCollab(editor: LexicalEditor, binding: LoroBinding) {
 /**
  * LoroCollaborativePluginV2 - Following YJS Architecture Patterns
  * 
+ * This plugin has been superseded by LoroCollaborationPlugin which follows
+ * the exact YJS CollaborationPlugin pattern with proper context management.
+ * 
  * Key YJS patterns implemented:
  * 1. Provider Factory Pattern - Use factory function instead of direct WebSocket
  * 2. Document Map Management - Manage Loro documents like YJS manages Y.Doc
@@ -178,10 +181,12 @@ export const LoroCollaborativePlugin = ({
   initialEditorState,
   onConnectionChange,
   onInitialization,
-  onPeerIdChange, // eslint-disable-line @typescript-eslint/no-unused-vars
-  onPeerCountChange, // eslint-disable-line @typescript-eslint/no-unused-vars  
-  onPeersChange, // eslint-disable-line @typescript-eslint/no-unused-vars
+  // Note: onPeerIdChange, onPeerCountChange, onPeersChange are legacy callbacks
+  // not used in the context-based collaboration approach
+  ...rest // Rest of props (including unused legacy callbacks)
 }: LoroCollaborativePluginV2Props) => {
+  // Explicitly ignore legacy callback props to avoid TypeScript unused variable warnings
+  void rest;
   const [editor] = useLexicalComposerContext();
   
   // State management (following YJS pattern)
