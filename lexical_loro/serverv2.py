@@ -22,42 +22,56 @@ import traceback
 import sys
 import base64
 from pathlib import Path
-from typing import Dict, Any, Set, Optional
+from typing import Dict, Any, Set, Optional, Protocol
 import websockets
 from websockets.legacy.server import WebSocketServerProtocol
+
+# Define protocols for type safety
+class LoroTextProtocol(Protocol):
+    def insert(self, pos: int, text: str) -> None: ...
+    def to_string(self) -> str: ...
+
+class LoroDocProtocol(Protocol):
+    def get_text(self, key: str) -> LoroTextProtocol: ...
+    def export_snapshot(self) -> bytes: ...
+    def import_batch(self, updates: list[bytes]) -> None: ...
 
 # Try to import loro-py, fall back to mock if not available
 try:
     from loro import LoroDoc, LoroText
+    # Verify that the real implementations match our protocol
+    _doc: LoroDocProtocol = LoroDoc()  # type: ignore
+    _text: LoroTextProtocol = _doc.get_text("test")  # type: ignore
 except ImportError:
     logger = logging.getLogger(__name__)
-    logger.warning("⚠️ loro-py not found, using mock implementation")
+    logger.warning("⚠️ loro-py not found, using mock implementation for testing")
     
-    class MockLoroDoc:
-        def __init__(self):
-            self.data = ""
+    # Import mock implementations from test module
+    try:
+        # Try different import paths depending on how the module is being run
+        try:
+            from tests.test_mocks import get_mock_loro_classes
+        except ImportError:
+            # Alternative path when run as package
+            import sys
+            from pathlib import Path
+            
+            # Add the project root to Python path temporarily
+            project_root = Path(__file__).parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            
+            from tests.test_mocks import get_mock_loro_classes
         
-        def get_text(self, key: str):
-            return MockLoroText(self)
+        LoroDoc, LoroText = get_mock_loro_classes()  # type: ignore
+        logger.info("✅ Successfully imported mock implementations for testing")
         
-        def export_snapshot(self) -> bytes:
-            return self.data.encode('utf-8')
-        
-        def import_batch(self, updates):
-            for update in updates:
-                if isinstance(update, bytes):
-                    self.data += update.decode('utf-8', errors='ignore')
-    
-    class MockLoroText:
-        def __init__(self, doc):
-            self.doc = doc
-        
-        def insert(self, pos: int, text: str):
-            current = self.doc.data
-            self.doc.data = current[:pos] + text + current[pos:]
-    
-    LoroDoc = MockLoroDoc
-    LoroText = MockLoroText
+    except ImportError as e:
+        # Fallback if tests module is not available
+        logger.error("❌ Could not import mock implementations from tests module")
+        logger.error(f"💡 Import error: {e}")
+        logger.error("💡 Please install loro-py or ensure tests/test_mocks.py is available")
+        raise ImportError("loro-py not found and mock implementations not available")
 
 # Configure logging
 logging.basicConfig(
@@ -76,8 +90,8 @@ class LoroDocumentV2:
     
     def __init__(self, doc_id: str, initial_content: str = None):
         self.doc_id = doc_id
-        self.loro_doc = LoroDoc()
-        self.loro_text = self.loro_doc.get_text("root")
+        self.loro_doc: LoroDocProtocol = LoroDoc()
+        self.loro_text: LoroTextProtocol = self.loro_doc.get_text("root")
         self.clients: Set[str] = set()
         self.client_loro_peer_ids: Dict[str, str] = {}  # Map WebSocket client ID -> Loro peer ID
         self.created_at = time.time()
@@ -140,31 +154,8 @@ class LoroDocumentV2:
     def get_snapshot(self) -> bytes:
         """Get the current snapshot of the document"""
         try:
-            # Try export_snapshot first (newer API)
-            if hasattr(self.loro_doc, 'export_snapshot'):
-                return self.loro_doc.export_snapshot()
-            # Fall back to export_bytes or export (older API)
-            elif hasattr(self.loro_doc, 'export_bytes'):
-                return self.loro_doc.export_bytes()
-            elif hasattr(self.loro_doc, 'export'):
-                # Try different export modes
-                try:
-                    result = self.loro_doc.export('snapshot')
-                    if isinstance(result, bytes):
-                        return result
-                    return str(result).encode('utf-8')
-                except Exception:
-                    try:
-                        result = self.loro_doc.export()
-                        if isinstance(result, bytes):
-                            return result
-                        return str(result).encode('utf-8')
-                    except Exception:
-                        logger.warning("⚠️ Export failed, using mock data")
-                        return b'mock_snapshot_data'
-            else:
-                logger.warning("⚠️ No suitable export method found, using mock data")
-                return b'mock_snapshot_data'
+            # Use export_snapshot for real LoroDoc, export_snapshot for MockLoroDoc
+            return self.loro_doc.export_snapshot()
         except Exception as e:
             logger.error(f"❌ Failed to get snapshot: {e}")
             return b'error_snapshot'
@@ -174,6 +165,46 @@ class LoroDocumentV2:
         try:
             self.loro_doc.import_batch([update_bytes])
             self.last_modified = time.time()
+            
+            # 🔍 VALIDATION: Check for JSON duplication issues after update
+            try:
+                text_content = self.loro_doc.get_text("content").to_string()
+                if text_content:
+                    # Check for duplicate JSON objects (indicates bug)
+                    json_children_pattern = '{"children"'
+                    children_count = text_content.count(json_children_pattern)
+                    if children_count > 1:
+                        logger.error("🚨 [SERVER-VALIDATION] DUPLICATE JSON DETECTED!")
+                        logger.error(f"📄 Document {self.doc_id} has malformed content:")
+                        logger.error(f"🔢 JSON object count: {children_count}")
+                        logger.error(f"📝 Content preview: {text_content[:200]}...")
+                        logger.error("🐛 This indicates a bug in content replacement logic")
+                        
+                        # Try to extract valid JSON objects
+                        json_objects = text_content.split('}{')
+                        if len(json_objects) > 1:
+                            logger.error(f"🔍 Found {len(json_objects)} concatenated JSON objects")
+                            for i, obj in enumerate(json_objects[:3]):  # Show first 3
+                                fixed_obj = obj if i == 0 else '{' + obj
+                                if i == len(json_objects) - 1 and i > 0:
+                                    pass  # Last object is already complete
+                                elif i < len(json_objects) - 1:
+                                    fixed_obj += '}'
+                                logger.error(f"📋 Object {i+1}: {fixed_obj[:100]}...")
+                    else:
+                        # Valid single JSON object
+                        try:
+                            parsed = json.loads(text_content)
+                            if parsed.get('type') == 'root':
+                                logger.debug(f"✅ [SERVER-VALIDATION] Valid Lexical JSON in {self.doc_id}")
+                            else:
+                                logger.warning(f"⚠️ [SERVER-VALIDATION] Non-Lexical JSON in {self.doc_id}: {parsed.get('type', 'unknown')}")
+                        except json.JSONDecodeError as je:
+                            logger.error(f"❌ [SERVER-VALIDATION] Invalid JSON in {self.doc_id}: {je}")
+                            logger.error(f"📝 Content: {text_content[:200]}...")
+            except Exception as validation_error:
+                logger.debug(f"🔍 [SERVER-VALIDATION] Could not validate content: {validation_error}")
+            
             return True
         except Exception as e:
             logger.error(f"❌ Failed to apply update to document {self.doc_id}: {e}")

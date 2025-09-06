@@ -16,10 +16,9 @@ import {
   createLoroBinding,
   type LoroProvider,
 } from './collaboration';
-import type { LexicalEditor } from 'lexical';
+import type { EditorState, LexicalEditor } from 'lexical';
 import { useEffect, useRef, useState } from 'react';
 
-import type { InitialEditorStateType } from './LoroCollaborativePluginV2';
 import {
   type LoroCursorsContainerRef,
   useLoroCollaboration,
@@ -27,6 +26,14 @@ import {
   useLoroHistory,
   type SyncLoroCursorPositionsFn,
 } from './useLoroCollaboration';
+
+// Initial editor state type (following YJS pattern)
+export type InitialEditorStateType = 
+  | null 
+  | string 
+  | EditorState 
+  | ((editor: LexicalEditor) => void);
+
 
 type Props = {
   id: string;

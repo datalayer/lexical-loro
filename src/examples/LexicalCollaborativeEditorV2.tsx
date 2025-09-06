@@ -22,8 +22,6 @@ import { LoroDoc } from 'loro-crdt';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
-
-// Import our Loro collaboration infrastructure (following YJS pattern)
 import { LoroCollaborationPlugin } from '../LoroCollaborationPlugin';
 import { createLoroProvider, type LoroProvider, LORO_CONNECTED_COMMAND } from '../collaboration';
 

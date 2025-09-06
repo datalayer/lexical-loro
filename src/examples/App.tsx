@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react'
 import { TextAreaCollaborativeEditor } from './TextAreaCollaborativeEditor'
-import { LexicalCollaborativeEditor } from './LexicalCollaborativeEditor'
+import { LexicalCollaborativeEditorV1 } from './LexicalCollaborativeEditorV1'
 import { LexicalCollaborativeEditorV2 } from './LexicalCollaborativeEditorV2'
 import { ServerSelector } from './ServerSelector'
 
@@ -132,7 +132,7 @@ function App() {
               />
             )}
             {activeTab === 'lexical' && (
-              <LexicalCollaborativeEditor
+              <LexicalCollaborativeEditorV1
                 websocketUrl={websocketUrl}
                 onConnectionChange={handleConnectionChange}
                 onInitialization={handleInitializationChange}

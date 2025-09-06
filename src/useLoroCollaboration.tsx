@@ -35,7 +35,7 @@ import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-import type { InitialEditorStateType } from './LoroCollaborativePluginV2';
+import type { InitialEditorStateType } from './LoroCollaborationPlugin';
 
 export type LoroCursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 
@@ -184,7 +184,23 @@ export function useLoroCollaboration(
       
       try {
         // Apply the update to the Loro document first
+        console.log('🔧 [COLLABORATION] Applying update to local Loro document...');
         binding.doc.import(update);
+        console.log('✅ [COLLABORATION] Update imported to local Loro document');
+        
+        // 🔍 VALIDATION: Check document state after import
+        const textAfterImport = binding.rootText.toString();
+        console.log('🔍 [COLLABORATION] Document state after import:', {
+          textLength: textAfterImport.length,
+          textPreview: textAfterImport.substring(0, 100),
+          hasDuplicates: textAfterImport.includes('}{'),
+          duplicateCount: textAfterImport.includes('}{') ? textAfterImport.split('}{').length : 1
+        });
+        
+        if (textAfterImport.includes('}{')) {
+          console.error('🚨 [COLLABORATION] DUPLICATES DETECTED AFTER IMPORT!');
+          console.error('📄 Full content with duplicates:', textAfterImport);
+        }
         
         // Create a mock event structure similar to YJS events
         // For now, we'll create a simple event that represents the update
@@ -194,6 +210,8 @@ export function useLoroCollaboration(
           target: binding.rootText, // Point to our text container
           doc: binding.doc
         }];
+        
+        console.log('🔄 [COLLABORATION] Calling syncLoroToLexical with mock events...');
         
         // Call our sync function following the YJS pattern exactly
         // This will use editor.update() with proper collaboration tags
@@ -208,6 +226,9 @@ export function useLoroCollaboration(
         console.log('✅ [COLLABORATION] Loro update processed via syncLoroToLexical');
       } catch (error) {
         console.error('❌ [COLLABORATION] Failed to process Loro update:', error);
+        if (error instanceof Error) {
+          console.error('🔍 Error details:', error.stack);
+        }
       }
     };
 

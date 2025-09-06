@@ -78,7 +78,7 @@ function ReloadStatePlugin() {
   return null; // This plugin doesn't render anything directly
 }
 
-export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProps> = ({
+export const LexicalCollaborativeEditorV1: React.FC<LexicalCollaborativeEditorProps> = ({
   websocketUrl,
   onConnectionChange,
   onInitialization

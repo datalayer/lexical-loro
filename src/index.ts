@@ -21,13 +21,5 @@ export {
   type SyncLoroCursorPositionsFn
 } from "./useLoroCollaboration";
 
-// Legacy plugin (deprecated)
-export { 
-  LoroCollaborativePlugin as LoroCollaborativePluginV2,
-  type PeerInfo,
-  type LoroProviderFactory,
-  type InitialEditorStateType
-} from "./LoroCollaborativePluginV2";
-
 // Core collaboration architecture
 export * from "./collaboration";
