@@ -11,7 +11,7 @@ import type { LoroProvider } from '../LoroProvider';
  */
 export function syncCursorPositions(
   binding: LoroBinding,
-  provider: LoroProvider
+  _provider: LoroProvider
 ): void {
   console.log('🎯 Syncing cursor positions');
   

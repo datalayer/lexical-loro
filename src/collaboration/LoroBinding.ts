@@ -79,7 +79,7 @@ export interface LoroBinding {
  */
 export function createLoroBinding(
   editor: LexicalEditor,
-  provider: LoroProvider,
+  _provider: LoroProvider,
   id: string,
   doc: LoroDoc,
   docMap: Map<string, LoroDoc>,

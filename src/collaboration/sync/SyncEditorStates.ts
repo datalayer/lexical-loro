@@ -12,7 +12,7 @@ import type { LoroProvider } from '../LoroProvider';
  */
 export function syncLoroToLexical(
   binding: LoroBinding,
-  provider: LoroProvider,
+  _provider: LoroProvider,
   events: any[], // Loro events
   isFromUndoManager: boolean = false
 ): void {
@@ -48,19 +48,19 @@ export function syncLoroToLexical(
  * Sync changes from Lexical to Loro document
  */
 export function syncLexicalToLoro(
-  binding: LoroBinding,
-  provider: LoroProvider,
-  prevEditorState: any,
-  editorState: any,
-  dirtyElements: Set<string>,
-  dirtyLeaves: Set<string>,
-  normalizedNodes: Set<string>,
-  tags: Set<string>
+  _binding: LoroBinding,
+  _provider: LoroProvider,
+  _prevEditorState: any,
+  _editorState: any,
+  _dirtyElements: Set<string>,
+  _dirtyLeaves: Set<string>,
+  _normalizedNodes: Set<string>,
+  _tags: Set<string>
 ): void {
   console.log('🔄 Syncing Lexical changes to Loro');
 
   // Skip if this update came from collaboration (avoid infinite loops)
-  if (tags.has('collaboration') || tags.has('historic')) {
+  if (_tags.has('collaboration') || _tags.has('historic')) {
     console.log('⏭️ Skipping sync - update from collaboration');
     return;
   }
@@ -72,7 +72,7 @@ export function syncLexicalToLoro(
   // 3. Apply them to the Loro document
   // 4. Send updates to other clients via provider
 
-  console.log('📤 Dirty elements:', dirtyElements.size);
-  console.log('📤 Dirty leaves:', dirtyLeaves.size);
-  console.log('📤 Normalized nodes:', normalizedNodes.size);
+  console.log('📤 Dirty elements:', _dirtyElements.size);
+  console.log('📤 Dirty leaves:', _dirtyLeaves.size);
+  console.log('📤 Normalized nodes:', _normalizedNodes.size);
 }

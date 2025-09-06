@@ -6,7 +6,6 @@
 import type { EditorState, NodeKey, NodeMap, BaseSelection } from 'lexical';
 import type { LoroBinding } from '../LoroBinding';
 import type { LoroProvider } from '../LoroProvider';
-import type { LoroEvent } from 'loro-crdt';
 
 import { 
   $getRoot, 
@@ -19,8 +18,8 @@ import {
   $isElementNode,
 } from 'lexical';
 
-// Import cursor sync functionality
-import { syncLoroCursorPositions, type SyncLoroCursorPositionsFn } from './CursorSync';
+// Import cursor sync functionality  
+// import { syncLoroCursorPositions, type SyncLoroCursorPositionsFn } from './CursorSync';
 
 // Collaboration tags (following YJS pattern)
 export const LORO_COLLABORATION_TAG = 'loro-collaboration';
@@ -90,76 +89,29 @@ function applyLoroMapDelta(_binding: LoroBinding, _collabNode: any, delta: any):
  * It follows the same pattern as YJS's syncYjsChangesToLexical function.
  */
 export function syncLoroChangesToLexical(
-  binding: LoroBinding,
-  events: any[], // TODO: Type properly with Loro event types
-  isFromUndoManager: boolean = false,
-  syncCursorPositionsFn: SyncLoroCursorPositionsFn = syncLoroCursorPositions,
+  _binding: LoroBinding,
+  _provider: LoroProvider,
+  events: any[],
+  isFromUndoManager: boolean = false
 ): void {
-  const editor = binding.editor;
-  const currentEditorState = editor._editorState;
-
   console.log('🔄 Syncing Loro changes to Lexical:', {
     eventCount: events.length,
     isFromUndoManager,
-    currentStateVersion: currentEditorState._readOnly ? 'readonly' : 'writable'
+    bindingId: _binding.id
   });
-
-  // Precompute deltas before editor update (following YJS pattern)
-  events.forEach((event) => {
-    if (event.delta) {
-      // Access delta to ensure it's computed during event call
-      void event.delta;
-    }
-  });
-
-  editor.update(
-    () => {
-      for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        processLoroEvent(binding, event);
-      }
-
-      // Handle selection recovery (following YJS pattern)
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        if (doesLexicalSelectionNeedRecovering(selection)) {
-          const prevSelection = currentEditorState._selection;
-          
-          if ($isRangeSelection(prevSelection)) {
-            syncLocalCursorPosition(binding);
-            if (doesLexicalSelectionNeedRecovering(selection)) {
-              // If the selected node is deleted, move selection to previous or parent node
-              const anchorNodeKey = selection.anchor.key;
-              $moveSelectionToPreviousNode(anchorNodeKey, currentEditorState);
-            }
-          }
-
-          syncLexicalSelectionToLoro(binding, prevSelection, $getSelection());
-        } else {
-          syncLocalCursorPosition(binding);
-        }
-      }
-
-      if (!isFromUndoManager) {
-        // External changes shouldn't affect scroll position
-        $addUpdateTag('skip-scroll-into-view');
-      }
-    },
-    {
-      onUpdate: () => {
-        syncCursorPositionsFn(binding);
-        
-        // Ensure root has at least one paragraph (following YJS pattern)
-        editor.update(() => {
-          if ($getRoot().getChildrenSize() === 0) {
-            $getRoot().append($createParagraphNode());
-          }
-        });
-      },
-      skipTransforms: true,
-      tag: isFromUndoManager ? 'historic' : 'collaboration',
-    },
-  );
+  
+  // TODO: Implement Loro to Lexical synchronization
+  // This function should:
+  // 1. Process Loro events and convert them to Lexical operations
+  // 2. Apply changes within editor.update() for atomicity
+  // 3. Handle selection recovery for deleted nodes
+  // 4. Manage cursor position synchronization
+  // 5. Ensure proper tagging for collaboration vs undo operations
+  
+  // Stub implementation for now
+  for (const event of events) {
+    console.log('📦 Event to process:', event);
+  }
 }
 
 /**
@@ -168,23 +120,23 @@ export function syncLoroChangesToLexical(
  * Handles different types of Loro events and applies them to the corresponding
  * collaboration nodes.
  */
-function processLoroEvent(binding: LoroBinding, event: any): void {
+function _processLoroEvent(_binding: LoroBinding, _event: any): void {
   try {
-    const { target } = event;
+    const { target } = _event;
     
     // Handle different container types
     if (target && target.kind) {
       switch (target.kind) {
         case 'Tree': {
-          processLoroTreeEvent(binding, event);
+          _processLoroTreeEvent(_binding, _event);
           break;
         }
         case 'Text': {
-          processLoroTextEvent(binding, event);
+          _processLoroTextEvent(_binding, _event);
           break;
         }
         case 'Map': {
-          processLoroMapEvent(binding, event);
+          _processLoroMapEvent(_binding, _event);
           break;
         }
         default: {
@@ -193,10 +145,10 @@ function processLoroEvent(binding: LoroBinding, event: any): void {
         }
       }
     } else {
-      console.warn('🔄 Loro event missing target or kind:', event);
+      console.warn('🔄 Loro event missing target or kind:', _event);
     }
   } catch (error) {
-    console.error('❌ Failed to process Loro event:', error, event);
+    console.error('❌ Failed to process Loro event:', error, _event);
   }
 }
 
@@ -205,7 +157,7 @@ function processLoroEvent(binding: LoroBinding, event: any): void {
  * 
  * Handles structural changes in the document hierarchy.
  */
-function processLoroTreeEvent(binding: LoroBinding, event: any): void {
+function _processLoroTreeEvent(_binding: LoroBinding, _event: any): void {
   const { target, diff } = event;
   
   console.log('🌳 Processing Loro Tree event:', { target, diff });
@@ -290,10 +242,10 @@ function processLoroMapEvent(binding: LoroBinding, event: any): void {
 /**
  * Sync Lexical Tree events to Loro structure (equivalent to YJS element operations)
  */
-function $syncLoroTreeEvent(binding: LoroBinding, event: any): void {
-  console.log('🌳 Processing Tree event:', event);
+function _$syncLoroTreeEvent(_binding: LoroBinding, _event: any): void {
+  console.log('🌳 Processing Tree event:', _event);
   
-  const { delta } = event;
+  const { delta } = _event;
   if (!delta || !Array.isArray(delta)) {
     return;
   }
@@ -301,11 +253,11 @@ function $syncLoroTreeEvent(binding: LoroBinding, event: any): void {
   // Process tree operations
   for (const operation of delta) {
     if (operation.action === 'create') {
-      $handleTreeNodeCreate(binding, operation);
+      $handleTreeNodeCreate(_binding, operation);
     } else if (operation.action === 'move') {
-      $handleTreeNodeMove(binding, operation);
+      $handleTreeNodeMove(_binding, operation);
     } else if (operation.action === 'delete') {
-      $handleTreeNodeDelete(binding, operation);
+      $handleTreeNodeDelete(_binding, operation);
     }
   }
 }
@@ -313,10 +265,10 @@ function $syncLoroTreeEvent(binding: LoroBinding, event: any): void {
 /**
  * Sync Loro Text events to Lexical content (equivalent to YJS text operations)
  */
-function $syncLoroTextEvent(binding: LoroBinding, event: any): void {
-  console.log('📝 Processing Text event:', event);
+function _$syncLoroTextEvent(_binding: LoroBinding, _event: any): void {
+  console.log('📝 Processing Text event:', _event);
   
-  const { delta } = event;
+  const { delta } = _event;
   if (!delta || !Array.isArray(delta)) {
     return;
   }
@@ -327,9 +279,9 @@ function $syncLoroTextEvent(binding: LoroBinding, event: any): void {
     if (operation.retain) {
       offset += operation.retain;
     } else if (operation.delete) {
-      $handleTextDelete(binding, offset, operation.delete);
+      $handleTextDelete(_binding, offset, operation.delete);
     } else if (operation.insert) {
-      $handleTextInsert(binding, offset, operation.insert);
+      $handleTextInsert(_binding, offset, operation.insert);
       offset += typeof operation.insert === 'string' ? operation.insert.length : 1;
     }
   }
@@ -445,7 +397,7 @@ export function syncLexicalUpdateToLoro(
 
 // Helper functions (simplified implementations)
 
-function ensureBasicDocumentStructure(): void {
+function _ensureBasicDocumentStructure(): void {
   const root = $getRoot();
   if (root.getChildrenSize() === 0) {
     const paragraph = $createParagraphNode();

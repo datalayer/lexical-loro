@@ -24,10 +24,10 @@ import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
-import { EditorState } from 'lexical';
 
 // Constants
 const DOC_ID = 'example-v2-doc';
+
 const WEBSOCKET_URL_V2 = 'ws://localhost:8083/collaboration';
 
 interface LexicalCollaborativeEditorV2Props {
