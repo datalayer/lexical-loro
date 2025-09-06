@@ -842,7 +842,7 @@ interface LoroMessage {
   addedBy?: string;
 }
 
-interface LoroCollaborativePluginProps {
+interface ILoroCollaborationPluginV1Props {
   websocketUrl: string;
   docId: string;
   onConnectionChange?: (connected: boolean) => void;
@@ -899,7 +899,7 @@ interface LoroCollaborativePluginProps {
  * - Enable the enhanced cursor creation methods by uncommenting TODO sections
  * - Complete the direct Loro cursor conversion path
  */
-export function LoroCollaborativePlugin({ 
+export function LoroCollaborationPluginV1({ 
   websocketUrl, 
   docId,
   onConnectionChange,
@@ -908,7 +908,7 @@ export function LoroCollaborativePlugin({
   onAwarenessChange,
   onInitialization,
   onSendMessageReady
-}: LoroCollaborativePluginProps) {
+}: ILoroCollaborationPluginV1Props) {
   const [editor] = useLexicalComposerContext();
   const wsRef = useRef<WebSocket | null>(null);
   const loroDocRef = useRef<LoroDoc>(new LoroDoc());
@@ -3368,5 +3368,3 @@ export function LoroCollaborativePlugin({
     </>
   );
 }
-
-export default LoroCollaborativePlugin;

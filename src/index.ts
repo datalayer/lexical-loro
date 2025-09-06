@@ -4,7 +4,7 @@
  */
 
 // Main collaboration plugin (following YJS pattern)
-export { LoroCollaborationPlugin } from "./LoroCollaborationPlugin";
+export { LoroCollaborationPluginV2 } from "./LoroCollaborationPluginV2";
 
 // Context and hooks (following YJS pattern)
 export { 

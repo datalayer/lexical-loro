@@ -35,7 +35,7 @@ import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-import type { InitialEditorStateType } from './LoroCollaborationPlugin';
+import type { InitialEditorStateType } from './LoroCollaborationPluginV2';
 
 export type LoroCursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 

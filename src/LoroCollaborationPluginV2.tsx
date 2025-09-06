@@ -35,7 +35,7 @@ export type InitialEditorStateType =
   | ((editor: LexicalEditor) => void);
 
 
-type Props = {
+type ILoroCollaborationPluginPropsV2 = {
   id: string;
   providerFactory: (
     id: string,
@@ -68,7 +68,7 @@ type Props = {
  * 4. Lifecycle management - Set isCollabActive flag, clientID assignment
  * 5. Component orchestration - Pass everything to LoroCollaborationCursors
  */
-export function LoroCollaborationPlugin({
+export function LoroCollaborationPluginV2({
   id,
   providerFactory,
   shouldBootstrap,
@@ -81,7 +81,7 @@ export function LoroCollaborationPlugin({
   syncCursorPositionsFn,
   onPeerIdChange,
   onAwarenessChange,
-}: Props): JSX.Element {
+}: ILoroCollaborationPluginPropsV2): JSX.Element {
   const isBindingInitialized = useRef(false);
   const isProviderInitialized = useRef(false);
 

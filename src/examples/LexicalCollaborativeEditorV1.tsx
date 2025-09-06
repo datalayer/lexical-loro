@@ -18,7 +18,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborativePlugin } from '../LoroCollaborativePlugin';
+import { LoroCollaborationPluginV1 } from '../LoroCollaborationPluginV1';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
@@ -567,7 +567,7 @@ export const LexicalCollaborativeEditorV1: React.FC<LexicalCollaborativeEditorPr
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-          <LoroCollaborativePlugin
+          <LoroCollaborationPluginV1
             websocketUrl={`${websocketUrl}/${DOC_ID}`}
 //            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/${DOC_ID}"
             docId={DOC_ID}

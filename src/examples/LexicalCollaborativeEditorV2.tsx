@@ -22,7 +22,7 @@ import { LoroDoc } from 'loro-crdt';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
-import { LoroCollaborationPlugin } from '../LoroCollaborationPlugin';
+import { LoroCollaborationPluginV2 } from '../LoroCollaborationPluginV2';
 import { createLoroProvider, type LoroProvider, LORO_CONNECTED_COMMAND } from '../collaboration';
 
 import "./LexicalCollaborativeEditor.css";
@@ -318,7 +318,7 @@ export function LexicalCollaborativeEditorV2({
           {/* Connection status listener */}
           <ConnectionStatusPlugin onConnectionChange={handleConnectionChange} />
           
-          <LoroCollaborationPlugin
+          <LoroCollaborationPluginV2
             id={DOC_ID}
             providerFactory={providerFactory}
             shouldBootstrap={true}
