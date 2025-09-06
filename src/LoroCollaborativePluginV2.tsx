@@ -18,6 +18,15 @@ export interface PeerInfo {
   isYou?: boolean;
 }
 
+// Provider interface (matching YJS Provider pattern)
+export interface LoroProvider {
+  doc: LoroDoc;
+  connected: boolean;
+  awareness?: any; // Loro equivalent of YJS awareness
+  connect?(): void | Promise<void>;
+  disconnect?(): void;
+}
+
 // Types for the new collaborative plugin
 interface LoroCollaborativePluginV2Props {
   id: string;
@@ -86,8 +95,20 @@ export const LoroCollaborativePlugin = ({
         const loroDoc = new LoroDoc();
         loroDocRef.current = loroDoc;
 
+        // Create enhanced provider with awareness (following YJS pattern)
+        const provider: LoroProvider = {
+          doc: loroDoc,
+          connected: false,
+          awareness: {}, // TODO: Implement proper awareness when Loro API is available
+          connect: async () => {
+            console.log('🔌 Provider connect called');
+          },
+          disconnect: () => {
+            console.log('🔌 Provider disconnect called');
+          }
+        };
+
         // Create Loro binding for collaboration (equivalent to YJS binding)
-        const provider = { doc: loroDoc, connected: false };
         const binding = createLoroBinding(
           editor,
           provider,

@@ -32,7 +32,7 @@ const LORO_HISTORIC_TAG = 'loro-historic';
  */
 export function syncLoroToLexical(
   binding: LoroBinding, 
-  provider: any, 
+  _provider: any, 
   events: Array<any>,
   isFromUndoManager: boolean,
   syncCursorPositionsFn?: (binding: LoroBinding, provider: any) => void
@@ -70,7 +70,7 @@ export function syncLoroToLexical(
 
       // Sync cursor positions after content changes
       if (syncCursorPositionsFn) {
-        syncCursorPositionsFn(binding, provider);
+        syncCursorPositionsFn(binding, _provider);
       }
 
     } catch (error) {
@@ -85,7 +85,7 @@ export function syncLoroToLexical(
 /**
  * Sync individual Loro event to Lexical (equivalent to YJS $syncEvent)
  */
-function $syncLoroEvent(binding: LoroBinding, event: any): void {
+function $syncLoroEvent(_binding: LoroBinding, event: any): void {
   console.log('🔄 Processing Loro event:', event);
   
   try {
@@ -128,11 +128,11 @@ function $syncLoroEvent(binding: LoroBinding, event: any): void {
 export function syncLexicalToLoro(
   binding: LoroBinding,
   _provider: any,
-  prevEditorState: EditorState,
+  _prevEditorState: EditorState,
   editorState: EditorState,
   dirtyElements: Map<string, boolean>,
-  dirtyLeaves: Map<string, boolean>,
-  normalizedNodes: Set<string>,
+  dirtyLeaves: Set<string>,
+  _normalizedNodes: Set<string>,
   tags: Set<string>
 ): void {
   const { doc } = binding;
@@ -140,7 +140,7 @@ export function syncLexicalToLoro(
   console.log('📝 Syncing Lexical changes to Loro:', {
     dirtyElements: dirtyElements.size,
     dirtyLeaves: dirtyLeaves.size,
-    normalizedNodes: normalizedNodes.size,
+    normalizedNodes: _normalizedNodes.size,
     tags: Array.from(tags)
   });
 
@@ -193,9 +193,9 @@ export function syncLexicalToLoro(
  */
 export function syncLoroCursorPositions(
   binding: LoroBinding,
-  provider: any
+  _provider: any // eslint-disable-line @typescript-eslint/no-unused-vars
 ): void {
-  console.log('�️ Syncing cursor positions');
+  console.log('🎯 Syncing cursor positions');
   
   try {
     // TODO: Implement cursor position synchronization
@@ -207,12 +207,12 @@ export function syncLoroCursorPositions(
     const selection = editor.getEditorState().read(() => $getSelection());
     
     if (selection) {
-      console.log('📍 Current selection:', selection.getType());
+      console.log('📍 Current selection type');
       // TODO: Convert to Loro Cursor and sync via awareness
     }
     
     // TODO: Render other users' cursors
-    cursors.forEach((cursor, clientId) => {
+    cursors.forEach((_cursor, clientId) => {
       console.log('👤 Rendering cursor for client:', clientId);
       // TODO: Convert Loro Cursor to DOM position and render
     });
@@ -229,15 +229,19 @@ export function syncLoroCursorPositions(
  * following the YJS collaboration pattern
  */
 export function initializeSyncHandlers(binding: LoroBinding): () => void {
-  const { doc, editor } = binding;
+  const { editor } = binding;
   
   console.log('🔄 Initializing Loro ↔ Lexical sync handlers');
   
   // Set up Loro document change listener (equivalent to YJS doc.on('update'))
+  // TODO: Wire this up when Loro document event API is available
   const handleLoroUpdate = (events: Array<any>) => {
     console.log('📥 Loro document updated, syncing to Lexical');
     syncLoroToLexical(binding, null, events, false, syncLoroCursorPositions);
   };
+  
+  // Note: handleLoroUpdate will be used when Loro document events are implemented
+  void handleLoroUpdate; // Suppress unused variable warning
 
   // Set up Lexical editor change listener (equivalent to YJS editor.registerUpdateListener)
   const removeEditorListener = editor.registerUpdateListener(
@@ -249,7 +253,7 @@ export function initializeSyncHandlers(binding: LoroBinding): () => void {
         prevEditorState, 
         editorState, 
         dirtyElements, // Map<string, boolean>
-        dirtyLeaves,   // Map<string, boolean>
+        dirtyLeaves,   // Set<string>
         normalizedNodes, // Set<string>
         tags           // Set<string>
       );
