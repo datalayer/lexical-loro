@@ -24,6 +24,7 @@ import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
+import { EditorState } from 'lexical';
 
 // Constants
 const DOC_ID = 'example-v2-doc';
@@ -131,6 +132,7 @@ export function LexicalCollaborativeEditorV2({
 
   // Editor configuration
   const initialConfig = {
+    editorState: null,
     namespace: 'LexicalCollaborativeEditorV2',
     theme: lexicalTheme,
     onError,

@@ -356,36 +356,32 @@ export const LoroCollaborativePlugin = ({
         function handleInitialContent(lexicalJsonStr: string) {
           try {
             console.log('📄 Processing initial Lexical content via collaboration system');
+            console.log('📄 Content length:', lexicalJsonStr.length, 'First 100 chars:', lexicalJsonStr.substring(0, 100));
             
             // Parse the Lexical JSON
             const lexicalState = JSON.parse(lexicalJsonStr);
+            console.log('📄 Parsed Lexical state:', lexicalState);
             
-            // Apply the state using the collaboration system instead of bypassing it
-            // This ensures proper sync setup and follows the YJS pattern
-            editor.update(() => {
-              // First, clear the current state
+            // Following YJS pattern: only apply initial content if editor is empty
+            const currentState = editor.getEditorState();
+            const isEmpty = currentState.read(() => {
               const root = $getRoot();
-              root.clear();
-              
-              // Apply the initial content by parsing the JSON state
-              const editorState = editor.parseEditorState(lexicalState);
-              
-              // Merge the state into current editor
-              editorState.read(() => {
-                const sourceRoot = $getRoot();
-                const targetRoot = root;
-                
-                // Copy children from source to target
-                const children = sourceRoot.getChildren();
-                children.forEach((child: any) => {
-                  targetRoot.append(child);
-                });
-              });
-              
-              console.log('✅ Initial content applied via collaboration system');
-            }, {
-              tag: 'initial-content', // Tag to identify this as initial content
+              return root.getChildrenSize() === 0;
             });
+            
+            console.log('📄 Editor empty check:', isEmpty);
+            
+            if (isEmpty) {
+              console.log('📄 Editor is empty, applying initial content (YJS pattern)');
+              // YJS uses setEditorState only when the document is empty
+              const editorState = editor.parseEditorState(lexicalState);
+              editor.setEditorState(editorState, {
+                tag: 'initial-content', // Use initial-content tag instead of collaboration to avoid conflicts
+              });
+              console.log('✅ Initial content applied following YJS pattern');
+            } else {
+              console.log('📄 Editor not empty, skipping initial content (YJS pattern)');
+            }
             
           } catch (error) {
             console.error('❌ Failed to apply initial content:', error, 'Content:', lexicalJsonStr);
@@ -393,6 +389,7 @@ export const LoroCollaborativePlugin = ({
             // Fallback: apply directly if collaboration system fails
             try {
               const lexicalState = JSON.parse(lexicalJsonStr);
+              console.log('🔄 Attempting fallback method...');
               editor.setEditorState(editor.parseEditorState(lexicalState));
               console.log('✅ Initial content applied via fallback method');
             } catch (fallbackError) {
@@ -452,7 +449,7 @@ export const LoroCollaborativePlugin = ({
                   text.insert(0, textContent);
                   
                   // Export the update and send to server
-                  const updateBytes = loroDoc.exportFrom(loroDoc.version());
+                  const updateBytes = loroDoc.export({mode: "update", from: loroDoc.version()});
                   if (updateBytes.length > 0 && websocketRef.current?.readyState === WebSocket.OPEN) {
                     const updateB64 = btoa(String.fromCharCode(...updateBytes));
                     websocketRef.current.send(JSON.stringify({

@@ -66,9 +66,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-INITIAL_CONTENT = """
-{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Lexical with Loro V2","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something to test incremental updates...","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"paragraph","version":1,"textFormat":0,"textStyle":""}],"direction":null,"format":"","indent":0,"type":"root","version":1}}
-"""
+INITIAL_CONTENT = '{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Lexical with Loro V2","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"heading","version":1,"tag":"h1"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Type something to test incremental updates...","type":"text","version":1}],"direction":null,"format":"","indent":0,"type":"paragraph","version":1,"textFormat":0,"textStyle":""}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
 
 class LoroDocumentV2:
     """
@@ -384,15 +382,15 @@ class LoroWebSocketServerV2:
             initial_content = self._load_initial_content(doc_id)
             try:
                 # Validate that it's proper JSON
-                json.loads(initial_content)
+                json.loads(initial_content.strip())
                 await websocket.send(json.dumps({
                     "type": "initial-content",
                     "docId": doc_id,
-                    "content": initial_content,
+                    "content": initial_content.strip(),
                     "peerCount": len(document.clients),
                     "peers": peer_list
                 }))
-                logger.info(f"📸 Sent initial content to client {client_id} ({len(initial_content)} bytes)")
+                logger.info(f"📸 Sent initial content to client {client_id} ({len(initial_content.strip())} bytes)")
             except json.JSONDecodeError as e:
                 logger.error(f"❌ Invalid JSON in initial content for {doc_id}: {e}")
                 # Fall back to snapshot if JSON is invalid
