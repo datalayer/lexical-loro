@@ -45,8 +45,59 @@ export function syncLoroToLexical(
         const event = events[i];
         console.log('🔄 Processing Loro event:', event);
         
-        // TODO: Implement Loro event processing when Tree API is available
-        // binding.root.applyLoroEvent?.(binding, event);
+        if (event.type === 'loro-update') {
+          // For now, implement a basic sync strategy:
+          // Get the text content from Loro and sync to Lexical
+          try {
+            // Get the text content from our main text container
+            const textContent = binding.rootText.toString();
+            console.log('📝 Loro text content length:', textContent.length);
+            console.log('📝 Loro text preview:', textContent.substring(0, 200));
+            
+            if (textContent && textContent.trim() !== '') {
+              try {
+                // Try to parse as Lexical JSON state
+                const parsedJson = JSON.parse(textContent);
+                
+                if (parsedJson.root && parsedJson.root.type === 'root') {
+                  // Create a new editor state from the Loro content
+                  const newEditorState = editor.parseEditorState(textContent);
+                  
+                  // Replace the current root content with the new state's content
+                  const root = $getRoot();
+                  const newRoot = newEditorState._nodeMap.get('root');
+                  
+                  if (newRoot) {
+                    // Clear current content
+                    root.clear();
+                    
+                    // Import children from the new state
+                    // For a proper implementation, we'd need to traverse the new state
+                    // and create/import nodes. For now, just log what we're receiving.
+                    console.log('📋 New state children count:', parsedJson.root.children?.length || 0);
+                    console.log('📋 First child type:', parsedJson.root.children?.[0]?.type || 'none');
+                    
+                    // This is where we'd implement proper node synchronization
+                    // Following the YJS pattern of processing individual changes
+                    // For now, we'll just log that we received the update
+                    console.log('� Loro update received - node sync would happen here');
+                  }
+                  
+                  console.log('✅ Processed Loro text update');
+                } else {
+                  console.warn('⚠️ Loro content is not valid Lexical JSON');
+                }
+              } catch (parseError) {
+                console.warn('⚠️ Could not parse Loro content as JSON:', parseError);
+                console.log('📄 Raw content:', textContent.substring(0, 500));
+              }
+            } else {
+              console.log('📭 Loro text is empty');
+            }
+          } catch (error) {
+            console.error('❌ Error processing Loro event:', error);
+          }
+        }
       }
 
       // Sync cursor positions (following YJS pattern)
@@ -55,7 +106,7 @@ export function syncLoroToLexical(
         syncCursorPositionsFn(binding, provider);
       }
 
-      console.log('✅ Loro changes applied to Lexical');
+      console.log('✅ Loro changes processed (sync implementation pending)');
     },
     {
       tag: isFromUndoManager ? HISTORIC_TAG : LORO_COLLABORATION_TAG,

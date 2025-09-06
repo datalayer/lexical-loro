@@ -13,6 +13,7 @@ import {
   initLoroLocalState,
   setLoroLocalStateFocus,
   syncLexicalToLoro,
+  syncLoroToLexical,
   syncLoroCursorPositions,
   createLoroUndoManager,
   LORO_CONNECTED_COMMAND,
@@ -173,11 +174,49 @@ export function useLoroCollaboration(
       }
     };
 
+    // Provider update handler - when we receive updates from other clients
+    // Following YJS pattern: convert updates to events and call syncLoroToLexical
+    const onProviderUpdate = (update: Uint8Array) => {
+      console.log('📥 [COLLABORATION] Received Loro update from other client:', {
+        updateSize: update.length,
+        updatePreview: Array.from(update.slice(0, 10))
+      });
+      
+      try {
+        // Apply the update to the Loro document first
+        binding.doc.import(update);
+        
+        // Create a mock event structure similar to YJS events
+        // For now, we'll create a simple event that represents the update
+        const mockEvents = [{
+          type: 'loro-update',
+          update: update,
+          target: binding.rootText, // Point to our text container
+          doc: binding.doc
+        }];
+        
+        // Call our sync function following the YJS pattern exactly
+        // This will use editor.update() with proper collaboration tags
+        syncLoroToLexical(
+          binding,
+          provider,
+          mockEvents,
+          false, // not from undo manager
+          syncLoroCursorPositions
+        );
+        
+        console.log('✅ [COLLABORATION] Loro update processed via syncLoroToLexical');
+      } catch (error) {
+        console.error('❌ [COLLABORATION] Failed to process Loro update:', error);
+      }
+    };
+
     // Register provider event listeners (following YJS pattern)
     provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
     provider.on('sync', onSync);
     provider.on('initial-content', onInitialContent);
+    provider.on('update', onProviderUpdate);
     
     // Register awareness events (when awareness system is implemented)
     if (awareness) {
@@ -231,6 +270,8 @@ export function useLoroCollaboration(
       provider.off('sync', onSync);
       provider.off('status', onStatus);
       provider.off('reload', onProviderDocReload);
+      provider.off('initial-content', onInitialContent);
+      provider.off('update', onProviderUpdate);
       
       // Clean up awareness listeners
       if (awareness) {
