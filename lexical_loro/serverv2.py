@@ -380,18 +380,33 @@ class LoroWebSocketServerV2:
                 "peers": peer_list
             }))
             
-            # Send initial snapshot
-            snapshot = document.get_snapshot()
-            if snapshot:
-                snapshot_b64 = base64.b64encode(snapshot).decode('utf-8')
+            # Send initial Lexical content (not Loro snapshot)
+            initial_content = self._load_initial_content(doc_id)
+            try:
+                # Validate that it's proper JSON
+                json.loads(initial_content)
                 await websocket.send(json.dumps({
-                    "type": "snapshot",
+                    "type": "initial-content",
                     "docId": doc_id,
-                    "snapshot": snapshot_b64,
+                    "content": initial_content,
                     "peerCount": len(document.clients),
                     "peers": peer_list
                 }))
-                logger.info(f"📸 Sent snapshot to client {client_id} ({len(snapshot)} bytes)")
+                logger.info(f"📸 Sent initial content to client {client_id} ({len(initial_content)} bytes)")
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Invalid JSON in initial content for {doc_id}: {e}")
+                # Fall back to snapshot if JSON is invalid
+                snapshot = document.get_snapshot()
+                if snapshot:
+                    snapshot_b64 = base64.b64encode(snapshot).decode('utf-8')
+                    await websocket.send(json.dumps({
+                        "type": "snapshot",
+                        "docId": doc_id,
+                        "snapshot": snapshot_b64,
+                        "peerCount": len(document.clients),
+                        "peers": peer_list
+                    }))
+                    logger.info(f"📸 Sent snapshot to client {client_id} ({len(snapshot)} bytes)")
             
             # Notify other clients about the new peer
             await self.broadcast_peer_update(doc_id, exclude_client=client_id)

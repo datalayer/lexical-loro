@@ -7,8 +7,7 @@ import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc } from 'loro-crdt';
 import { createLoroBinding, type LoroBinding, type LoroProvider } from './collaboration/LoroBinding';
-import { syncLoroChangesToLexical, syncLexicalUpdateToLoro } from './collaboration/sync/SyncLoroToLexical';
-import { syncLoroCursorPositions } from './collaboration/sync/LoroSyncCursors';
+import { syncLexicalUpdateToLoro } from './collaboration/sync/SyncLoroToLexical';
 
 // Types for peer information
 export interface PeerInfo {
@@ -257,6 +256,18 @@ export const LoroCollaborativePlugin = ({
                   callbacksRef.current.onPeersChange?.(processedPeers);
                 }
                 
+              } else if (message.type === 'initial-content' && message.content) {
+                console.log('📄 Applying initial Lexical content');
+                handleInitialContent(message.content);
+                
+                if (message.peerCount !== undefined) {
+                  callbacksRef.current.onPeerCountChange?.(message.peerCount);
+                }
+                if (message.peers) {
+                  const processedPeers = processPeerList(message.peers, loroDoc.peerIdStr);
+                  callbacksRef.current.onPeersChange?.(processedPeers);
+                }
+                
               } else if (message.type === 'snapshot' && message.snapshot) {
                 console.log('📸 Applying initial snapshot');
                 handleSnapshot(message.snapshot);
@@ -326,6 +337,24 @@ export const LoroCollaborativePlugin = ({
             
           } catch (error) {
             console.error('❌ Failed to apply snapshot:', error, 'Snapshot data:', snapshotB64);
+          }
+        }
+
+        // Function to handle initial Lexical content
+        function handleInitialContent(lexicalJsonStr: string) {
+          try {
+            console.log('📄 Setting initial Lexical content:', lexicalJsonStr.length, 'chars');
+            
+            // Parse the Lexical JSON
+            const lexicalState = JSON.parse(lexicalJsonStr);
+            
+            // Apply the state directly to the editor
+            editor.setEditorState(editor.parseEditorState(lexicalState));
+            
+            console.log('✅ Initial Lexical content applied successfully');
+            
+          } catch (error) {
+            console.error('❌ Failed to apply initial content:', error, 'Content:', lexicalJsonStr);
           }
         }
 
