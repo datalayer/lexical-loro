@@ -102,6 +102,31 @@ export function syncLoroToLexical(
                 const parsedJson = JSON.parse(textContent);
                 
                 if (parsedJson.type === 'root') {
+                  // SAFETY CHECK: Prevent applying empty states that would clear content
+                  const newStateIsEmpty = !parsedJson.children || parsedJson.children.length === 0;
+                  const currentRoot = $getRoot();
+                  const currentHasContent = currentRoot.getChildren().length > 0;
+                  
+                  if (newStateIsEmpty && currentHasContent) {
+                    console.warn('🚨 [LORO-TO-LEXICAL-BLOCKED] Preventing destructive sync from Loro');
+                    console.warn('📄 Received empty state but current editor has content');
+                    console.warn('🛡️ Skipping sync to prevent content disappearing');
+                    console.warn('📊 Current children:', currentRoot.getChildren().length);
+                    console.warn('📊 New children:', parsedJson.children?.length || 0);
+                    return; // Skip this destructive update
+                  }
+                  
+                  // Check if content is identical (no need to sync)
+                  const currentStateJson = JSON.stringify(currentRoot.exportJSON());
+                  if (currentStateJson === textContent) {
+                    console.log('✅ [LORO-TO-LEXICAL-SKIP] Content is identical - no sync needed');
+                    return;
+                  }
+                  
+                  console.log('✅ [LORO-TO-LEXICAL-SAFE] Proceeding with safe sync from Loro');
+                  console.log('📊 New children count:', parsedJson.children?.length || 0);
+                  console.log('📊 Current children count:', currentRoot.getChildren().length);
+                  
                   // Create a new editor state from the Loro content
                   // We need to wrap it in the expected structure for parseEditorState
                   const wrappedContent = JSON.stringify({ root: parsedJson });
@@ -112,7 +137,7 @@ export function syncLoroToLexical(
                   const newRoot = newEditorState._nodeMap.get('root');
                   
                   if (newRoot) {
-                    // Clear current content
+                    // Clear current content only if we're sure the new state is valid
                     root.clear();
                     
                     // Import children from the new state
@@ -124,7 +149,7 @@ export function syncLoroToLexical(
                     // This is where we'd implement proper node synchronization
                     // Following the YJS pattern of processing individual changes
                     // For now, we'll just log that we received the update
-                    console.log('� Loro update received - node sync would happen here');
+                    console.log('📝 Loro update received - node sync would happen here');
                   }
                   
                   console.log('✅ Processed Loro text update');
@@ -227,6 +252,24 @@ export function syncLexicalToLoro(
         // Store in Loro's text container for simplicity
         // Use the binding's rootText to match what syncLoroToLexical reads from
         const text = _binding.rootText;
+        
+        // SAFETY CHECK: Prevent destructive updates that cause content to disappear
+        const currentLoroContent = text.toString();
+        const newStateIsEmpty = rootChildren.length === 0;
+        const currentContentExists = currentLoroContent.length > 100; // Has real content
+        
+        if (newStateIsEmpty && currentContentExists) {
+          console.warn('🚨 [SYNC-BLOCKED] Preventing destructive sync - new state is empty but current content exists');
+          console.warn('📄 This would cause content to disappear in other editors');
+          console.warn('🛡️ Skipping sync to prevent data loss');
+          return;
+        }
+        
+        // Check if content is identical (no need to sync)
+        if (currentLoroContent === editorStateJson) {
+          console.log('✅ [SYNC-SKIP] Content is identical - no sync needed');
+          return;
+        }
         
         console.log('🔍 [SYNC-TO-LORO] Starting content sync:');
         console.log('📝 New content to write:', editorStateJson.substring(0, 100));
