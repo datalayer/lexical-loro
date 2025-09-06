@@ -277,11 +277,22 @@ class LoroWebSocketServerV2:
         
         try:
             # Send welcome message
+            # Create peer list for initial messages
+            peer_list = []
+            for peer_id in document.clients:
+                peer_list.append({
+                    "id": peer_id,
+                    "displayId": peer_id.split('_')[-1] if '_' in peer_id else peer_id[:8],
+                    "isCurrentUser": peer_id == client_id
+                })
+            
             await websocket.send(json.dumps({
                 "type": "welcome",
                 "clientId": client_id,
                 "docId": doc_id,
-                "message": "Connected to Loro V2 server"
+                "message": "Connected to Loro V2 server",
+                "peerCount": len(document.clients),
+                "peers": peer_list
             }))
             
             # Send initial snapshot
@@ -291,9 +302,14 @@ class LoroWebSocketServerV2:
                 await websocket.send(json.dumps({
                     "type": "snapshot",
                     "docId": doc_id,
-                    "snapshot": snapshot_b64
+                    "snapshot": snapshot_b64,
+                    "peerCount": len(document.clients),
+                    "peers": peer_list
                 }))
                 logger.info(f"📸 Sent snapshot to client {client_id} ({len(snapshot)} bytes)")
+            
+            # Notify other clients about the new peer
+            await self.broadcast_peer_update(doc_id, exclude_client=client_id)
             
             # Listen for messages
             async for message in websocket:
@@ -415,6 +431,39 @@ class LoroWebSocketServerV2:
         
         logger.debug(f"📡 Broadcast: {successful_sends} successful, {len(failed_clients)} failed")
     
+    async def broadcast_peer_update(self, doc_id: str, exclude_client: str = None):
+        """Broadcast peer list update to all clients in a document"""
+        if doc_id not in self.documents:
+            return
+        
+        document = self.documents[doc_id]
+        peer_count = len(document.clients)
+        
+        # Create peer list with truncated IDs for display
+        peer_list = []
+        for client_id in document.clients:
+            peer_list.append({
+                "id": client_id,
+                "displayId": client_id.split('_')[-1] if '_' in client_id else client_id[:8],
+                "isCurrentUser": False  # Will be set by client
+            })
+        
+        # Create peer update message
+        message = json.dumps({
+            "type": "peerUpdate",
+            "docId": doc_id,
+            "peerCount": peer_count,
+            "peers": peer_list
+        })
+        
+        # Send to all clients in this document
+        for client_id in document.clients:
+            if client_id != exclude_client and client_id in self.clients:
+                try:
+                    await self.clients[client_id].send(message)
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to send peer update to {client_id}: {e}")
+    
     async def cleanup_client(self, client_id: str):
         """Clean up a disconnected client"""
         doc_id = self.client_to_doc.get(client_id)
@@ -423,6 +472,10 @@ class LoroWebSocketServerV2:
         if doc_id and doc_id in self.documents:
             document = self.documents[doc_id]
             is_empty = document.remove_client(client_id)
+            
+            # Notify remaining clients about peer count change
+            if not is_empty:
+                await self.broadcast_peer_update(doc_id)
             
             # If document has no more clients, save and optionally remove it
             if is_empty:

@@ -6,6 +6,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc } from 'loro-crdt';
+import { createLoroBinding, type LoroBinding } from './collaboration/LoroBinding';
+import { initializeSyncHandlers } from './collaboration/sync/SyncLoroToLexical';
+
+// Types for peer information
+export interface PeerInfo {
+  id: string;
+  displayId: string;
+  isCurrentUser: boolean;
+}
 
 // Types for the new collaborative plugin
 interface LoroCollaborativePluginV2Props {
@@ -14,6 +23,8 @@ interface LoroCollaborativePluginV2Props {
   onConnectionChange?: (connected: boolean) => void;
   onInitialization?: (initialized: boolean) => void;
   onPeerIdChange?: (peerId: string) => void;
+  onPeerCountChange?: (peerCount: number) => void;
+  onPeersChange?: (peers: PeerInfo[]) => void;
 }
 
 /**
@@ -25,7 +36,9 @@ export function LoroCollaborativePluginV2({
   docId,
   onConnectionChange,
   onInitialization,
-  onPeerIdChange
+  onPeerIdChange,
+  onPeerCountChange,
+  onPeersChange
 }: LoroCollaborativePluginV2Props) {
   const [editor] = useLexicalComposerContext();
   const [initialized, setInitialized] = useState(false);
@@ -33,6 +46,8 @@ export function LoroCollaborativePluginV2({
   // Refs to store collaboration objects
   const loroDocRef = useRef<LoroDoc | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
+  const bindingRef = useRef<LoroBinding | null>(null);
+  const syncCleanupRef = useRef<(() => void) | null>(null);
   
   // Initialize the collaboration system
   useEffect(() => {
@@ -46,6 +61,22 @@ export function LoroCollaborativePluginV2({
         // Create Loro document
         const loroDoc = new LoroDoc();
         loroDocRef.current = loroDoc;
+
+        // Create Loro binding for collaboration (equivalent to YJS binding)
+        const provider = { doc: loroDoc, connected: false };
+        const binding = createLoroBinding(
+          editor,
+          provider,
+          docId,
+          loroDoc,
+          new Map(),
+          new Map()
+        );
+        bindingRef.current = binding;
+
+        // Initialize sync handlers (equivalent to YJS sync setup)
+        const syncCleanup = initializeSyncHandlers(binding);
+        syncCleanupRef.current = syncCleanup;
 
         // Create WebSocket connection to V2 server
         const wsUrl = `${websocketUrl}/${docId}`;
@@ -87,14 +118,36 @@ export function LoroCollaborativePluginV2({
 
               if (message.type === 'welcome') {
                 console.log('👋 Welcome message received:', message);
+                if (message.peerCount !== undefined) {
+                  onPeerCountChange?.(message.peerCount);
+                }
+                if (message.peers) {
+                  onPeersChange?.(message.peers);
+                }
                 
               } else if (message.type === 'snapshot' && message.snapshot) {
                 console.log('📸 Applying initial snapshot');
                 handleSnapshot(message.snapshot);
                 
+                if (message.peerCount !== undefined) {
+                  onPeerCountChange?.(message.peerCount);
+                }
+                if (message.peers) {
+                  onPeersChange?.(message.peers);
+                }
+                
                 if (!initialized) {
                   setInitialized(true);
                   onInitialization?.(true);
+                }
+                
+              } else if (message.type === 'peerUpdate') {
+                console.log('👥 Peer update:', message.peerCount, 'peers');
+                if (message.peerCount !== undefined) {
+                  onPeerCountChange?.(message.peerCount);
+                }
+                if (message.peers) {
+                  onPeersChange?.(message.peers);
                 }
                 
               } else if (message.type === 'update' && message.update) {
@@ -214,6 +267,12 @@ export function LoroCollaborativePluginV2({
           console.log('🧹 Cleaning up LoroCollaborativePluginV2');
           removeUpdateListener();
           
+          // Clean up sync handlers
+          if (syncCleanupRef.current) {
+            syncCleanupRef.current();
+            syncCleanupRef.current = null;
+          }
+          
           if (reconnectTimer) {
             clearTimeout(reconnectTimer);
           }
@@ -224,6 +283,7 @@ export function LoroCollaborativePluginV2({
           }
           
           loroDocRef.current = null;
+          bindingRef.current = null;
         };
 
       } catch (error) {
@@ -236,7 +296,7 @@ export function LoroCollaborativePluginV2({
     return () => {
       cleanup?.();
     };
-  }, [editor, websocketUrl, docId, onConnectionChange, onInitialization, onPeerIdChange, initialized]);
+  }, [editor, websocketUrl, docId, onConnectionChange, onInitialization, onPeerIdChange, onPeerCountChange, onPeersChange, initialized]);
 
   // This plugin doesn't render anything - it just handles collaboration
   return null;

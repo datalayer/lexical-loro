@@ -4,25 +4,28 @@
  */
 
 import type { ElementNode, NodeKey, NodeMap } from 'lexical';
-import type { LoroText } from 'loro-crdt';
+import type { LoroTree, TreeID } from 'loro-crdt';
 import type { LoroCollabNode } from './LoroCollabNode';
 import { $getNodeByKey, $isElementNode } from 'lexical';
 
 export class LoroCollabElementNode implements LoroCollabNode {
   _key: NodeKey;
   _children: Array<LoroCollabNode>;
-  _loroText: LoroText;
+  _loroTree: LoroTree; // Use Tree for hierarchical structure (equivalent to YJS XmlText)
+  _treeId: TreeID;
   _type: string;
   _parent: LoroCollabElementNode | null;
 
   constructor(
-    loroText: LoroText,
+    loroTree: LoroTree,
     parent: LoroCollabElementNode | null,
     type: string,
+    treeId?: string,
   ) {
     this._key = '';
     this._children = [];
-    this._loroText = loroText;
+    this._loroTree = loroTree;
+    this._treeId = (treeId || 'document') as TreeID;
     this._type = type;
     this._parent = parent;
   }
@@ -41,8 +44,12 @@ export class LoroCollabElementNode implements LoroCollabNode {
     return $isElementNode(node) ? node : null;
   }
 
-  getLoroText(): LoroText {
-    return this._loroText;
+  getLoroTree(): LoroTree {
+    return this._loroTree;
+  }
+
+  getTreeId(): TreeID {
+    return this._treeId;
   }
 
   getType(): string {
@@ -88,25 +95,25 @@ export class LoroCollabElementNode implements LoroCollabNode {
   /**
    * Apply delta operations from Loro to update the Lexical editor state
    */
-  applyLoroDeltas(binding: any, deltas: Array<any>): void {
+  applyLoroDeltas(_binding: any, deltas: Array<any>): void {
     // TODO: Implement delta application logic similar to YJS
     // This will process insertions, deletions, and retains from Loro
     console.log('📝 Applying Loro deltas:', deltas);
   }
 
   /**
-   * Sync children from Loro text to Lexical nodes
+   * Sync children from Loro tree to Lexical nodes
    */
-  syncChildrenFromLoro(binding: any): void {
+  syncChildrenFromLoro(_binding: any): void {
     // TODO: Implement children synchronization logic
-    // This will ensure Lexical nodes match the Loro text structure
-    console.log('🔄 Syncing children from Loro');
+    // This will ensure Lexical nodes match the Loro tree structure
+    console.log('🔄 Syncing children from Loro tree');
   }
 
   /**
    * Sync properties from Loro to Lexical node
    */
-  syncPropertiesFromLoro(binding: any, keysChanged: Set<string> | null): void {
+  syncPropertiesFromLoro(_binding: any, keysChanged: Set<string> | null): void {
     // TODO: Implement property synchronization
     // This will update node properties based on Loro changes
     console.log('🔧 Syncing properties from Loro:', keysChanged);

@@ -18,7 +18,7 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborativePluginV2 } from '../LoroCollaborativePluginV2';
+import { LoroCollaborativePluginV2, PeerInfo } from '../LoroCollaborativePluginV2';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
@@ -75,6 +75,8 @@ export function LexicalCollaborativeEditorV2({
   const [connected, setConnected] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [peerId, setPeerId] = useState<string>('');
+  const [peerCount, setPeerCount] = useState<number>(0);
+  const [peers, setPeers] = useState<PeerInfo[]>([]);
 
   // Handle connection changes
   const handleConnectionChange = useCallback((connected: boolean) => {
@@ -94,6 +96,18 @@ export function LexicalCollaborativeEditorV2({
   const handlePeerIdChange = useCallback((newPeerId: string) => {
     console.log(`👤 Peer ID changed: ${newPeerId}`);
     setPeerId(newPeerId);
+  }, []);
+
+  // Handle peer count changes
+  const handlePeerCountChange = useCallback((newPeerCount: number) => {
+    console.log(`👥 Peer count changed: ${newPeerCount}`);
+    setPeerCount(newPeerCount);
+  }, []);
+
+  // Handle peers list changes
+  const handlePeersChange = useCallback((newPeers: PeerInfo[]) => {
+    console.log(`👥 Peers changed:`, newPeers);
+    setPeers(newPeers);
   }, []);
 
   // Editor configuration
@@ -128,14 +142,37 @@ export function LexicalCollaborativeEditorV2({
               {connected ? '🟢 Connected' : '🔴 Disconnected'}
             </span>
             {peerId && <span>👤 Peer: {peerId.slice(0, 8)}</span>}
+            {peerCount > 0 && <span>👥 Peers: {peerCount}</span>}
             <button
               className="disconnect-button"
-              onClick={() => console.log('🔍 V2 Debug - Connected:', connected, 'Initialized:', isInitialized, 'Peer:', peerId)}
+              onClick={() => console.log('🔍 V2 Debug - Connected:', connected, 'Initialized:', isInitialized, 'Peer:', peerId, 'Count:', peerCount, 'Peers:', peers)}
               style={{ marginLeft: '10px' }}
             >
               🔍 Debug Info
             </button>
           </div>
+          {peers.length > 0 && (
+            <div className="peers-list" style={{ marginTop: '10px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Active Users:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {peers.map((peer) => (
+                  <div 
+                    key={peer.id} 
+                    style={{ 
+                      padding: '4px 8px',
+                      backgroundColor: peer.isCurrentUser ? '#1ABC9C' : '#f3f4f6',
+                      color: peer.isCurrentUser ? '#FFFFFF' : '#666',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      border: peer.isCurrentUser ? 'none' : '1px solid #d1d5db'
+                    }}
+                  >
+                    {peer.isCurrentUser ? '👤 You' : `👥 ${peer.displayId}`}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -170,6 +207,8 @@ export function LexicalCollaborativeEditorV2({
             onConnectionChange={handleConnectionChange}
             onInitialization={handleInitialization}
             onPeerIdChange={handlePeerIdChange}
+            onPeerCountChange={handlePeerCountChange}
+            onPeersChange={handlePeersChange}
           />
         </div>
       </LexicalComposer>
