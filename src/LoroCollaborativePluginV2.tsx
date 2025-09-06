@@ -8,6 +8,7 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { 
   $getRoot, 
   $createParagraphNode,
+  $getSelection,
   HISTORY_MERGE_TAG,
   SKIP_COLLAB_TAG,
   type EditorState
@@ -65,6 +66,12 @@ interface LoroCollaborativePluginV2Props {
 /**
  * Initialize editor with content (following YJS initializeEditor pattern)
  * This is called when bootstrapping an empty document, just like YJS
+ * 
+ * NOTE: This is the ONLY place where setEditorState is allowed, because:
+ * 1. It only happens during bootstrap when document is completely empty
+ * 2. It's tagged with HISTORY_MERGE_TAG for initialization tracking  
+ * 3. It's not replacing existing state, but setting initial state
+ * 4. This matches YJS behavior exactly
  */
 function initializeEditor(
   editor: LexicalEditor,
@@ -78,7 +85,7 @@ function initializeEditor(
         if (initialEditorState) {
           switch (typeof initialEditorState) {
             case 'string': {
-              // Parse Lexical JSON string
+              // Parse Lexical JSON string (YJS pattern)
               const parsedEditorState = editor.parseEditorState(initialEditorState);
               editor.setEditorState(parsedEditorState, {
                 tag: HISTORY_MERGE_TAG,
@@ -86,14 +93,14 @@ function initializeEditor(
               break;
             }
             case 'object': {
-              // Use EditorState object directly - assume it's valid EditorState
+              // Use EditorState object directly (YJS pattern)
               editor.setEditorState(initialEditorState as EditorState, {
                 tag: HISTORY_MERGE_TAG,
               });
               break;
             }
             case 'function': {
-              // Execute function to populate editor
+              // Execute function to populate editor (YJS pattern)
               editor.update(
                 () => {
                   const root1 = $getRoot();
@@ -111,9 +118,12 @@ function initializeEditor(
           const paragraph = $createParagraphNode();
           root.append(paragraph);
           
-          // Auto-select if editor is focused
+          // Auto-select if editor is focused (YJS pattern)
           const { activeElement } = document;
-          if (activeElement === editor.getRootElement()) {
+          if (
+            $getSelection() !== null ||
+            (activeElement !== null && activeElement === editor.getRootElement())
+          ) {
             paragraph.select();
           }
         }
