@@ -164,15 +164,28 @@ export function syncLexicalToLoro(
     try {
       // Export the current document state as an update
       const exportedUpdate = _binding.doc.export({ mode: 'update' });
-      console.log('📦 Exported Loro update:', exportedUpdate.length, 'bytes');
+      const browserId = _provider.clientId.slice(-4);
+      console.log(`📦 [CLIENT-${browserId}] Exported Loro update:`, exportedUpdate.length, 'bytes');
       
       // Send the update via the provider (if there are actual changes)
       if (exportedUpdate.length > 0) {
+        const timestamp = new Date().toISOString();
+        const browserId = _provider.clientId.slice(-4); // Use last 4 chars of client ID
+        console.log(`📤 [CLIENT-${browserId}] Sending update to server at ${timestamp}:`, {
+          updateSize: exportedUpdate.length,
+          updatePreview: Array.from(exportedUpdate.slice(0, 10)),
+          dirtyElementsCount: dirtyElements.size,
+          dirtyLeavesCount: dirtyLeaves.size
+        });
         _provider.sendUpdate(exportedUpdate);
-        console.log('📤 Sent update to other clients');
+        console.log(`✅ [CLIENT-${browserId}] Update sent successfully`);
+      } else {
+        const browserId = _provider.clientId.slice(-4);
+        console.log(`⏭️ [CLIENT-${browserId}] No changes to send (empty update)`);
       }
     } catch (error) {
-      console.warn('⚠️ Failed to export/send update:', error);
+      const browserId = _provider.clientId.slice(-4);
+      console.error(`❌ [CLIENT-${browserId}] Failed to export/send update:`, error);
     }
 
     console.log('✅ Lexical changes applied to Loro');

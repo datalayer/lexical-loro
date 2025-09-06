@@ -31,8 +31,8 @@ export interface LoroProvider {
   /**
    * Register event listeners (YJS-style events + Loro-specific events)
    */
-  on(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload' | 'initial-content' | 'welcome', callback: (data?: any) => void): void;
-  off(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload' | 'initial-content' | 'welcome', callback: (data?: any) => void): void;
+  on(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload' | 'initial-content' | 'welcome' | 'peerUpdate', callback: (data?: any) => void): void;
+  off(event: 'connect' | 'disconnect' | 'sync' | 'update' | 'status' | 'reload' | 'initial-content' | 'welcome' | 'peerUpdate', callback: (data?: any) => void): void;
 
   /**
    * Send an update to other clients
@@ -92,27 +92,62 @@ export function createLoroProvider(
         websocket.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            console.log('📨 Received WebSocket message:', message.type, message);
+            const timestamp = new Date().toISOString();
+            const browserId = provider.clientId.slice(-4);
+            console.log(`📨 [PROVIDER-${browserId}] Received WebSocket message at ${timestamp}:`, {
+              type: message.type,
+              from: message.clientId || 'server',
+              docId: message.docId,
+              messageSize: event.data.length
+            });
             
             if (message.type === 'update' && message.update) {
               // Convert base64 update to Uint8Array and apply
               const updateBytes = new Uint8Array(
                 atob(message.update).split('').map(c => c.charCodeAt(0))
               );
-              provider.applyUpdate(updateBytes);
+              
+              const fromBrowserId = message.clientId ? message.clientId.slice(-4) : 'UNKN';
+              console.log(`🔄 [PROVIDER-${browserId}] Processing update from ${fromBrowserId}:`, {
+                updateSize: updateBytes.length,
+                base64Size: message.update.length,
+                updatePreview: Array.from(updateBytes.slice(0, 10)),
+                fromClient: message.clientId,
+                ourClientId: provider.clientId,
+                isFromUs: message.clientId === provider.clientId
+              });
+              
+              // Don't apply updates that originated from this client (avoid echo)
+              if (message.clientId !== provider.clientId) {
+                provider.applyUpdate(updateBytes);
+                console.log(`✅ [PROVIDER-${browserId}] Update applied successfully`);
+              } else {
+                console.log(`⏭️ [PROVIDER-${browserId}] Skipping our own update (echo prevention)`);
+              }
             } else if (message.type === 'initial-content' && message.content) {
               // Handle initial content from server (Lexical JSON state)
-              console.log('📋 Received initial content from server');
+              console.log(`📋 [PROVIDER-${browserId}] Received initial content from server:`, {
+                contentLength: message.content.length,
+                contentPreview: message.content.substring(0, 100)
+              });
               emit('initial-content', { content: message.content });
             } else if (message.type === 'welcome') {
               // Handle welcome message
-              console.log('👋 Welcome message received:', message.message);
+              console.log(`👋 [PROVIDER-${browserId}] Welcome message received:`, message.message);
               emit('welcome', message);
+            } else if (message.type === 'peerUpdate') {
+              // Handle peer update message
+              console.log(`👥 [PROVIDER-${browserId}] Peer update received:`, {
+                peerCount: message.peerCount,
+                peers: message.peers?.length || 0
+              });
+              emit('peerUpdate', message);
             } else {
-              console.log('❓ Unknown message type:', message.type);
+              console.log(`❓ [PROVIDER-${browserId}] Unknown message type:`, message.type);
             }
           } catch (error) {
-            console.error('❌ Failed to process WebSocket message:', error);
+            const browserId = provider.clientId.slice(-4);
+            console.error(`❌ [PROVIDER-${browserId}] Failed to process WebSocket message:`, error);
           }
         };
       });
@@ -145,18 +180,53 @@ export function createLoroProvider(
       if (websocket && websocket.readyState === WebSocket.OPEN) {
         // Convert Uint8Array to base64 for transmission
         const base64Update = btoa(String.fromCharCode(...update));
-        websocket.send(JSON.stringify({
+        const timestamp = new Date().toISOString();
+        const browserId = provider.clientId.slice(-4);
+        
+        const message = {
           type: 'update',
           docId,
           clientId: provider.clientId,
           update: base64Update
-        }));
+        };
+        
+        console.log(`🚀 [PROVIDER-${browserId}] Sending update to server at ${timestamp}:`, {
+          updateSize: update.length,
+          base64Size: base64Update.length,
+          updatePreview: Array.from(update.slice(0, 10)),
+          clientId: provider.clientId,
+          docId,
+          websocketState: websocket.readyState
+        });
+        
+        websocket.send(JSON.stringify(message));
+        console.log(`✅ [PROVIDER-${browserId}] Update sent to WebSocket`);
+      } else {
+        const browserId = provider.clientId.slice(-4);
+        console.warn(`⚠️ [PROVIDER-${browserId}] Cannot send update - WebSocket not connected:`, {
+          websocketExists: !!websocket,
+          readyState: websocket?.readyState,
+          connected: provider.connected
+        });
       }
     },
 
     applyUpdate(update) {
-      doc.import(update);
-      emit('update', update);
+      const timestamp = new Date().toISOString();
+      const browserId = provider.clientId.slice(-4);
+      console.log(`🔧 [PROVIDER-${browserId}] Applying update at ${timestamp}:`, {
+        updateSize: update.length,
+        updatePreview: Array.from(update.slice(0, 10))
+      });
+      
+      try {
+        doc.import(update);
+        console.log(`✅ [PROVIDER-${browserId}] Update imported to Loro doc successfully`);
+        emit('update', update);
+        console.log(`📡 [PROVIDER-${browserId}] Update event emitted to listeners`);
+      } catch (error) {
+        console.error(`❌ [PROVIDER-${browserId}] Failed to import update:`, error);
+      }
     }
   };
 

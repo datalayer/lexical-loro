@@ -43,6 +43,9 @@ type Props = {
   // `awarenessData` parameter allows arbitrary data to be added to the awareness.
   awarenessData?: object;
   syncCursorPositionsFn?: SyncLoroCursorPositionsFn;
+  // Callback props for peer management
+  onPeerIdChange?: (peerId: string) => void;
+  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
 };
 
 /**
@@ -69,6 +72,8 @@ export function LoroCollaborationPlugin({
   excludedProperties,
   awarenessData,
   syncCursorPositionsFn,
+  onPeerIdChange,
+  onAwarenessChange,
 }: Props): JSX.Element {
   const isBindingInitialized = useRef(false);
   const isProviderInitialized = useRef(false);
@@ -169,6 +174,8 @@ export function LoroCollaborationPlugin({
       shouldBootstrap={shouldBootstrap}
       loroDocMap={loroDocMap}
       syncCursorPositionsFn={syncCursorPositionsFn}
+      onPeerIdChange={onPeerIdChange}
+      onAwarenessChange={onAwarenessChange}
     />
   );
 }
@@ -198,6 +205,8 @@ function LoroCollaborationCursors({
   binding,
   setDoc,
   syncCursorPositionsFn,
+  onPeerIdChange,
+  onAwarenessChange,
 }: {
   editor: LexicalEditor;
   id: string;
@@ -213,6 +222,8 @@ function LoroCollaborationCursors({
   awarenessData?: object;
   collabContext: LoroCollaborationContextType;
   syncCursorPositionsFn?: SyncLoroCursorPositionsFn;
+  onPeerIdChange?: (peerId: string) => void;
+  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
 }) {
   // Main collaboration hook (following YJS pattern exactly)
   const cursors = useLoroCollaboration(
@@ -230,6 +241,54 @@ function LoroCollaborationCursors({
     awarenessData,
     syncCursorPositionsFn,
   );
+
+  // Handle peer data from provider events
+  useEffect(() => {
+    if (!provider) return;
+
+    // Set peer ID when available
+    if (provider.clientId && onPeerIdChange) {
+      onPeerIdChange(provider.clientId);
+    }
+
+    // Listen for welcome messages with peer data
+    const handleWelcome = (data: any) => {
+      if (data.peers && onAwarenessChange) {
+        // Convert peer data from server format to awareness format
+        const awarenessData = data.peers.map((peer: any) => ({
+          peerId: peer.id || peer.clientId,
+          userName: peer.displayId || peer.id?.slice(-4) || 'User',
+          isCurrentUser: peer.isCurrentUser || peer.clientId === provider.clientId
+        }));
+        onAwarenessChange(awarenessData);
+      }
+      
+      // Also set peer ID from welcome message
+      if (data.clientId && onPeerIdChange) {
+        onPeerIdChange(data.clientId);
+      }
+    };
+
+    // Listen for peer updates
+    const handlePeerUpdate = (data: any) => {
+      if (data.peers && onAwarenessChange) {
+        const awarenessData = data.peers.map((peer: any) => ({
+          peerId: peer.id || peer.clientId,
+          userName: peer.displayId || peer.id?.slice(-4) || 'User',
+          isCurrentUser: peer.isCurrentUser || peer.clientId === provider.clientId
+        }));
+        onAwarenessChange(awarenessData);
+      }
+    };
+
+    provider.on('welcome', handleWelcome);
+    provider.on('peerUpdate', handlePeerUpdate);
+
+    return () => {
+      provider.off('welcome', handleWelcome);
+      provider.off('peerUpdate', handlePeerUpdate);
+    };
+  }, [provider, onPeerIdChange, onAwarenessChange]);
 
   // Set client ID in context (following YJS pattern exactly)
   collabContext.clientID = binding.clientID;

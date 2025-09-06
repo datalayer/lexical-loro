@@ -345,7 +345,8 @@ class LoroWebSocketServerV2:
             await websocket.close()
             return
         
-        logger.info(f"🔌 New connection: client {client_id} -> document {doc_id} (path: {path})")
+        logger.info(f"🔌 [SERVER] New connection: client {client_id} -> document {doc_id} (path: {path})")
+        logger.info(f"👤 [SERVER] Total clients: {len(self.clients) + 1}")
         
         # Store client info
         self.clients[client_id] = websocket
@@ -354,6 +355,8 @@ class LoroWebSocketServerV2:
         # Get or create document
         document = self.get_or_create_document(doc_id)
         document.add_client(client_id)
+        
+        logger.info(f"📄 [SERVER] Document {doc_id} now has {len(document.clients)} clients: {list(document.clients)}")
         
         try:
             # Send welcome message
@@ -369,44 +372,50 @@ class LoroWebSocketServerV2:
                     "isCurrentUser": peer_id == client_id
                 })
             
-            await websocket.send(json.dumps({
+            welcome_message = {
                 "type": "welcome",
                 "clientId": client_id,
                 "docId": doc_id,
                 "message": "Connected to Loro V2 server",
                 "peerCount": len(document.clients),
                 "peers": peer_list
-            }))
+            }
+            
+            await websocket.send(json.dumps(welcome_message))
+            logger.info(f"👋 [SERVER] Sent welcome message to {client_id} with {len(peer_list)} peers")
             
             # Send initial Lexical content (not Loro snapshot)
             initial_content = self._load_initial_content(doc_id)
             try:
                 # Validate that it's proper JSON
                 json.loads(initial_content.strip())
-                await websocket.send(json.dumps({
+                initial_content_msg = {
                     "type": "initial-content",
                     "docId": doc_id,
                     "content": initial_content.strip(),
                     "peerCount": len(document.clients),
                     "peers": peer_list
-                }))
-                logger.info(f"📸 Sent initial content to client {client_id} ({len(initial_content.strip())} bytes)")
+                }
+                await websocket.send(json.dumps(initial_content_msg))
+                logger.info(f"� [SERVER] Sent initial content to {client_id} ({len(initial_content.strip())} bytes)")
             except json.JSONDecodeError as e:
-                logger.error(f"❌ Invalid JSON in initial content for {doc_id}: {e}")
+                logger.error(f"❌ [SERVER] Invalid JSON in initial content for {doc_id}: {e}")
                 # Fall back to snapshot if JSON is invalid
                 snapshot = document.get_snapshot()
                 if snapshot:
                     snapshot_b64 = base64.b64encode(snapshot).decode('utf-8')
-                    await websocket.send(json.dumps({
+                    snapshot_msg = {
                         "type": "snapshot",
                         "docId": doc_id,
                         "snapshot": snapshot_b64,
                         "peerCount": len(document.clients),
                         "peers": peer_list
-                    }))
-                    logger.info(f"📸 Sent snapshot to client {client_id} ({len(snapshot)} bytes)")
+                    }
+                    await websocket.send(json.dumps(snapshot_msg))
+                    logger.info(f"📸 [SERVER] Sent snapshot to {client_id} ({len(snapshot)} bytes)")
             
             # Notify other clients about the new peer
+            logger.info(f"📢 [SERVER] Notifying other clients about new peer {client_id}")
             await self.broadcast_peer_update(doc_id, exclude_client=client_id)
             
             # Listen for messages
@@ -428,51 +437,68 @@ class LoroWebSocketServerV2:
             msg_type = data.get("type")
             doc_id = data.get("docId")
             
-            logger.debug(f"📨 Message from {client_id}: {msg_type} for document {doc_id}")
+            timestamp = time.strftime("%H:%M:%S", time.localtime())
+            logger.info(f"📨 [SERVER] {timestamp} - Message from {client_id}: {msg_type} for document {doc_id}")
             
             if msg_type == "update" and "update" in data:
+                update_size = len(data["update"]) if data["update"] else 0
+                logger.info(f"🔄 [SERVER] Processing update from {client_id}: {update_size} bytes (base64)")
                 await self.handle_loro_update(client_id, doc_id, data["update"])
             elif msg_type == "cursor" and "cursor" in data:
                 await self.handle_cursor_update(client_id, doc_id, data["cursor"])
             elif msg_type == "registerLoroPeerId" and "loroPeerId" in data:
                 await self.handle_register_loro_peer_id(client_id, doc_id, data["loroPeerId"])
             else:
-                logger.warning(f"⚠️ Unknown message type: {msg_type}")
+                logger.warning(f"⚠️ [SERVER] Unknown message type: {msg_type}")
                 
         except json.JSONDecodeError as e:
-            logger.error(f"❌ Invalid JSON from client {client_id}: {e}")
+            logger.error(f"❌ [SERVER] Invalid JSON from client {client_id}: {e}")
         except Exception as e:
-            logger.error(f"❌ Error handling message from {client_id}: {e}")
+            logger.error(f"❌ [SERVER] Error handling message from {client_id}: {e}")
+            traceback.print_exc()
     
     async def handle_loro_update(self, sender_id: str, doc_id: str, update_b64: str):
         """Handle a Loro update from a client"""
         try:
             # Decode the update
             update_bytes = base64.b64decode(update_b64)
+            timestamp = time.strftime("%H:%M:%S", time.localtime())
+            
+            logger.info(f"🔧 [SERVER] {timestamp} - Processing Loro update:")
+            logger.info(f"    📊 From: {sender_id}")
+            logger.info(f"    📄 Document: {doc_id}")
+            logger.info(f"    📦 Size: {len(update_bytes)} bytes")
+            logger.info(f"    🔢 Preview: {list(update_bytes[:10])}")
             
             # Get the document
             if doc_id not in self.documents:
-                logger.error(f"❌ Document {doc_id} not found for update")
+                logger.error(f"❌ [SERVER] Document {doc_id} not found for update")
                 return
             
             document = self.documents[doc_id]
+            connected_clients = list(document.clients)
+            logger.info(f"👥 [SERVER] Document has {len(connected_clients)} connected clients: {connected_clients}")
             
             # Apply the update to the document
             if document.apply_update(update_bytes):
-                logger.debug(f"✅ Applied update to document {doc_id} from client {sender_id}")
+                logger.info(f"✅ [SERVER] Applied update to document {doc_id} from client {sender_id}")
                 
                 # Broadcast the update to other clients
+                other_clients = [c for c in connected_clients if c != sender_id]
+                logger.info(f"📡 [SERVER] Broadcasting to {len(other_clients)} other clients: {other_clients}")
                 await self.broadcast_update(sender_id, doc_id, update_b64)
                 
                 # Save document periodically (every 10 updates for example)
                 # In production, you might want a more sophisticated saving strategy
                 if int(time.time()) % 10 == 0:  # Save every ~10 seconds
                     self._save_document(doc_id, document)
+                    logger.info(f"💾 [SERVER] Saved document {doc_id}")
             else:
-                logger.error(f"❌ Failed to apply update to document {doc_id}")
+                logger.error(f"❌ [SERVER] Failed to apply update to document {doc_id}")
                 
         except Exception as e:
-            logger.error(f"❌ Error handling Loro update: {e}")
+            logger.error(f"❌ [SERVER] Error handling Loro update: {e}")
+            traceback.print_exc()
     
     async def handle_cursor_update(self, sender_id: str, doc_id: str, cursor_data: dict):
         """Handle a cursor update from a client"""
@@ -518,14 +544,23 @@ class LoroWebSocketServerV2:
     async def broadcast_message(self, sender_id: str, message: dict):
         """Broadcast a message to all clients except the sender"""
         doc_id = message.get("docId")
+        msg_type = message.get("type")
+        timestamp = time.strftime("%H:%M:%S", time.localtime())
         
         if doc_id not in self.documents:
+            logger.warning(f"⚠️ [SERVER] Cannot broadcast - document {doc_id} not found")
             return
         
         document = self.documents[doc_id]
         target_clients = [cid for cid in document.clients if cid != sender_id]
         
+        logger.info(f"📡 [SERVER] {timestamp} - Broadcasting {msg_type}:")
+        logger.info(f"    📤 From: {sender_id}")
+        logger.info(f"    👥 To: {target_clients} ({len(target_clients)} clients)")
+        logger.info(f"    📄 Document: {doc_id}")
+        
         if not target_clients:
+            logger.info(f"⏭️ [SERVER] No other clients to broadcast to")
             return
         
         message_str = json.dumps(message)
@@ -537,15 +572,19 @@ class LoroWebSocketServerV2:
                 try:
                     await self.clients[client_id].send(message_str)
                     successful_sends += 1
+                    logger.info(f"✅ [SERVER] Sent to {client_id}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Failed to send to client {client_id}: {e}")
+                    logger.warning(f"⚠️ [SERVER] Failed to send to client {client_id}: {e}")
                     failed_clients.append(client_id)
+            else:
+                logger.warning(f"⚠️ [SERVER] Client {client_id} not found in active connections")
+                failed_clients.append(client_id)
         
         # Clean up failed clients
         for client_id in failed_clients:
             await self.cleanup_client(client_id)
         
-        logger.debug(f"📡 Broadcast: {successful_sends} successful, {len(failed_clients)} failed")
+        logger.info(f"� [SERVER] Broadcast complete: {successful_sends} successful, {len(failed_clients)} failed")
     
     async def broadcast_peer_update(self, doc_id: str, exclude_client: str = None):
         """Broadcast peer list update to all clients in a document"""

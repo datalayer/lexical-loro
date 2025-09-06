@@ -104,6 +104,8 @@ export function LexicalCollaborativeEditorV2({
   // onInitialization // TODO: Wire up when LoroCollaborationPlugin supports it
 }: LexicalCollaborativeEditorV2Props) {
   const [connected, setConnected] = useState(false);
+  const [peerId, setPeerId] = useState<string>('');
+  const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   // const [isInitialized, setIsInitialized] = useState(false); // TODO: Implement when supported
 
   // Handle connection status changes from the collaboration plugin
@@ -111,6 +113,16 @@ export function LexicalCollaborativeEditorV2({
     setConnected(newConnected);
     onConnectionChange?.(newConnected);
   }, [onConnectionChange]);
+
+  // Handle peer ID changes
+  const handlePeerIdChange = useCallback((newPeerId: string) => {
+    setPeerId(newPeerId);
+  }, []);
+
+  // Handle awareness/peer list changes  
+  const handleAwarenessChange = useCallback((awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => {
+    setAwarenessData(awareness);
+  }, []);
 
   // Handle initialization (for future use when plugin supports it)
   // const handleInitialization = useCallback((success: boolean) => {
@@ -161,15 +173,121 @@ export function LexicalCollaborativeEditorV2({
         <h3>✨ Rich Text Editor V2 (Lexical + Loro CRDT)</h3>
         <div className="lexical-editor-info">
           <div className="connection-status">
-            <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
-              {connected ? '🟢 Connected' : '🔴 Disconnected'}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '12px',
+              backgroundColor: connected ? '#e8f5e8' : '#fee',
+              border: connected ? '1px solid #4CAF50' : '1px solid #f44336',
+              fontSize: '12px',
+              fontWeight: '500'
+            }}>
+              <span style={{ fontSize: '10px' }}>
+                {connected ? '🟢' : '🔴'}
+              </span>
+              <span style={{ color: connected ? '#2e7d32' : '#c62828' }}>
+                {connected ? 'Connected' : 'Disconnected'}
+              </span>
             </span>
+            {peerId && (
+              <div style={{ 
+                marginLeft: '15px', 
+                fontSize: '11px', 
+                color: '#666',
+                padding: '3px 6px',
+                backgroundColor: '#f5f5f5',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <span style={{ fontSize: '10px' }}>🆔</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '10px' }}>
+                  {peerId.slice(-8)}
+                </span>
+              </div>
+            )}
+            {awarenessData.length > 0 && (
+              <div className="awareness-display" style={{ marginLeft: '15px', fontSize: '12px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  fontWeight: 'bold', 
+                  color: '#333',
+                  fontSize: '13px'
+                }}>
+                  👥 Active Users ({awarenessData.length}):
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '6px',
+                  alignItems: 'center'
+                }}>
+                  {awarenessData.map((peer) => (
+                    <div 
+                      key={peer.peerId} 
+                      style={{ 
+                        padding: '4px 8px', 
+                        backgroundColor: peer.isCurrentUser ? '#4CAF50' : '#2196F3', 
+                        color: 'white',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '500',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        border: peer.isCurrentUser ? '2px solid #45a049' : '1px solid #1976D2',
+                        minWidth: 'fit-content'
+                      }}
+                    >
+                      {peer.isCurrentUser && <span>👤</span>}
+                      <span>{peer.userName}</span>
+                      {peer.isCurrentUser ? (
+                        <span style={{ 
+                          fontWeight: 'bold', 
+                          backgroundColor: 'rgba(255,255,255,0.3)',
+                          padding: '1px 4px',
+                          borderRadius: '6px',
+                          fontSize: '10px'
+                        }}>
+                          YOU
+                        </span>
+                      ) : (
+                        <span style={{ 
+                          opacity: 0.7,
+                          fontSize: '10px'
+                        }}>
+                          {peer.peerId.slice(-4)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <button
-              className="disconnect-button"
-              onClick={() => console.log('🔍 V2 Debug - Connected:', connected)}
-              style={{ marginLeft: '10px' }}
+              onClick={() => console.log('🔍 V2 Debug - Connected:', connected, 'Peers:', awarenessData.length)}
+              style={{ 
+                marginLeft: '15px',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                border: '1px solid #ccc',
+                backgroundColor: '#f8f9fa',
+                color: '#495057',
+                fontSize: '11px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              onMouseOver={(e) => (e.target as HTMLButtonElement).style.backgroundColor = '#e9ecef'}
+              onMouseOut={(e) => (e.target as HTMLButtonElement).style.backgroundColor = '#f8f9fa'}
             >
-              🔍 Debug Info
+              🔍 Debug
             </button>
           </div>
         </div>
@@ -208,6 +326,8 @@ export function LexicalCollaborativeEditorV2({
             shouldBootstrap={true}
             username="V2User"
             cursorColor="#3366cc"
+            onPeerIdChange={handlePeerIdChange}
+            onAwarenessChange={handleAwarenessChange}
           />
         </div>
       </LexicalComposer>
