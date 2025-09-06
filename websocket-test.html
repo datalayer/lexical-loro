@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Disconnected</div>
+    <div id="log"></div>
+    
+    <script>
+        const status = document.getElementById('status');
+        const log = document.getElementById('log');
+        
+        function logMessage(message) {
+            const div = document.createElement('div');
+            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            log.appendChild(div);
+            console.log(message);
+        }
+        
+        logMessage('Testing WebSocket connection to ws://localhost:8082/collaboration');
+        
+        const ws = new WebSocket('ws://localhost:8082/collaboration');
+        
+        ws.onopen = function(event) {
+            status.textContent = 'Connected';
+            status.style.color = 'green';
+            logMessage('✅ WebSocket connected successfully');
+        };
+        
+        ws.onmessage = function(event) {
+            logMessage('📨 Received: ' + event.data);
+        };
+        
+        ws.onerror = function(error) {
+            status.textContent = 'Error';
+            status.style.color = 'red';
+            logMessage('❌ WebSocket error: ' + error);
+        };
+        
+        ws.onclose = function(event) {
+            status.textContent = 'Disconnected';
+            status.style.color = 'red';
+            logMessage('❌ WebSocket closed: ' + event.code + ' ' + event.reason);
+        };
+    </script>
+</body>
+</html>

@@ -3,16 +3,97 @@
 
 """
 Command line interface for the Lexical Loro server
-CLI for pure WebSocket relay server
+CLI for WebSocket relay servers (V1 and V2)
 """
 
 import asyncio
 import logging
 import click
 from .server import LoroWebSocketServer
+from .serverv2 import LoroWebSocketServerV2
 
 
-@click.command()
+@click.group()
+def cli():
+    """Lexical Loro WebSocket Servers"""
+    pass
+
+
+@cli.command()
+@click.option("--port", "-p", default=8081, help="Port to run the server on (default: 8081)")
+@click.option("--host", "-h", default="localhost", help="Host to bind to (default: localhost)")
+@click.option("--log-level", "-l", default="INFO", 
+              type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+              help="Logging level (default: INFO)")
+def serverv1(port: int, host: str, log_level: str):
+    """
+    Start the Lexical Loro WebSocket relay server V1 for real-time collaboration.
+    
+    This server uses full editor state replacement and is compatible with the
+    original LoroCollaborativePlugin.
+    """
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+    
+    # Create and start the server
+    server = LoroWebSocketServer(
+        port=port,
+        host=host,
+        autosave_interval_sec=60
+    )
+    
+    click.echo(f"🚀 Starting Lexical Loro V1 server on {host}:{port}")
+    click.echo(f"📋 Log level: {log_level}")
+    click.echo("📡 V1 Server - Full state replacement")
+    click.echo("Press Ctrl+C to stop the server")
+    
+    try:
+        asyncio.run(server.start())
+    except KeyboardInterrupt:
+        click.echo("\n🛑 Server stopped by user")
+
+
+@cli.command()
+@click.option("--port", "-p", default=8082, help="Port to run the server on (default: 8082)")
+@click.option("--host", "-h", default="localhost", help="Host to bind to (default: localhost)")
+@click.option("--log-level", "-l", default="INFO", 
+              type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+              help="Logging level (default: INFO)")
+def serverv2(port: int, host: str, log_level: str):
+    """
+    Start the Lexical Loro WebSocket server V2 for incremental collaboration.
+    
+    This server uses incremental Loro updates and is designed for the
+    LoroCollaborativePluginV2 that follows the YJS pattern.
+    """
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+    
+    # Create and start the V2 server
+    server = LoroWebSocketServerV2(
+        port=port,
+        host=host
+    )
+    
+    click.echo(f"🚀 Starting Lexical Loro V2 server on {host}:{port}")
+    click.echo(f"📋 Log level: {log_level}")
+    click.echo("⚡ V2 Server - Incremental updates, YJS-style collaboration")
+    click.echo("Press Ctrl+C to stop the server")
+    
+    try:
+        asyncio.run(server.start())
+    except KeyboardInterrupt:
+        click.echo("\n🛑 V2 Server stopped by user")
+
+
+# Keep the original main command for backward compatibility
+@cli.command()
 @click.option("--port", "-p", default=8081, help="Port to run the server on (default: 8081)")
 @click.option("--host", "-h", default="localhost", help="Host to bind to (default: localhost)")
 @click.option("--log-level", "-l", default="INFO", 
@@ -22,13 +103,7 @@ def main(port: int, host: str, log_level: str):
     """
     Start the Lexical Loro WebSocket relay server for real-time collaboration.
     
-    This server is now a pure WebSocket relay that delegates all 
-    document and ephemeral operations to LexicalModel. The server only handles:
-    - Client connections and WebSocket communication
-    - Message routing to LexicalModel methods  
-    - Broadcasting responses from LexicalModel events
-    
-    All Loro CRDT operations and ephemeral data management are handled by LexicalModel.
+    This is the V1 server (same as serverv1) kept for backward compatibility.
     """
     # Configure logging
     logging.basicConfig(
@@ -58,4 +133,4 @@ def main(port: int, host: str, log_level: str):
 
 
 if __name__ == "__main__":
-    main()
+    cli()
