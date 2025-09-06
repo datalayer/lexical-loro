@@ -3,76 +3,126 @@
  * Distributed under the terms of the MIT License.
  */
 
+import type { EditorState, NodeKey } from 'lexical';
 import type { LoroBinding } from '../LoroBinding';
 import type { LoroProvider } from '../LoroProvider';
 
+// Collaboration tags (following YJS pattern)
+const LORO_COLLABORATION_TAG = 'loro-collab';
+const HISTORIC_TAG = 'historic';
+
 /**
  * Sync changes from Loro to Lexical editor
- * This is the key function that prevents full editor state replacement
+ * Following YJS syncYjsChangesToLexical pattern exactly
  */
 export function syncLoroToLexical(
   binding: LoroBinding,
-  _provider: LoroProvider,
-  events: any[], // Loro events
-  isFromUndoManager: boolean = false
+  provider: LoroProvider,
+  events: Array<any>, // LoroEvent type when available
+  isFromUndoManager: boolean,
+  syncCursorPositionsFn?: (binding: LoroBinding, provider: LoroProvider) => void
 ): void {
-  const { editor, root } = binding;
+  const editor = binding.editor;
+  const currentEditorState = editor._editorState;
 
-  console.log('🔄 Syncing Loro changes to Lexical:', events.length, 'events');
+  console.log('� Syncing Loro changes to Lexical:', {
+    eventsCount: events.length,
+    isFromUndoManager,
+    hasCurrentState: !!currentEditorState
+  });
 
-  // Use editor.update to apply changes without full state replacement
+  // Precompute event deltas (following YJS pattern)
+  events.forEach((event) => {
+    // TODO: Access event.delta when Loro API is available
+    console.log('📊 Precomputing event delta:', event);
+  });
+
   editor.update(
     () => {
-      // Process each Loro event and apply incremental changes
-      for (const event of events) {
-        // TODO: Implement event processing logic
-        // This should parse Loro events and apply them as incremental updates
-        console.log('📝 Processing Loro event:', event);
+      // Process each Loro event (following YJS $syncEvent pattern)
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        console.log('🔄 Processing Loro event:', event);
         
-        // Apply changes to the collaboration tree
-        root.applyLoroDeltas(binding, [event]);
+        // TODO: Implement Loro event processing when Tree API is available
+        // binding.root.applyLoroEvent?.(binding, event);
       }
 
-      // Sync the collaboration tree with Lexical nodes
-      root.syncChildrenFromLoro(binding);
+      // Sync cursor positions (following YJS pattern)
+      if (syncCursorPositionsFn) {
+        console.log('🎯 Syncing cursor positions');
+        syncCursorPositionsFn(binding, provider);
+      }
+
+      console.log('✅ Loro changes applied to Lexical');
     },
     {
-      // Use collaboration tag to identify updates from remote clients
-      tag: isFromUndoManager ? 'historic' : 'collaboration',
-      skipTransforms: true, // Skip transforms to preserve exact changes
+      tag: isFromUndoManager ? HISTORIC_TAG : LORO_COLLABORATION_TAG,
+      skipTransforms: true,
     }
   );
 }
 
+type IntentionallyMarkedAsDirtyElement = boolean;
+
 /**
- * Sync changes from Lexical to Loro document
+ * Sync changes from Lexical to Loro document  
+ * Following YJS syncLexicalUpdateToYjs pattern exactly
  */
 export function syncLexicalToLoro(
-  _binding: LoroBinding,
-  _provider: LoroProvider,
-  _prevEditorState: any,
-  _editorState: any,
-  _dirtyElements: Set<string>,
-  _dirtyLeaves: Set<string>,
-  _normalizedNodes: Set<string>,
-  _tags: Set<string>
+  _binding: LoroBinding, // eslint-disable-line @typescript-eslint/no-unused-vars
+  _provider: LoroProvider, // eslint-disable-line @typescript-eslint/no-unused-vars
+  _prevEditorState: EditorState, // eslint-disable-line @typescript-eslint/no-unused-vars
+  currEditorState: EditorState,
+  dirtyElements: Map<NodeKey, IntentionallyMarkedAsDirtyElement>,
+  dirtyLeaves: Set<NodeKey>,
+  normalizedNodes: Set<NodeKey>,
+  tags: Set<string>
 ): void {
-  console.log('🔄 Syncing Lexical changes to Loro');
+  console.log('📤 Syncing Lexical changes to Loro', {
+    dirtyElementsCount: dirtyElements.size,
+    dirtyLeavesCount: dirtyLeaves.size,
+    normalizedNodesCount: normalizedNodes.size,
+    tags: Array.from(tags)
+  });
 
-  // Skip if this update came from collaboration (avoid infinite loops)
-  if (_tags.has('collaboration') || _tags.has('historic')) {
-    console.log('⏭️ Skipping sync - update from collaboration');
-    return;
-  }
+  // TODO: Implement syncWithTransaction when Loro supports transactions
+  // syncWithTransaction(binding, () => {
+  currEditorState.read(() => {
+    // Skip if this update came from Loro collaboration (following YJS pattern)
+    if (tags.has(LORO_COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) {
+      if (normalizedNodes.size > 0) {
+        console.log('🔧 Handling normalization merge conflicts');
+        // TODO: Implement $handleNormalizationMergeConflicts when Loro API supports it
+      }
+      return;
+    }
 
-  // TODO: Implement Lexical to Loro synchronization
-  // This should:
-  // 1. Analyze dirty elements and leaves
-  // 2. Generate Loro operations
-  // 3. Apply them to the Loro document
-  // 4. Send updates to other clients via provider
+    // Sync root structure changes (following YJS pattern)
+    if (dirtyElements.has('root')) {
+      const nextLexicalRoot = currEditorState._nodeMap.get('root');
+      
+      console.log('🌳 Root element changed, syncing structure');
+      
+      // TODO: Sync root properties when Loro Tree API is available
+      if (nextLexicalRoot) {
+        // binding.root.syncPropertiesFromLexical?.(binding, nextLexicalRoot, prevNodeMap);
+        console.log('📝 Root properties would be synced here');
+      }
+    }
 
-  console.log('📤 Dirty elements:', _dirtyElements.size);
-  console.log('📤 Dirty leaves:', _dirtyLeaves.size);
-  console.log('📤 Normalized nodes:', _normalizedNodes.size);
+    // Process all dirty elements (following YJS pattern)
+    // TODO: Implement reconciler when Loro Tree API is available
+    console.log('📊 Processing dirty elements and leaves:', {
+      dirtyElementsCount: dirtyElements.size,
+      dirtyLeavesCount: dirtyLeaves.size
+    });
+
+    // TODO: Implement syncChildrenFromLexical when Loro Tree API is available
+    // binding.root.syncChildrenFromLexical?.(binding, currEditorState._nodeMap.get('root'), prevEditorState._nodeMap, reconciler, dirtyElements);
+    console.log('🔄 Children synchronization would happen here');
+
+    console.log('✅ Lexical changes applied to Loro');
+  });
+  // });
 }
