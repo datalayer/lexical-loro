@@ -6,8 +6,9 @@
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc } from 'loro-crdt';
-import { createLoroBinding, type LoroBinding } from './collaboration/LoroBinding';
-import { initializeSyncHandlers } from './collaboration/sync/SyncLoroToLexical';
+import { createLoroBinding, type LoroBinding, type LoroProvider } from './collaboration/LoroBinding';
+import { syncLoroChangesToLexical, syncLexicalUpdateToLoro } from './collaboration/sync/SyncLoroToLexical';
+import { syncLoroCursorPositions } from './collaboration/sync/LoroSyncCursors';
 
 // Types for peer information
 export interface PeerInfo {
@@ -16,15 +17,6 @@ export interface PeerInfo {
   displayId: string;
   isCurrentUser: boolean;
   isYou?: boolean;
-}
-
-// Provider interface (matching YJS Provider pattern)
-export interface LoroProvider {
-  doc: LoroDoc;
-  connected: boolean;
-  awareness?: any; // Loro equivalent of YJS awareness
-  connect?(): void | Promise<void>;
-  disconnect?(): void;
 }
 
 // Types for the new collaborative plugin
@@ -37,6 +29,50 @@ interface LoroCollaborativePluginV2Props {
   onPeerIdChange?: (peerId: string) => void;
   onPeerCountChange?: (count: number) => void;
   onPeersChange?: (peers: Array<{ id: string; clientId: string; isYou?: boolean }>) => void;
+}
+
+/**
+ * Initialize sync event handlers (equivalent to YJS sync setup)
+ * 
+ * This sets up the bidirectional sync between Loro and Lexical,
+ * following the YJS collaboration pattern
+ */
+function initializeLoroSyncHandlers(binding: LoroBinding): () => void {
+  const { editor } = binding;
+  
+  console.log('🔄 Initializing Loro ↔ Lexical sync handlers');
+  
+  // Set up Lexical editor change listener (equivalent to YJS editor.registerUpdateListener)
+  const removeEditorListener = editor.registerUpdateListener(
+    ({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
+      // Convert Lexical changes to Loro operations
+      syncLexicalUpdateToLoro(
+        binding, 
+        binding as unknown as LoroProvider, // TODO: Replace with actual provider
+        prevEditorState, 
+        editorState, 
+        dirtyElements, 
+        dirtyLeaves,
+        normalizedNodes,
+        tags
+      );
+    }
+  );
+
+  // TODO: Add Loro document listener when API is available
+  // doc.on('update', (events) => {
+  //   syncLoroChangesToLexical(binding, provider, events, false, syncLoroCursorPositions);
+  // });
+  
+  console.log('✅ Sync handlers initialized');
+  
+  // Return cleanup function
+  return () => {
+    console.log('🧹 Cleaning up sync handlers');
+    removeEditorListener();
+    // TODO: Remove Loro document listener when available
+    // doc.off('update', handleLoroUpdate);
+  };
 }
 
 /**
@@ -99,13 +135,15 @@ export const LoroCollaborativePlugin = ({
         const provider: LoroProvider = {
           doc: loroDoc,
           connected: false,
-          awareness: {}, // TODO: Implement proper awareness when Loro API is available
+          awareness: undefined, // TODO: Implement proper awareness when Loro API is available
           connect: async () => {
             console.log('🔌 Provider connect called');
           },
           disconnect: () => {
             console.log('🔌 Provider disconnect called');
-          }
+          },
+          on: () => {}, 
+          off: () => {}, 
         };
 
         // Create Loro binding for collaboration (equivalent to YJS binding)
@@ -137,7 +175,7 @@ export const LoroCollaborativePlugin = ({
         }
 
         // Initialize sync handlers (equivalent to YJS sync setup)
-        const syncCleanup = initializeSyncHandlers(binding);
+        const syncCleanup = initializeLoroSyncHandlers(binding);
         syncCleanupRef.current = syncCleanup;
 
         // Create WebSocket connection to V2 server

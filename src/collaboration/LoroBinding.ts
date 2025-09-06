@@ -4,24 +4,54 @@
  */
 
 import type { LexicalEditor, NodeKey } from 'lexical';
-import type { LoroDoc, LoroTree, TreeID, Cursor } from 'loro-crdt';
+import type { LoroDoc, LoroTree, TreeID, Cursor, LoroText, LoroMap } from 'loro-crdt';
 import type { LoroCollabNode } from './nodes/LoroCollabNode';
 import { LoroCollabElementNode } from './nodes/LoroCollabElementNode';
 
 export type ClientID = string;
+export type LoroTreeNode = { 
+  id: TreeID; 
+  parent: TreeID | undefined; 
+  index: number; 
+  fractionalIndex: string; 
+  meta: LoroMap; 
+};
 
 // Provider interface (matching YJS Provider pattern)
 export interface LoroProvider {
   doc: LoroDoc;
   connected: boolean;
-  awareness?: any; // Loro equivalent of YJS awareness
+  awareness?: LoroAwareness; // Loro equivalent of YJS awareness
   connect?(): void | Promise<void>;
   disconnect?(): void;
+  on(event: 'sync' | 'status' | 'update' | 'reload', callback: (...args: any[]) => void): void;
+  off(event: 'sync' | 'status' | 'update' | 'reload', callback: (...args: any[]) => void): void;
 }
 
-// Cursor interface (matching YJS cursor pattern)
+// Awareness interface (equivalent to YJS awareness)
+export interface LoroAwareness {
+  getLocalState(): LoroUserState | null;
+  getStates(): Map<ClientID, LoroUserState>;
+  setLocalState(state: LoroUserState): void;
+  setLocalStateField(field: string, value: unknown): void;
+  on(event: 'update', callback: () => void): void;
+  off(event: 'update', callback: () => void): void;
+}
+
+// User state interface (equivalent to YJS UserState)
+export interface LoroUserState {
+  anchorCursor: Cursor | null; // Loro cursor (equivalent to YJS RelativePosition)
+  focusCursor: Cursor | null;  // Loro cursor for selection end
+  color: string;
+  name: string;
+  focusing: boolean;
+  awarenessData: object;
+  [key: string]: unknown;
+}
+
+// Cursor selection interface (matching YJS cursor pattern)
 export interface LoroCollabCursor {
-  cursor: Cursor | null; // Loro cursor (equivalent to YJS RelativePosition)
+  cursor: Cursor | null; 
   selection: any;
   name: string;
   color: string;
@@ -36,11 +66,11 @@ export interface LoroBinding {
   doc: LoroDoc; // Loro document
   docMap: Map<string, LoroDoc>; // Document registry
   editor: LexicalEditor; // Lexical editor instance
-  ephemeral: Record<ClientID, any> | null; // Ephemeral store (equivalent to YJS awareness)
+  ephemeral: Record<ClientID, any>; // Ephemeral state store (equivalent to YJS awareness)
   id: string; // Binding identifier
   root: LoroCollabElementNode; // Root collaboration node
   rootTree: LoroTree; // Loro tree (equivalent to YJS XmlText)
-  rootTreeId: TreeID; // Tree identifier
+  rootText: LoroText; // Primary text container for document content
   excludedProperties: Map<any, Set<string>>; // Properties to exclude from sync
 }
 
@@ -53,7 +83,7 @@ export interface LoroBinding {
  * YJS Pattern:                 Loro Equivalent:
  * - XmlText (hierarchical)  -> LoroTree (hierarchical)
  * - RelativePosition        -> Cursor (position tracking)  
- * - Awareness              -> Ephemeral store (presence)
+ * - Awareness              -> LoroAwareness (presence)
  * - Provider               -> WebSocket + LoroDoc
  * - Binding                -> LoroBinding (this interface)
  */
@@ -70,8 +100,11 @@ export function createLoroBinding(
   // Get or create the root tree container in Loro document 
   // This is equivalent to YJS XmlText but uses Loro's Tree structure
   // which supports hierarchical document editing
-  const rootTreeId = 'document' as TreeID;
-  const rootTree = doc.getTree(rootTreeId);
+  const rootTree = doc.getTree('document');
+  
+  // Create primary text container for document content
+  // This stores the actual text content like YJS Text
+  const rootText = doc.getText('content');
   
   // Create the root collaboration element node
   // This represents the document root in the collaboration layer
@@ -79,7 +112,7 @@ export function createLoroBinding(
   root._key = 'root';
 
   console.log('🌳 Loro binding created:');
-  console.log('  - Tree ID:', rootTreeId);
+  console.log('  - Tree for structure, Text for content');
   console.log('  - Client ID:', doc.peerIdStr);
   console.log('  - Editor:', editor.constructor.name);
 
@@ -91,11 +124,11 @@ export function createLoroBinding(
     doc,
     docMap,
     editor,
-    ephemeral: {}, // Initialize ephemeral store for user awareness
+    ephemeral: {}, // Initialize ephemeral state store for awareness
     id,
     root,
     rootTree,
-    rootTreeId,
+    rootText,
     excludedProperties: excludedProperties || new Map(),
   };
 }
@@ -114,14 +147,12 @@ export function initLoroLocalState(
 ): void {
   console.log('👤 Initializing local state:', { name, color, focusing });
   
-  // TODO: Implement with Loro ephemeral store when available
-  // For now, this is a placeholder that matches the YJS pattern
   if (provider.awareness) {
     provider.awareness.setLocalState({
-      anchorPos: null,
+      anchorCursor: null,
+      focusCursor: null,
       awarenessData,
       color,
-      focusPos: null,
       focusing: focusing,
       name,
     });
@@ -142,22 +173,22 @@ export function setLoroLocalStateFocus(
 ): void {
   console.log('👁️ Setting focus state:', focusing);
   
-  // TODO: Implement with Loro ephemeral store when available
   if (provider.awareness) {
     let localState = provider.awareness.getLocalState();
     
     if (localState === null) {
       localState = {
-        anchorPos: null,
+        anchorCursor: null,
+        focusCursor: null,
         awarenessData,
         color,
-        focusPos: null,
         focusing: focusing,
         name,
       };
+    } else {
+      localState.focusing = focusing;
     }
     
-    localState.focusing = focusing;
     provider.awareness.setLocalState(localState);
   }
 }
