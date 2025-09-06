@@ -62,6 +62,7 @@ export interface LoroBinding {
   rootTree: LoroTree; // Loro tree (equivalent to YJS XmlText)
   rootText: LoroText; // Primary text container for document content
   excludedProperties: Map<any, Set<string>>; // Properties to exclude from sync
+  collabDisabled?: boolean; // Flag to temporarily disable collaboration sync
 }
 
 /**
@@ -120,6 +121,7 @@ export function createLoroBinding(
     rootTree,
     rootText,
     excludedProperties: excludedProperties || new Map(),
+    collabDisabled: false, // Initialize collaboration sync as enabled
   };
 }
 

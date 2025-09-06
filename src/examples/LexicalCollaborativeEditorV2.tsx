@@ -204,7 +204,7 @@ export function LexicalCollaborativeEditorV2({
               }}>
                 <span style={{ fontSize: '10px' }}>🆔</span>
                 <span style={{ fontFamily: 'monospace', fontSize: '10px' }}>
-                  {peerId.slice(-8)}
+                  {peerId.split('_').pop() || peerId.slice(-4)}
                 </span>
               </div>
             )}
@@ -324,7 +324,7 @@ export function LexicalCollaborativeEditorV2({
             shouldBootstrap={true}
             username="V2User"
             cursorColor="#3366cc"
-            onPeerIdChange={handlePeerIdChange}
+            onWebSocketClientIdChange={handlePeerIdChange}
             onAwarenessChange={handleAwarenessChange}
           />
         </div>

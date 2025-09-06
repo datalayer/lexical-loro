@@ -40,6 +40,16 @@ export interface LoroProvider {
   sendUpdate(update: Uint8Array): void;
 
   /**
+   * Send a custom message to the server
+   */
+  sendMessage(message: any): void;
+
+  /**
+   * Register the Loro peer ID with the server
+   */
+  registerLoroPeerId(loroPeerId: string): void;
+
+  /**
    * Apply an update from another client
    */
   applyUpdate(update: Uint8Array): void;
@@ -209,6 +219,44 @@ export function createLoroProvider(
           connected: provider.connected
         });
       }
+    },
+
+    sendMessage(message) {
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        const timestamp = new Date().toISOString();
+        const browserId = provider.clientId.slice(-4);
+        
+        console.log(`📤 [PROVIDER-${browserId}] Sending message to server at ${timestamp}:`, {
+          type: message.type,
+          clientId: provider.clientId,
+          docId,
+          websocketState: websocket.readyState
+        });
+        
+        websocket.send(JSON.stringify({
+          ...message,
+          docId,
+          clientId: provider.clientId
+        }));
+        console.log(`✅ [PROVIDER-${browserId}] Message sent to WebSocket`);
+      } else {
+        const browserId = provider.clientId.slice(-4);
+        console.warn(`⚠️ [PROVIDER-${browserId}] Cannot send message - WebSocket not connected:`, {
+          websocketExists: !!websocket,
+          readyState: websocket?.readyState,
+          connected: provider.connected
+        });
+      }
+    },
+
+    registerLoroPeerId(loroPeerId: string) {
+      const browserId = provider.clientId.slice(-4);
+      console.log(`🆔 [PROVIDER-${browserId}] Registering Loro peer ID: ${loroPeerId}`);
+      
+      provider.sendMessage({
+        type: 'registerLoroPeerId',
+        loroPeerId: loroPeerId
+      });
     },
 
     applyUpdate(update) {

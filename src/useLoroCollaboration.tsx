@@ -165,11 +165,26 @@ export function useLoroCollaboration(
     const onInitialContent = ({ content }: { content: string }) => {
       console.log('📋 Received initial content, applying to editor');
       try {
+        // Temporarily disable sync to prevent feedback loop during initial content setup
+        const wasCollabDisabled = binding.collabDisabled;
+        binding.collabDisabled = true;
+        
+        console.log('🔒 Temporarily disabled sync during initial content application');
+        
         // Parse the JSON content and set as editor state
         const editorState = editor.parseEditorState(content);
         editor.setEditorState(editorState);
+        
+        // Re-enable sync after a short delay to ensure the editor state is fully applied
+        setTimeout(() => {
+          binding.collabDisabled = wasCollabDisabled;
+          console.log('🔓 Re-enabled sync after initial content application');
+        }, 100);
+        
         console.log('✅ Initial content applied successfully');
       } catch (error) {
+        // Make sure to re-enable sync even if there's an error
+        binding.collabDisabled = false;
         console.error('❌ Failed to apply initial content:', error);
       }
     };

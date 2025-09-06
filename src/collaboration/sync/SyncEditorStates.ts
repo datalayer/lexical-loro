@@ -175,6 +175,12 @@ export function syncLexicalToLoro(
   normalizedNodes: Set<NodeKey>,
   tags: Set<string>
 ): void {
+  // Check if collaboration sync is disabled (e.g., during initial content setup)
+  if (_binding.collabDisabled) {
+    console.log('🔒 Skipping sync to Loro - collaboration temporarily disabled');
+    return;
+  }
+
   // Debug: Log the actual types to understand what Lexical provides
   console.log('🔍 Parameter types:', {
     dirtyElements: dirtyElements.constructor.name,
