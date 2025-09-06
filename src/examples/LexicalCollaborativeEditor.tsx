@@ -5,6 +5,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
@@ -17,13 +18,15 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import LoroCollaborativePlugin from '../LoroCollaborativePlugin';
+import { LoroCollaborativePlugin } from '../LoroCollaborativePlugin';
+import { YouTubeNode } from './YouTubeNode';
+import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
 
 // Constants
-const DOC_ID = 'lexical-shared-doc-3';
+const DOC_ID = 'example-1';
 
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
@@ -37,6 +40,44 @@ function onError(error: Error) {
   console.error('Lexical error:', error);
 }
 
+// Component that renders the reload button in a portal outside the editor
+function ReloadStatePlugin() {
+  const [editor] = useLexicalComposerContext();
+  
+  const handleReloadState = useCallback(() => {
+    console.log('🔄 Reload State button clicked - reading and setting lexical state');
+    
+    editor.update(() => {
+      const editorState = editor.getEditorState();
+      console.log('📊 Current editor state:', editorState.toJSON());
+      
+      // Read the current state and immediately set it again
+      // This simulates what MCP operations do that cause YouTube nodes to reload
+      const currentStateJSON = editorState.toJSON();
+      
+      // Schedule a state update with the same content
+      setTimeout(() => {
+        console.log('🔄 Setting the same state back to editor...');
+        const newEditorState = editor.parseEditorState(JSON.stringify(currentStateJSON));
+        editor.setEditorState(newEditorState);
+        console.log('✅ State reload completed - YouTube nodes should have reloaded if this is the issue');
+      }, 100);
+    });
+  }, [editor]);
+
+  // Add the button to the UI through a global reference
+  React.useEffect(() => {
+    // Store the handler globally so it can be called from outside
+    (window as any).reloadEditorState = handleReloadState;
+    
+    return () => {
+      delete (window as any).reloadEditorState;
+    };
+  }, [handleReloadState]);
+
+  return null; // This plugin doesn't render anything directly
+}
+
 export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProps> = ({
   websocketUrl,
   onConnectionChange,
@@ -48,6 +89,9 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   const [showMcpDropdown, setShowMcpDropdown] = useState(false);
   const [mcpStatus, setMcpStatus] = useState<string>('');
+  const [documentInfo, setDocumentInfo] = useState<string>('');
+  const [documentContent, setDocumentContent] = useState<any>(null);
+  const [showDocumentTree, setShowDocumentTree] = useState(true);
   const disconnectRef = useRef<(() => void) | null>(null);
   const sendMessageRef = useRef<((message: any) => void) | null>(null);
   const mcpDropdownRef = useRef<HTMLDivElement>(null);
@@ -96,6 +140,13 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
 
   // MCP helper functions
   const callMcpTool = useCallback(async (toolName: string, params: any = {}) => {
+    // Guard: Don't allow MCP calls until the system is fully initialized
+    if (!isInitialized) {
+      setMcpStatus(`${toolName} failed: System not yet initialized`);
+      setTimeout(() => setMcpStatus(''), 3000);
+      return;
+    }
+
     try {
       setMcpStatus(`Calling ${toolName}...`);
       
@@ -166,8 +217,68 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       setMcpStatus(`${toolName}: ${resultText}`);
       console.log(`MCP ${toolName} result:`, result);
       
-      // Clear status after 3 seconds
-      setTimeout(() => setMcpStatus(''), 3000);
+      // Update document content if this was get_document_info or any document-modifying operation
+      if (toolName === 'get_document_info' && result.result && result.result.content && result.result.content.length > 0) {
+        try {
+          const responseText = result.result.content[0].text;
+          
+          // The MCP server returns formatted text, not JSON
+          // We need to extract the JSON part from the formatted response
+          const jsonMatch = responseText.match(/FULL JSON DOCUMENT:\s*(\{[\s\S]*\})\s*$/);
+          
+          if (jsonMatch) {
+            try {
+              const jsonContent = JSON.parse(jsonMatch[1]);
+              if (jsonContent.root && jsonContent.root.children) {
+                setDocumentContent(jsonContent.root);
+              }
+            } catch (jsonError) {
+              console.warn('Could not parse JSON from response:', jsonError.message);
+            }
+          }
+          
+          // Always set the formatted text as document info (this is what the user wants to see)
+          setDocumentInfo(responseText);
+          setMcpStatus('Document info updated ✅');
+        } catch (error) {
+          console.error('Failed to process document info:', error);
+          setDocumentInfo('Failed to process document info');
+        }
+      } else if (['append_paragraph', 'insert_paragraph', 'load_document'].includes(toolName)) {
+        // Refresh document content after modifying operations
+        setTimeout(async () => {
+          try {
+            const docResult = await callMcpTool('get_document_info', { doc_id: DOC_ID });
+            if (docResult?.result?.content?.[0]?.text) {
+              const responseText = docResult.result.content[0].text;
+              
+              // Extract JSON from the formatted response
+              const jsonMatch = responseText.match(/FULL JSON DOCUMENT:\s*(\{[\s\S]*\})\s*$/);
+              
+              if (jsonMatch) {
+                try {
+                  const jsonContent = JSON.parse(jsonMatch[1]);
+                  if (jsonContent.root && jsonContent.root.children) {
+                    setDocumentContent(jsonContent.root);
+                  }
+                } catch (jsonError) {
+                  console.warn('Could not parse JSON from refresh response:', jsonError.message);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Failed to refresh document content:', error);
+          }
+        }, 500); // Small delay to ensure the operation has completed
+      }
+      
+      // Keep status displayed permanently for get_document_info, clear after 3 seconds for others
+      if (toolName === 'get_document_info') {
+        // Don't auto-clear for document info - user can see the persistent data in the tree below
+      } else {
+        // Clear status after 3 seconds for other operations
+        setTimeout(() => setMcpStatus(''), 3000);
+      }
       
       return result;
     } catch (error) {
@@ -175,17 +286,104 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       setMcpStatus(errorMsg);
       console.error('MCP tool error:', error);
       
-      // Clear error after 5 seconds
+      // Clear error after 5 seconds for all tools
       setTimeout(() => setMcpStatus(''), 5000);
     }
-  }, []);
+  }, [isInitialized]);
+
+  // Auto-load document content when initialized
+  useEffect(() => {
+    if (isInitialized) {
+      const loadContent = async () => {
+        try {
+          const result = await callMcpTool('get_document_info', { doc_id: DOC_ID });
+          if (result?.result?.content?.[0]?.text) {
+            const responseText = result.result.content[0].text;
+            
+            // Extract JSON from the formatted response
+            const jsonMatch = responseText.match(/FULL JSON DOCUMENT:\s*(\{[\s\S]*\})\s*$/);
+            
+            if (jsonMatch) {
+              try {
+                const jsonContent = JSON.parse(jsonMatch[1]);
+                if (jsonContent.root && jsonContent.root.children) {
+                  setDocumentContent(jsonContent.root);
+                }
+              } catch (jsonError) {
+                console.warn('Could not parse JSON from auto-load response:', jsonError.message);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load document content:', error);
+        }
+      };
+      loadContent();
+    }
+  }, [isInitialized, callMcpTool]);
+
+  // JSON Tree Component
+  const JsonTree = ({ data, level = 0 }: { data: any, level?: number }) => {
+    const [collapsed, setCollapsed] = useState(level > 2);
+    
+    if (data === null) return <span style={{ color: '#999' }}>null</span>;
+    if (data === undefined) return <span style={{ color: '#999' }}>undefined</span>;
+    if (typeof data === 'string') return <span style={{ color: '#22863a' }}>"{data}"</span>;
+    if (typeof data === 'number') return <span style={{ color: '#005cc5' }}>{data}</span>;
+    if (typeof data === 'boolean') return <span style={{ color: '#d73a49' }}>{String(data)}</span>;
+    
+    if (Array.isArray(data)) {
+      if (data.length === 0) return <span>[]</span>;
+      return (
+        <div>
+          <span 
+            onClick={() => setCollapsed(!collapsed)} 
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+          >
+            {collapsed ? '▶' : '▼'} [{data.length}]
+          </span>
+          {!collapsed && (
+            <div style={{ marginLeft: '20px', borderLeft: '1px solid #ddd', paddingLeft: '10px' }}>
+              {data.map((item, index) => (
+                <div key={index}>
+                  <span style={{ color: '#666' }}>{index}:</span> <JsonTree data={item} level={level + 1} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    if (typeof data === 'object') {
+      const keys = Object.keys(data);
+      if (keys.length === 0) return <span>{'{}'}</span>;
+      return (
+        <div>
+          <span 
+            onClick={() => setCollapsed(!collapsed)} 
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+          >
+            {collapsed ? '▶' : '▼'} {'{'}
+          </span>
+          {!collapsed && (
+            <div style={{ marginLeft: '20px', borderLeft: '1px solid #ddd', paddingLeft: '10px' }}>
+              {keys.map((key) => (
+                <div key={key}>
+                  <span style={{ color: '#032f62' }}>{key}:</span> <JsonTree data={data[key]} level={level + 1} />
+                </div>
+              ))}
+            </div>
+          )}
+          {!collapsed && <span>{'}'}</span>}
+        </div>
+      );
+    }
+    
+    return <span>{String(data)}</span>;
+  };
 
   const mcpTools = [
-    {
-      name: 'set_current_document',
-      label: '📝 Set Current Document',
-      params: { doc_id: DOC_ID }
-    },
     {
       name: 'append_paragraph',
       label: '➕ Append Paragraph (MCP)',
@@ -197,18 +395,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       params: { doc_id: DOC_ID, index: 2, text: 'Inserted at index 2 via MCP!' }
     },
     {
-      name: 'get_document_data',
-      label: '📄 Get Document Data',
-      params: { doc_id: DOC_ID }
-    },
-    {
-      name: 'list_models',
-      label: '📋 List Documents',
-      params: {}
-    },
-    {
-      name: 'export_document',
-      label: '💾 Export Document',
+      name: 'get_document_info',
+      label: '📄 Get Document Info',
       params: { doc_id: DOC_ID }
     }
   ];
@@ -218,18 +406,19 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     theme: lexicalTheme,
     onError,
     nodes: [
-      HeadingNode,
-      ListNode,
-      ListItemNode,
-      QuoteNode,
-      CodeNode,
-      CodeHighlightNode,
-      TableNode,
-      TableCellNode,
-      TableRowNode,
       AutoLinkNode,
-      LinkNode,
+      CodeHighlightNode,
+      CodeNode,
       CounterNode,
+      HeadingNode,
+      LinkNode,
+      ListItemNode,
+      ListNode,
+      QuoteNode,
+      TableCellNode,
+      TableNode,
+      TableRowNode,
+      YouTubeNode,
     ],
   };
 
@@ -298,61 +487,57 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                 >
                   ➕ Append Paragraph
                 </button>
+                <button 
+                  onClick={() => {
+                    // Call the global reload function that has access to the editor
+                    if ((window as any).reloadEditorState) {
+                      (window as any).reloadEditorState();
+                    } else {
+                      console.warn('Reload state function not available - editor not initialized');
+                    }
+                  }}
+                  className="reload-state-button"
+                  title="Reload editor state (test YouTube node reloading)"
+                  style={{ 
+                    marginLeft: '8px',
+                    backgroundColor: '#ff9500',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 Reload State
+                </button>
                 <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block', marginLeft: '8px' }}>
                   <button 
                     onClick={() => setShowMcpDropdown(!showMcpDropdown)}
                     className="mcp-tools-button"
-                    title="MCP Tools"
+                    title={isInitialized ? "MCP Tools" : "MCP Tools (waiting for initialization...)"}
                     style={{ 
-                      backgroundColor: '#4CAF50',
-                      color: 'white',
+                      backgroundColor: isInitialized ? '#1ABC9C' : '#95a5a6',
+                      color: '#FFFFFF',
                       border: 'none',
                       padding: '6px 12px',
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: isInitialized ? 'pointer' : 'not-allowed',
+                      opacity: isInitialized ? 1 : 0.7
                     }}
+                    disabled={!isInitialized}
                   >
-                    🔧 MCP Tools ▼
+                    🔧 MCP Tools {isInitialized ? '▼' : '⏳'}
                   </button>
-                  {showMcpDropdown && (
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        backgroundColor: 'white',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                        zIndex: 1000,
-                        minWidth: '200px',
-                        marginTop: '2px'
-                      }}
-                    >
-                      {mcpTools.map((tool, index) => (
+                  {showMcpDropdown && isInitialized && (
+                    <div className="mcp-tools-dropdown">
+                      {mcpTools.map((tool) => (
                         <button
                           key={tool.name}
                           onClick={() => {
                             callMcpTool(tool.name, tool.params);
                             setShowMcpDropdown(false);
                           }}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            padding: '8px 12px',
-                            border: 'none',
-                            backgroundColor: 'transparent',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            borderBottom: index < mcpTools.length - 1 ? '1px solid #eee' : 'none'
-                          }}
-                          onMouseOver={(e) => {
-                            (e.target as HTMLElement).style.backgroundColor = '#f5f5f5';
-                          }}
-                          onMouseOut={(e) => {
-                            (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                          }}
+                          className="mcp-tool-button"
                           title={`Call MCP tool: ${tool.name}`}
                         >
                           {tool.label}
@@ -365,19 +550,6 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             )}
           </div>
           <span>Powered by Lexical + Loro CRDT</span>
-          {mcpStatus && (
-            <div style={{ 
-              marginTop: '8px', 
-              padding: '4px 8px', 
-              backgroundColor: mcpStatus.includes('failed') ? '#ffebee' : '#e8f5e8',
-              color: mcpStatus.includes('failed') ? '#c62828' : '#2e7d32',
-              borderRadius: '4px',
-              fontSize: '12px',
-              border: `1px solid ${mcpStatus.includes('failed') ? '#ffcdd2' : '#c8e6c9'}`
-            }}>
-              MCP: {mcpStatus}
-            </div>
-          )}
         </div>
       </div>
       
@@ -395,8 +567,6 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-          <HistoryPlugin />
-          <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
           <LoroCollaborativePlugin
             websocketUrl={`${websocketUrl}/${DOC_ID}`}
 //            websocketUrl="wss://prod1.datalayer.run/api/spacer/v1/lexical/ws/${DOC_ID}"
@@ -412,12 +582,157 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               sendMessageRef.current = sendMessageFn;
             }}
           />
+          {isInitialized && (
+            <>
+              <HistoryPlugin />
+              <YouTubePlugin />
+              <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} />
+              <ReloadStatePlugin />
+            </>
+          )}
         </div>
       </LexicalComposer>
       
       <div className="lexical-editor-footer">
+        {mcpStatus && (
+          <div style={{ 
+            marginBottom: '10px', 
+            padding: '8px 12px', 
+            backgroundColor: mcpStatus.includes('failed') ? '#ffebee' : '#e8f5e8',
+            color: mcpStatus.includes('failed') ? '#c62828' : '#2e7d32',
+            borderRadius: '6px',
+            fontSize: '13px',
+            border: `1px solid ${mcpStatus.includes('failed') ? '#ffcdd2' : '#c8e6c9'}`,
+            fontWeight: '500'
+          }}>
+            MCP: {mcpStatus}
+          </div>
+        )}
         <p>Document ID: {DOC_ID}</p>
         <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
+        
+        {/* Document JSON Tree */}
+        {showDocumentTree && (
+          <div style={{
+            marginTop: '20px',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #dee2e6',
+            borderRadius: '8px',
+            maxHeight: '400px',
+            overflowY: 'auto'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '10px',
+              borderBottom: '1px solid #dee2e6',
+              paddingBottom: '8px'
+            }}>
+              <div>
+                <h4 style={{ margin: 0, color: '#495057' }}>Document Structure</h4>
+                <small style={{ color: '#6c757d', fontSize: '11px' }}>
+                  📡 Data source: MCP Server Local Model (not WebSocket)
+                </small>
+              </div>
+              <div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const result = await callMcpTool('get_document_info', { doc_id: DOC_ID });
+                      if (result?.result?.content?.[0]?.text) {
+                        const responseText = result.result.content[0].text;
+                        
+                        // Extract JSON from the formatted response
+                        const jsonMatch = responseText.match(/FULL JSON DOCUMENT:\s*(\{[\s\S]*\})\s*$/);
+                        
+                        if (jsonMatch) {
+                          try {
+                            const jsonContent = JSON.parse(jsonMatch[1]);
+                            if (jsonContent.root && jsonContent.root.children) {
+                              setDocumentContent(jsonContent.root);
+                            }
+                          } catch (jsonError) {
+                            console.warn('Could not parse JSON from refresh response:', jsonError.message);
+                          }
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to refresh document content:', error);
+                    }
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    marginRight: '8px'
+                  }}
+                >
+                  🔄 Refresh
+                </button>
+                <button
+                  onClick={() => setShowDocumentTree(!showDocumentTree)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {showDocumentTree ? '🔽 Hide' : '▶️ Show'}
+                </button>
+              </div>
+            </div>
+            {documentContent ? (
+              <div style={{ 
+                fontFamily: 'Monaco, "Lucida Console", monospace',
+                fontSize: '12px',
+                lineHeight: '1.4'
+              }}>
+                <JsonTree data={documentContent} />
+              </div>
+            ) : (
+              <div style={{ 
+                textAlign: 'center', 
+                color: '#6c757d',
+                fontStyle: 'italic',
+                padding: '20px'
+              }}>
+                {isInitialized ? 'Click refresh to load document structure' : 'Waiting for initialization...'}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Document Info Display */}
+        {documentInfo && (
+          <div style={{
+            marginTop: '20px',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #dee2e6'
+          }}>
+            <pre style={{
+              fontFamily: 'Monaco, "Lucida Console", monospace',
+              fontSize: '11px',
+              lineHeight: '1.3',
+              margin: 0,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word'
+            }}>
+              {documentInfo}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   );

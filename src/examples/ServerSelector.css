@@ -13,7 +13,7 @@
 
 .server-selector h3 {
   margin: 0 0 15px 0;
-  color: #333;
+  color: #000000;
   font-size: 16px;
 }
 
@@ -32,17 +32,17 @@
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  background-color: white;
+  background-color: #FFFFFF;
   flex: 1;
   min-width: 200px;
 }
 
 .server-option:hover {
-  border-color: #007acc;
+  border-color: #1ABC9C;
 }
 
 .server-option.active {
-  border-color: #007acc;
+  border-color: #1ABC9C;
   background-color: #f0f8ff;
 }
 
@@ -58,24 +58,24 @@
 
 .server-name {
   font-weight: bold;
-  color: #333;
+  color: #000000;
 }
 
 .server-url {
   font-size: 12px;
-  color: #666;
+  color: #59595C;
   font-family: monospace;
 }
 
 .server-tech {
   font-size: 11px;
-  color: #888;
+  color: #59595C;
 }
 
 .connection-notice {
   margin-top: 10px;
   font-size: 14px;
-  color: #666;
+  color: #59595C;
   text-align: center;
 }
 

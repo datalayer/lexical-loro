@@ -15,8 +15,12 @@ import {
 import { $setBlocksType } from '@lexical/selection';
 import { $createHeadingNode } from '@lexical/rich-text';
 import { $createCodeNode } from '@lexical/code';
-import { $createCounterNode } from './CounterNode';
 import { INSERT_TABLE_COMMAND } from '@lexical/table';
+import { $createCounterNode } from './CounterNode';
+import { $createYouTubeNode } from './YouTubeNode';
+
+// Default YouTube video URL - can be easily changed here
+const DEFAULT_YOUTUBE_URL = 'https://www.youtube.com/watch?v=Eb1JFC2_lLc';
 
 interface LexicalToolbarProps {
   className?: string;
@@ -99,6 +103,23 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
         return;
       }
       
+      if (blockType === 'youtube') {
+        // Extract video ID from the default YouTube URL
+        const urlMatch = DEFAULT_YOUTUBE_URL.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/);
+        if (urlMatch) {
+          const videoID = urlMatch[1];
+          editor.update(() => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              const node = $createYouTubeNode(videoID);
+              selection.insertNodes([node]);
+            }
+          });
+        }
+        setBlockType('paragraph');
+        return;
+      }
+      
       if (blockType !== 'paragraph' && blockType !== 'h1' && blockType !== 'code') {
         return;
       }
@@ -136,6 +157,7 @@ export const LexicalToolbar: React.FC<LexicalToolbarProps> = ({ className = '' }
           <option value="code">Code</option>
           <option value="table">Table (5x5)</option>
           <option value="counter">Counter</option>
+          <option value="youtube">YouTube</option>
         </select>
       </div>
       

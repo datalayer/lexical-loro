@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   $createParagraphNode,
@@ -19,7 +19,6 @@ import {
   $isElementNode,
   $isLineBreakNode,
   $createTextNode,
-  createState,
   $getState,
   $setState
 } from 'lexical';
@@ -27,21 +26,23 @@ import { createDOMRange, createRectsFromDOMRange } from '@lexical/selection';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LoroDoc, LoroText, Cursor, EphemeralStore } from 'loro-crdt';
 import type { EphemeralStoreEvent, PeerID, VersionVector } from 'loro-crdt';
+import { applyDifferentialUpdate } from './DiffMerge';
+import { stableNodeIdState } from './stableNodeState';
+
+// ============================================================================
+// DIFFERENTIAL UPDATE CONFIGURATION
+// ============================================================================
+
+/**
+ * Control flag for differential updates to prevent decorator node reloading.
+ * When true, uses sophisticated differential merging instead of wholesale setEditorState.
+ * This prevents YouTube/Counter decorator nodes from reloading during collaborative editing.
+ */
+const USE_DIFFERENTIAL_UPDATE = false;
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
 // ============================================================================
-
-/**
- * NodeState configuration for storing stable UUIDs in Lexical nodes.
- * This replaces the unstable NodeKey system for cursor positioning.
- * 
- * Based on Lexical NodeState documentation:
- * https://lexical.dev/docs/concepts/node-state
- */
-const stableNodeIdState = createState('stable-node-id', {
-  parse: (v: unknown) => typeof v === 'string' ? v : undefined,
-});
 
 /**
  * Generate a stable UUID for nodes
@@ -196,52 +197,7 @@ function $ensureAllNodesHaveStableIds(): void {
   }
   
   traverse(root);
-}/**
- * LoroCollaborativePlugin - Enhanced Cursor Management
- * 
- * IMPROVEMENTS IMPLEMENTED based on Loro Cursor documentation and YJS SyncCursors patterns:
- * 
- * 1. Enhanced CursorAwareness class with Loro document reference
- *    - Added loroDoc parameter for proper cursor operations
- *    - Provides framework for stable cursor positioning
- * 
- * 2. Added createCursorFromLexicalPoint method
- *    - Inspired by YJS SyncCursors createRelativePosition pattern
- *    - Creates stable Loro cursors from Lexical selection points
- *    - Replaces approximation with proper cursor positioning
- * 
- * 3. Added getStableCursorPosition method  
- *    - Inspired by YJS SyncCursors createAbsolutePosition pattern
- *    - Converts Loro cursors back to stable positions
- *    - Provides better positioning than current approximations
- * 
- * 4. Enhanced cursor side information support
- *    - Added anchorSide and focusSide to stable cursor data
- *    - Follows Loro Cursor documentation patterns for precise positioning
- *    - Equivalent to YJS RelativePosition side information
- * 
- * 5. Improved cursor creation with framework for better methods
- *    - Added TODO comments showing enhanced cursor creation approach
- *    - Framework ready for using createCursorFromLexicalPoint
- *    - Maintains backward compatibility while providing upgrade path
- * 
- * 6. Enhanced remote cursor processing
- *    - Added support for cursor side information in stable cursor data
- *    - Provides framework for direct Loro cursor conversion
- *    - Better handling of cursor position stability across edits
- * 
- * TECHNICAL APPROACH:
- * - Loro Cursor type is equivalent to YJS RelativePosition (as documented)
- * - Stable positions survive document edits (like YJS RelativePosition)
- * - Cursor side information provides precise positioning
- * - Framework supports proper createRelativePosition/createAbsolutePosition patterns
- * 
- * NEXT STEPS for full implementation:
- * - Implement calculateGlobalPosition method with proper document traversal
- * - Add convertGlobalPositionToLexical helper function
- * - Enable the enhanced cursor creation methods by uncommenting TODO sections
- * - Complete the direct Loro cursor conversion path
- */
+}
 
 interface CursorProps {
   peerId: string;
@@ -353,15 +309,32 @@ interface CursorsContainerProps {
   editor: LexicalEditor;
 }
 
-const CursorsContainer: React.FC<CursorsContainerProps> = ({ 
+interface CursorsContainerRef {
+  update: (cursors: Record<PeerID, RemoteCursor>) => void;
+}
+
+const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsContainerProps>(({ 
   remoteCursors, 
   getPositionFromLexicalPosition, 
   clientId,
   editor
-}) => {
+}, ref) => {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   // Keep last known good positions to avoid snapping to x=0 when mapping fails
   const lastCursorStateRef = useRef<Record<string, { position: { top: number; left: number }, offset: number }>>({});
+  
+  // Internal state to hold the current cursor data
+  const [internalCursors, setInternalCursors] = useState<Record<PeerID, RemoteCursor>>(remoteCursors);
+  
+  // Expose update method through ref
+  useImperativeHandle(ref, () => ({
+    update: (cursors: Record<PeerID, RemoteCursor>) => {
+      setInternalCursors(cursors);
+    }
+  }), []);
+  
+  // Use internal cursors instead of props for rendering
+  const cursorsToRender = internalCursors;
 
   useEffect(() => {
     // Create or get the cursor overlay container
@@ -399,11 +372,11 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
   }
 
   console.log('🎯 Rendering cursors via React portal:', {
-    remoteCursorsCount: Object.keys(remoteCursors).length,
+    remoteCursorsCount: Object.keys(cursorsToRender).length,
     clientId
   });
 
-  const cursors = Object.values(remoteCursors)
+  const cursors = Object.values(cursorsToRender)
     .map(remoteCursor => {
       const { peerId, anchor, focus, user } = remoteCursor;
       if (!anchor) {
@@ -574,7 +547,9 @@ const CursorsContainer: React.FC<CursorsContainerProps> = ({
     <>{cursors}</>,
     portalContainer
   );
-};
+});
+
+CursorsContainer.displayName = 'CursorsContainer';
 
 class CursorAwareness {
   private ephemeralStore: EphemeralStore;
@@ -839,17 +814,6 @@ interface RemoteCursor {
   };
 }
 
-interface LoroCollaborativePluginProps {
-  websocketUrl: string;
-  docId: string;
-  onConnectionChange?: (connected: boolean) => void;
-  onPeerIdChange?: (peerId: string) => void;
-  onDisconnectReady?: (disconnectFn: () => void) => void;
-  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
-  onInitialization?: (success: boolean) => void;
-  onSendMessageReady?: (sendMessageFn: (message: any) => void) => void;
-}
-
 interface LoroMessage {
   type: string;
   update?: number[];
@@ -878,6 +842,63 @@ interface LoroMessage {
   addedBy?: string;
 }
 
+interface LoroCollaborativePluginProps {
+  websocketUrl: string;
+  docId: string;
+  onConnectionChange?: (connected: boolean) => void;
+  onPeerIdChange?: (peerId: string) => void;
+  onDisconnectReady?: (disconnectFn: () => void) => void;
+  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
+  onInitialization?: (success: boolean) => void;
+  onSendMessageReady?: (sendMessageFn: (message: any) => void) => void;
+}
+
+/**
+ * LoroCollaborativePlugin - Enhanced Cursor Management
+ * 
+ * IMPROVEMENTS IMPLEMENTED based on Loro Cursor documentation and YJS SyncCursors patterns:
+ * 
+ * 1. Enhanced CursorAwareness class with Loro document reference
+ *    - Added loroDoc parameter for proper cursor operations
+ *    - Provides framework for stable cursor positioning
+ * 
+ * 2. Added createCursorFromLexicalPoint method
+ *    - Inspired by YJS SyncCursors createRelativePosition pattern
+ *    - Creates stable Loro cursors from Lexical selection points
+ *    - Replaces approximation with proper cursor positioning
+ * 
+ * 3. Added getStableCursorPosition method  
+ *    - Inspired by YJS SyncCursors createAbsolutePosition pattern
+ *    - Converts Loro cursors back to stable positions
+ *    - Provides better positioning than current approximations
+ * 
+ * 4. Enhanced cursor side information support
+ *    - Added anchorSide and focusSide to stable cursor data
+ *    - Follows Loro Cursor documentation patterns for precise positioning
+ *    - Equivalent to YJS RelativePosition side information
+ * 
+ * 5. Improved cursor creation with framework for better methods
+ *    - Added TODO comments showing enhanced cursor creation approach
+ *    - Framework ready for using createCursorFromLexicalPoint
+ *    - Maintains backward compatibility while providing upgrade path
+ * 
+ * 6. Enhanced remote cursor processing
+ *    - Added support for cursor side information in stable cursor data
+ *    - Provides framework for direct Loro cursor conversion
+ *    - Better handling of cursor position stability across edits
+ * 
+ * TECHNICAL APPROACH:
+ * - Loro Cursor type is equivalent to YJS RelativePosition (as documented)
+ * - Stable positions survive document edits (like YJS RelativePosition)
+ * - Cursor side information provides precise positioning
+ * - Framework supports proper createRelativePosition/createAbsolutePosition patterns
+ * 
+ * NEXT STEPS for full implementation:
+ * - Implement calculateGlobalPosition method with proper document traversal
+ * - Add convertGlobalPositionToLexical helper function
+ * - Enable the enhanced cursor creation methods by uncommenting TODO sections
+ * - Complete the direct Loro cursor conversion path
+ */
 export function LoroCollaborativePlugin({ 
   websocketUrl, 
   docId,
@@ -897,15 +918,28 @@ export function LoroCollaborativePlugin({
   
   // Cursor awareness system
   const awarenessRef = useRef<CursorAwareness | null>(null);
-  const [remoteCursors, setRemoteCursors] = useState<Record<PeerID, RemoteCursor>>({});
+  // Use a ref instead of state to avoid triggering full plugin re-renders
+  const remoteCursorsRef = useRef<Record<PeerID, RemoteCursor>>({});
+  // Cursor overlay manager - handles rendering without triggering full plugin re-renders
+  const cursorOverlayRef = useRef<{ update: (cursors: Record<PeerID, RemoteCursor>) => void } | null>(null);
+  
+  // Update remote cursors and trigger only overlay re-render
+  const updateRemoteCursors = useCallback((newCursors: Record<PeerID, RemoteCursor>) => {
+    remoteCursorsRef.current = newCursors;
+    cursorOverlayRef.current?.update(newCursors);
+  }, []);
+  
   const [clientId, setClientId] = useState<string>('');
   const [clientColor, setClientColor] = useState<string>('');
   const peerIdRef = useRef<string>(''); // Changed from numericPeerIdRef to handle string IDs
   
+  // Incremental update error state
+  const [incrementalUpdateError, setIncrementalUpdateError] = useState<string | null>(null);
+  
   // Version vector state for optimized updates
   const [lastSentVersionVector, setLastSentVersionVector] = useState<VersionVector | null>(null);
   const isConnectingRef = useRef<boolean>(false);
-  const [forceUpdate, setForceUpdate] = useState(0); // Force cursor re-render
+  // Remove forceUpdate state - no longer needed
   const cursorTimestamps = useRef<Record<string, number>>({});
 
   const updateLoroFromLexical = useCallback((editorState: EditorState) => {
@@ -1016,15 +1050,20 @@ export function LoroCollaborativePlugin({
         return;
       }
       
-      try {
-        // Fallback to full replacement if incremental update fails
-        loroTextRef.current.delete(0, currentLoroText.length);
-        loroTextRef.current.insert(0, editorStateJson);
-        console.warn('🚨 Full replacement fallback completed successfully');
-      } catch (fallbackError) {
-        console.error('🚨 Even full replacement fallback failed:', fallbackError);
-        return;
-      }
+      // REMOVED: Wholesale delete/insert fallback to ensure pure incremental updates
+      // Instead, log the error and continue with incremental-only approach
+      console.error('🚨 Incremental update failed - skipping wholesale fallback to maintain CRDT consistency');
+      console.error('🚨 This maintains collaborative editing integrity by avoiding destructive operations');
+      
+      // Set error state to show red banner
+      setIncrementalUpdateError(`Incremental update failed: ${error instanceof Error ? error.message : String(error)}`);
+      
+      // Clear error after 5 seconds
+      setTimeout(() => {
+        setIncrementalUpdateError(null);
+      }, 5000);
+      
+      return;
     }
     
     // Send update to WebSocket server
@@ -1045,15 +1084,9 @@ export function LoroCollaborativePlugin({
         docId: docId
       }));
 
-      // Also send a snapshot occasionally to keep server state updated
-      if (Math.random() < 0.1) { // 10% chance to send snapshot
-        const snapshot = loroDocRef.current.export({ mode: "snapshot" });
-        wsRef.current.send(JSON.stringify({
-          type: 'snapshot',
-          snapshot: Array.from(snapshot),
-          docId: docId
-        }));
-      }
+      // NOTE: Removed snapshot sending to ensure pure incremental updates
+      // The system now relies entirely on loro-update messages for collaboration
+      // Initial snapshots are still sent by the server for new client connections
     }
 
     // Reset the flag after a delay to prevent infinite loops
@@ -1107,10 +1140,25 @@ export function LoroCollaborativePlugin({
             // This standardizes the format and prevents confusion between wrapped/unwrapped formats
             const stateLike = parsed; // Always use the parsed object directly
             if (stateLike && typeof stateLike === 'object' && stateLike.root && stateLike.root.type === 'root') {
-              const newEditorState = editor.parseEditorState(stateLike);
-              editor.setEditorState(newEditorState);
-              applied = true;
-              console.log('✅ Successfully applied JSON as Lexical state');
+              // Use differential updates to prevent YouTube nodes from reloading
+              if (USE_DIFFERENTIAL_UPDATE) {
+                const success = applyDifferentialUpdate(editor, stateLike, 'WebSocket update');
+                if (success) {
+                  applied = true;
+                  console.log('✅ Successfully applied JSON as differential Lexical state update');
+                } else {
+                  console.log('❌ Differential update failed, falling back to setEditorState');
+                  const newEditorState = editor.parseEditorState(stateLike);
+                  editor.setEditorState(newEditorState);
+                  applied = true;
+                }
+              } else {
+                // Fallback to wholesale setEditorState when differential updates disabled
+                const newEditorState = editor.parseEditorState(stateLike);
+                editor.setEditorState(newEditorState);
+                applied = true;
+                console.log('✅ Applied JSON using setEditorState (differential updates disabled)');
+              }
             } else {
               console.log('❌ JSON structure invalid for Lexical:', {
                 stateLike: typeof stateLike,
@@ -1195,10 +1243,25 @@ export function LoroCollaborativePlugin({
               
               if (bestParsedObject) {
                 try {
-                  const newEditorState = editor.parseEditorState(bestParsedObject);
-                  editor.setEditorState(newEditorState);
-                  applied = true;
-                  console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as Lexical state (most complete)`);
+                  // Use differential updates for concatenated JSON recovery too
+                  if (USE_DIFFERENTIAL_UPDATE) {
+                    const success = applyDifferentialUpdate(editor, bestParsedObject, 'JSON recovery');
+                    if (success) {
+                      applied = true;
+                      console.log(`✅ Successfully applied JSON object ${bestObjectIndex} as differential update (most complete)`);
+                    } else {
+                      console.log('❌ Differential update failed in JSON recovery, falling back to setEditorState');
+                      const newEditorState = editor.parseEditorState(bestParsedObject);
+                      editor.setEditorState(newEditorState);
+                      applied = true;
+                    }
+                  } else {
+                    // Fallback to wholesale setEditorState when differential updates disabled
+                    const newEditorState = editor.parseEditorState(bestParsedObject);
+                    editor.setEditorState(newEditorState);
+                    applied = true;
+                    console.log(`✅ Applied JSON object ${bestObjectIndex} using setEditorState (differential updates disabled)`);
+                  }
                 } catch (applyError) {
                   console.log('❌ Failed to apply best JSON object to editor:', applyError);
                 }
@@ -1520,12 +1583,10 @@ export function LoroCollaborativePlugin({
                 // Only remove if the peer is truly no longer in the awareness state
                 if (!currentPeerIds.includes(peerId)) {
                   console.log('👁️ ✅ Confirmed removal - peer not in current state:', peerId);
-                  setRemoteCursors(prev => {
-                    const updated = { ...prev };
-                    delete updated[peerId as PeerID];
-                    console.log('👁️ Removed peer from remote cursors:', peerId);
-                    return updated;
-                  });
+                  const updated = { ...remoteCursorsRef.current };
+                  delete updated[peerId as PeerID];
+                  updateRemoteCursors(updated);
+                  console.log('👁️ Removed peer from remote cursors:', peerId);
                   
                   // Clear cursor timestamps
                   delete cursorTimestamps.current[peerId];
@@ -2042,7 +2103,7 @@ export function LoroCollaborativePlugin({
           cursorTimestamps.current[peerId] = now;
         });
         
-        setRemoteCursors(remoteCursorsData);
+        updateRemoteCursors(remoteCursorsData);
         
         // Call awareness change callback for UI display (include ALL users, including self)
         if (stableOnAwarenessChange.current) {
@@ -2063,8 +2124,7 @@ export function LoroCollaborativePlugin({
           stableOnAwarenessChange.current(awarenessData);
         }
         
-        // Force cursor re-render when remote cursors change
-        setForceUpdate(prev => prev + 1);
+        // No more setForceUpdate - overlay handles its own re-rendering
       }
     };
     
@@ -2081,16 +2141,12 @@ export function LoroCollaborativePlugin({
     // Set up the remote cursor callback
     awarenessRef.current.setRemoteCursorCallback((peerId: PeerID, cursor: RemoteCursor) => {
       console.log('🎯 Remote cursor callback triggered:', peerId, cursor);
-      setRemoteCursors(prev => {
-        const updated = {
-          ...prev,
-          [peerId]: cursor
-        };
-        console.log('🎯 Updated remote cursors state:', updated);
-        // Force cursor re-render
-        setForceUpdate(updateVal => updateVal + 1);
-        return updated;
-      });
+      const updated = {
+        ...remoteCursorsRef.current,
+        [peerId]: cursor
+      };
+      console.log('🎯 Updated remote cursors state:', updated);
+      updateRemoteCursors(updated);
     });
     
     // Subscribe to Loro document changes
@@ -2110,8 +2166,6 @@ export function LoroCollaborativePlugin({
         
         updateLexicalFromLoro(editor, currentText);
       }
-      // Force cursor re-render when document changes (content affects cursor positioning)
-      setForceUpdate(prev => prev + 1);
     });
 
     // Subscribe to Lexical editor changes with debouncing
@@ -2151,7 +2205,7 @@ export function LoroCollaborativePlugin({
       unsubscribe();
       removeEditorListener();
     };
-  }, [editor, docId, updateLoroFromLexical, updateLexicalFromLoro, clientId]);
+  }, [editor, docId, updateLoroFromLexical, updateLexicalFromLoro, clientId, updateRemoteCursors]);
 
   // Connection retry state
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -2246,11 +2300,34 @@ export function LoroCollaborativePlugin({
             }
           };
           stableOnSendMessageReady.current?.(sendMessageFn);
+          
+          // Request initial snapshot immediately after connection to ensure proper initialization
+          // This ensures the editor is ready for programmatic operations even before user types
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'request-snapshot',
+                docId: docId
+              }));
+              console.log('📞 Lexical editor requested initial snapshot on connection');
+            }
+          }, 100); // Small delay to ensure connection is fully established
         };
 
         ws.onmessage = (event) => {
           try {
+            // VERY PROMINENT LOGGING - This should appear for EVERY message received
+            console.log('🟢🟢🟢 WEBSOCKET MESSAGE RECEIVED 🟢🟢🟢');
+            console.log('Raw event.data:', event.data);
+            console.log('Event type:', typeof event.data);
+            console.log('Event length:', event.data?.length || 'N/A');
+            
             const data: LoroMessage = JSON.parse(event.data);
+            
+            console.log('🟢🟢🟢 PARSED MESSAGE DATA 🟢🟢🟢');
+            console.log('Message type:', data.type);
+            console.log('Document ID:', data.docId);
+            console.log('Full parsed data:', data);
             
             // Prominent log for ALL incoming messages with safe preview
             const preview = typeof event.data === 'string' ? (event.data as string).slice(0, 300) + ((event.data as string).length > 300 ? '…' : '') : '';
@@ -2264,14 +2341,15 @@ export function LoroCollaborativePlugin({
               preview
             });
             
-            if (data.type === 'loro-update' && data.docId === docId) {
-              // Apply remote update to local document
-              const update = new Uint8Array(data.update!);
+            if ((data.type === 'loro-update' || data.type === 'snapshot') && data.docId === docId) {
+              // Apply remote update or snapshot to local document
+              const update = new Uint8Array(data.update || data.snapshot!);
               
-              console.log('🔍📥 Processing loro-update:', {
+              console.log(`🔍📥 Processing ${data.type}:`, {
                 updateSize: update.length,
                 docId: data.docId,
-                hasUpdate: !!data.update
+                hasUpdate: !!(data.update || data.snapshot),
+                messageType: data.type
               });
               
               // Check CRDT content BEFORE import
@@ -2304,43 +2382,109 @@ export function LoroCollaborativePlugin({
               if (contentAfter && contentAfter.trim().length > 0 && contentBefore !== contentAfter) {
                 try {
                   updateLexicalFromLoro(editor, contentAfter);
-                  console.log('✅ Successfully updated Lexical editor from loro-update');
+                  console.log(`✅ Successfully updated Lexical editor from ${data.type}`);
                 } catch (e) {
-                  console.warn('⚠️ Could not update Lexical editor from loro-update:', e);
+                  console.warn(`⚠️ Could not update Lexical editor from ${data.type}:`, e);
                 }
               } else {
                 console.log('📝 No content change detected, skipping Lexical update');
               }
             } else if (data.type === 'initial-snapshot' && data.docId === docId) {
-              // Apply initial snapshot from server and immediately sync to Lexical
-              const snapshot = new Uint8Array(data.snapshot!);
-              loroDocRef.current.import(snapshot);
+              // Handle initial snapshot from server
               hasReceivedInitialSnapshot.current = true;
-              console.log('📄 Lexical editor received and applied initial snapshot');
+              console.log('📄 Lexical editor received initial snapshot response');
               
-              // Notify parent component about successful initialization
+              // Check if there's actual snapshot data
+              if (data.snapshot && data.snapshot.length > 0) {
+                // Apply snapshot with actual data
+                const snapshot = new Uint8Array(data.snapshot);
+                loroDocRef.current.import(snapshot);
+                console.log('📄 Applied non-empty initial snapshot');
+                
+                // Immediately reflect the current Loro content into the editor after import
+                try {
+                  // Always use 'content' container for structured JSON (single container architecture)
+                  const currentContent = loroDocRef.current.getText('content').toString();
+                  console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
+                  
+                  if (currentContent && currentContent.trim().length > 0) {
+                    updateLexicalFromLoro(editor, currentContent);
+                    console.log('✅ Successfully updated Lexical editor from snapshot');
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
+                }
+              } else {
+                // No snapshot data - initialize with empty document
+                console.log('📄 No snapshot data available, initializing with empty document');
+                
+                // Initialize the CRDT document with a basic empty structure
+                try {
+                  const emptyContent = JSON.stringify({
+                    root: {
+                      children: [],
+                      direction: null,
+                      format: "",
+                      indent: 0,
+                      type: "root",
+                      version: 1
+                    }
+                  });
+                  
+                  // Set the content in the Loro document to establish baseline
+                  loroDocRef.current.getText('content').insert(0, emptyContent);
+                  console.log('📄 Initialized Loro document with empty structure');
+                } catch (e) {
+                  console.warn('⚠️ Could not initialize empty document structure:', e);
+                }
+              }
+              
+              // Notify parent component about successful initialization (even if empty)
               if (onInitialization) {
                 onInitialization(true);
               }
+            } else if (data.type === 'document-update' && data.docId === docId) {
+              // Handle document update broadcasts (e.g., from append-paragraph operations)
+              console.log('📄 Lexical editor received document-update broadcast');
               
-              // Immediately reflect the current Loro content into the editor after import
-              try {
-                // Always use 'content' container for structured JSON (single container architecture)
-                const currentContent = loroDocRef.current.getText('content').toString();
-                console.log('📋 Got structured content from "content" container:', currentContent.slice(0, 100) + '...');
-                
-                if (currentContent && currentContent.trim().length > 0) {
-                  updateLexicalFromLoro(editor, currentContent);
-                  console.log('✅ Successfully updated Lexical editor from snapshot');
-                } else {
-                  console.warn('⚠️ Empty content received from snapshot');
+              // Check if there's snapshot data
+              if (data.snapshot && data.snapshot.length > 0) {
+                try {
+                  let snapshotBytes: Uint8Array;
+                  
+                  // Handle different snapshot formats
+                  if (typeof data.snapshot === 'string') {
+                    // Base64 encoded string (from document-update)
+                    const base64Decoded = atob(data.snapshot);
+                    snapshotBytes = new Uint8Array(
+                      base64Decoded.split('').map(char => char.charCodeAt(0))
+                    );
+                  } else {
+                    // Already a Uint8Array (from initial-snapshot)
+                    snapshotBytes = new Uint8Array(data.snapshot);
+                  }
+                  
+                  console.log('📄 Applying document-update snapshot:', {
+                    originalLength: data.snapshot.length,
+                    decodedLength: snapshotBytes.length
+                  });
+                  
+                  // Apply snapshot to local document
+                  loroDocRef.current.import(snapshotBytes);
+                  
+                  // Update the Lexical editor with the new content
+                  const updatedContent = loroDocRef.current.getText('content').toString();
+                  console.log('📋 Got updated content from document-update:', updatedContent.slice(0, 100) + '...');
+                  
+                  if (updatedContent && updatedContent.trim().length > 0) {
+                    updateLexicalFromLoro(editor, updatedContent);
+                    console.log('✅ Successfully updated Lexical editor from document-update');
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Could not apply document-update snapshot:', e);
                 }
-              } catch (e) {
-                console.warn('⚠️ Could not immediately reflect snapshot to editor:', e);
-                // Notify parent component about failed initialization
-                if (onInitialization) {
-                  onInitialization(false);
-                }
+              } else {
+                console.log('📄 No snapshot data in document-update message');
               }
             } else if (data.type === 'ephemeral-update' || data.type === 'ephemeral-event') {
               // Handle ephemeral updates from other clients using EphemeralStore
@@ -2400,28 +2544,40 @@ export function LoroCollaborativePlugin({
               setClientId(data.clientId || '');
               setClientColor(data.color || '');
               
-                // Update the numeric peer ID to use the client ID for consistency
-                if (data.clientId && awarenessRef.current) {
-                  // Store the client ID as the peer ID
-                  peerIdRef.current = data.clientId;
-                  
-                  // Create a new CursorAwareness instance with the client ID as peer ID
-                  awarenessRef.current = new CursorAwareness(data.clientId as PeerID, loroDocRef.current);
-                  
-                  console.log('🎯 Updated awareness to use client ID as peer ID:', data.clientId);
-                  
-                  // Extract meaningful part from client ID
-                  const extractedId = data.clientId.includes('_') ? 
-                    data.clientId.split('_').find(part => /^\d{13}$/.test(part)) || data.clientId.slice(-8) : 
-                    data.clientId.slice(-8);
-                  
-                  // We'll re-add the awareness callback in the main useEffect
-                  // Update awareness with client info using the client ID
-                  awarenessRef.current.setLocal({
-                    user: { name: extractedId, color: data.color || '#007acc' }
-                  });
-                  console.log('🎯 Updated awareness with WebSocket client ID user data:', { name: extractedId, color: data.color || '#007acc', clientId: data.clientId });
-                }              // Notify parent component of the peerId
+              // FIXED: Preserve existing awareness state when updating peer ID
+              if (data.clientId && awarenessRef.current) {
+                // Store the client ID as the peer ID
+                peerIdRef.current = data.clientId;
+                
+                console.log('🎯 Updating awareness to use client ID as peer ID:', data.clientId);
+                
+                // Save current local state before creating new instance
+                const currentState = awarenessRef.current.getLocal();
+                console.log('💾 Saving current awareness state:', currentState);
+                
+                // Create a new CursorAwareness instance with the client ID as peer ID
+                // This is necessary because the peer ID is set in the constructor
+                awarenessRef.current = new CursorAwareness(data.clientId as PeerID, loroDocRef.current);
+                
+                // Extract meaningful part from client ID
+                const extractedId = data.clientId.includes('_') ? 
+                  data.clientId.split('_').find(part => /^\d{13}$/.test(part)) || data.clientId.slice(-8) : 
+                  data.clientId.slice(-8);
+                
+                // Update awareness with client info using the client ID
+                awarenessRef.current.setLocal({
+                  user: { name: extractedId, color: data.color || '#007acc' }
+                });
+                console.log('🎯 Updated awareness with WebSocket client ID user data:', { 
+                  name: extractedId, 
+                  color: data.color || '#007acc', 
+                  clientId: data.clientId 
+                });
+                
+                // NOTE: The awareness callback listeners will be re-added by the useEffect
+                // that monitors changes to awarenessRef.current
+                console.log('🎯 Awareness instance updated - listeners will be re-attached by useEffect');
+              }              // Notify parent component of the peerId
               if (onPeerIdChange && data.clientId) {
                 onPeerIdChange(data.clientId);
               }
@@ -2437,19 +2593,10 @@ export function LoroCollaborativePlugin({
                 }
               }, 150); // Slightly different delay than text editor
             } else if (data.type === 'snapshot-request' && data.docId === docId) {
-              // Another client is requesting a snapshot, send ours if we have content
-              editor.getEditorState().read(() => {
-                const currentText = $getRoot().getTextContent();
-                if (currentText.length > 0) {
-                  const snapshot = loroDocRef.current.export({ mode: "snapshot" });
-                  ws.send(JSON.stringify({
-                    type: 'snapshot',
-                    snapshot: Array.from(snapshot),
-                    docId: docId
-                  }));
-                  console.log('📄 Lexical editor sent snapshot in response to request');
-                }
-              });
+              // REMOVED: Snapshot response to maintain pure incremental updates
+              // Instead, let the requesting client get updates through normal loro-update flow
+              console.log('📄 Lexical editor received snapshot request - ignoring to maintain incremental-only updates');
+              console.log('📄 Requesting client will receive updates through normal loro-update messages');
             } else if (data.type === 'client-disconnect') {
               // Handle explicit client disconnect notifications
               console.log('📢 Received client disconnect notification:', data);
@@ -2459,19 +2606,14 @@ export function LoroCollaborativePlugin({
                 console.log('🧹 Forcing cleanup of disconnected client:', disconnectedClientId);
                 
                 // Remove from remote cursors immediately
-                setRemoteCursors(prev => {
-                  const updated = { ...prev };
-                  console.log('🧹 Current remote cursors before cleanup:', prev);
-                  delete updated[disconnectedClientId as PeerID];
-                  console.log('🧹 Removed disconnected client from remote cursors, new state:', updated);
-                  return updated;
-                });
+                const updated = { ...remoteCursorsRef.current };
+                console.log('🧹 Current remote cursors before cleanup:', remoteCursorsRef.current);
+                delete updated[disconnectedClientId as PeerID];
+                console.log('🧹 Removed disconnected client from remote cursors, new state:', updated);
+                updateRemoteCursors(updated);
                 
                 // Clear from timestamps
                 delete cursorTimestamps.current[disconnectedClientId];
-                
-                // Force awareness refresh
-                setForceUpdate(prev => prev + 1);
                 
                 console.log('🧹 Completed immediate cleanup for disconnected client');
               } else {
@@ -2503,6 +2645,10 @@ export function LoroCollaborativePlugin({
             }
           } catch (err) {
             console.error('Error processing WebSocket message in Lexical plugin:', err);
+            // Notify parent component about failed initialization
+            if (onInitialization) {
+              onInitialization(false);
+            }
           }
         };
 
@@ -2556,7 +2702,7 @@ export function LoroCollaborativePlugin({
         wsRef.current.close();
       }
     };
-  }, [websocketUrl, docId, editor, onPeerIdChange, onInitialization, updateLexicalFromLoro]); // Include all dependencies
+  }, [websocketUrl, docId, editor, onPeerIdChange, onInitialization, updateLexicalFromLoro, updateRemoteCursors]); // Include all dependencies
 
   // Cleanup stale cursors periodically
   useEffect(() => {
@@ -2564,26 +2710,26 @@ export function LoroCollaborativePlugin({
       const now = Date.now();
       const staleThreshold = 10000; // 10 seconds
       
-      setRemoteCursors(prev => {
-        const updated = { ...prev };
-        let hasChanges = false;
-        
-        Object.keys(updated).forEach(peerId => {
-          const lastSeen = cursorTimestamps.current[peerId] || 0;
-          if (now - lastSeen > staleThreshold) {
-            console.log('🧹 Removing stale cursor for peer:', peerId, 'last seen:', now - lastSeen, 'ms ago');
-            delete updated[peerId as PeerID];
-            delete cursorTimestamps.current[peerId];
-            hasChanges = true;
-          }
-        });
-        
-        return hasChanges ? updated : prev;
+      const updated = { ...remoteCursorsRef.current };
+      let hasChanges = false;
+      
+      Object.keys(updated).forEach(peerId => {
+        const lastSeen = cursorTimestamps.current[peerId] || 0;
+        if (now - lastSeen > staleThreshold) {
+          console.log('🧹 Removing stale cursor for peer:', peerId, 'last seen:', now - lastSeen, 'ms ago');
+          delete updated[peerId as PeerID];
+          delete cursorTimestamps.current[peerId];
+          hasChanges = true;
+        }
       });
+      
+      if (hasChanges) {
+        updateRemoteCursors(updated);
+      }
     }, 2000); // Check every 2 seconds
     
     return () => clearInterval(cleanupInterval);
-  }, []);
+  }, [updateRemoteCursors]);
 
   // Track selection changes for collaborative cursors using Awareness
   useEffect(() => {
@@ -2655,12 +2801,6 @@ export function LoroCollaborativePlugin({
 
     return removeUpdateListener;
   }, [editor, updateCursorAwareness]);
-
-  // Force cursor re-rendering when remote cursors change
-  useEffect(() => {
-    // This effect will trigger whenever forceUpdate changes
-    console.log('🔄 Forcing cursor re-render due to remote cursor changes');
-  }, [forceUpdate]);
 
   // Get the Lexical editor element and its parent for overlay positioning
   const getEditorElement = useCallback(() => {
@@ -3154,7 +3294,7 @@ export function LoroCollaborativePlugin({
   useEffect(() => {
     const handleScroll = () => {
       console.log('🔄 Scroll detected, forcing cursor re-render');
-      setForceUpdate(prev => prev + 1); // Use existing force update mechanism
+      // Cursor overlay will handle its own re-rendering through the ref
     };
 
     // Listen to scroll events on window and any scrollable containers
@@ -3182,11 +3322,11 @@ export function LoroCollaborativePlugin({
         }
       }
     };
-  }, [setForceUpdate, getEditorElement]);
+  }, [getEditorElement]);
 
   console.log('🎬 LoroCollaborativePlugin component render called', {
-    remoteCursorsCount: Object.keys(remoteCursors).length,
-    remoteCursorsPeerIds: Object.keys(remoteCursors),
+    remoteCursorsCount: Object.keys(remoteCursorsRef.current).length,
+    remoteCursorsPeerIds: Object.keys(remoteCursorsRef.current),
     clientId: clientId,
     peerIdRef: peerIdRef.current,
     editorElementExists: !!getEditorElement()
@@ -3194,12 +3334,38 @@ export function LoroCollaborativePlugin({
 
   // Use React portal for cursor rendering
   return (
-    <CursorsContainer 
-      remoteCursors={remoteCursors}
-      getPositionFromLexicalPosition={getPositionFromLexicalPosition}
-      clientId={clientId}
-      editor={editor}
-    />
+    <>
+      {/* Red banner for incremental update errors */}
+      {incrementalUpdateError && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: '#dc3545',
+            color: 'white',
+            padding: '8px 16px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            zIndex: 9999,
+            borderBottom: '2px solid #a02834',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+          }}
+        >
+          ⚠️ Incremental Update Failed: {incrementalUpdateError}
+        </div>
+      )}
+      
+      <CursorsContainer 
+        ref={cursorOverlayRef}
+        remoteCursors={remoteCursorsRef.current}
+        getPositionFromLexicalPosition={getPositionFromLexicalPosition}
+        clientId={clientId}
+        editor={editor}
+      />
+    </>
   );
 }
 

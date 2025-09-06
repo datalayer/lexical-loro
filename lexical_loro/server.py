@@ -42,15 +42,33 @@ logger = logging.getLogger(__name__)
 
 def default_load_model(doc_id: str) -> Optional[str]:
     """
-    Default load_model implementation - returns initial content for new models.
+    Default load_model implementation - loads from local .models folder or returns initial content.
     
     Args:
         doc_id: Document ID to load
         
     Returns:
-        Initial content string or None for default initialization
+        Content string from saved file, or initial content for new models
     """
-    return INITIAL_LEXICAL_JSON
+    try:
+        # Check if a saved model exists
+        models_dir = Path(".models")
+        model_file = models_dir / f"{doc_id}.json"
+        
+        if model_file.exists():
+            with open(model_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    logger.info(f"📂 Loaded existing model {doc_id} from {model_file}")
+                    return content
+        
+        # No existing file found, return initial content for new documents
+        logger.info(f"✨ Creating new model {doc_id} with initial content")
+        return INITIAL_LEXICAL_JSON
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Error loading model {doc_id}: {e}, using initial content")
+        return INITIAL_LEXICAL_JSON
 
 
 def default_save_model(doc_id: str, model: LexicalModel) -> bool:
@@ -126,9 +144,17 @@ class LoroWebSocketServer:
             # Document exists, return it without calling load_model
             return self.document_manager.models[doc_id]
         
-        # Document doesn't exist, load initial content and create it
+        # Document doesn't exist, load content and create it
         initial_content = self.load_model(doc_id)
-        return self.document_manager.get_or_create_document(doc_id, initial_content)
+        model = self.document_manager.get_or_create_document(doc_id, initial_content)
+        
+        # Mark the model as saved since we just loaded it from storage
+        # or created it with initial content. This prevents unnecessary
+        # saves of documents that haven't been modified yet.
+        model.mark_as_saved()
+        logger.debug(f"📌 Marked document {doc_id} as saved after loading/creation")
+        
+        return model
 
     def _extract_doc_id_from_websocket(self, websocket: WebSocketServerProtocol) -> str:
         """
@@ -246,8 +272,12 @@ class LoroWebSocketServer:
         Server only handles broadcasting, no document logic.
         """
         try:
+            logger.debug(f"🔔 _on_document_event: Received event_type='{event_type}'")
+            logger.debug(f"🔔 _on_document_event: event_data keys: {list(event_data.keys())}")
+            
             if event_type in ["ephemeral_changed", "broadcast_needed"]:
                 # Schedule async broadcasting
+                logger.debug(f"📡 _on_document_event: Scheduling broadcast for event_type='{event_type}'")
                 self._schedule_broadcast(event_data)
                 
             elif event_type == "document_changed":
@@ -281,14 +311,25 @@ class LoroWebSocketServer:
     async def _handle_broadcast(self, event_data: dict):
         """Handle broadcasting from model events"""
         try:
+            logger.debug(f"📡 _handle_broadcast: Processing broadcast")
+            logger.debug(f"📡 _handle_broadcast: event_data keys: {list(event_data.keys())}")
+            
             broadcast_data = event_data.get("broadcast_data")
             client_id = event_data.get("client_id")
             
+            logger.debug(f"📡 _handle_broadcast: broadcast_data exists: {broadcast_data is not None}")
+            logger.debug(f"📡 _handle_broadcast: client_id: {client_id}")
+            
             if broadcast_data and client_id:
+                logger.info(f"📡 Broadcasting message to other clients (sender: {client_id})")
                 await self.broadcast_to_other_clients(client_id, broadcast_data)
+            else:
+                logger.warning(f"📡 _handle_broadcast: Missing data - broadcast_data: {broadcast_data is not None}, client_id: {client_id}")
                 
         except Exception as e:
             logger.error(f"❌ Error in broadcast handling: {e}")
+            import traceback
+            logger.error(f"❌ Broadcast error traceback: {traceback.format_exc()}")
     
     async def _autosave_models(self):
         """Periodically auto-save all models at the configured interval"""
@@ -303,20 +344,36 @@ class LoroWebSocketServer:
                     
                     if doc_ids:
                         logger.info(f"🔄 Auto-saving {len(doc_ids)} models every {self.autosave_interval_sec} seconds...")
+                        saved_count = 0
+                        unchanged_count = 0
                         for doc_id in doc_ids:
                             try:
                                 # Get existing model without triggering load (model already exists)
                                 if doc_id in self.document_manager.models:
                                     model = self.document_manager.models[doc_id]
-                                    success = self.save_model(doc_id, model)
-                                    if success:
-                                        logger.info(f"💾 Auto-saved document: {doc_id}")
+                                    
+                                    # Check if the document has changed since last save
+                                    if model.has_changed_since_last_save():
+                                        success = self.save_model(doc_id, model)
+                                        if success:
+                                            # Mark the model as saved to track the current state
+                                            model.mark_as_saved()
+                                            saved_count += 1
+                                            logger.info(f"💾 Auto-saved document: {doc_id}")
+                                        else:
+                                            logger.warning(f"⚠️ Auto-save failed for document: {doc_id}")
                                     else:
-                                        logger.warning(f"⚠️ Auto-save failed for document: {doc_id}")
+                                        unchanged_count += 1
+                                        logger.debug(f"⏭️ Skipping auto-save for unchanged document: {doc_id}")
                                 else:
                                     logger.warning(f"⚠️ Document {doc_id} not found during auto-save")
                             except Exception as e:
                                 logger.error(f"❌ Error auto-saving document {doc_id}: {e}")
+                        
+                        if saved_count > 0:
+                            logger.info(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                        elif unchanged_count > 0:
+                            logger.debug(f"ℹ️ Auto-save check: {unchanged_count} documents unchanged, none saved")
                     else:
                         logger.debug(f"🔍 No documents to auto-save")
                     
@@ -339,19 +396,32 @@ class LoroWebSocketServer:
         doc_ids = self.document_manager.list_models()
         
         logger.info(f"💾 Manually saving {len(doc_ids)} models...")
+        saved_count = 0
+        unchanged_count = 0
         
         for doc_id in doc_ids:
             try:
                 # Get existing model without triggering load (model already exists)
                 if doc_id in self.document_manager.models:
                     model = self.document_manager.models[doc_id]
-                    success = self.save_model(doc_id, model)
-                    results[doc_id] = success
                     
-                    if success:
-                        logger.info(f"💾 Manually saved document: {doc_id}")
+                    # Check if the document has changed since last save
+                    if model.has_changed_since_last_save():
+                        success = self.save_model(doc_id, model)
+                        results[doc_id] = success
+                        
+                        if success:
+                            # Mark the model as saved to track the current state
+                            model.mark_as_saved()
+                            saved_count += 1
+                            logger.info(f"💾 Manually saved document: {doc_id}")
+                        else:
+                            logger.warning(f"⚠️ Failed to save document: {doc_id}")
                     else:
-                        logger.warning(f"⚠️ Failed to save document: {doc_id}")
+                        # Document hasn't changed, consider it a successful "save"
+                        results[doc_id] = True
+                        unchanged_count += 1
+                        logger.debug(f"⏭️ Skipping manual save for unchanged document: {doc_id}")
                 else:
                     logger.warning(f"⚠️ Document {doc_id} not found during manual save")
                     results[doc_id] = False
@@ -360,11 +430,16 @@ class LoroWebSocketServer:
                 logger.error(f"❌ Error saving document {doc_id}: {e}")
                 results[doc_id] = False
         
+        logger.info(f"✅ Manual save completed: {saved_count} saved, {unchanged_count} unchanged")
         return results
     
     async def start(self):
         """Start the WebSocket server"""
-        logger.info(f"🚀 Loro WebSocket relay starting on {self.host}:{self.port}")
+        logger.info(f"🚀 Starting Loro WebSocket Relay Server")
+        logger.info(f"   Host: {self.host}")
+        logger.info(f"   Port: {self.port}")
+        logger.info(f"   Auto-save interval: {self.autosave_interval_sec} seconds")
+        logger.info(f"   Document manager timeout: {self.document_manager.ephemeral_timeout}ms")
         
         self.running = True
         
@@ -376,11 +451,19 @@ class LoroWebSocketServer:
             ping_interval=20,
             ping_timeout=10
         ):
-            logger.info(f"✅ Loro WebSocket relay running on ws://{self.host}:{self.port}")
+            logger.info(f"✅ WebSocket Server Ready!")
+            logger.info(f"   URL: ws://{self.host}:{self.port}")
+            logger.info(f"   Ping interval: 20s")
+            logger.info(f"   Ping timeout: 10s")
+            logger.info(f"   Change tracking: enabled")
+            logger.info(f"   Ready to accept connections...")
             
             # Start background tasks
+            logger.info(f"🔄 Starting background services...")
             stats_task = asyncio.create_task(self.log_stats())
             self._autosave_task = asyncio.create_task(self._autosave_models())
+            logger.info(f"   ✓ Statistics logging (30s interval)")
+            logger.info(f"   ✓ Auto-save service ({self.autosave_interval_sec}s interval)")
             
             try:
                 # Keep the server running until interrupted
@@ -412,12 +495,26 @@ class LoroWebSocketServer:
         client_id = self.generate_client_id()
         client = Client(websocket, client_id)
         
+        # Log detailed connection information
+        remote_address = getattr(websocket, 'remote_address', 'unknown')
+        path = getattr(websocket, 'path', 'unknown')
+        headers = dict(getattr(websocket, 'request_headers', {}))
+        
+        logger.info(f"🔌 New WebSocket connection attempt:")
+        logger.info(f"   Client ID: {client_id}")
+        logger.info(f"   Remote Address: {remote_address}")
+        logger.info(f"   Path: {path}")
+        logger.info(f"   User-Agent: {headers.get('user-agent', 'unknown')}")
+        logger.info(f"   Origin: {headers.get('origin', 'unknown')}")
+        
         try:
             # Extract document ID from WebSocket request
             doc_id = self._extract_doc_id_from_websocket(websocket)
+            logger.info(f"📄 Client {client_id} requesting document: '{doc_id}'")
         except ValueError as e:
             # Send error message and close connection if no document ID found
             logger.error(f"❌ Client {client_id} connection rejected: {e}")
+            logger.error(f"   Remote: {remote_address}, Path: {path}")
             await websocket.send(json.dumps({
                 "type": "error",
                 "message": str(e),
@@ -427,70 +524,114 @@ class LoroWebSocketServer:
             return
         
         self.clients[client_id] = client
-        logger.info(f"📱 Client {client_id} connected for document '{doc_id}'. Total clients: {len(self.clients)}")
+        logger.info(f"✅ Client {client_id} successfully connected:")
+        logger.info(f"   Document: '{doc_id}'")
+        logger.info(f"   Color: {client.color}")
+        logger.info(f"   Total clients: {len(self.clients)}")
+        logger.info(f"   Connection details: {remote_address} -> {path}")
         
         try:
             # Send welcome message with document info
-            await websocket.send(json.dumps({
+            welcome_msg = {
                 "type": "welcome",
                 "clientId": client_id,
                 "color": client.color,
                 "docId": doc_id,
                 "message": "Connected to Loro CRDT relay (Python)"
-            }))
+            }
+            await websocket.send(json.dumps(welcome_msg))
+            logger.info(f"👋 Sent welcome message to client {client_id}")
             
             # Send initial snapshots to the new client for the specific document
             await self.send_initial_snapshots(websocket, client_id, doc_id)
             
             # Listen for messages from this client
+            logger.info(f"👂 Started listening for messages from client {client_id}")
             async for message in websocket:
+                logger.debug(f"📨 Received message from {client_id}: {len(message)} bytes")
                 await self.handle_message(client_id, message)
                 
-        except websockets.exceptions.ConnectionClosed:
-            logger.info(f"📴 Client {client_id} disconnected normally")
+        except websockets.exceptions.ConnectionClosed as e:
+            close_code = getattr(e, 'code', 'unknown')
+            close_reason = getattr(e, 'reason', 'unknown')
+            logger.info(f"📴 Client {client_id} disconnected normally:")
+            logger.info(f"   Close code: {close_code}")
+            logger.info(f"   Close reason: {close_reason}")
+            logger.info(f"   Document: '{doc_id}'")
         except Exception as e:
-            logger.error(f"❌ Error handling client {client_id}: {e}")
+            error_type = type(e).__name__
+            logger.error(f"❌ Unexpected error handling client {client_id}:")
+            logger.error(f"   Error type: {error_type}")
+            logger.error(f"   Error message: {e}")
+            logger.error(f"   Document: '{doc_id}'")
+            logger.error(f"   Remote: {remote_address}")
         finally:
             # Delegate client cleanup to DocumentManager
-            logger.info(f"🧹 Cleaning up client {client_id}")
+            logger.info(f"🧹 Starting cleanup for client {client_id}:")
+            logger.info(f"   Document: '{doc_id}'")
+            logger.info(f"   Connection duration: active session ended")
             
+            cleanup_count = 0
             # Clean up client data in all managed models
-            for doc_id in self.document_manager.list_models():
+            for cleanup_doc_id in self.document_manager.list_models():
                 try:
                     # Get existing model without triggering load (model already exists)
-                    if doc_id in self.document_manager.models:
-                        model = self.document_manager.models[doc_id]
+                    if cleanup_doc_id in self.document_manager.models:
+                        model = self.document_manager.models[cleanup_doc_id]
                         response = model.handle_client_disconnect(client_id)
                         if response.get("success"):
                             removed_keys = response.get("removed_keys", [])
                             if removed_keys:
-                                logger.info(f"🧹 Cleaned up client {client_id} data in {doc_id}")
+                                cleanup_count += 1
+                                logger.info(f"🧹 Cleaned up client {client_id} data in {cleanup_doc_id} ({len(removed_keys)} keys)")
                 except Exception as e:
-                    logger.error(f"❌ Error cleaning up client {client_id} in {doc_id}: {e}")
+                    logger.error(f"❌ Error cleaning up client {client_id} in {cleanup_doc_id}: {e}")
             
             # Remove client from server
             if client_id in self.clients:
                 del self.clients[client_id]
+                logger.info(f"🗑️ Removed client {client_id} from active clients list")
             
-            logger.info(f"📴 Client {client_id} cleanup complete. Total clients: {len(self.clients)}")
+            logger.info(f"✅ Client {client_id} cleanup complete:")
+            logger.info(f"   Cleaned up data in {cleanup_count} documents")
+            logger.info(f"   Remaining clients: {len(self.clients)}")
+            logger.info(f"   Active documents: {len(self.document_manager.list_models())}")
     
     async def send_initial_snapshots(self, websocket: WebSocketServerProtocol, client_id: str, doc_id: str):
         """
         Send initial snapshot for the specified document.
         Create document with initial content and send snapshot.
         """
+        logger.info(f"📸 Preparing initial snapshot for client {client_id}:")
+        logger.info(f"   Document: '{doc_id}'")
             
         try:
             # Ensure document exists with initial content
-            self.get_document(doc_id)  # This will create with initial content if needed
+            logger.debug(f"🔍 Getting/creating document '{doc_id}' for initial snapshot")
+            document = self.get_document(doc_id)  # This will create with initial content if needed
             
             # Now get the snapshot
+            logger.debug(f"📊 Retrieving CRDT snapshot for document '{doc_id}'")
             snapshot_bytes = self.document_manager.get_snapshot(doc_id)
+            
+            # Check if document has content - either in CRDT snapshot or lexical data
+            has_content = False
+            lexical_blocks = 0
+            if snapshot_bytes and len(snapshot_bytes) > 0:
+                has_content = True
+                logger.debug(f"✅ CRDT snapshot available: {len(snapshot_bytes)} bytes")
+            elif document and hasattr(document, 'lexical_data') and document.lexical_data:
+                # Even if CRDT snapshot is empty, check if document has lexical content
+                lexical_root = document.lexical_data.get("root", {})
+                children = lexical_root.get("children", [])
+                lexical_blocks = len(children)
+                has_content = lexical_blocks > 0
+                logger.debug(f"📝 Lexical content available: {lexical_blocks} blocks")
             
             if snapshot_bytes and len(snapshot_bytes) > 0:
                 # Convert bytes to list of integers for JSON serialization
                 snapshot_data = list(snapshot_bytes)
-                await websocket.send(json.dumps({
+                snapshot_msg = {
                     "type": "initial-snapshot",
                     "snapshot": snapshot_data,
                     "docId": doc_id,
@@ -499,62 +640,119 @@ class LoroWebSocketServer:
                     "hasSnapshot": True,
                     "clientId": client_id,
                     "dataLength": len(snapshot_bytes)
-                }))
-                logger.info(f"📄 Sent {doc_id} snapshot ({len(snapshot_bytes)} bytes) to client {client_id}")
+                }
+                await websocket.send(json.dumps(snapshot_msg))
+                logger.info(f"� Sent initial snapshot to client {client_id}:")
+                logger.info(f"   Document: '{doc_id}'")
+                logger.info(f"   Snapshot size: {len(snapshot_bytes)} bytes")
+                logger.info(f"   Lexical blocks: {lexical_blocks}")
             else:
-                # Send empty response with enhanced fields
-                await websocket.send(json.dumps({
+                # Even without CRDT snapshot, we can still send initial content if document exists
+                snapshot_msg = {
                     "type": "initial-snapshot",
                     "docId": doc_id,
-                    "hasData": False,
-                    "hasEvent": False,
-                    "hasSnapshot": False,
+                    "hasData": has_content,  # Based on content check, not just snapshot
+                    "hasEvent": has_content,  # Based on content check, not just snapshot
+                    "hasSnapshot": False,  # No CRDT snapshot available
                     "clientId": client_id,
                     "dataLength": 0
-                }))
-                logger.info(f"📄 No content in {doc_id} to send to client {client_id}")
+                }
+                await websocket.send(json.dumps(snapshot_msg))
+                logger.info(f"� Sent initial state to client {client_id}:")
+                logger.info(f"   Document: '{doc_id}'")
+                logger.info(f"   Has content: {has_content}")
+                logger.info(f"   Lexical blocks: {lexical_blocks}")
+                logger.info(f"   CRDT snapshot: not available")
                 
         except Exception as e:
-            logger.error(f"❌ Error sending snapshot for {doc_id} to {client_id}: {e}")
+            error_type = type(e).__name__
+            logger.error(f"❌ Error sending snapshot to client {client_id}:")
+            logger.error(f"   Document: '{doc_id}'")
+            logger.error(f"   Error type: {error_type}")
+            logger.error(f"   Error message: {e}")
     
     async def handle_message(self, client_id: str, message: str):
         """
         Handle a message from a client.
         Pure delegation to LexicalModel - server doesn't process messages.
         """
+        message_start_time = time.time()
+        
         try:
+            # Parse the message
+            logger.debug(f"🔍 Parsing message from client {client_id}: {len(message)} chars")
             data = json.loads(message)
             message_type = data.get("type")
             doc_id = data.get("docId")
             
+            # DEBUG: Log data type and content for append-paragraph messages
+            if message_type == "append-paragraph":
+                logger.debug(f"🔍 SERVER: append-paragraph data type = {type(data)}")
+                logger.debug(f"🔍 SERVER: append-paragraph data = {data}")
+            
+            logger.info(f"📨 Processing message from client {client_id}:")
+            logger.info(f"   Type: '{message_type}'")
+            logger.info(f"   Document: '{doc_id}'")
+            logger.info(f"   Message size: {len(message)} bytes")
+            
+            # Log additional details for specific message types
+            if message_type == "loro-update":
+                update_data = data.get("update", [])
+                logger.debug(f"   Update data size: {len(update_data)} bytes")
+            elif message_type == "ephemeral-update":
+                ephemeral_data = data.get("data", {})
+                if isinstance(ephemeral_data, dict):
+                    logger.debug(f"   Ephemeral data keys: {list(ephemeral_data.keys())}")
+                else:
+                    logger.debug(f"   Ephemeral data type: {type(ephemeral_data)}, length: {len(ephemeral_data) if hasattr(ephemeral_data, '__len__') else 'N/A'}")
+            elif message_type == "snapshot":
+                snapshot_data = data.get("snapshot", [])
+                logger.debug(f"   Snapshot data size: {len(snapshot_data)} bytes")
+            
             # Validate that docId is provided in the message
             if not doc_id:
+                logger.error(f"❌ Message validation failed for client {client_id}:")
+                logger.error(f"   Message type: '{message_type}' missing 'docId' field")
                 raise ValueError(f"Message of type '{message_type}' missing required 'docId' field")
-            
-            logger.info(f"📨 {message_type} for {doc_id} from {client_id}")
             
             # Add client color to data for better UX
             client = self.clients.get(client_id)
             if client and "color" not in data:
                 data["color"] = client.color
+                logger.debug(f"   Added client color: {client.color}")
             
             # Delegate message handling to DocumentManager
+            logger.debug(f"🔄 Delegating message to DocumentManager...")
             response = await self.document_manager.handle_message(doc_id, message_type, data, client_id)
+            
+            # Calculate processing time
+            processing_time = (time.time() - message_start_time) * 1000  # Convert to milliseconds
+            logger.debug(f"⏱️ Message processed in {processing_time:.2f}ms")
             
             # Log LexicalModel state after ephemeral updates
             ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
             if message_type in ephemeral_message_types:
                 model = self.get_document(doc_id)
-                logger.info(f"🔄 LexicalModel after ephemeral update: {repr(model)}")
+                logger.debug(f"🔄 LexicalModel after ephemeral update: {repr(model)}")
             
             # Handle the response
             await self._handle_model_response(response, client_id, doc_id)
+            
+            logger.info(f"✅ Message handling completed for client {client_id}:")
+            logger.info(f"   Type: '{message_type}', Doc: '{doc_id}', Time: {processing_time:.2f}ms")
                 
-        except json.JSONDecodeError:
-            logger.error(f"❌ Invalid JSON from client {client_id}")
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON parsing error from client {client_id}:")
+            logger.error(f"   Error: {e}")
+            logger.error(f"   Message preview: {message[:200]}...")
             await self._send_error_to_client(client_id, "Invalid message format")
         except Exception as e:
-            logger.error(f"❌ Error processing message from client {client_id}: {e}")
+            error_type = type(e).__name__
+            processing_time = (time.time() - message_start_time) * 1000
+            logger.error(f"❌ Message processing error for client {client_id}:")
+            logger.error(f"   Error type: {error_type}")
+            logger.error(f"   Error message: {e}")
+            logger.error(f"   Processing time: {processing_time:.2f}ms")
             await self._send_error_to_client(client_id, f"Server error: {str(e)}")
     
     async def _handle_model_response(self, response: Dict[str, Any], client_id: str, doc_id: str):
@@ -607,34 +805,75 @@ class LoroWebSocketServer:
         Broadcast a message to all clients except the sender.
         Pure broadcasting function - no document logic.
         """
-        if len(self.clients) <= 1:
+        total_clients = len(self.clients)
+        
+        message_type = message.get("type", "unknown")
+        doc_id = message.get("docId", "unknown")
+        
+        logger.info(f"📡 Broadcasting message from {sender_id}:")
+        logger.info(f"   Type: '{message_type}'")
+        logger.info(f"   Document: '{doc_id}'")
+        logger.info(f"   Total clients: {total_clients}")
+        logger.info(f"   All client IDs: {list(self.clients.keys())}")
+        
+        if total_clients == 0:
+            logger.warning(f"📡 No clients connected - cannot broadcast")
             return
-            
+        
+        # For document updates, we should broadcast to ALL clients
+        # including the sender, so their editor gets updated too
+        # NOTE: Removed 'snapshot' from broadcast list as we now use pure incremental updates
+        should_include_sender = message_type in ["document-update", "loro-update"]
+        target_count = total_clients if should_include_sender else total_clients - 1
+        
+        logger.info(f"   Target clients: {target_count} (include sender: {should_include_sender})")
+        
         message_str = json.dumps(message)
+        message_size = len(message_str)
+        logger.info(f"   Message size: {message_size} bytes")
+        logger.debug(f"   Message preview: {message_str[:200]}...")
+        
         failed_clients = []
+        successful_sends = 0
         
         # Create a copy of clients to avoid "dictionary changed size during iteration" error
         clients_copy = dict(self.clients)
         
         for client_id, client in clients_copy.items():
-            if client_id != sender_id:
-                try:
-                    # Check if websocket is still valid before sending
-                    # For websockets.ServerConnection, check if it's closed instead of open
-                    if hasattr(client.websocket, 'closed') and client.websocket.closed:
-                        logger.warning(f"⚠️ Skipping send to closed websocket for client {client_id}")
-                        failed_clients.append(client_id)
-                    else:
-                        await client.websocket.send(message_str)
-                except (websockets.exceptions.ConnectionClosed, Exception) as e:
-                    logger.warning(f"⚠️ Client {client_id} disconnected during broadcast: {e}")
+            # Skip sender only if we shouldn't include them
+            if not should_include_sender and client_id == sender_id:
+                logger.debug(f"   ⏭️ Skipping sender {client_id}")
+                continue
+            
+            try:
+                logger.debug(f"   📤 Attempting to send to client {client_id}")
+                # Check if websocket is still valid before sending
+                # For websockets.ServerConnection, check if it's closed instead of open
+                if hasattr(client.websocket, 'closed') and client.websocket.closed:
+                    logger.warning(f"⚠️ Skipping broadcast to closed connection: {client_id}")
                     failed_clients.append(client_id)
+                else:
+                    await client.websocket.send(message_str)
+                    successful_sends += 1
+                    sender_note = " (sender)" if client_id == sender_id else ""
+                    logger.info(f"   ✅ Successfully sent to client {client_id}{sender_note}")
+            except (websockets.exceptions.ConnectionClosed, Exception) as e:
+                error_type = type(e).__name__
+                logger.warning(f"⚠️ Broadcast failed to client {client_id}:")
+                logger.warning(f"   Error type: {error_type}")
+                logger.warning(f"   Error: {e}")
+                failed_clients.append(client_id)
         
         # Remove failed clients safely
         for client_id in failed_clients:
             if client_id in self.clients:
                 del self.clients[client_id]
-                logger.info(f"🧹 Removed disconnected client {client_id} from broadcast list")
+                logger.info(f"🧹 Removed disconnected client {client_id} from active list")
+        
+        logger.info(f"✅ Broadcast completed:")
+        logger.info(f"   Successful: {successful_sends}")
+        logger.info(f"   Failed: {len(failed_clients)}")
+        logger.info(f"   Message: '{message_type}' for '{doc_id}'")
     
     def generate_client_id(self) -> str:
         """Generate a unique client ID"""
@@ -650,12 +889,15 @@ class LoroWebSocketServer:
                 if self.running:
                     # Clean up stale connections
                     stale_clients = []
+                    active_connections = 0
+                    
                     for client_id, client in list(self.clients.items()):
                         try:
                             if hasattr(client.websocket, 'ping'):
                                 await asyncio.wait_for(client.websocket.ping(), timeout=5.0)
+                                active_connections += 1
                         except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed, Exception) as e:
-                            logger.info(f"🧹 Detected stale connection for client {client_id}")
+                            logger.debug(f"🧹 Detected stale connection for client {client_id}: {type(e).__name__}")
                             stale_clients.append(client_id)
                     
                     # Remove stale clients
@@ -668,14 +910,31 @@ class LoroWebSocketServer:
                                 pass
                             del self.clients[client_id]
                     
-                    # Log basic stats - Use document manager
+                    # Collect detailed stats
                     doc_count = len(self.document_manager.list_models())
-                    logger.info(f"📊 Relay stats: {len(self.clients)} clients, {doc_count} models")
+                    client_count = len(self.clients)
+                    doc_ids = self.document_manager.list_models()
+                    
+                    # Log comprehensive stats
+                    logger.info(f"📊 WebSocket Server Statistics:")
+                    logger.info(f"   Active clients: {client_count}")
+                    logger.info(f"   Active connections: {active_connections}")
+                    logger.info(f"   Stale connections removed: {len(stale_clients)}")
+                    logger.info(f"   Managed documents: {doc_count}")
+                    
+                    if doc_ids:
+                        logger.debug(f"   Document IDs: {', '.join(doc_ids[:5])}{'...' if len(doc_ids) > 5 else ''}")
+                    
+                    # Log client details at debug level
+                    if client_count > 0:
+                        client_ids = list(self.clients.keys())
+                        logger.debug(f"   Client IDs: {', '.join(client_ids[:3])}{'...' if len(client_ids) > 3 else ''}")
                     
             except asyncio.CancelledError:
+                logger.debug("📊 Stats logging task cancelled")
                 break
             except Exception as e:
-                logger.error(f"❌ Error in stats loop: {e}")
+                logger.error(f"❌ Error in stats loop: {type(e).__name__}: {e}")
     
     async def shutdown(self):
         """Gracefully shutdown the server"""
@@ -693,20 +952,33 @@ class LoroWebSocketServer:
         # Perform final save of all models
         logger.info("💾 Performing final save of all models...")
         doc_ids = self.document_manager.list_models()
+        saved_count = 0
+        unchanged_count = 0
         for doc_id in doc_ids:
             try:
                 # Get existing model without triggering load (model already exists)
                 if doc_id in self.document_manager.models:
                     model = self.document_manager.models[doc_id]
-                    success = self.save_model(doc_id, model)
-                    if success:
-                        logger.info(f"💾 Final save completed for model {doc_id}")
+                    
+                    # Check if the document has changed since last save
+                    if model.has_changed_since_last_save():
+                        success = self.save_model(doc_id, model)
+                        if success:
+                            # Mark the model as saved to track the current state
+                            model.mark_as_saved()
+                            saved_count += 1
+                            logger.info(f"💾 Final save completed for model {doc_id}")
+                        else:
+                            logger.warning(f"⚠️ Final save failed for model {doc_id}")
                     else:
-                        logger.warning(f"⚠️ Final save failed for model {doc_id}")
+                        unchanged_count += 1
+                        logger.debug(f"⏭️ Skipping final save for unchanged document: {doc_id}")
                 else:
                     logger.warning(f"⚠️ Document {doc_id} not found during final save")
             except Exception as e:
                 logger.error(f"❌ Error during final save of model {doc_id}: {e}")
+        
+        logger.info(f"✅ Final save completed: {saved_count} saved, {unchanged_count} unchanged")
         
         # Close all client connections
         clients_to_close = list(self.clients.values())
@@ -763,7 +1035,7 @@ async def main():
         port=8081,
         load_model=default_load_model,
         save_model=default_save_model,
-        autosave_interval_sec=5
+        autosave_interval_sec=60
     )
     
     try:

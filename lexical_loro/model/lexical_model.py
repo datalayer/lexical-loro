@@ -85,13 +85,14 @@ USAGE PATTERNS:
 """
 
 import json
+import hashlib
 import logging
 import time
 import asyncio
 from typing import Dict, Any, List, Optional, TYPE_CHECKING, Callable
 from enum import Enum
 import loro
-from loro import ExportMode, EphemeralStore, EphemeralStoreEvent
+from loro import ExportMode, EphemeralStore, EphemeralStoreEvent, VersionVector
 
 if TYPE_CHECKING and loro is not None:
     from loro import LoroDoc
@@ -197,6 +198,12 @@ class LexicalModel:
         # Track if we need to subscribe to existing document changes
         self._text_doc_subscription = None
         
+        # Track last known version/frontier for incremental updates
+        # Using both Version Vector (for sync) and Frontiers (for efficiency)
+        self._last_broadcast_version = None  # Version Vector for precise tracking
+        self._last_broadcast_frontiers = None  # Frontiers for compact checkpoints
+        self._pending_updates = []  # Store incremental updates since last broadcast
+        
         # Add operation lock to prevent concurrent CRDT modifications
         self._operation_lock = asyncio.Lock()
         
@@ -234,6 +241,9 @@ class LexicalModel:
             "source": "Lexical Loro",
             "version": "0.34.0"
         }
+        
+        # Initialize change tracking for auto-save optimization
+        self._last_saved_hash = None  # Hash of the content when last saved
         
         # If we were given an existing text_doc, sync from it first
         if text_doc is not None:
@@ -305,10 +315,10 @@ class LexicalModel:
         
         # DEBUG: Check current state before creating snapshot
         current_blocks = len(self.lexical_data.get("root", {}).get("children", []))
-        logger.debug(f"🔄 _create_broadcast_data: Creating snapshot with {current_blocks} blocks", flush=True)
+        logger.debug(f"🔄 _create_broadcast_data: Creating snapshot with {current_blocks} blocks")
         
         snapshot_bytes = self.get_snapshot()
-        logger.debug(f"🔄 _create_broadcast_data: Snapshot size: {len(snapshot_bytes)} bytes", flush=True)
+        logger.debug(f"🔄 _create_broadcast_data: Snapshot size: {len(snapshot_bytes)} bytes")
         
         broadcast_data = {
             "type": event_type,
@@ -570,14 +580,20 @@ class LexicalModel:
                     if target_matches:
                         logger.debug(f"LoroModel: Applying text diff for {target_str}")
                         self._apply_text_diff(container_diff.diff)
-                        # Auto-sync after receiving changes - schedule async operation
-                        import asyncio
-                        try:
-                            loop = asyncio.get_event_loop()
-                            loop.create_task(self._auto_sync_on_change())
-                        except RuntimeError:
-                            # No event loop running, skip async operation
-                            logger.debug("LoroModel: No event loop available, skipping auto-sync")
+                        
+                        # Only auto-sync if this is NOT a remote update to prevent feedback loops
+                        if not getattr(self, '_processing_remote_update', False):
+                            logger.debug("LoroModel: Local change detected, triggering auto-sync")
+                            # Auto-sync after receiving changes - schedule async operation
+                            import asyncio
+                            try:
+                                loop = asyncio.get_event_loop()
+                                loop.create_task(self._auto_sync_on_change())
+                            except RuntimeError:
+                                # No event loop running, skip async operation
+                                logger.debug("LoroModel: No event loop available, skipping auto-sync")
+                        else:
+                            logger.debug("LoroModel: Remote update detected, skipping auto-sync to prevent feedback loop")
                     else:
                         logger.debug(f"LoroModel: Ignoring diff for {target_str} (not our container)")
                         
@@ -1306,7 +1322,7 @@ class LexicalModel:
             logger.debug(f"❌ Lexical data structure: {self.lexical_data}")
             raise e
     
-    async def append_block(self, block_detail: Dict[str, Any], block_type: str):
+    async def append_block(self, block_detail: Dict[str, Any], block_type: str, client_id: Optional[str] = None):
         """
         Append a new block to the lexical model using SAFE incremental operations.
         
@@ -1482,9 +1498,13 @@ class LexicalModel:
             # This allows the CRDT system to handle synchronization properly without conflicts
             logger.debug("✨ SAFE append_block: Using event-based propagation for synchronization")
             
-            # Emit broadcast event for this change
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-                            self._create_broadcast_data("document-update"))
+            # Emit broadcast event for this change - FIXED: Include client_id
+            logger.debug(f"🔄 SAFE append_block: Emitting BROADCAST_NEEDED with client_id='{client_id}'")
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "message_type": "append-block",
+                "broadcast_data": self._create_broadcast_data("document-update"),
+                "client_id": client_id or "append-block-system"
+            })
             
             logger.debug(f"✅ SAFE append_block: Broadcasted document update successfully")
             
@@ -1599,7 +1619,128 @@ class LexicalModel:
                 "snapshot": self.get_snapshot()
             })
     
-    async def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str):
+    async def insert_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str, client_id: Optional[str] = None):
+        """
+        Insert a new block at a specific index using SAFE incremental operations.
+        
+        This method implements the same safe approach as append_block, but for insertion
+        at a specific index. It uses event-based propagation instead of destructive
+        CRDT wholesale operations.
+        
+        Args:
+            index: Index where to insert the block (0-based)
+            block_detail: Dictionary containing block details (text, formatting, etc.)
+            block_type: Type of block (paragraph, heading1, heading2, etc.)
+            client_id: Optional client ID for tracking
+            
+        Returns:
+            Dict containing operation results with success status, block counts, etc.
+        """
+        try:
+            logger.debug(f"✨ SAFE insert_block_at_index: Adding '{block_type}' block at index {index}")
+            
+            # Get blocks before adding
+            old_count = len(self.lexical_data["root"]["children"])
+            
+            # Map block types to lexical types
+            type_mapping = {
+                "paragraph": "paragraph",
+                "heading1": "heading1",
+                "heading2": "heading2",
+                "heading3": "heading3",
+                "heading4": "heading4",
+                "heading5": "heading5",
+                "heading6": "heading6",
+            }
+            
+            lexical_type = type_mapping.get(block_type, "paragraph")
+            
+            # Create the block structure
+            new_block = {
+                "children": [],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": lexical_type,
+                "version": 1
+            }
+            
+            # Add heading tag if it's a heading
+            if block_type.startswith("heading"):
+                new_block["tag"] = f"h{block_type[-1]}"  # Extract number from heading1, heading2, etc.
+            elif lexical_type == "paragraph":
+                # Paragraphs don't need a tag
+                pass
+            
+            # Add text content if provided
+            if "text" in block_detail:
+                text_node = {
+                    "detail": 0,
+                    "format": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "text": block_detail["text"],
+                    "type": "text",
+                    "version": 1
+                }
+                
+                # Apply any formatting from block_detail
+                if "format" in block_detail:
+                    text_node["format"] = block_detail["format"]
+                if "style" in block_detail:
+                    text_node["style"] = block_detail["style"]
+                if "detail" in block_detail:
+                    text_node["detail"] = block_detail["detail"]
+                if "mode" in block_detail:
+                    text_node["mode"] = block_detail["mode"]
+                
+                new_block["children"].append(text_node)
+            
+            # Add any additional properties from block_detail
+            for key, value in block_detail.items():
+                if key not in ["text", "format", "style", "detail", "mode"]:  # These are handled above
+                    new_block[key] = value
+            
+            # Ensure index is within valid range
+            children = self.lexical_data["root"]["children"]
+            if index < 0:
+                index = 0
+            elif index > len(children):
+                index = len(children)
+            
+            # SAFE OPERATION: Only modify local lexical_data structure
+            children.insert(index, new_block)
+            self.lexical_data["lastSaved"] = int(time.time() * 1000)
+            
+            new_count = len(children)
+            logger.debug(f"✅ SAFE insert_block_at_index: Added block to lexical_data at index {index}: {old_count} -> {new_count} blocks")
+            
+            # Use event-based propagation instead of destructive CRDT sync
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "type": "document-update", 
+                "docId": self.doc_id,
+                "snapshot": self.get_snapshot()
+            })
+            
+            return {
+                "success": True,
+                "blocks_before": old_count,
+                "blocks_after": new_count,
+                "index": index,
+                "block_type": block_type,
+                "text": block_detail.get("text", "")
+            }
+            
+        except Exception as e:
+            logger.debug(f"❌ Error in insert_block_at_index: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "index": index,
+                "block_type": block_type
+            }
+
+    async def add_block_at_index(self, index: int, block_detail: Dict[str, Any], block_type: str, client_id: Optional[str] = None):
         """
         Insert a new block at a specific index using SAFE incremental operations.
         
@@ -1761,9 +1902,13 @@ class LexicalModel:
             # This allows the CRDT system to handle synchronization properly without conflicts
             logger.debug("✨ SAFE add_block_at_index: Using event-based propagation for synchronization")
             
-            # Emit broadcast event for this change
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-                            self._create_broadcast_data("document-update"))
+            # Emit broadcast event for this change - FIXED: Include client_id
+            logger.debug(f"🔄 SAFE add_block_at_index: Emitting BROADCAST_NEEDED with client_id='{client_id}'")
+            self._emit_event(LexicalEventType.BROADCAST_NEEDED, {
+                "message_type": "insert-block", 
+                "broadcast_data": self._create_broadcast_data("document-update"),
+                "client_id": client_id or "insert-block-system"
+            })
             
             logger.debug(f"✅ SAFE add_block_at_index: Broadcasted document update successfully")
             
@@ -2046,8 +2191,9 @@ class LexicalModel:
                 logger.debug("Warning: Empty snapshot provided")
                 return False
             
-            # Set flag to prevent recursive operations during import
+            # Set flags to prevent recursive operations during import
             self._import_in_progress = True
+            self._processing_remote_update = True  # NEW: Flag to prevent auto-sync feedback loops
             
             try:
                 # Import the snapshot into our text document
@@ -2064,12 +2210,14 @@ class LexicalModel:
                 return True
                 
             finally:
-                # Always clear the flag, even if an error occurs
+                # Always clear the flags, even if an error occurs
                 self._import_in_progress = False
+                self._processing_remote_update = False
             
         except Exception as e:
             logger.debug(f"❌ Error importing snapshot: {e}")
             self._import_in_progress = False  # Make sure flag is cleared on error
+            self._processing_remote_update = False  # Clear remote update flag on error
             return False
     
     def apply_update(self, update_bytes: bytes) -> bool:
@@ -2093,8 +2241,9 @@ class LexicalModel:
             blocks_before_import = len(self.lexical_data.get("root", {}).get("children", []))
             logger.debug(f"📊 apply_update: BEFORE import - lexical_data has {blocks_before_import} blocks")
             
-            # Set flag to prevent recursive operations during import
+            # Set flags to prevent recursive operations during import
             self._import_in_progress = True
+            self._processing_remote_update = True  # NEW: Flag to prevent auto-sync feedback loops
             
             try:
                 # Apply the update to our text document
@@ -2124,43 +2273,292 @@ class LexicalModel:
                 return True
                 
             finally:
-                # Always clear the flag, even if an error occurs
+                # Always clear the flags, even if an error occurs
                 self._import_in_progress = False
+                self._processing_remote_update = False
             
         except Exception as e:
             logger.debug(f"❌ Error applying update: {e}")
             self._import_in_progress = False  # Make sure flag is cleared on error
+            self._processing_remote_update = False  # Clear remote update flag on error
             return False
     
     def export_update(self) -> Optional[bytes]:
         """
         Export any pending changes as an update that can be broadcast to other clients.
         
-        Note: In Loro, updates are generated automatically when changes are made.
-        This method is provided for consistency but may return None if no changes 
-        are pending or if the update mechanism works differently.
+        Uses Loro's update export mode for efficient incremental synchronization.
+        Follows best practices from Loro documentation for collaborative editing.
         
         Returns:
             Optional[bytes]: Update bytes if available, None otherwise
         """
+        logger.info(f"🔧 export_update CALLED - checking for incremental updates...")
         try:
             if ExportMode is None:
-                logger.debug("Warning: ExportMode not available")
+                logger.info("⚠️ Warning: ExportMode not available")
                 return None
             
-            # Try to export updates - this may not be the standard Loro pattern
-            # as updates are typically generated automatically during changes
-            
-            # For now, we'll return None and rely on the subscription mechanism
-            # to handle broadcasting via the change_callback
-            
-            # In a full implementation, this might track changes and export deltas
-            logger.debug("ℹ️ export_update called - relying on subscription mechanism for updates")
-            return None
+            # Try to get incremental updates from Loro
+            try:
+                # Get current state - prefer version vector for sync accuracy
+                current_vv = self.text_doc.state_vv
+                logger.info(f"🔄 Current state version vector: {current_vv}")
+                logger.info(f"🔄 Last broadcast version: {self._last_broadcast_version}")
+                
+                # If we have a last broadcast version, try to get updates since then
+                if self._last_broadcast_version is not None:
+                    logger.info(f"🔄 Trying incremental update from last broadcast version...")
+                    try:
+                        # Use ExportMode.Updates with version vector for precise incremental updates
+                        # This follows Loro best practices for collaborative sync
+                        update_mode = ExportMode.Updates(from_=self._last_broadcast_version)
+                        update_data = self.text_doc.export(update_mode)
+                        
+                        if update_data and len(update_data) > 0:
+                            logger.info(f"✅ Got incremental update: {len(update_data)} bytes")
+                            return update_data
+                        else:
+                            logger.info("ℹ️ No updates since last broadcast (empty result)")
+                            return None
+                            
+                    except Exception as e:
+                        logger.info(f"⚠️ ExportMode.Updates failed: {e}")
+                        
+                        # Fallback: check if there are actual changes using version vectors
+                        try:
+                            # Compare current state with last broadcast state
+                            if current_vv != self._last_broadcast_version:
+                                logger.info("ℹ️ Changes detected but incremental export failed - falling back to snapshot")
+                                return None
+                            else:
+                                logger.info("ℹ️ No changes detected via version vector comparison")
+                                return None
+                        except Exception as e2:
+                            logger.info(f"⚠️ Version comparison also failed: {e2}")
+                else:
+                    # No previous version tracked - for incremental updates, get all changes from beginning
+                    # According to Loro docs, omitting 'from' should give all operations
+                    try:
+                        logger.info("🔄 No previous version tracked - getting all operations as incremental update")
+                        
+                        # Try different approaches to get incremental updates from the beginning
+                        update_data = None
+                        
+                        # Method 1: Use Updates mode with no 'from' parameter (should give all ops)
+                        try:
+                            logger.info("🔄 Trying Updates mode with no 'from' parameter...")
+                            update_mode = ExportMode.Updates()
+                            update_data = self.text_doc.export(update_mode)
+                            if update_data and len(update_data) > 0:
+                                logger.info(f"✅ Method 1 success: Got {len(update_data)} bytes from Updates()")
+                            else:
+                                logger.info("⚠️ Method 1: Updates() returned empty/None")
+                                update_data = None
+                        except Exception as e:
+                            logger.info(f"⚠️ Method 1 failed: {e}")
+                        
+                        # Method 2: If method 1 failed, try with empty version vector
+                        if not update_data:
+                            try:
+                                logger.info("🔄 Trying Updates mode with empty version vector...")
+                                empty_vv = VersionVector({})
+                                update_mode = ExportMode.Updates(from_=empty_vv)
+                                update_data = self.text_doc.export(update_mode)
+                                if update_data and len(update_data) > 0:
+                                    logger.info(f"✅ Method 2 success: Got {len(update_data)} bytes with empty VV")
+                                else:
+                                    logger.info("⚠️ Method 2: Updates(empty_vv) returned empty/None")
+                                    update_data = None
+                            except Exception as e:
+                                logger.info(f"⚠️ Method 2 failed: {e}")
+                        
+                        # Method 3: Try using oplog_frontiers (start of document)
+                        if not update_data:
+                            try:
+                                logger.info("🔄 Trying Updates mode with oplog frontiers...")
+                                oplog_frontiers = self.text_doc.oplog_frontiers()
+                                # Convert frontiers to version vector
+                                start_vv = self.text_doc.frontiersToVV(oplog_frontiers)
+                                update_mode = ExportMode.Updates(from_=start_vv)
+                                update_data = self.text_doc.export(update_mode)
+                                if update_data and len(update_data) > 0:
+                                    logger.info(f"✅ Method 3 success: Got {len(update_data)} bytes with oplog frontiers")
+                                else:
+                                    logger.info("⚠️ Method 3: Updates(oplog_frontiers) returned empty/None")
+                                    update_data = None
+                            except Exception as e:
+                                logger.info(f"⚠️ Method 3 failed: {e}")
+                        
+                        if update_data and len(update_data) > 0:
+                            logger.info(f"✅ Successfully got incremental update: {len(update_data)} bytes")
+                            return update_data
+                        else:
+                            logger.info("⚠️ All methods failed to get incremental update")
+                            return None
+                            
+                    except Exception as e:
+                        logger.info(f"⚠️ Getting incremental updates failed: {e}")
+                        return None
+                
+            except AttributeError as e:
+                # Version vector or export methods not available in this Loro version
+                logger.debug(f"ℹ️ Incremental update methods not available: {e}")
+                return None
             
         except Exception as e:
             logger.debug(f"❌ Error exporting update: {e}")
             return None
+
+    def get_broadcast_data(self, prefer_incremental: bool = True, use_case: str = "sync") -> Optional[Dict[str, Any]]:
+        """
+        Get data suitable for broadcasting to other clients.
+        
+        This is the main method that MCP server should call to get broadcast data.
+        Follows Loro best practices for different use cases.
+        
+        Args:
+            prefer_incremental: If True, tries to get incremental updates first
+            use_case: The intended use case ("sync", "persistence", "startup")
+            
+        Returns:
+            Dictionary with message_type and update/snapshot data, or None if no changes
+        """
+        logger.info(f"🔧 get_broadcast_data CALLED - prefer_incremental={prefer_incremental}, use_case={use_case}")
+        try:
+            # Get recommendation based on use case
+            recommended_type = self.get_export_recommendation(use_case)
+            logger.info(f"🔧 Recommended message type: {recommended_type}")
+            
+            # For real-time sync, try incremental updates first
+            if prefer_incremental and recommended_type == "loro-update":
+                logger.info(f"🔧 Attempting incremental update (prefer_incremental={prefer_incremental}, recommended={recommended_type})")
+                # Try to get incremental update first
+                update_data = self.export_update()
+                logger.info(f"🔧 export_update returned: {type(update_data)} (length: {len(update_data) if update_data else 'None'})")
+                if update_data:
+                    # Update the last broadcast version for next incremental update
+                    try:
+                        self._last_broadcast_version = self.text_doc.state_vv
+                        self._last_broadcast_frontiers = self.text_doc.frontiers()
+                    except:
+                        pass  # Version tracking not available
+                    
+                    logger.info(f"✅ Returning loro-update message with {len(update_data)} bytes")
+                    return {
+                        "message_type": "loro-update",
+                        "update": update_data.hex() if isinstance(update_data, bytes) else update_data,
+                        "doc_id": self.doc_id,
+                        "use_case": use_case
+                    }
+                else:
+                    logger.info(f"⚠️ export_update returned None, falling back to snapshot")
+            else:
+                logger.info(f"🔧 Skipping incremental update (prefer_incremental={prefer_incremental}, recommended={recommended_type})")
+            
+            # Fallback to snapshot or use snapshot by design
+            logger.info(f"🔧 Falling back to snapshot export...")
+            snapshot_data = self.get_snapshot()
+            if snapshot_data:
+                # Update the last broadcast version for future incremental updates
+                try:
+                    self._last_broadcast_version = self.text_doc.state_vv
+                    self._last_broadcast_frontiers = self.text_doc.frontiers()
+                except:
+                    pass  # Version tracking not available
+                
+                message_type = "snapshot" if recommended_type in ["snapshot", "shallow-snapshot"] else "snapshot"
+                
+                logger.info(f"✅ Returning {message_type} message with {len(snapshot_data) if snapshot_data else 'None'} bytes")
+                return {
+                    "message_type": message_type, 
+                    "snapshot": snapshot_data.hex() if isinstance(snapshot_data, bytes) else snapshot_data,
+                    "doc_id": self.doc_id,
+                    "use_case": use_case
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"❌ Error getting broadcast data: {e}")
+            return None
+
+    def mark_version_as_broadcast(self):
+        """
+        Mark the current version as having been broadcast.
+        
+        Tracks both Version Vector (for precise sync) and Frontiers (for efficiency).
+        This helps optimize future incremental update exports.
+        """
+        try:
+            # Track Version Vector for precise incremental updates
+            self._last_broadcast_version = self.text_doc.state_vv
+            
+            # Also track Frontiers for efficient checkpoints (optional)
+            try:
+                self._last_broadcast_frontiers = self.text_doc.frontiers()
+                logger.debug(f"📝 Marked version as broadcast - VV: {self._last_broadcast_version}")
+                logger.debug(f"📝 Frontiers: {self._last_broadcast_frontiers}")
+            except:
+                # Frontiers may not be available in all Loro versions
+                logger.debug(f"📝 Marked version as broadcast (VV only): {self._last_broadcast_version}")
+                
+        except Exception as e:
+            logger.debug(f"⚠️ Could not mark version as broadcast: {e}")
+
+    def has_changes_since_last_broadcast(self) -> bool:
+        """
+        Check if there are changes since the last broadcast.
+        
+        Uses Version Vector comparison for precise change detection.
+        
+        Returns:
+            True if there are changes to broadcast, False otherwise
+        """
+        try:
+            if self._last_broadcast_version is None:
+                return True  # No previous broadcast, so there are changes
+            
+            # Use Version Vector for precise comparison
+            current_version = self.text_doc.state_vv
+            has_changes = current_version != self._last_broadcast_version
+            
+            if has_changes:
+                logger.debug(f"📊 Changes detected: {current_version} != {self._last_broadcast_version}")
+            
+            return has_changes
+            
+        except Exception as e:
+            logger.debug(f"⚠️ Could not check for changes: {e}")
+            return True  # Assume changes exist if we can't check
+
+    def get_export_recommendation(self, use_case: str = "sync") -> str:
+        """
+        Get the recommended export mode based on use case.
+        
+        Following Loro best practices:
+        - Updates: For real-time sync between collaborators
+        - Snapshot: For persistence/backup 
+        - Shallow Snapshot: For fast startup with minimal history
+        
+        Args:
+            use_case: "sync", "persistence", "startup", or "relay"
+            
+        Returns:
+            Recommended message type: "loro-update", "snapshot", or "shallow-snapshot"
+        """
+        recommendations = {
+            "sync": "loro-update",      # Real-time collaboration
+            "persistence": "snapshot",   # Full backup with history
+            "startup": "shallow-snapshot",  # Fast loading
+            "relay": "loro-update",     # Server relay (OpLog only)
+            "backup": "snapshot",       # Complete backup
+            "checkpoint": "snapshot"    # Full state checkpoint
+        }
+        
+        recommended = recommendations.get(use_case, "loro-update")
+        logger.debug(f"📋 Export recommendation for '{use_case}': {recommended}")
+        return recommended
     
     def get_document_info(self) -> Dict[str, Any]:
         """
@@ -2211,6 +2609,61 @@ class LexicalModel:
                 "container_id": self.container_id,
                 "error": str(e)
             }
+    
+    def _compute_content_hash(self) -> str:
+        """
+        Compute a SHA-256 hash of the current document content for change detection.
+        
+        This method creates a hash based only on the semantic content of the document
+        (the root structure and its children), excluding metadata like lastSaved timestamp
+        that changes frequently but doesn't represent actual content changes.
+        
+        Returns:
+            SHA-256 hash string of the document content
+        """
+        try:
+            # Create a normalized representation of the content for hashing
+            # Only include the semantic content, exclude metadata that changes frequently
+            content_for_hash = {
+                "root": self.lexical_data.get("root", {}),
+                "source": self.lexical_data.get("source", ""),
+                "version": self.lexical_data.get("version", "")
+            }
+            
+            # Convert to JSON with sorted keys for consistent hashing
+            content_json = json.dumps(content_for_hash, sort_keys=True, separators=(',', ':'))
+            
+            # Compute SHA-256 hash
+            hash_obj = hashlib.sha256(content_json.encode('utf-8'))
+            return hash_obj.hexdigest()
+            
+        except Exception as e:
+            logger.debug(f"❌ Error computing content hash: {e}")
+            # Return a timestamp-based fallback to ensure some change detection
+            return str(int(time.time() * 1000))
+    
+    def has_changed_since_last_save(self) -> bool:
+        """
+        Check if the document content has changed since the last save.
+        
+        Returns:
+            True if the document has changed since last save, False otherwise
+        """
+        current_hash = self._compute_content_hash()
+        if self._last_saved_hash is None:
+            # First time checking, consider it changed
+            return True
+        return current_hash != self._last_saved_hash
+    
+    def mark_as_saved(self) -> None:
+        """
+        Mark the current document state as saved by storing its content hash.
+        
+        This should be called after a successful save operation to prevent
+        unnecessary saves of unchanged documents.
+        """
+        self._last_saved_hash = self._compute_content_hash()
+        logger.debug(f"📌 Document marked as saved with hash: {self._last_saved_hash[:16]}...")
     
     # ==========================================
     # SERIALIZATION METHODS
@@ -2374,7 +2827,13 @@ class LexicalModel:
             Dict with response information including any broadcast data needed
         """
         logger.debug(f"📨 LexicalModel.handle_message: RECEIVED {message_type} from client {client_id or 'unknown'}")
-        logger.debug(f"📨 LexicalModel.handle_message: data keys: {list(data.keys()) if data else 'None'}")
+        logger.debug(f"📨 LexicalModel.handle_message: data type = {type(data)}")
+        logger.debug(f"📨 LexicalModel.handle_message: data keys: {list(data.keys()) if isinstance(data, dict) else 'NOT A DICT'}")
+        
+        # DEBUG: Extra logging for append-paragraph
+        if message_type == "append-paragraph":
+            logger.debug(f"🔍 LEXICAL_MODEL: append-paragraph data type = {type(data)}")
+            logger.debug(f"🔍 LEXICAL_MODEL: append-paragraph data = {data}")
         
         try:
             if message_type == "loro-update":
@@ -2389,6 +2848,9 @@ class LexicalModel:
             elif message_type == "append-paragraph":
                 logger.debug(f"➕ handle_message: Processing append-paragraph...")
                 return await self._handle_append_paragraph(data, client_id)
+            elif message_type == "insert-paragraph":
+                logger.debug(f"📝 handle_message: Processing insert-paragraph...")
+                return await self._handle_insert_paragraph(data, client_id)
             else:
                 return {
                     "success": False,
@@ -2566,77 +3028,106 @@ class LexicalModel:
         """Handle append-paragraph message type"""
         # IMMEDIATE DEBUG: Force flush to see if method is called
         import sys
-        logger.debug(f"🚨 _handle_append_paragraph: METHOD CALLED!", flush=True)
+        logger.debug(f"🚨 _handle_append_paragraph: METHOD CALLED!")
         sys.stdout.flush()
         
-        # DEBUG: Check data parameter
-        logger.debug(f"🔍 _handle_append_paragraph: data type = {type(data)}", flush=True)
-        logger.debug(f"🔍 _handle_append_paragraph: data = {data}", flush=True)
+        # DEBUG: Check data parameter type and content
+        logger.debug(f"🔍 _handle_append_paragraph: data type = {type(data)}")
+        logger.debug(f"🔍 _handle_append_paragraph: data = {data}")
         sys.stdout.flush()
+        
+        # TYPE SAFETY: Check if data is actually a string (this would cause the error)
+        if isinstance(data, str):
+            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is a string, not a dict!")
+            logger.error(f"❌ _handle_append_paragraph: String data = '{data}'")
+            sys.stdout.flush()
+            try:
+                # Try to parse it as JSON
+                import json
+                data = json.loads(data)
+                logger.info(f"✅ _handle_append_paragraph: Successfully parsed string data as JSON")
+                logger.debug(f"✅ _handle_append_paragraph: Parsed data = {data}")
+                sys.stdout.flush()
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ _handle_append_paragraph: Failed to parse string data as JSON: {e}")
+                sys.stdout.flush()
+                return {
+                    "success": False,
+                    "error": f"Invalid data format: expected dict, got string that couldn't be parsed as JSON: {e}",
+                    "message_type": "append-paragraph"
+                }
+        elif not isinstance(data, dict):
+            logger.error(f"❌ _handle_append_paragraph: CRITICAL ERROR - data is neither string nor dict: {type(data)}")
+            sys.stdout.flush()
+            return {
+                "success": False,
+                "error": f"Invalid data format: expected dict, got {type(data)}",
+                "message_type": "append-paragraph"
+            }
         
         try:
-            logger.debug(f"🔍 _handle_append_paragraph: About to call data.get('message', 'Hello')", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: About to call data.get('message', 'Hello')")
             sys.stdout.flush()
             message_text = data.get("message", "Hello")
-            logger.debug(f"🔍 _handle_append_paragraph: message_text = '{message_text}'", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: message_text = '{message_text}'")
             sys.stdout.flush()
             
             logger.debug(f"➕ _handle_append_paragraph: STARTING - message='{message_text}', client={client_id or 'unknown'}")
             
             # Log current state - DEBUG LEXICAL_DATA ACCESS
-            logger.debug(f"🔍 _handle_append_paragraph: About to access self.lexical_data", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: About to access self.lexical_data")
             sys.stdout.flush()
             
             try:
-                logger.debug(f"🔍 _handle_append_paragraph: self.lexical_data type = {type(self.lexical_data)}", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: self.lexical_data type = {type(self.lexical_data)}")
                 sys.stdout.flush()
                 
                 root_data = self.lexical_data.get("root", {})
-                logger.debug(f"🔍 _handle_append_paragraph: root_data type = {type(root_data)}", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: root_data type = {type(root_data)}")
                 sys.stdout.flush()
                 
                 children_data = root_data.get("children", [])
-                logger.debug(f"🔍 _handle_append_paragraph: children_data type = {type(children_data)}", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: children_data type = {type(children_data)}")
                 sys.stdout.flush()
                 
-                logger.debug(f"🔍 _handle_append_paragraph: About to call len(children_data)", flush=True)
+                logger.debug(f"🔍 _handle_append_paragraph: About to call len(children_data)")
                 sys.stdout.flush()
                 blocks_current = len(children_data)
-                logger.debug(f"� _handle_append_paragraph: len() returned {blocks_current}", flush=True)
+                logger.debug(f"� _handle_append_paragraph: len() returned {blocks_current}")
                 sys.stdout.flush()
                 
                 logger.debug(f"�📊 _handle_append_paragraph: Current lexical_data has {blocks_current} blocks")
             except Exception as data_error:
-                logger.debug(f"❌ _handle_append_paragraph: Error accessing lexical_data: {data_error}", flush=True)
-                logger.debug(f"❌ _handle_append_paragraph: lexical_data = {self.lexical_data}", flush=True)
+                logger.debug(f"❌ _handle_append_paragraph: Error accessing lexical_data: {data_error}")
+                logger.debug(f"❌ _handle_append_paragraph: lexical_data = {self.lexical_data}")
                 sys.stdout.flush()
                 raise data_error
             
-            logger.debug(f"🔍 _handle_append_paragraph: Successfully accessed data, continuing...", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: Successfully accessed data, continuing...")
             sys.stdout.flush()
             
             # COLLABORATIVE FIX: Don't sync manually when subscriptions are active
             # The subscription system keeps lexical_data current automatically
-            logger.debug(f"🔍 _handle_append_paragraph: About to check subscription status", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: About to check subscription status")
             sys.stdout.flush()
             
-            logger.debug(f"🔍 _handle_append_paragraph: self._text_doc_subscription = {self._text_doc_subscription}", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: self._text_doc_subscription = {self._text_doc_subscription}")
             sys.stdout.flush()
             
             if self._text_doc_subscription is not None:
-                logger.debug(f"✅ _handle_append_paragraph: Using current data (subscription mode - no sync needed)", flush=True)
-                logger.debug(f"✅ _handle_append_paragraph: Subscription keeps data current, avoiding sync to prevent race conditions", flush=True)
+                logger.debug(f"✅ _handle_append_paragraph: Using current data (subscription mode - no sync needed)")
+                logger.debug(f"✅ _handle_append_paragraph: Subscription keeps data current, avoiding sync to prevent race conditions")
                 sys.stdout.flush()
             else:
-                logger.debug(f"🔄 _handle_append_paragraph: No subscription - syncing from CRDT", flush=True)
+                logger.debug(f"🔄 _handle_append_paragraph: No subscription - syncing from CRDT")
                 sys.stdout.flush()
                 # Only sync when there's no subscription (standalone mode)
                 self._sync_from_loro()
                 blocks_after_sync = len(self.lexical_data.get("root", {}).get("children", []))
-                logger.debug(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks", flush=True)
+                logger.debug(f"📊 _handle_append_paragraph: AFTER sync - lexical_data has {blocks_after_sync} blocks")
                 sys.stdout.flush()
             
-            logger.debug(f"🔍 _handle_append_paragraph: Subscription check completed", flush=True)
+            logger.debug(f"🔍 _handle_append_paragraph: Subscription check completed")
             sys.stdout.flush()
             
             # Create the paragraph structure
@@ -2651,8 +3142,8 @@ class LexicalModel:
             # SAFE OPERATION: Use append_block instead of destructive add_block
             # This prevents JSON corruption and Rust panics from wholesale CRDT operations
             try:
-                logger.debug(f"➕ _handle_append_paragraph: Calling append_block(text='{message_text}', type='paragraph')")
-                result = await self.append_block(new_paragraph, "paragraph")
+                logger.debug(f"➕ _handle_append_paragraph: Calling append_block(text='{message_text}', type='paragraph', client_id='{client_id}')")
+                result = await self.append_block(new_paragraph, "paragraph", client_id)
                 logger.debug(f"➕ _handle_append_paragraph: append_block() returned: {result}")
             except Exception as append_error:
                 logger.debug(f"❌ _handle_append_paragraph: append_block() FAILED: {append_error}")
@@ -2671,16 +3162,8 @@ class LexicalModel:
             doc_info = self.get_document_info()
             
             # COLLABORATIVE-SAFE: The append_block method already handles broadcasting properly
-            # But we ensure one more broadcast for MCP clients to receive the updated content
-            logger.debug("LoroModel: Ensuring additional broadcast for MCP append-paragraph")
-            
-            # Check what we're broadcasting
-            blocks_final = len(self.lexical_data.get("root", {}).get("children", []))
-            logger.debug(f"🔄 _handle_append_paragraph: About to broadcast with {blocks_final} blocks")
-            
-            # Emit broadcast event to notify WebSocket clients
-            self._emit_event(LexicalEventType.BROADCAST_NEEDED, 
-            self._create_broadcast_data("document-update"))
+            # No need for additional broadcast since append_block() now emits its own event with client_id
+            logger.debug("✅ _handle_append_paragraph: append_block() handled broadcasting, no duplicate needed")
             
             return {
                 "success": True,
@@ -2697,6 +3180,94 @@ class LexicalModel:
                 "success": False,
                 "error": str(e),
                 "message_type": "append-paragraph"
+            }
+    
+    async def _handle_insert_paragraph(self, data: Dict[str, Any], client_id: Optional[str] = None) -> Dict[str, Any]:
+        """Handle insert-paragraph message type"""
+        logger.debug(f"📝 _handle_insert_paragraph: METHOD CALLED!")
+        
+        # TYPE SAFETY: Check if data is actually a string (this would cause the error)
+        if isinstance(data, str):
+            logger.error(f"❌ _handle_insert_paragraph: CRITICAL ERROR - data is a string, not a dict!")
+            try:
+                import json
+                data = json.loads(data)
+                logger.info(f"✅ _handle_insert_paragraph: Successfully parsed string data as JSON")
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ _handle_insert_paragraph: Failed to parse string data as JSON: {e}")
+                return {
+                    "success": False,
+                    "error": f"Invalid data format: expected dict, got string that couldn't be parsed as JSON: {e}",
+                    "message_type": "insert-paragraph"
+                }
+        elif not isinstance(data, dict):
+            return {
+                "success": False,
+                "error": f"Invalid data format: expected dict, got {type(data)}",
+                "message_type": "insert-paragraph"
+            }
+        
+        try:
+            message_text = data.get("message", "Hello")
+            index = data.get("index", 0)
+            
+            logger.debug(f"📝 _handle_insert_paragraph: STARTING - message='{message_text}', index={index}, client={client_id or 'unknown'}")
+            
+            # Sync data if not in subscription mode
+            if self._text_doc_subscription is not None:
+                logger.debug(f"✅ _handle_insert_paragraph: Using current data (subscription mode)")
+            else:
+                logger.debug(f"🔄 _handle_insert_paragraph: No subscription - syncing from CRDT")
+                self._sync_from_loro()
+            
+            # Create the paragraph structure
+            new_paragraph = {
+                "text": message_text
+            }
+            
+            # Get blocks before adding
+            blocks_before = len(self.lexical_data.get("root", {}).get("children", []))
+            logger.debug(f"📝 _handle_insert_paragraph: About to call insert_block_at_index() with {blocks_before} blocks at index {index}")
+            
+            # Use add_block_at_index which correctly updates the CRDT
+            try:
+                logger.debug(f"📝 _handle_insert_paragraph: Calling add_block_at_index(index={index}, text='{message_text}', type='paragraph', client_id='{client_id}')")
+                result = await self.add_block_at_index(index, new_paragraph, "paragraph", client_id)
+                logger.debug(f"📝 _handle_insert_paragraph: add_block_at_index() returned: {result}")
+            except Exception as insert_error:
+                logger.debug(f"❌ _handle_insert_paragraph: add_block_at_index() FAILED: {insert_error}")
+                return {
+                    "success": False,
+                    "error": f"Failed to insert paragraph: {insert_error}",
+                    "message_type": "insert-paragraph"
+                }
+            
+            # Get updated counts
+            blocks_after = len(self.lexical_data.get("root", {}).get("children", []))
+            logger.debug(f"📝 _handle_insert_paragraph: COMPLETED - blocks: {blocks_before} -> {blocks_after}")
+            
+            # Get document info for response
+            doc_info = {
+                "total_blocks": blocks_after,
+                "doc_id": self.doc_id
+            }
+            
+            return {
+                "success": True,
+                "message_type": "insert-paragraph",
+                "blocks_before": blocks_before,
+                "blocks_after": blocks_after,
+                "added_text": message_text,
+                "index": index,
+                "document_info": doc_info
+            }
+            
+        except Exception as e:
+            logger.debug(f"❌ Error in _handle_insert_paragraph: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message_type": "insert-paragraph"
             }
     
     # ==========================================
@@ -3202,7 +3773,7 @@ class LexicalDocumentManager:
     for the server to interact with multiple models.
     """
     
-    def __init__(self, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000, client_mode: bool = False, websocket_url: str = "ws://localhost:8081"):
+    def __init__(self, event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None, ephemeral_timeout: int = 300000, client_mode: bool = False, websocket_base_url: str = "ws://localhost:8081"):
         """
         Initialize the document manager.
         
@@ -3210,19 +3781,18 @@ class LexicalDocumentManager:
             event_callback: Callback function for events from any managed document
             ephemeral_timeout: Default ephemeral timeout for all models
             client_mode: If True, connect as WebSocket client to collaborative server
-            websocket_url: WebSocket server URL for client mode
+            websocket_base_url: Base WebSocket server URL for client mode (document ID will be appended)
         """
         self.models: Dict[str, LexicalModel] = {}
         self.event_callback = event_callback
         self.ephemeral_timeout = ephemeral_timeout
         self.client_mode = client_mode
-        self.websocket_url = websocket_url
-        self.websocket = None
-        self.client_id = None
-        self.connected = False
-        self._connection_task = None
+        self.websocket_base_url = websocket_base_url
         
-        # Note: WebSocket connection will be started lazily when first needed
+        # Multiple WebSocket connections - one per document ID
+        self.websocket_clients: Dict[str, Dict[str, Any]] = {}  # doc_id -> {websocket, client_id, connected, connection_task}
+        
+        # Note: WebSocket connections will be started lazily per document when first needed
         # to avoid event loop issues during module initialization
     
     def get_or_create_document(self, doc_id: str, initial_content: Optional[str] = None) -> LexicalModel:
@@ -3245,6 +3815,10 @@ class LexicalDocumentManager:
                 ephemeral_timeout=self.ephemeral_timeout
             )
             self.models[doc_id] = model
+            
+            # Initialize WebSocket client for this document if in client mode
+            if self.client_mode:
+                self._ensure_websocket_client(doc_id)
             
             # Notify about new document creation
             if self.event_callback:
@@ -3292,12 +3866,18 @@ class LexicalDocumentManager:
             Response from the document's message handler
         """
         logger.debug(f"🔍 DocumentManager.handle_message: CALLED with message_type='{message_type}', doc_id='{doc_id}', client_id='{client_id}'")
-        logger.debug(f"🔍 DocumentManager.handle_message: data keys: {list(data.keys()) if data else 'None'}")
+        logger.debug(f"🔍 DocumentManager.handle_message: data type = {type(data)}")
+        logger.debug(f"🔍 DocumentManager.handle_message: data keys: {list(data.keys()) if isinstance(data, dict) else 'NOT A DICT'}")
+        
+        # DEBUG: Extra logging for append-paragraph
+        if message_type == "append-paragraph":
+            logger.debug(f"🔍 DOCUMENT_MANAGER: append-paragraph data type = {type(data)}")
+            logger.debug(f"🔍 DOCUMENT_MANAGER: append-paragraph data = {data}")
         
         model = self.get_or_create_document(doc_id)
         
         # Route to appropriate handler based on message type
-        document_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph"]
+        document_message_types = ["loro-update", "snapshot", "request-snapshot", "append-paragraph", "insert-paragraph"]
         ephemeral_message_types = ["ephemeral-update", "ephemeral", "awareness-update", "cursor-position", "text-selection"]
         
         if message_type in document_message_types:
@@ -3413,46 +3993,65 @@ class LexicalDocumentManager:
         for doc_id in doc_ids:
             self.cleanup_document(doc_id)
         
-        # Cleanup WebSocket connection if in client mode
-        if self.client_mode and (self.websocket or self._connection_task):
+        # Cleanup WebSocket connections if in client mode
+        if self.client_mode and self.websocket_clients:
             import asyncio
             try:
-                # Cancel the connection task if it's still running
-                if self._connection_task and not self._connection_task.done():
-                    self._connection_task.cancel()
-                    
-                # Disconnect if connected
-                if self.websocket:
-                    asyncio.create_task(self._disconnect_client())
+                # Disconnect all WebSocket connections
+                for doc_id, client_info in self.websocket_clients.items():
+                    if client_info.get("connected", False):
+                        # Cancel the connection task if it's still running
+                        if client_info.get("connection_task") and not client_info["connection_task"].done():
+                            client_info["connection_task"].cancel()
+                        
+                        # Mark as disconnected
+                        client_info["connected"] = False
+                        
+                # Clear all WebSocket clients
+                self.websocket_clients.clear()
             except Exception as e:
-                logger.debug(f"⚠️ Error cleaning up WebSocket connection: {e}")
+                logger.debug(f"⚠️ Error cleaning up WebSocket connections: {e}")
     
-    async def start_client_mode(self):
-        """Explicitly start client mode connection (call this when async environment is ready)"""
-        if self.client_mode and not self.connected and self._connection_task is None:
-            await self._ensure_connected()
+    def _ensure_websocket_client(self, doc_id: str):
+        """Ensure a WebSocket client entry exists for the document"""
+        if doc_id not in self.websocket_clients:
+            self.websocket_clients[doc_id] = {
+                "websocket": None,
+                "client_id": None,
+                "connected": False,
+                "connection_task": None
+            }
 
-    async def _ensure_connected(self):
-        """Ensure WebSocket connection is established if in client mode"""
+    async def start_client_mode(self):
+        """Initialize client mode - individual connections are created per document"""
+        if not self.client_mode:
+            return
+        logger.debug(f"🚀 DocumentManager client mode initialized with base URL: {self.websocket_base_url}")
+
+    async def _ensure_connected(self, doc_id: str):
+        """Ensure WebSocket connection is established for a specific document"""
         if not self.client_mode:
             return
             
-        if self.connected:
+        self._ensure_websocket_client(doc_id)
+        client_info = self.websocket_clients[doc_id]
+        
+        if client_info["connected"]:
             return
             
-        if self._connection_task is None:
+        if client_info["connection_task"] is None:
             import asyncio
-            self._connection_task = asyncio.create_task(self._connect_as_client())
+            client_info["connection_task"] = asyncio.create_task(self._connect_as_client(doc_id))
             
         # Wait for connection to complete
         try:
-            await self._connection_task
+            await client_info["connection_task"]
         except Exception as e:
-            logger.debug(f"❌ Failed to establish connection: {e}")
-            self._connection_task = None  # Reset for retry
+            logger.debug(f"❌ Failed to establish connection for {doc_id}: {e}")
+            client_info["connection_task"] = None  # Reset for retry
 
-    async def _connect_as_client(self):
-        """Connect to collaborative server as WebSocket client"""
+    async def _connect_as_client(self, doc_id: str):
+        """Connect to collaborative server as WebSocket client for a specific document"""
         if not self.client_mode:
             return
             
@@ -3460,108 +4059,116 @@ class LexicalDocumentManager:
             import websockets
             import json
             
-            logger.debug(f"🔌 DocumentManager connecting to {self.websocket_url} in client mode")
-            self.websocket = await websockets.connect(self.websocket_url)
-            self.connected = True
-            logger.debug(f"✅ DocumentManager connected as WebSocket client")
+            # Construct the WebSocket URL for this specific document
+            document_url = f"{self.websocket_base_url}/{doc_id}"
             
-            # Start listening for messages
+            logger.info(f"🔌 DocumentManager connecting to {document_url} for doc '{doc_id}'")
+            
+            self._ensure_websocket_client(doc_id)
+            client_info = self.websocket_clients[doc_id]
+            
+            client_info["websocket"] = await websockets.connect(document_url)
+            client_info["connected"] = True
+            logger.info(f"✅ DocumentManager connected to WebSocket to {document_url} for doc '{doc_id}'")
+
+            # Start listening for messages for this document
             import asyncio
-            asyncio.create_task(self._listen_for_messages())
+            asyncio.create_task(self._listen_for_messages(doc_id))
             
         except Exception as e:
-            logger.debug(f"❌ DocumentManager failed to connect as client: {e}")
-            self.connected = False
+            logger.error(f"❌ DocumentManager failed to connect to { document_url} for doc '{doc_id}': {e}")
+            if doc_id in self.websocket_clients:
+                self.websocket_clients[doc_id]["connected"] = False
     
-    async def _disconnect_client(self):
-        """Disconnect from collaborative server"""
-        if self.websocket:
-            await self.websocket.close()
-            self.connected = False
-            logger.debug("🔌 DocumentManager WebSocket client disconnected")
+    async def _disconnect_client(self, doc_id: str):
+        """Disconnect from collaborative server for a specific document"""
+        if doc_id in self.websocket_clients:
+            client_info = self.websocket_clients[doc_id]
+            if client_info["websocket"]:
+                await client_info["websocket"].close()
+                client_info["connected"] = False
+                logger.debug(f"🔌 DocumentManager WebSocket client disconnected for doc '{doc_id}'")
     
-    async def _listen_for_messages(self):
-        """Listen for messages from collaborative server"""
+    async def _listen_for_messages(self, doc_id: str):
+        """Listen for messages from collaborative server for a specific document"""
+        if doc_id not in self.websocket_clients:
+            return
+            
+        client_info = self.websocket_clients[doc_id]
+        websocket = client_info["websocket"]
+        
         try:
             import json
-            async for message in self.websocket:
+            async for message in websocket:
                 data = json.loads(message)
                 message_type = data.get("type")
                 
-                logger.debug(f"📨 DocumentManager received: {message_type} from {data.get('clientId', 'unknown')}")
+                logger.debug(f"📨 DocumentManager received: {message_type} for doc '{doc_id}' from {data.get('clientId', 'unknown')}")
                 
                 # Handle different message types
                 if message_type == "connection-established":
-                    self.client_id = data.get("clientId")
-                    logger.debug(f"✅ DocumentManager established with ID: {self.client_id}")
-                    await self._register_for_default_document()
+                    client_info["client_id"] = data.get("clientId")
+                    logger.debug(f"✅ DocumentManager established for doc '{doc_id}' with ID: {client_info['client_id']}")
+                    await self._register_for_document(doc_id)
                 
                 elif message_type == "welcome":
-                    self.client_id = data.get("clientId")
-                    logger.debug(f"👋 DocumentManager welcomed with ID: {self.client_id}")
-                    await self._register_for_default_document()
+                    client_info["client_id"] = data.get("clientId")
+                    logger.debug(f"👋 DocumentManager welcomed for doc '{doc_id}' with ID: {client_info['client_id']}")
+                    await self._register_for_document(doc_id)
                 
                 elif message_type == "initial-snapshot":
-                    await self._handle_initial_snapshot(data)
+                    await self._handle_initial_snapshot(doc_id, data)
                 
                 elif message_type == "loro-update":
                     # Check if this update originated from us (echo prevention)
                     sender_id = data.get("senderId") or data.get("clientId")
-                    if sender_id == self.client_id:
-                        logger.debug(f"🔄 DocumentManager ignoring echo update from self")
+                    if sender_id == client_info["client_id"]:
+                        logger.debug(f"🔄 DocumentManager ignoring echo update for doc '{doc_id}' from self")
                         continue
                     
-                    await self._handle_loro_update(data)
+                    await self._handle_loro_update(doc_id, data)
                 
         except Exception as e:
-            logger.debug(f"❌ DocumentManager WebSocket error: {e}")
-            self.connected = False
+            logger.debug(f"❌ DocumentManager WebSocket error for doc '{doc_id}': {e}")
+            client_info["connected"] = False
     
-    async def _register_for_default_document(self):
-        """Register for the first available document"""
+    async def _register_for_document(self, doc_id: str):
+        """Register for a specific document"""
         try:
-            # Get the first available document or use a standard name
-            if self.models:
-                default_doc_id = list(self.models.keys())[0]
-                logger.debug(f"👁️ DocumentManager using first available document: {default_doc_id}")
-            else:
-                # If no models exist yet, we can't register for anything
-                logger.debug(f"👁️ DocumentManager: No models available to register for")
-                return
-            
-            logger.debug(f"👁️ DocumentManager registering for document: {default_doc_id}")
+            logger.debug(f"👁️ DocumentManager registering for document: {doc_id}")
             
             # Request snapshot to get latest state
             snapshot_request = {
                 "type": "request-snapshot",
-                "docId": default_doc_id
+                "docId": doc_id
             }
-            await self._send_message(snapshot_request)
+            await self._send_message(doc_id, snapshot_request)
             
             # Skip ephemeral update for MCP clients to avoid Rust panic
             # MCP clients don't need awareness/cursor data since they're not interactive
-            logger.debug(f"👁️ DocumentManager registered for {default_doc_id}")
+            logger.debug(f"👁️ DocumentManager registered for {doc_id}")
             
         except Exception as e:
-            logger.debug(f"❌ Failed to register for default document: {e}")
+            logger.debug(f"❌ Failed to register for document {doc_id}: {e}")
     
-    async def _send_message(self, message):
-        """Send message to collaborative server"""
-        if self.websocket and self.connected:
-            try:
-                import json
-                await self.websocket.send(json.dumps(message))
-                logger.debug(f"📤 DocumentManager sent: {message.get('type', 'unknown')}")
-            except Exception as e:
-                logger.debug(f"❌ Failed to send message: {e}")
+    async def _send_message(self, doc_id: str, message):
+        """Send message to collaborative server for a specific document"""
+        if doc_id in self.websocket_clients:
+            client_info = self.websocket_clients[doc_id]
+            if client_info["websocket"] and client_info["connected"]:
+                try:
+                    import json
+                    await client_info["websocket"].send(json.dumps(message))
+                    logger.debug(f"📤 DocumentManager sent: {message.get('type', 'unknown')} for doc '{doc_id}'")
+                except Exception as e:
+                    logger.debug(f"❌ Failed to send message for doc '{doc_id}': {e}")
     
-    async def _handle_initial_snapshot(self, data):
-        """Handle initial snapshot from collaborative server"""
+    async def _handle_initial_snapshot(self, doc_id: str, data):
+        """Handle initial snapshot from collaborative server for a specific document"""
         try:
-            doc_id = data.get("docId")
             snapshot_data = data.get("data") or data.get("snapshot")
             
-            if doc_id and snapshot_data:
+            if snapshot_data:
                 logger.debug(f"📄 DocumentManager received initial snapshot for {doc_id}")
                 
                 # Get or create the model and apply snapshot
@@ -3571,25 +4178,28 @@ class LexicalDocumentManager:
                     # Binary snapshot
                     binary_data = bytes(snapshot_data)
                     model.import_snapshot(binary_data)
-                    logger.debug(f"📄 DocumentManager imported binary snapshot for {doc_id}")
+                    # Sync lexical_data after importing binary snapshot
+                    model._sync_from_loro()
+                    logger.debug(f"📄 DocumentManager imported binary snapshot for {doc_id} and synced lexical_data")
                 else:
                     # JSON snapshot
                     if hasattr(model, 'apply_snapshot'):
                         model.apply_snapshot(snapshot_data)
-                    logger.debug(f"📄 DocumentManager applied JSON snapshot for {doc_id}")
+                        # Sync lexical_data after applying JSON snapshot
+                        model._sync_from_loro()
+                    logger.debug(f"📄 DocumentManager applied JSON snapshot for {doc_id} and synced lexical_data")
                     
         except Exception as e:
-            logger.debug(f"❌ Error handling initial snapshot: {e}")
+            logger.debug(f"❌ Failed to handle initial snapshot for {doc_id}: {e}")
     
-    async def _handle_loro_update(self, data):
-        """Handle incremental Loro updates from other clients"""
+    async def _handle_loro_update(self, doc_id: str, data):
+        """Handle incremental Loro updates from other clients for a specific document"""
         try:
-            doc_id = data.get("docId")
             update_data = data.get("update")
             sender_id = data.get("senderId", "unknown")
             
-            if not doc_id or not update_data:
-                logger.debug(f"⚠️ DocumentManager received incomplete loro-update")
+            if not update_data:
+                logger.debug(f"⚠️ DocumentManager received incomplete loro-update for {doc_id}")
                 return
             
             logger.debug(f"📄 DocumentManager applying loro-update for {doc_id} from {sender_id}")
@@ -3602,29 +4212,32 @@ class LexicalDocumentManager:
                 update_bytes = bytes(update_data)
                 model.text_doc.import_(update_bytes)
                 
-                logger.debug(f"✅ DocumentManager applied loro-update from {sender_id}")
+                # CRITICAL: After importing CRDT update, sync the lexical_data structure
+                # This ensures the JSON structure is updated with the new CRDT state
+                model._sync_from_loro()
+                
+                logger.debug(f"✅ DocumentManager applied loro-update from {sender_id} and synced lexical_data")
             else:
                 logger.debug(f"⚠️ DocumentManager no model found for doc_id: {doc_id}")
                 
         except Exception as e:
-            logger.debug(f"❌ DocumentManager error handling loro-update: {e}")
+            logger.debug(f"❌ DocumentManager error handling loro-update for {doc_id}: {e}")
     
-    async def broadcast_change(self, doc_id: str, message_type: str = "document-update"):
+    async def broadcast_change(self, doc_id: str, message_type: str = "loro-update", prefer_incremental: bool = True, use_case: str = "sync"):
         """Broadcast a change to other clients when in client mode"""
-        logger.debug(f"📤 broadcast_change called: doc_id={doc_id}, message_type={message_type}, client_mode={self.client_mode}")
+        logger.debug(f"📤 broadcast_change called: doc_id={doc_id}, message_type={message_type}, use_case={use_case}, client_mode={self.client_mode}")
         
         if not self.client_mode:
             logger.debug(f"⚠️ Not in client mode, skipping broadcast")
             return
             
-        # Ensure connection is established
-        logger.debug(f"🔄 Ensuring connection is established...")
-        await self._ensure_connected()
+        # Ensure connection is established for this document
+        logger.debug(f"🔄 Ensuring connection is established for doc '{doc_id}'...")
+        await self._ensure_connected(doc_id)
         
-        logger.debug(f"🔍 Connection status: connected={self.connected}, websocket={self.websocket is not None}")
-        
-        if not self.connected:
-            logger.debug(f"⚠️ Cannot broadcast - not connected to collaborative server")
+        client_info = self.websocket_clients.get(doc_id, {})
+        if not client_info.get("connected", False):
+            logger.debug(f"⚠️ Cannot broadcast for {doc_id} - not connected to collaborative server")
             return
             
         try:
@@ -3632,43 +4245,66 @@ class LexicalDocumentManager:
                 model = self.models[doc_id]
                 logger.debug(f"📄 Found model for {doc_id}, creating broadcast message...")
                 
-                # Create broadcast message using loro-update format instead of snapshot
-                # This matches the format expected by the collaborative server
-                try:
-                    # Get the latest update from the model
-                    update_data = model.export_update()
-                    logger.debug(f"📄 Got update of {len(update_data) if update_data else 0} bytes")
-                    
-                    # Convert bytes to list for JSON serialization
-                    update_list = list(update_data) if update_data else []
-                    
-                    message = {
-                        "type": "loro-update",  # Use loro-update format for incremental sync
-                        "docId": doc_id,
-                        "senderId": self.client_id,
-                        "update": update_list  # Use update instead of snapshot
-                    }
-                except Exception as e:
-                    logger.debug(f"⚠️ Could not get update, falling back to snapshot: {e}")
-                    # Fallback to snapshot if update fails
-                    snapshot = model.get_snapshot()
-                    snapshot_data = list(snapshot) if snapshot else []
-                    
-                    message = {
-                        "type": "document-update",
-                        "docId": doc_id,
-                        "senderId": self.client_id,
-                        "snapshot": snapshot_data
-                    }
+                # Use the enhanced get_broadcast_data method with use case optimization
+                broadcast_data = model.get_broadcast_data(prefer_incremental=prefer_incremental, use_case=use_case)
                 
-                logger.debug(f"📤 Sending broadcast message: type={message_type}, docId={doc_id}, senderId={self.client_id}")
-                await self._send_message(message)
+                if not broadcast_data:
+                    logger.debug(f"ℹ️ No broadcast data available (no changes to send)")
+                    return
+                
+                # Extract the message type from broadcast_data (loro-update or snapshot)
+                detected_message_type = broadcast_data.get("message_type", message_type)
+                logger.debug(f"📄 Using message type: {detected_message_type} (optimized for {use_case})")
+                
+                # Prepare message based on the detected type
+                if detected_message_type == "loro-update" and "update" in broadcast_data:
+                    # Send incremental update
+                    update_data = broadcast_data["update"]
+                    if isinstance(update_data, str):
+                        # Convert hex string back to bytes list for JSON
+                        update_bytes = bytes.fromhex(update_data)
+                        update_list = list(update_bytes)
+                    else:
+                        update_list = list(update_data) if isinstance(update_data, bytes) else update_data
+                    
+                    message = {
+                        "type": "loro-update",
+                        "docId": doc_id,
+                        "senderId": client_info.get("client_id"),
+                        "update": update_list
+                    }
+                    logger.debug(f"📤 Sending incremental update: {len(update_list)} bytes")
+                    
+                elif detected_message_type == "snapshot" and "snapshot" in broadcast_data:
+                    # Send snapshot as fallback
+                    snapshot_data = broadcast_data["snapshot"] 
+                    if isinstance(snapshot_data, str):
+                        # Convert hex string back to bytes list for JSON
+                        snapshot_bytes = bytes.fromhex(snapshot_data)
+                        snapshot_list = list(snapshot_bytes)
+                    else:
+                        snapshot_list = list(snapshot_data) if isinstance(snapshot_data, bytes) else snapshot_data
+                    
+                    message = {
+                        "type": "snapshot",
+                        "docId": doc_id,
+                        "senderId": client_info.get("client_id"),
+                        "snapshot": snapshot_list
+                    }
+                    logger.debug(f"📤 Sending snapshot: {len(snapshot_list)} bytes")
+                    
+                else:
+                    logger.debug(f"❌ Invalid broadcast data: {broadcast_data}")
+                    return
+                
+                logger.debug(f"📤 Sending broadcast message: type={message_type}, docId={doc_id}")
+                await self._send_message(doc_id, message)
                 logger.debug(f"✅ DocumentManager broadcasted {message_type} for {doc_id}")
             else:
-                logger.debug(f"❌ No model found for doc_id: {doc_id}, available models: {list(self.models.keys())}")
+                logger.debug(f"❌ No model found for doc_id: {doc_id}")
                 
         except Exception as e:
-            logger.debug(f"❌ Error broadcasting change: {e}")
+            logger.debug(f"❌ Error broadcasting change for {doc_id}: {e}")
             import traceback
             logger.debug(f"❌ Full traceback: {traceback.format_exc()}")
 
@@ -3680,14 +4316,15 @@ class LexicalDocumentManager:
             logger.debug(f"⚠️ Not in client mode, skipping broadcast")
             return
             
-        # Ensure connection is established
-        logger.debug(f"🔄 Ensuring connection is established...")
-        await self._ensure_connected()
+        # Ensure connection is established for this document
+        logger.debug(f"🔄 Ensuring connection is established for doc '{doc_id}'...")
+        await self._ensure_connected(doc_id)
         
-        logger.debug(f"🔍 Connection status: connected={self.connected}, websocket={self.websocket is not None}")
+        client_info = self.websocket_clients.get(doc_id, {})
+        logger.debug(f"🔍 Connection status for {doc_id}: connected={client_info.get('connected', False)}, websocket={client_info.get('websocket') is not None}")
         
-        if not self.connected:
-            logger.debug(f"⚠️ Cannot broadcast - not connected to collaborative server")
+        if not client_info.get("connected", False):
+            logger.debug(f"⚠️ Cannot broadcast for {doc_id} - not connected to collaborative server")
             return
             
         try:
@@ -3703,23 +4340,22 @@ class LexicalDocumentManager:
                 message = {
                     "type": "loro-update",
                     "docId": doc_id,
-                    "senderId": self.client_id,
+                    "senderId": client_info.get("client_id"),
                     "update": snapshot_list  # Send as update for incremental sync
                 }
             else:
                 logger.debug(f"⚠️ No snapshot data in broadcast_data, skipping")
                 return
                 
-            logger.debug(f"📤 Sending broadcast message: type={message['type']}, docId={doc_id}, senderId={self.client_id}")
+            logger.debug(f"📤 Sending broadcast message: type={message['type']}, docId={doc_id}, senderId={client_info.get('client_id')}")
             logger.debug(f"📤 Update size: {len(message['update'])} bytes")
             
-            # Send the message via WebSocket
-            await self.websocket.send(json.dumps(message))
-            logger.debug(f"📤 DocumentManager sent: {message['type']}")
+            # Send the message via WebSocket for this specific document
+            await self._send_message(doc_id, message)
             logger.debug(f"✅ DocumentManager broadcasted pre-built data for {doc_id}")
                 
         except Exception as e:
-            logger.debug(f"❌ Failed to broadcast with pre-built data: {e}")
+            logger.debug(f"❌ Failed to broadcast with pre-built data for {doc_id}: {e}")
     
     def __repr__(self) -> str:
         """String representation showing managed models"""
@@ -3729,4 +4365,5 @@ class LexicalDocumentManager:
     
     def __del__(self):
         """Cleanup when manager is destroyed"""
+
         self.cleanup()

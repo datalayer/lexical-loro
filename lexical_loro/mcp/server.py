@@ -18,20 +18,49 @@ from ..model.lexical_model import LexicalDocumentManager
 ###############################################################################
 
 
-DOC_ID = "lexical-shared-doc-3"
-
-WEBSOCKET_URL = f"ws://localhost:8081/{DOC_ID}"
-
-
-###############################################################################
-
-
 logger = logging.getLogger(__name__)
 
 
 ###############################################################################
 # Global document manager instance
 document_manager: Optional[LexicalDocumentManager] = None
+
+
+###############################################################################
+# Helper function for ensuring document synchronization
+
+async def _ensure_document_synced(doc_id: str):
+    """Ensure document is properly synchronized with WebSocket server before reading"""
+    model = document_manager.get_or_create_document(doc_id)
+    
+    if document_manager.client_mode:
+        client_info = document_manager.websocket_clients.get(doc_id, {})
+        is_connected = client_info.get("connected", False)
+        
+        # Log document state before sync
+        lexical_data = model.get_lexical_data()
+        children_count = len(lexical_data.get("root", {}).get("children", []))
+        logger.info(f"📊 Document '{doc_id}' before sync: {children_count} blocks")
+        
+        if not is_connected:
+            logger.info(f"🔄 MCP waiting for initial connection and sync for doc '{doc_id}'...")
+            await document_manager._ensure_connected(doc_id)
+            
+            # Give more time for the initial snapshot to be processed
+            # This includes connection establishment, registration, snapshot request, and processing
+            import asyncio
+            await asyncio.sleep(1.0)  # Increased from 0.5s to ensure reliable sync
+            
+            # Log document state after sync
+            lexical_data_after = model.get_lexical_data()
+            children_count_after = len(lexical_data_after.get("root", {}).get("children", []))
+            logger.info(f"📊 Document '{doc_id}' after sync: {children_count_after} blocks")
+            
+            logger.info(f"✅ MCP initial sync completed for doc '{doc_id}'")
+        else:
+            logger.info(f"✅ MCP document '{doc_id}' already connected, using current state")
+    
+    return model
 
 
 ###############################################################################
@@ -77,7 +106,7 @@ class FastMCPWithCORS(FastMCP):
 mcp = FastMCPWithCORS(name="Lexical MCP Server", json_response=False, stateless_http=True)
 
 # Initialize document manager
-async def initialize_mcp_collaboration():
+async def initialize_mcp_collaboration(websocket_base_url: str):
     """Initialize MCP server with standard LexicalDocumentManager in client mode"""
     global document_manager
     
@@ -87,31 +116,30 @@ async def initialize_mcp_collaboration():
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
             if doc_id and doc_id in document_manager.models:
-                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
-                # Extract broadcast data from the event - this contains the pre-built message
-                broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
-                # Call broadcast_change with the pre-built data
-                asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
+                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}' - SKIPPING automatic broadcast")
+                # CRITICAL FIX: Do NOT broadcast automatically from events
+                # This creates race conditions with explicit MCP function broadcasts
+                # The MCP functions will handle broadcasting explicitly after operations complete
+                logger.debug(f"🔥 MCP: Event-based broadcasting disabled - MCP functions handle broadcasting explicitly")
     
     # Create standard document manager with client mode enabled
-    # This will automatically connect to the collaborative WebSocket server
+    # WebSocket connections will be created per document ID
     document_manager = LexicalDocumentManager(
         event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,  # Enable WebSocket client mode for collaboration
-        websocket_url=WEBSOCKET_URL  # Connect to collaborative server
+        websocket_base_url=websocket_base_url  # Base URL for WebSocket connections
     )
     
-    # Start the client connection immediately when in async context
+    # Start the client mode (connections will be created per document)
     await document_manager.start_client_mode()
     
     logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")
     logger.info(f"🔌 Client mode enabled: {document_manager.client_mode}")
-    logger.info(f"🔗 WebSocket URL: {document_manager.websocket_url}")
-    logger.info(f"✅ WebSocket client connection established: {document_manager.connected}")
+    logger.info(f"🔗 WebSocket base URL: {document_manager.websocket_base_url}")
 
 # Initialize with default settings when NOT in async context
-def sync_initialize_mcp_collaboration():
+def initialize_mcp_collaboration(websocket_base_url: str):
     """Synchronous initialization for module loading"""
     global document_manager
     
@@ -121,30 +149,26 @@ def sync_initialize_mcp_collaboration():
             # Get the document that emitted the event
             doc_id = event_data.get("doc_id")
             if doc_id and doc_id in document_manager.models:
-                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}', calling broadcast_change()")
-                # Extract broadcast data from the event - this contains the pre-built message
-                broadcast_data = {k: v for k, v in event_data.items() if k != "doc_id"}
-                # Call broadcast_change with the pre-built data
-                asyncio.create_task(document_manager.broadcast_change_with_data(doc_id, broadcast_data))
+                logger.debug(f"🔥 MCP: Handling BROADCAST_NEEDED event for doc '{doc_id}' - SKIPPING automatic broadcast")
+                # CRITICAL FIX: Do NOT broadcast automatically from events
+                # This creates race conditions with explicit MCP function broadcasts
+                # The MCP functions will handle broadcasting explicitly after operations complete
+                logger.debug(f"🔥 MCP: Event-based broadcasting disabled - MCP functions handle broadcasting explicitly")
     
     # Create standard document manager with client mode enabled  
-    # Connection will be established lazily when first async call is made
+    # Connections will be established per document when needed
     document_manager = LexicalDocumentManager(
         event_callback=handle_document_events,  # Handle BROADCAST_NEEDED events
         ephemeral_timeout=300000,
         client_mode=True,
-        websocket_url=WEBSOCKET_URL
+        websocket_base_url=websocket_base_url
     )
     
     logger.info(f"🚀 MCP server initialized with collaborative LexicalDocumentManager")
     logger.info(f"🔌 Client mode enabled: {document_manager.client_mode}")
-    logger.info(f"🔗 WebSocket URL: {document_manager.websocket_url}")
+    logger.info(f"🔗 WebSocket base URL: {document_manager.websocket_base_url}")
 
-# Use sync version for module initialization
-sync_initialize_mcp_collaboration()
-
-# Current document state
-current_document_id: Optional[str] = None
+# Default initialization will be deferred until server start
 
 
 def set_document_manager(manager: LexicalDocumentManager) -> None:
@@ -177,7 +201,7 @@ def get_document_manager() -> LexicalDocumentManager:
 
 
 ###############################################################################
-# Tools using FastMCP decorators
+# MCP Tools
 
 
 @mcp.tool()
@@ -189,10 +213,14 @@ async def load_document(doc_id: str) -> str:
     Returns the complete lexical data structure including all blocks, metadata, and
     container information for collaborative editing.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to load.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
-        doc_id: The unique identifier of the document to load. Can be any string
+        doc_id: The unique identifier of the document to load (REQUIRED). Can be any string
                that serves as a document identifier (e.g., "my-doc", "report-2024").
-               Documents are automatically created if they don't exist.
+               Documents are automatically created if they don't exist. You cannot omit
+               this parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing:
@@ -209,8 +237,8 @@ async def load_document(doc_id: str) -> str:
     try:
         logger.info(f"Loading document: {doc_id}")
         
-        # Get or create the document using the document manager
-        model = document_manager.get_or_create_document(doc_id)
+        # Ensure document is properly synchronized before reading
+        model = await _ensure_document_synced(doc_id)
         
         # Get the lexical data from the model
         lexical_data = model.get_lexical_data()
@@ -237,74 +265,7 @@ async def load_document(doc_id: str) -> str:
 
 
 @mcp.tool()
-async def set_current_document(doc_id: str) -> str:
-    """Set the current document for subsequent operations that support optional doc_id.
-
-    This tool establishes a "working document" context that allows other tools
-    (append_paragraph, insert_paragraph, get_document_info) to operate without
-    explicitly specifying a doc_id parameter. This creates a more fluid workflow
-    when working primarily with a single document. The document is automatically
-    created if it doesn't exist.
-
-    Args:
-        doc_id: The unique identifier of the document to set as current working document.
-                Can be any string identifier. Document will be created if it doesn't exist.
-                Examples: "my-notes", "project-2024", "draft-document"
-
-    Returns:
-        str: JSON string containing:
-            - success: Boolean indicating operation success
-            - message: Confirmation message about the current document setting
-            - doc_id: The document identifier that was set as current
-            - container_id: Loro container ID for the document
-            - On error: success=False with error message and doc_id
-
-    Example Usage:
-        Set working doc: set_current_document("project-notes")
-        Create new context: set_current_document("new-draft-2024")
-        Switch models: set_current_document("meeting-minutes")
-
-    Workflow Benefits:
-        1. Set current document once: set_current_document("my-doc")
-        2. Work without doc_id: append_paragraph("First point")
-        3. Continue seamlessly: insert_paragraph(0, "Introduction")
-        4. Check status easily: get_document_info()
-
-    Note: The load_document tool always requires an explicit doc_id parameter
-    and is not affected by the current document setting.
-    """
-    global current_document_id
-    try:
-        logger.info(f"Setting current document to: {doc_id}")
-        
-        # Validate that the document exists or can be created
-        model = document_manager.get_or_create_document(doc_id)
-        
-        # Set the current document
-        current_document_id = doc_id
-        
-        result = {
-            "success": True,
-            "message": f"Current document set to: {doc_id}",
-            "doc_id": doc_id,
-            "container_id": model.container_id
-        }
-        
-        logger.info(f"Successfully set current document to {doc_id}")
-        return json.dumps(result, indent=2)
-        
-    except Exception as e:
-        logger.error(f"Error setting current document to {doc_id}: {e}")
-        error_result = {
-            "success": False,
-            "error": str(e),
-            "doc_id": doc_id
-        }
-        return json.dumps(error_result, indent=2)
-
-
-@mcp.tool()
-async def get_document_info(doc_id: Optional[str] = None) -> str:
+async def get_document_info(doc_id: str) -> str:
     """Retrieve comprehensive information and metadata about a Lexical document.
 
     This tool provides detailed information about a document's structure, content,
@@ -312,10 +273,12 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
     understanding document composition, tracking changes, and getting quick insights
     about document statistics before performing operations.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to inspect.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
-        doc_id: The unique identifier of the document to inspect (optional).
-                If not provided, uses the current document set via set_current_document.
-                Explicit doc_id takes precedence over current document setting.
+        doc_id: The unique identifier of the document to inspect (REQUIRED). You cannot
+               omit this parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing comprehensive document information:
@@ -330,7 +293,6 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
             - On error: success=False with error message and context
 
     Example Usage:
-        Check current doc: get_document_info()
         Check specific doc: get_document_info("project-notes")
         Inspect before editing: get_document_info("draft-2024")
 
@@ -340,58 +302,162 @@ async def get_document_info(doc_id: Optional[str] = None) -> str:
         - Version tracking and change monitoring
         - Debugging document state issues
     """
-    global current_document_id
     try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
+        logger.info(f"Getting document info for: {doc_id}")
         
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
+        # Ensure document is properly synchronized before reading
+        model = await _ensure_document_synced(doc_id)
         
-        logger.info(f"Getting document info for: {target_doc_id}")
+        # Log client mode status for debugging
+        if document_manager.client_mode:
+            client_info = document_manager.websocket_clients.get(doc_id, {})
+            is_connected = client_info.get("connected", False)
+            client_id = client_info.get("client_id", "unknown")
+            logger.info(f"📡 MCP Client Mode: connected={is_connected}, client_id={client_id}")
+        else:
+            logger.info(f"📍 MCP Standalone Mode: reading local state only")
         
-        # Get or create the document
-        model = document_manager.get_or_create_document(target_doc_id)
-        
-        # Get lexical data
+        # DIRECT LOCAL READ: Get lexical data directly from the local model
+        # In client mode, this model should be automatically kept in sync with the WebSocket server
+        # through incremental updates, so we can trust the current local state
         lexical_data = model.get_lexical_data()
         children = lexical_data.get("root", {}).get("children", [])
         
         # Count different block types
         block_types = {}
-        for child in children:
+        content_preview = []
+        
+        for i, child in enumerate(children):
             block_type = child.get("type", "unknown")
             block_types[block_type] = block_types.get(block_type, 0) + 1
+            
+            # Extract text content for preview
+            if block_type == "paragraph":
+                text_content = ""
+                child_children = child.get("children", [])
+                for text_node in child_children:
+                    if text_node.get("type") == "text":
+                        text_content += text_node.get("text", "")
+                content_preview.append(f"Block {i}: [{block_type}] '{text_content[:100]}{'...' if len(text_content) > 100 else ''}'")
+            else:
+                content_preview.append(f"Block {i}: [{block_type}] (non-text content)")
         
+        # Build comprehensive info including the full lexical document structure
         result = {
             "success": True,
-            "doc_id": target_doc_id,
+            "doc_id": doc_id,
             "container_id": model.container_id,
             "total_blocks": len(children),
             "block_types": block_types,
+            "content_preview": content_preview,
             "last_saved": lexical_data.get("lastSaved"),
             "version": lexical_data.get("version"),
-            "source": lexical_data.get("source")
+            "source": lexical_data.get("source"),
+            "local_model_state": {
+                "description": "Complete local Lexical document structure from MCP server",
+                "lexical_data": lexical_data
+            }
         }
         
-        logger.info(f"Successfully retrieved document info for {target_doc_id}")
-        return json.dumps(result, indent=2)
+        # Create a readable summary
+        summary = f"""
+*** DOCUMENT INFO for '{doc_id}' - MCP Local Model State
+{'='*70}
+
+SUMMARY:
+- Total Blocks: {len(children)}
+- Block Types: {dict(block_types)}
+- Container ID: {model.container_id}
+
+CONTENT PREVIEW:
+"""
+        for preview in content_preview[:10]:  # Show first 10 blocks
+            summary += f"  {preview}\n"
+        
+        if len(content_preview) > 10:
+            summary += f"  ... and {len(content_preview) - 10} more blocks\n"
+        
+        summary += f"""
+DOCUMENT TREE STRUCTURE:
+{_format_lexical_tree(lexical_data)}
+
+TECHNICAL DETAILS:
+- Document Version: {lexical_data.get("version", "N/A")}
+- Last Saved: {lexical_data.get("lastSaved", "N/A")}
+- Source: {lexical_data.get("source", "N/A")}
+
+LOCAL MODEL VALIDATION:
+The above data is read directly from the MCP server's local LexicalModel instance.
+This confirms the local model state is current and matches what should be displayed
+in the frontend after collaborative operations.
+
+FULL JSON DOCUMENT:
+{json.dumps(lexical_data, indent=2)}
+"""
+        
+        logger.info(f"Successfully retrieved document info for {doc_id}")
+        return summary
         
     except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error getting document info for {target_doc_id_for_error}: {e}")
+        logger.error(f"Error getting document info for {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": target_doc_id_for_error
+            "doc_id": doc_id
         }
-        return json.dumps(error_result, indent=2)
+        return f"ERROR: Failed to get document info for {doc_id}: {str(e)}"
 
 
-###############################################################################
+def _format_lexical_tree(lexical_data: dict, indent: str = "") -> str:
+    """Format the lexical document as a tree structure"""
+    tree = ""
+    root = lexical_data.get("root", {})
+    
+    tree += f"{indent}* root (type: {root.get('type', 'unknown')})\n"
+    
+    children = root.get("children", [])
+    for i, child in enumerate(children):
+        is_last = i == len(children) - 1
+        connector = "+-- " if is_last else "|-- "
+        next_indent = indent + ("    " if is_last else "|   ")
+        
+        child_type = child.get("type", "unknown")
+        tree += f"{indent}{connector}[{i}] {child_type}"
+        
+        # Add content preview for text-containing blocks
+        if child_type == "paragraph":
+            text_content = ""
+            child_children = child.get("children", [])
+            for text_node in child_children:
+                if text_node.get("type") == "text":
+                    text_content += text_node.get("text", "")
+            if text_content:
+                preview = text_content[:50] + "..." if len(text_content) > 50 else text_content
+                tree += f" -> \"{preview}\""
+        
+        tree += "\n"
+        
+        # Recursively format children if they exist
+        child_children = child.get("children", [])
+        if child_children and child_type != "paragraph":  # Don't recurse into paragraph text nodes
+            for j, grandchild in enumerate(child_children):
+                is_last_grandchild = j == len(child_children) - 1
+                grandchild_connector = "└── " if is_last_grandchild else "├── "
+                grandchild_type = grandchild.get("type", "unknown")
+                tree += f"{next_indent}{grandchild_connector}{grandchild_type}"
+                
+                if grandchild_type == "text":
+                    text = grandchild.get("text", "")
+                    if text:
+                        preview = text[:30] + "..." if len(text) > 30 else text
+                        tree += f" → \"{preview}\""
+                tree += "\n"
+    
+    return tree
+
 
 @mcp.tool()
-async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) -> str:
+async def insert_paragraph(index: int, text: str, doc_id: str) -> str:
     """Insert a text paragraph at a specific position in a Lexical document.
 
     This tool inserts a new paragraph block at the specified index position within
@@ -402,15 +468,17 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
     Uses the same SAFE incremental operations as append_paragraph to prevent
     race conditions and ensure collaborative stability.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to modify.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
         index: The zero-based index position where to insert the paragraph.
                Use 0 to insert at the beginning, or any valid index within the document.
                If index exceeds document length, paragraph is appended at the end.
         text: The text content of the paragraph to insert. Can contain any UTF-8 text
               including emojis, special characters, and multi-line content.
-        doc_id: The unique identifier of the document (optional). If not provided,
-                uses the current document set via set_current_document. Explicit doc_id
-                takes precedence over current document.
+        doc_id: The unique identifier of the document (REQUIRED). You cannot omit this
+               parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing:
@@ -423,60 +491,85 @@ async def insert_paragraph(index: int, text: str, doc_id: Optional[str] = None) 
             - On error: success=False with error message and context
 
     Example Usage:
-        Insert at beginning: insert_paragraph(0, "Introduction paragraph")
-        Insert with explicit doc: insert_paragraph(2, "Middle content", "my-doc")
-        Insert using current doc: insert_paragraph(1, "Second paragraph")
+        Insert at beginning: insert_paragraph(0, "Introduction paragraph", "my-doc")
+        Insert with doc: insert_paragraph(2, "Middle content", "my-doc")
     """
-    global current_document_id
     try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
+        logger.info(f"🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{doc_id}'")
+        logger.info(f"Inserting paragraph in document {doc_id} at index {index}")
         
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
-        
-        logger.info(f"🚀🚀🚀 insert_paragraph FUNCTION CALLED with text='{text}', index={index}, doc_id='{target_doc_id}'")
-        logger.info(f"Inserting paragraph in document {target_doc_id} at index {index}")
-        
-        # Get or create the document
-        model = document_manager.get_or_create_document(target_doc_id)
-        
-        # Create paragraph structure with message data 
-        block_detail = {"text": text}
-        
-        # Insert the paragraph at the specified index using SAFE operations
-        result = await model.add_block_at_index(index, block_detail, "paragraph")
-        
-        # Get updated document structure  
-        lexical_data = model.get_lexical_data()
-        total_blocks = len(lexical_data.get("root", {}).get("children", []))
-        
-        result = {
-            "success": True,
-            "doc_id": target_doc_id,
-            "action": "insert_paragraph",
-            "index": index,
-            "text": text,
-            "total_blocks": total_blocks
-        }
-        
-        logger.info(f"Successfully inserted paragraph in document {target_doc_id} at index {index}")
-        return json.dumps(result, indent=2)
+        # WEBSOCKET APPROACH: Send the exact same message that would work for collaborative editing
+        # This ensures we use the exact same code path as collaborative editing
+        if document_manager.client_mode:
+            logger.info(f"🔄 Using WebSocket approach - sending insert-paragraph message")
+            
+            # Ensure WebSocket connection is established
+            await document_manager._ensure_connected(doc_id)
+            
+            # Get the WebSocket connection for this document
+            ws_client_info = document_manager.websocket_clients.get(doc_id)
+            if ws_client_info and ws_client_info["websocket"] and ws_client_info["connected"]:
+                # Send the message format for insert-paragraph
+                websocket_message = {
+                    "type": "insert-paragraph",
+                    "docId": doc_id,
+                    "message": text,
+                    "index": index
+                }
+                
+                logger.info(f"📤 Sending WebSocket message: {websocket_message}")
+                await ws_client_info["websocket"].send(json.dumps(websocket_message))
+                logger.info(f"✅ WebSocket message sent successfully")
+                
+                # Wait for the server to process the message and broadcast
+                await asyncio.sleep(0.2)  # Give more time for processing and broadcast
+                
+                # Get updated document structure for response
+                model = document_manager.get_or_create_document(doc_id)
+                lexical_data = model.get_lexical_data()
+                total_blocks = len(lexical_data.get("root", {}).get("children", []))
+                
+                logger.info(f"✅ Successfully inserted paragraph via WebSocket to document {doc_id}")
+                return f"✅ Successfully inserted paragraph at index {index} in document {doc_id}. Total blocks: {total_blocks}"
+            else:
+                logger.error(f"❌ No WebSocket connection available for document {doc_id}")
+                raise Exception("WebSocket connection not available")
+        else:
+            # Fallback to direct method for server mode
+            logger.info(f"🔄 Using direct method approach (server mode)")
+            
+            # Use the same message handling system as append_paragraph for consistency
+            message_data = {
+                "message": text,  # Use "message" field as expected by LexicalModel
+                "index": index    # Specify the index for insertion
+            }
+            
+            # Call through the message handling system to trigger collaborative sync
+            result = await document_manager.handle_message(doc_id, "insert-paragraph", message_data)
+            
+            if not result.get("success"):
+                raise Exception(f"Failed to insert paragraph: {result.get('error', 'Unknown error')}")
+            
+            # Get updated document structure from result
+            total_blocks = result.get("document_info", {}).get("total_blocks", 0)
+            
+            logger.info(f"Successfully inserted paragraph in document {doc_id} at index {index}")
+            return f"✅ Successfully inserted paragraph at index {index} in document {doc_id}. Total blocks: {total_blocks}"
         
     except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error inserting paragraph in document {target_doc_id_for_error}: {e}")
+        logger.error(f"Error inserting paragraph in document {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": target_doc_id_for_error,
+            "doc_id": doc_id,
             "action": "insert_paragraph"
         }
-        return json.dumps(error_result, indent=2)
+        # Return a simple error message instead of JSON dump
+        return f"❌ Failed to insert paragraph at index {index} in document {doc_id}: {str(e)}"
 
 
 @mcp.tool()
-async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
+async def append_paragraph(text: str, doc_id: str) -> str:
     """Append a text paragraph to the end of a Lexical document.
 
     This tool adds a new paragraph block at the end of the specified document.
@@ -484,13 +577,15 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
     inserting at the last position. The document uses Loro's collaborative editing
     backend, ensuring real-time synchronization across all connected clients.
 
+    IMPORTANT: You MUST provide a doc_id parameter to specify which document to modify.
+    There is no default or current document - every operation requires an explicit doc_id.
+
     Args:
         text: The text content of the paragraph to append. Supports any UTF-8 text
               including emojis, special characters, formatted content, and multi-line
               text. Empty strings are allowed and will create an empty paragraph block.
-        doc_id: The unique identifier of the document (optional). If not provided,
-                uses the current document set via set_current_document. Explicit doc_id
-                takes precedence over current document setting.
+        doc_id: The unique identifier of the document (REQUIRED). You cannot omit this
+               parameter - every call must specify which document to operate on.
 
     Returns:
         str: JSON string containing:
@@ -502,69 +597,87 @@ async def append_paragraph(text: str, doc_id: Optional[str] = None) -> str:
             - On error: success=False with error message and context information
 
     Example Usage:
-        Simple append: append_paragraph("This is my conclusion.")
-        With explicit doc: append_paragraph("Final thoughts", "report-2024")
-        Using current doc: append_paragraph("Additional notes")
-        Empty paragraph: append_paragraph("")
+        Simple append: append_paragraph("This is my conclusion.", "my-doc")
+        With emoji: append_paragraph("Final thoughts 🎉", "report-2024")
+        Empty paragraph: append_paragraph("", "my-doc")
     """
-    logger.info(f"🚀🚀🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
-    global current_document_id
+    logger.info(f"🚀 append_paragraph FUNCTION CALLED with text='{text}', doc_id='{doc_id}'")
     try:
-        # Determine which document to use
-        target_doc_id = doc_id if doc_id is not None else current_document_id
+        logger.info(f"Appending paragraph to document {doc_id}")
         
-        if target_doc_id is None:
-            raise ValueError("No document ID provided and no current document set. Use set_current_document first or provide doc_id.")
-        
-        logger.info(f"Appending paragraph to document {target_doc_id}")
-        
-        # Use the collaborative document manager's handle_message system
-        # This will trigger WebSocket broadcasts to other clients
-        message_data = {
-            "message": text,  # Use "message" field as expected by LexicalModel
-            "position": "end"  # append at the end
-        }
-        
-        # Call through the message handling system to trigger collaborative sync
-        result = await document_manager.handle_message(target_doc_id, "append-paragraph", message_data)
-        
-        if not result.get("success"):
-            raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")
-        
-        # Note: Broadcasting is handled automatically by the document manager's 
-        # subscription system when in client mode. The WebSocket client receives
-        # and processes changes through the normal collaborative flow.
-        
-        # Get updated document structure for response
-        model = document_manager.get_or_create_document(target_doc_id)
-        lexical_data = model.get_lexical_data()
-        total_blocks = len(lexical_data.get("root", {}).get("children", []))
-        
-        response_result = {
-            "success": True,
-            "doc_id": target_doc_id,
-            "action": "append_paragraph",
-            "text": text,
-            "total_blocks": total_blocks
-        }
-        
-        logger.info(f"Successfully appended paragraph to document {target_doc_id}")
-        return json.dumps(response_result, indent=2)
+        # WEBSOCKET APPROACH: Send the exact same message that the button sends
+        # This ensures we use the exact same code path as collaborative editing
+        if document_manager.client_mode:
+            logger.info(f"🔄 Using WebSocket approach - sending append-paragraph message")
+            
+            # Ensure WebSocket connection is established
+            await document_manager._ensure_connected(doc_id)
+            
+            # Get the WebSocket connection for this document
+            ws_client_info = document_manager.websocket_clients.get(doc_id)
+            if ws_client_info and ws_client_info["websocket"] and ws_client_info["connected"]:
+                # Send the exact same message format that the button uses
+                websocket_message = {
+                    "type": "append-paragraph",
+                    "docId": doc_id,
+                    "message": text
+                }
+                
+                logger.info(f"📤 Sending WebSocket message: {websocket_message}")
+                await ws_client_info["websocket"].send(json.dumps(websocket_message))
+                logger.info(f"✅ WebSocket message sent successfully")
+                
+                # Wait for the server to process the message and broadcast
+                await asyncio.sleep(0.2)  # Give more time for processing and broadcast
+                
+                # Get updated document structure for response
+                model = document_manager.get_or_create_document(doc_id)
+                lexical_data = model.get_lexical_data()
+                total_blocks = len(lexical_data.get("root", {}).get("children", []))
+                
+                logger.info(f"✅ Successfully appended paragraph via WebSocket to document {doc_id}")
+                return f"✅ Successfully appended paragraph to document {doc_id}. Total blocks: {total_blocks}"
+            else:
+                logger.error(f"❌ No WebSocket connection available for document {doc_id}")
+                raise Exception("WebSocket connection not available")
+        else:
+            # Fallback to direct method for server mode
+            logger.info(f"� Using direct method approach (server mode)")
+            
+            # Use the collaborative document manager's handle_message system
+            message_data = {
+                "message": text,  # Use "message" field as expected by LexicalModel
+                "position": "end"  # append at the end
+            }
+            
+            # Call through the message handling system to trigger collaborative sync
+            result = await document_manager.handle_message(doc_id, "append-paragraph", message_data)
+            
+            if not result.get("success"):
+                raise Exception(f"Failed to append paragraph: {result.get('error', 'Unknown error')}")
+            
+            # Get updated document structure for response
+            model = document_manager.get_or_create_document(doc_id)
+            lexical_data = model.get_lexical_data()
+            total_blocks = len(lexical_data.get("root", {}).get("children", []))
+            
+            logger.info(f"Successfully appended paragraph to document {doc_id}")
+            return f"✅ Successfully appended paragraph to document {doc_id}. Total blocks: {total_blocks}"
         
     except Exception as e:
-        target_doc_id_for_error = target_doc_id if 'target_doc_id' in locals() else (doc_id or "unknown")
-        logger.error(f"Error appending paragraph to document {target_doc_id_for_error}: {e}")
+        logger.error(f"Error appending paragraph to document {doc_id}: {e}")
         error_result = {
             "success": False,
             "error": str(e),
-            "doc_id": target_doc_id_for_error,
+            "doc_id": doc_id,
             "action": "append_paragraph"
         }
-        return json.dumps(error_result, indent=2)
+        # Return a simple error message instead of JSON dump
+        return f"❌ Failed to append paragraph to document {doc_id}: {str(e)}"
 
 
 ###############################################################################
-# Commands using Click
+# Click Commands
 
 
 @click.group()
@@ -596,6 +709,13 @@ def server():
     help="The host to bind to for the Streamable HTTP transport. Ignored for stdio transport.",
 )
 @click.option(
+    "--websocket-url",
+    envvar="WEBSOCKET_URL", 
+    type=click.STRING,
+    default="ws://localhost:8081",
+    help="The base WebSocket URL for collaborative editing. Defaults to 'ws://localhost:8081'.",
+)
+@click.option(
     "--log-level",
     envvar="LOG_LEVEL",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
@@ -606,6 +726,7 @@ def start_command(
     transport: str,
     port: int,
     host: str,
+    websocket_url: str,
     log_level: str,
 ):
     """Start the Lexical Loro MCP server with a transport."""
@@ -616,7 +737,12 @@ def start_command(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # Initialize document manager with the provided websocket base URL
+    # Each document will have its own WebSocket connection: {websocket_url}/{doc_id}
+    initialize_mcp_collaboration(websocket_url)
+    
     logger.info(f"Starting Lexical Loro MCP Server with transport: {transport}")
+    logger.info(f"WebSocket base URL: {websocket_url}")
     
     if transport == "stdio":
         mcp.run(transport="stdio")
@@ -658,7 +784,6 @@ class LexicalMCPServer:
         self._insert_paragraph = self._wrap_legacy_tool(insert_paragraph)
         self._append_paragraph = self._wrap_legacy_tool(append_paragraph)
         self._get_document_info = self._wrap_legacy_tool(get_document_info)
-        self._set_current_document = self._wrap_legacy_tool(set_current_document)
     
     def _wrap_legacy_tool(self, tool_func):
         """Wrap new tool functions for legacy interface compatibility"""
