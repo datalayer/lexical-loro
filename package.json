@@ -9,7 +9,7 @@
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",
     "server:ws": "cross-env HOST=localhost PORT=1234 YPERSISTENCE=./yjs-wss-db npx y-websocket",
-    "server:ws:min": "fkill -s :1234 && ts-node src/servers/yjs/ws-min/server.ts",
+    "server:ws:min": "fkill -s :1234 && tsx src/servers/yjs/ws-min/server.ts",
     "server:ws:full": "fkill -s :1234 && YPERSISTENCE=./data-server node src/servers/yjs/ws-full/server.js",
     "preview": "vite preview"
   },
@@ -53,6 +53,7 @@
     "cross-env": "^7.0.3",
     "rollup-plugin-copy": "^3.5.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^5.2.11",
     "vite-plugin-static-copy": "^2.3.0"

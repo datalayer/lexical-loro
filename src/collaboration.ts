@@ -7,7 +7,8 @@
  */
 
 import {Provider} from '@lexical/yjs';
-import {WebsocketProvider} from './servers/yjs/ws-min/y-websocket';
+// import {WebsocketProvider} from './servers/yjs/ws-min/y-websocket';
+import {WebsocketProvider} from 'y-websocket';
 import {Doc} from 'yjs';
 
 const url = new URL(window.location.href);

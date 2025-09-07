@@ -19,7 +19,7 @@ import {
   $isTextNode,
   removeFromParent,
 } from 'lexical';
-import invariant from 'shared/invariant';
+import invariant from '../utils/invariant';
 
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
@@ -691,6 +691,6 @@ export function $createCollabElementNode(
   type: string,
 ): CollabElementNode {
   const collabNode = new CollabElementNode(xmlText, parent, type);
-  xmlText._collabNode = collabNode;
+  (xmlText as any)._collabNode = collabNode;
   return collabNode;
 }

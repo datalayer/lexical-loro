@@ -1,14 +1,14 @@
 import * as Y from 'yjs';
 
 import WebSocket from 'ws'
-const http = require('http')
+import * as http from 'http'
 
-const encoding = require('lib0/dist/encoding.cjs')
-const decoding = require('lib0/dist/decoding.cjs')
-const mutex = require('lib0/dist/mutex.cjs')
-const map = require('lib0/dist/map.cjs')
+import * as encoding from 'lib0/dist/encoding.cjs'
+import * as decoding from 'lib0/dist/decoding.cjs'
+import * as mutex from 'lib0/dist/mutex.cjs'
+import * as map from 'lib0/dist/map.cjs'
 
-const syncProtocol = require('y-protocols/dist/sync.cjs')
+import * as syncProtocol from 'y-protocols/dist/sync.cjs'
 
 const wsReadyStateConnecting = 0
 const wsReadyStateOpen = 1

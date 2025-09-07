@@ -26,7 +26,7 @@ import {
   RangeSelection,
   TextNode,
 } from 'lexical';
-import invariant from 'shared/invariant';
+import invariant from '../utils/invariant';
 import {Doc, Map as YMap, XmlElement, XmlText} from 'yjs';
 
 import {
@@ -177,7 +177,7 @@ export function $getOrInitCollabNodeFromSharedType(
   | CollabTextNode
   | CollabLineBreakNode
   | CollabDecoratorNode {
-  const collabNode = sharedType._collabNode;
+  const collabNode = (sharedType as any)._collabNode;
 
   if (collabNode === undefined) {
     const registeredNodes = binding.editor._nodes;

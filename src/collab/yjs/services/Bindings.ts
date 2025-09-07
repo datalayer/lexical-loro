@@ -15,7 +15,7 @@ import type {LexicalEditor, NodeKey} from 'lexical';
 import type {Doc} from 'yjs';
 
 import {Klass, LexicalNode} from 'lexical';
-import invariant from 'shared/invariant';
+import invariant from '../utils/invariant';
 import {XmlText} from 'yjs';
 
 import {Provider} from '.';

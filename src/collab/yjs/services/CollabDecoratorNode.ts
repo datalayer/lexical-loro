@@ -12,7 +12,7 @@ import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import type {XmlElement} from 'yjs';
 
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
-import invariant from 'shared/invariant';
+import invariant from '../utils/invariant';
 
 import {$syncPropertiesFromYjs, syncPropertiesFromLexical} from './Utils';
 
@@ -107,6 +107,6 @@ export function $createCollabDecoratorNode(
   type: string,
 ): CollabDecoratorNode {
   const collabNode = new CollabDecoratorNode(xmlElem, parent, type);
-  xmlElem._collabNode = collabNode;
+  (xmlElem as any)._collabNode = collabNode;
   return collabNode;
 }

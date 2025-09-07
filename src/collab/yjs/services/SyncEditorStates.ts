@@ -21,7 +21,7 @@ import {
   HISTORIC_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
-import invariant from 'shared/invariant';
+import invariant from '../utils/invariant';
 import {
   Map as YMap,
   Text as YText,

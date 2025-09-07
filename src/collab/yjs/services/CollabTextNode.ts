@@ -17,8 +17,8 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
-import invariant from 'shared/invariant';
-import simpleDiffWithCursor from 'shared/simpleDiffWithCursor';
+import invariant from '../utils/invariant';
+import simpleDiffWithCursor from '../utils/simpleDiffWithCursor';
 
 import {$syncPropertiesFromYjs, syncPropertiesFromLexical} from './Utils';
 
@@ -174,6 +174,6 @@ export function $createCollabTextNode(
   type: string,
 ): CollabTextNode {
   const collabNode = new CollabTextNode(map, text, parent, type);
-  map._collabNode = collabNode;
+  (map as any)._collabNode = collabNode;
   return collabNode;
 }
