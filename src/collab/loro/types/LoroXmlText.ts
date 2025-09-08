@@ -5,7 +5,7 @@
  * and LoroMap underneath to maintain compatibility with existing code.
  */
 
-import { LoroList, LoroMap, LoroDoc } from 'loro-crdt';
+import { LoroList, LoroMap, LoroDoc, Cursor } from 'loro-crdt';
 
 export interface EmbedObject {
   type: 'embed';
@@ -211,6 +211,51 @@ export class LoroXmlText {
   slice(start?: number, end?: number): unknown[] {
     const items = this._list.toArray();
     return items.slice(start, end);
+  }
+
+  /**
+   * Get the document this LoroXmlText belongs to
+   */
+  getDoc(): LoroDoc {
+    return this._doc;
+  }
+
+  /**
+   * Create a stable cursor at the specified position
+   * This allows tracking positions even as the text changes
+   */
+  getCursor(pos: number, side?: -1 | 0 | 1): Cursor | null {
+    try {
+      // Convert position-based access to Loro cursor
+      // For LoroXmlText backed by LoroList, we need to create cursors based on list positions
+      const textContent = this.toString();
+      if (pos < 0 || pos > textContent.length) {
+        return null;
+      }
+      
+      // Create a cursor using the underlying list structure
+      // Since we store characters individually in the list, position maps directly
+      return this._list.getCursor(Math.min(pos, this._list.length), side || 0);
+    } catch (error) {
+      console.warn('Failed to create cursor:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Resolve a cursor to current position
+   */
+  getCursorPos(cursor: Cursor): { offset: number; side: -1 | 0 | 1 } | null {
+    try {
+      const result = this._doc.getCursorPos(cursor);
+      return {
+        offset: result.offset,
+        side: result.side
+      };
+    } catch (error) {
+      console.warn('Failed to resolve cursor position:', error);
+      return null;
+    }
   }
 }
 

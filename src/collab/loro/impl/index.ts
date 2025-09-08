@@ -9,6 +9,7 @@
 import type {Binding} from './Bindings';
 import type {LexicalCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
+import {UndoManager} from 'loro-crdt';
 import type {LoroXmlText} from '../types/LoroXmlText';
 
 import {createCommand} from 'lexical';
@@ -64,21 +65,44 @@ export {createBinding} from './Bindings';
 export function createUndoManager(
   binding: Binding,
   root: LoroXmlText,
-): any {
-  // TODO: Implement Loro-based undo manager
-  // Loro has built-in undo/redo functionality, need to implement proper API
-  return {
-    undo: () => {
-      // TODO: Implement undo with Loro
-      console.warn('Undo not yet implemented for Loro');
+): UndoManager {
+  const doc = root.getDoc();
+  
+  // Create Loro UndoManager with configuration
+  const undoManager = new UndoManager(doc, {
+    mergeInterval: 1000, // Merge operations within 1 second
+    maxUndoSteps: 100,   // Keep up to 100 undo steps
+    excludeOriginPrefixes: ['collab-', 'sync-'], // Exclude collaboration operations
+    onPush: (isUndo, counterRange, event) => {
+      // Save cursor positions when adding to undo stack
+      const selection = binding.editor.getEditorState().read(() => {
+        return binding.editor.getEditorState()._selection;
+      });
+      
+      // Get cursors for the current state
+      const cursors: Cursor[] = [];
+      if (selection) {
+        // TODO: Convert Lexical selection to Loro cursors
+        // This would need to be implemented based on the specific selection format
+      }
+      
+      return {
+        value: doc.toJSON(), // Save document state
+        cursors: cursors
+      };
     },
-    redo: () => {
-      // TODO: Implement redo with Loro
-      console.warn('Redo not yet implemented for Loro');
-    },
-    canUndo: () => false, // TODO: Implement canUndo check
-    canRedo: () => false, // TODO: Implement canRedo check
-  };
+    onPop: (isUndo, metadata, counterRange) => {
+      // Restore cursor positions when undoing/redoing
+      if (metadata?.cursors && metadata.cursors.length > 0) {
+        binding.editor.update(() => {
+          // TODO: Restore selection state from cursors
+          // This would need to convert Loro cursors back to Lexical selection
+        });
+      }
+    }
+  });
+
+  return undoManager;
 }
 
 export function initLocalState(

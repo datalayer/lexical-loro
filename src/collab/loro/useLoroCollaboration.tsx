@@ -37,7 +37,7 @@ import {
 } from 'lexical';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
-import {LoroDoc} from 'loro-crdt';
+import {LoroDoc, UndoManager} from 'loro-crdt';
 
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
@@ -59,6 +59,32 @@ export function useLoroCollaboration(
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): JSX.Element {
   const isReloadingDoc = useRef(false);
+  const undoManagerRef = useRef<UndoManager | null>(null);
+  const skipCollaborationUpdateRef = useRef(false);
+
+  // Enhanced undo/redo state management
+  const updateUndoRedoStates = useCallback(() => {
+    if (undoManagerRef.current) {
+      editor.dispatchCommand(
+        CAN_UNDO_COMMAND,
+        undoManagerRef.current.canUndo(),
+      );
+      editor.dispatchCommand(
+        CAN_REDO_COMMAND,
+        undoManagerRef.current.canRedo(),
+      );
+    }
+  }, [editor]);
+
+  // Implementation of clearEditorSkipCollaborationUpdate equivalent
+  const clearEditorSkipCollaborationUpdate = useCallback(() => {
+    skipCollaborationUpdateRef.current = false;
+  }, []);
+
+  // Function to skip next collaboration update
+  const setSkipCollaborationUpdate = useCallback(() => {
+    skipCollaborationUpdateRef.current = true;
+  }, []);
 
   const connect = useCallback(() => provider.connect(), [provider]);
 
@@ -101,17 +127,32 @@ export function useLoroCollaboration(
       event: any, // LoroEventBatch
     ) => {
       const origin = event.by; // 'local' | 'import' | 'checkout'
+      
+      // Skip processing if we should skip collaboration updates
+      if (skipCollaborationUpdateRef.current) {
+        skipCollaborationUpdateRef.current = false;
+        return;
+      }
+      
       if (origin !== 'local') { // Only process remote changes
-        const isFromUndoManger = false; // TODO: Implement Loro undo manager detection
+        // Check if this change is from the undo manager
+        const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
+        
         syncYjsChangesToLexical(
           binding,
           provider,
           event.events, // Array of LoroEvent
-          isFromUndoManger,
+          isFromUndoManager,
           syncCursorPositionsFn,
         );
       }
     };
+
+    // Initialize the undo manager
+    if (!undoManagerRef.current) {
+      const undoManager = createUndoManager(binding, binding.root.getSharedType());
+      undoManagerRef.current = undoManager;
+    }
 
     initLocalState(
       provider,
@@ -122,15 +163,15 @@ export function useLoroCollaboration(
     );
 
     const onProviderDocReload = (loroDoc: LoroDoc) => {
-      // TODO: Implement clearEditorSkipCollaborationUpdate equivalent for Loro
-      // This function would clear any pending skip collaboration updates
-      // clearEditorSkipCollaborationUpdate();
+      clearEditorSkipCollaborationUpdate();
 
-      // TODO: Implement Loro document reload handling
-      // In YJS this would update the root and potentially trigger re-initialization
-      // For Loro, we may need to handle document replacement differently
+      // Update document references
       docMap.set(id, loroDoc);
       setDoc(loroDoc);
+      
+      // Create new undo manager for the reloaded document  
+      const newUndoManager = createUndoManager(binding, binding.root.getSharedType());
+      undoManagerRef.current = newUndoManager;
     };    provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
     provider.on('sync', onSync);
@@ -148,7 +189,13 @@ export function useLoroCollaboration(
         normalizedNodes,
         tags,
       }) => {
-        if (tags.has(SKIP_COLLAB_TAG) === false) {
+        if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
+          // Set origin to indicate this is a local edit for undo manager
+          const doc = docMap.get(id);
+          if (doc) {
+            doc.setNextCommitOrigin('lexical-edit');
+          }
+          
           syncLexicalUpdateToYjs(
             binding,
             provider,
@@ -317,20 +364,23 @@ export function useYjsHistory(
     const updateUndoRedoStates = () => {
       editor.dispatchCommand(
         CAN_UNDO_COMMAND,
-        undoManager.undoStack.length > 0,
+        undoManager.canUndo(),
       );
       editor.dispatchCommand(
         CAN_REDO_COMMAND,
-        undoManager.redoStack.length > 0,
+        undoManager.canRedo(),
       );
     };
-    undoManager.on('stack-item-added', updateUndoRedoStates);
-    undoManager.on('stack-item-popped', updateUndoRedoStates);
-    undoManager.on('stack-cleared', updateUndoRedoStates);
+    
+    // Initial state update
+    updateUndoRedoStates();
+    
+    // Loro UndoManager doesn't have event listeners like YJS
+    // We would need to check state periodically or after operations
+    // For now, update after each operation
+    
     return () => {
-      undoManager.off('stack-item-added', updateUndoRedoStates);
-      undoManager.off('stack-item-popped', updateUndoRedoStates);
-      undoManager.off('stack-cleared', updateUndoRedoStates);
+      // No cleanup needed for Loro UndoManager events
     };
   }, [editor, undoManager]);
 

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development concurrently \"npm:server:ws\" \"vite  --host --port 3000\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm:server:ws:min\" \"vite  --host --port 3000\"",
     "build:tsc": "tsc",
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",

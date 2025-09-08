@@ -1,6 +1,7 @@
 import * as Y from 'yjs';
 
 import WebSocket from 'ws'
+
 import * as http from 'http'
 
 import * as encoding from 'lib0/dist/encoding.cjs'
@@ -17,11 +18,12 @@ const messageSync = 0
 
 export const DOCS = new Map()
 
-const _send = (doc, conn, m) => {
+const _send = (doc: WSSharedDoc, conn, m) => {
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
     onClose(doc, conn)
   }
   try {
+    console.log('----', doc.toJSON)
     conn.send(m, err => { err != null && onClose(doc, conn) })
   } catch (e) {
     onClose(doc, conn)
@@ -31,9 +33,9 @@ const _send = (doc, conn, m) => {
 class WSSharedDoc extends Y.Doc {
   private name = null;
   private mux = null;
-  private conns = new Map();
+  public conns = new Map();
 
-  updateHandler(update, origin, doc) {
+  updateHandler(update, origin, doc: WSSharedDoc) {
     console.log('Update received:', update);
     const encoder = encoding.createEncoder()
     encoding.writeVarUint(encoder, messageSync)
@@ -51,14 +53,14 @@ class WSSharedDoc extends Y.Doc {
 
 }
 
-export const getDoc = (docname) => map.setIfUndefined(DOCS, docname, () => {
+export const getDoc = (docname): WSSharedDoc => map.setIfUndefined(DOCS, docname, () => {
   const doc = new WSSharedDoc(docname);
   DOCS.set(docname, doc);
   return doc;
 })
 
-const onWsMessage = (conn, doc, message) => {
-  console.log('Received message from client:', message);
+const onWsMessage = (conn, doc: WSSharedDoc, message) => {
+  // console.log('Received message from client:', message);
   const encoder = encoding.createEncoder();
   const decoder = decoding.createDecoder(message);
   const messageType = decoding.readVarUint(decoder);
