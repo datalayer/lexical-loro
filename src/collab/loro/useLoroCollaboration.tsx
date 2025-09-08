@@ -37,7 +37,7 @@ import {
 } from 'lexical';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
-import {Doc, Transaction, UndoManager, YEvent} from 'yjs';
+import {LoroDoc} from 'loro-crdt';
 
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
@@ -47,12 +47,12 @@ export function useLoroCollaboration(
   editor: LexicalEditor,
   id: string,
   provider: Provider,
-  docMap: Map<string, Doc>,
+  docMap: Map<string, LoroDoc>,
   name: string,
   color: string,
   shouldBootstrap: boolean,
   binding: Binding,
-  setDoc: React.Dispatch<React.SetStateAction<Doc | undefined>>,
+  setDoc: React.Dispatch<React.SetStateAction<LoroDoc | undefined>>,
   cursorsContainerRef?: CursorsContainerRef,
   initialEditorState?: InitialEditorStateType,
   awarenessData?: object,
@@ -83,7 +83,7 @@ export function useLoroCollaboration(
         shouldBootstrap &&
         isSynced &&
         root.isEmpty() &&
-        root._xmlText._length === 0 &&
+        root._xmlText.length === 0 &&
         isReloadingDoc.current === false
       ) {
         initializeEditor(editor, initialEditorState);
@@ -96,19 +96,17 @@ export function useLoroCollaboration(
       syncCursorPositionsFn(binding, provider);
     };
 
-    const onYjsTreeChanges = (
-      // The below `any` type is taken directly from the vendor types for YJS.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      events: Array<YEvent<any>>,
-      transaction: Transaction,
+    const onLoroTreeChanges = (
+      // Loro event has different signature than YJS
+      event: any, // LoroEventBatch
     ) => {
-      const origin = transaction.origin;
-      if (origin !== binding) {
-        const isFromUndoManger = origin instanceof UndoManager;
+      const origin = event.by; // 'local' | 'import' | 'checkout'
+      if (origin !== 'local') { // Only process remote changes
+        const isFromUndoManger = false; // TODO: Implement Loro undo manager detection
         syncYjsChangesToLexical(
           binding,
           provider,
-          events,
+          event.events, // Array of LoroEvent
           isFromUndoManger,
           syncCursorPositionsFn,
         );
@@ -123,19 +121,24 @@ export function useLoroCollaboration(
       awarenessData || {},
     );
 
-    const onProviderDocReload = (ydoc: Doc) => {
-      clearEditorSkipCollab(editor, binding);
-      setDoc(ydoc);
-      docMap.set(id, ydoc);
-      isReloadingDoc.current = true;
-    };
+    const onProviderDocReload = (loroDoc: LoroDoc) => {
+      // TODO: Implement clearEditorSkipCollaborationUpdate equivalent for Loro
+      // This function would clear any pending skip collaboration updates
+      // clearEditorSkipCollaborationUpdate();
 
-    provider.on('reload', onProviderDocReload);
+      // TODO: Implement Loro document reload handling
+      // In YJS this would update the root and potentially trigger re-initialization
+      // For Loro, we may need to handle document replacement differently
+      docMap.set(id, loroDoc);
+      setDoc(loroDoc);
+    };    provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
     provider.on('sync', onSync);
     awareness.on('update', onAwarenessUpdate);
     // This updates the local editor state when we receive updates from other clients
-    root.getSharedType().observeDeep(onYjsTreeChanges);
+    // Subscribe to Loro document changes
+    const doc = docMap.get(id);
+    const unsubscribe = doc?.subscribe(onLoroTreeChanges);
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,
@@ -182,7 +185,8 @@ export function useLoroCollaboration(
       provider.off('status', onStatus);
       provider.off('reload', onProviderDocReload);
       awareness.off('update', onAwarenessUpdate);
-      root.getSharedType().unobserveDeep(onYjsTreeChanges);
+      // Unsubscribe from Loro document changes
+      unsubscribe?.();
       docMap.delete(id);
       removeListener();
     };
