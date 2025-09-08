@@ -8,7 +8,7 @@
 
 import type {Binding} from '.';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
-import type {AbstractType, Map as YMap, XmlElement, XmlText} from 'yjs';
+import type {LoroXmlText} from '../types';
 
 import {$createChildrenArray} from '@lexical/offset';
 import {
@@ -44,12 +44,12 @@ export class CollabElementNode {
     | CollabDecoratorNode
     | CollabLineBreakNode
   >;
-  _xmlText: XmlText;
+  _xmlText: LoroXmlText;
   _type: string;
   _parent: null | CollabElementNode;
 
   constructor(
-    xmlText: XmlText,
+    xmlText: LoroXmlText,
     parent: null | CollabElementNode,
     type: string,
   ) {
@@ -74,7 +74,7 @@ export class CollabElementNode {
     return $isElementNode(node) ? node : null;
   }
 
-  getSharedType(): XmlText {
+  getSharedType(): LoroXmlText {
     return this._xmlText;
   }
 
@@ -119,7 +119,7 @@ export class CollabElementNode {
   applyChildrenYjsDelta(
     binding: Binding,
     deltas: Array<{
-      insert?: string | object | AbstractType<unknown>;
+      insert?: string | object | LoroXmlText;
       delete?: number;
       retain?: number;
       attributes?: {
@@ -219,7 +219,7 @@ export class CollabElementNode {
           );
           const collabNode = $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedType as XmlText | YMap<unknown> | XmlElement,
+            sharedType as LoroXmlText,
             this,
           );
           if (
@@ -578,7 +578,7 @@ export class CollabElementNode {
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
-      xmlText.insertEmbed(offset, collabNode._xmlElem);
+      xmlText.insertEmbed(offset, collabNode._map);
     }
 
     this._children.push(collabNode);
@@ -630,7 +630,7 @@ export class CollabElementNode {
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
-      xmlText.insertEmbed(offset, collabNode._xmlElem);
+      xmlText.insertEmbed(offset, collabNode._map);
     }
 
     if (delCount !== 0) {
@@ -686,7 +686,7 @@ export class CollabElementNode {
 }
 
 export function $createCollabElementNode(
-  xmlText: XmlText,
+  xmlText: LoroXmlText,
   parent: null | CollabElementNode,
   type: string,
 ): CollabElementNode {

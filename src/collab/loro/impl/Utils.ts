@@ -27,7 +27,8 @@ import {
   TextNode,
 } from 'lexical';
 import invariant from '../utils/invariant';
-import {Doc, Map as YMap, XmlElement, XmlText} from 'yjs';
+import {LoroMap, LoroDoc} from 'loro-crdt';
+import {LoroXmlText} from '../types/LoroXmlText';
 
 import {
   $createCollabDecoratorNode,
@@ -127,13 +128,13 @@ export function $createCollabNodeFromLexicalNode(
   let collabNode;
 
   if ($isElementNode(lexicalNode)) {
-    const xmlText = new XmlText();
+    const xmlText = new LoroXmlText(binding.doc, `element_${lexicalNode.__key}`);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
   } else if ($isTextNode(lexicalNode)) {
     // TODO create a token text node for token, segmented nodes.
-    const map = new YMap();
+    const map = binding.doc.getMap(`text_${lexicalNode.__key}`);
     collabNode = $createCollabTextNode(
       map,
       lexicalNode.__text,
@@ -142,12 +143,12 @@ export function $createCollabNodeFromLexicalNode(
     );
     collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
   } else if ($isLineBreakNode(lexicalNode)) {
-    const map = new YMap();
+    const map = binding.doc.getMap(`linebreak_${lexicalNode.__key}`);
     map.set('__type', 'linebreak');
     collabNode = $createCollabLineBreakNode(map, parent);
   } else if ($isDecoratorNode(lexicalNode)) {
-    const xmlElem = new XmlElement();
-    collabNode = $createCollabDecoratorNode(xmlElem, parent, nodeType);
+    const map = binding.doc.getMap(`decorator_${lexicalNode.__key}`);
+    collabNode = $createCollabDecoratorNode(map, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
   } else {
     invariant(false, 'Expected text, element, decorator, or linebreak node');
@@ -158,7 +159,7 @@ export function $createCollabNodeFromLexicalNode(
 }
 
 export function getNodeTypeFromSharedType(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
 ): string | undefined {
   const type = sharedTypeGet(sharedType, '__type');
   invariant(
@@ -170,7 +171,7 @@ export function getNodeTypeFromSharedType(
 
 export function $getOrInitCollabNodeFromSharedType(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   parent?: CollabElementNode,
 ):
   | CollabElementNode
@@ -194,7 +195,7 @@ export function $getOrInitCollabNodeFromSharedType(
       parent === undefined && sharedParent !== null
         ? $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedParent as XmlText | YMap<unknown> | XmlElement,
+            sharedParent as LoroXmlText | LoroMap<Record<string, unknown>>,
           )
         : parent || null;
 
@@ -203,15 +204,16 @@ export function $getOrInitCollabNodeFromSharedType(
       'Expected parent to be a collab element node',
     );
 
-    if (sharedType instanceof XmlText) {
+    if (sharedType instanceof LoroXmlText) {
       return $createCollabElementNode(sharedType, targetParent, type);
-    } else if (sharedType instanceof YMap) {
+    } else if (sharedType instanceof LoroMap) {
       if (type === 'linebreak') {
         return $createCollabLineBreakNode(sharedType, targetParent);
       }
       return $createCollabTextNode(sharedType, '', targetParent, type);
-    } else if (sharedType instanceof XmlElement) {
-      return $createCollabDecoratorNode(sharedType, targetParent, type);
+    } else {
+      // For decorator nodes, we use LoroMap as well
+      return $createCollabDecoratorNode(sharedType as LoroMap<Record<string, unknown>>, targetParent, type);
     }
   }
 
@@ -256,13 +258,13 @@ export function createLexicalNodeFromCollabNode(
 
 export function $syncPropertiesFromYjs(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,
   keysChanged: null | Set<string>,
 ): void {
   const properties =
     keysChanged === null
-      ? sharedType instanceof YMap
+      ? sharedType instanceof LoroMap
         ? Array.from(sharedType.keys())
         : Object.keys(sharedType.getAttributes())
       : Array.from(keysChanged);
@@ -284,15 +286,15 @@ export function $syncPropertiesFromYjs(
     let nextValue = sharedTypeGet(sharedType, property);
 
     if (prevValue !== nextValue) {
-      if (nextValue instanceof Doc) {
+      if (nextValue instanceof LoroDoc) {
         const yjsDocMap = binding.docMap;
 
-        if (prevValue instanceof Doc) {
-          yjsDocMap.delete(prevValue.guid);
+        if (prevValue instanceof LoroDoc) {
+          // TODO: Handle document cleanup
         }
 
         const nestedEditor = createEditor();
-        const key = nextValue.guid;
+        const key = nextValue.peerId.toString();
         nestedEditor._key = key;
         yjsDocMap.set(key, nextValue);
 
@@ -310,10 +312,10 @@ export function $syncPropertiesFromYjs(
 }
 
 function sharedTypeGet(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   property: string,
 ): unknown {
-  if (sharedType instanceof YMap) {
+  if (sharedType instanceof LoroMap) {
     return sharedType.get(property);
   } else {
     return sharedType.getAttribute(property);
@@ -321,11 +323,11 @@ function sharedTypeGet(
 }
 
 function sharedTypeSet(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   property: string,
   nextValue: unknown,
 ): void {
-  if (sharedType instanceof YMap) {
+  if (sharedType instanceof LoroMap) {
     sharedType.set(property, nextValue);
   } else {
     sharedType.setAttribute(property, nextValue as string);
@@ -334,22 +336,22 @@ function sharedTypeSet(
 
 function $syncNodeStateToLexical(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,
 ): void {
   const existingState = sharedTypeGet(sharedType, '__state');
-  if (!(existingState instanceof YMap)) {
+  if (!(existingState instanceof LoroMap)) {
     return;
   }
   // This should only called when creating the node initially,
-  // incremental updates to state come in through YMapEvent
+  // incremental updates to state come in through LoroMap events
   // with the __state as the target.
   $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 function syncNodeStateFromLexical(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {
@@ -360,13 +362,13 @@ function syncNodeStateFromLexical(
   }
   const [unknown, known] = nextState.getInternalState();
   const prevState = prevLexicalNode && prevLexicalNode.__state;
-  const stateMap: YMap<unknown> =
-    existingState instanceof YMap ? existingState : new YMap();
+  const stateMap: LoroMap<Record<string, unknown>> =
+    existingState instanceof LoroMap ? existingState : binding.doc.getMap('nodestate_' + nextLexicalNode.__key);
   if (prevState === nextState) {
     return;
   }
   const [prevUnknown, prevKnown] =
-    prevState && stateMap.doc
+    prevState && stateMap
       ? prevState.getInternalState()
       : [undefined, new Map()];
   if (unknown) {
@@ -388,7 +390,7 @@ function syncNodeStateFromLexical(
 
 export function syncPropertiesFromLexical(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {
@@ -429,9 +431,9 @@ export function syncPropertiesFromLexical(
           yjsDocMap.delete(prevKey);
         }
 
-        // If we already have a document, use it.
-        const doc = prevDoc || new Doc();
-        const key = doc.guid;
+        // If we already have a document, use it, otherwise create new LoroDoc
+        const doc = prevDoc || new LoroDoc();
+        const key = doc.peerId.toString();
         nextValue._key = key;
         yjsDocMap.set(key, doc);
         nextValue = doc;
@@ -555,7 +557,9 @@ export function doesSelectionNeedRecovering(
 }
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
-  binding.doc.transact(fn, binding);
+  // TODO: Implement Loro transaction wrapping
+  // Loro handles transactions differently than YJS
+  fn();
 }
 
 export function $moveSelectionToPreviousNode(

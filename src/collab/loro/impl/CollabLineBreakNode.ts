@@ -9,17 +9,17 @@
 import type {Binding} from '.';
 import type {CollabElementNode} from './CollabElementNode';
 import type {LineBreakNode, NodeKey} from 'lexical';
-import type {Map as YMap} from 'yjs';
+import type {LoroMap} from 'loro-crdt';
 
 import {$getNodeByKey, $isLineBreakNode} from 'lexical';
 
 export class CollabLineBreakNode {
-  _map: YMap<unknown>;
+  _map: LoroMap<Record<string, unknown>>;
   _key: NodeKey;
   _parent: CollabElementNode;
   _type: 'linebreak';
 
-  constructor(map: YMap<unknown>, parent: CollabElementNode) {
+  constructor(map: LoroMap<Record<string, unknown>>, parent: CollabElementNode) {
     this._key = '';
     this._map = map;
     this._parent = parent;
@@ -35,7 +35,7 @@ export class CollabLineBreakNode {
     return this._key;
   }
 
-  getSharedType(): YMap<unknown> {
+  getSharedType(): LoroMap<Record<string, unknown>> {
     return this._map;
   }
 
@@ -61,7 +61,7 @@ export class CollabLineBreakNode {
 }
 
 export function $createCollabLineBreakNode(
-  map: YMap<unknown>,
+  map: LoroMap<Record<string, unknown>>,
   parent: CollabElementNode,
 ): CollabLineBreakNode {
   const collabNode = new CollabLineBreakNode(map, parent);

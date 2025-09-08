@@ -9,7 +9,7 @@
 import type {Binding} from '.';
 import type {CollabElementNode} from './CollabElementNode';
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
-import type {XmlElement} from 'yjs';
+import type {LoroMap} from 'loro-crdt';
 
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
 import invariant from '../utils/invariant';
@@ -17,14 +17,14 @@ import invariant from '../utils/invariant';
 import {$syncPropertiesFromYjs, syncPropertiesFromLexical} from './Utils';
 
 export class CollabDecoratorNode {
-  _xmlElem: XmlElement;
+  _map: LoroMap<Record<string, unknown>>;
   _key: NodeKey;
   _parent: CollabElementNode;
   _type: string;
 
-  constructor(xmlElem: XmlElement, parent: CollabElementNode, type: string) {
+  constructor(map: LoroMap<Record<string, unknown>>, parent: CollabElementNode, type: string) {
     this._key = '';
-    this._xmlElem = xmlElem;
+    this._map = map;
     this._parent = parent;
     this._type = type;
   }
@@ -43,8 +43,8 @@ export class CollabDecoratorNode {
     return $isDecoratorNode(node) ? node : null;
   }
 
-  getSharedType(): XmlElement {
-    return this._xmlElem;
+  getSharedType(): LoroMap<Record<string, unknown>> {
+    return this._map;
   }
 
   getType(): string {
@@ -70,11 +70,11 @@ export class CollabDecoratorNode {
     prevNodeMap: null | NodeMap,
   ): void {
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
-    const xmlElem = this._xmlElem;
+    const map = this._map;
 
     syncPropertiesFromLexical(
       binding,
-      xmlElem,
+      map,
       prevLexicalNode,
       nextLexicalNode,
     );
@@ -89,8 +89,8 @@ export class CollabDecoratorNode {
       lexicalNode !== null,
       'syncPropertiesFromYjs: could not find decorator node',
     );
-    const xmlElem = this._xmlElem;
-    $syncPropertiesFromYjs(binding, xmlElem, lexicalNode, keysChanged);
+    const map = this._map;
+    $syncPropertiesFromYjs(binding, map, lexicalNode, keysChanged);
   }
 
   destroy(binding: Binding): void {
@@ -102,11 +102,11 @@ export class CollabDecoratorNode {
 }
 
 export function $createCollabDecoratorNode(
-  xmlElem: XmlElement,
+  map: LoroMap<Record<string, unknown>>,
   parent: CollabElementNode,
   type: string,
 ): CollabDecoratorNode {
-  const collabNode = new CollabDecoratorNode(xmlElem, parent, type);
-  (xmlElem as any)._collabNode = collabNode;
+  const collabNode = new CollabDecoratorNode(map, parent, type);
+  (map as any)._collabNode = collabNode;
   return collabNode;
 }

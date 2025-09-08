@@ -8,16 +8,16 @@
 
 import type {Binding} from './Bindings';
 import type {LexicalCommand} from 'lexical';
-import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';
+import type {LoroDoc, Cursor} from 'loro-crdt';
+import type {LoroXmlText} from '../types/LoroXmlText';
 
 import {createCommand} from 'lexical';
-import {UndoManager as YjsUndoManager} from 'yjs';
 
 export type UserState = {
-  anchorPos: null | RelativePosition;
+  anchorPos: null | Cursor;
   color: string;
   focusing: boolean;
-  focusPos: null | RelativePosition;
+  focusPos: null | Cursor;
   name: string;
   awarenessData: object;
   [key: string]: unknown;
@@ -42,11 +42,11 @@ declare interface Provider {
   off(type: 'sync', cb: (isSynced: boolean) => void): void;
   off(type: 'update', cb: (arg0: unknown) => void): void;
   off(type: 'status', cb: (arg0: {status: string}) => void): void;
-  off(type: 'reload', cb: (doc: Doc) => void): void;
+  off(type: 'reload', cb: (doc: LoroDoc) => void): void;
   on(type: 'sync', cb: (isSynced: boolean) => void): void;
   on(type: 'status', cb: (arg0: {status: string}) => void): void;
   on(type: 'update', cb: (arg0: unknown) => void): void;
-  on(type: 'reload', cb: (doc: Doc) => void): void;
+  on(type: 'reload', cb: (doc: LoroDoc) => void): void;
 }
 export type Operation = {
   attributes: {
@@ -63,11 +63,22 @@ export {createBinding} from './Bindings';
 
 export function createUndoManager(
   binding: Binding,
-  root: XmlText,
-): UndoManager {
-  return new YjsUndoManager(root, {
-    trackedOrigins: new Set([binding, null]),
-  });
+  root: LoroXmlText,
+): any {
+  // TODO: Implement Loro-based undo manager
+  // Loro has built-in undo/redo functionality, need to implement proper API
+  return {
+    undo: () => {
+      // TODO: Implement undo with Loro
+      console.warn('Undo not yet implemented for Loro');
+    },
+    redo: () => {
+      // TODO: Implement redo with Loro
+      console.warn('Redo not yet implemented for Loro');
+    },
+    canUndo: () => false, // TODO: Implement canUndo check
+    canRedo: () => false, // TODO: Implement canRedo check
+  };
 }
 
 export function initLocalState(

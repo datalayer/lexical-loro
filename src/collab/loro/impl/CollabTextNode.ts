@@ -9,7 +9,7 @@
 import type {Binding} from '.';
 import type {CollabElementNode} from './CollabElementNode';
 import type {NodeKey, NodeMap, TextNode} from 'lexical';
-import type {Map as YMap} from 'yjs';
+import type {LoroMap} from 'loro-crdt';
 
 import {
   $getNodeByKey,
@@ -44,7 +44,7 @@ function $diffTextContentAndApplyDelta(
 }
 
 export class CollabTextNode {
-  _map: YMap<unknown>;
+  _map: LoroMap<Record<string, unknown>>;
   _key: NodeKey;
   _parent: CollabElementNode;
   _text: string;
@@ -52,7 +52,7 @@ export class CollabTextNode {
   _normalized: boolean;
 
   constructor(
-    map: YMap<unknown>,
+    map: LoroMap<Record<string, unknown>>,
     text: string,
     parent: CollabElementNode,
     type: string,
@@ -79,7 +79,7 @@ export class CollabTextNode {
     return $isTextNode(node) ? node : null;
   }
 
-  getSharedType(): YMap<unknown> {
+  getSharedType(): LoroMap<Record<string, unknown>> {
     return this._map;
   }
 
@@ -168,7 +168,7 @@ export class CollabTextNode {
 }
 
 export function $createCollabTextNode(
-  map: YMap<unknown>,
+  map: LoroMap<Record<string, unknown>>,
   text: string,
   parent: CollabElementNode,
   type: string,

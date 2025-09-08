@@ -8,7 +8,7 @@
 
 import type {Binding} from './Bindings';
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
-import type {AbsolutePosition, RelativePosition} from 'yjs';
+import type {Cursor as LoroCursor} from 'loro-crdt';
 
 import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import {
@@ -20,11 +20,6 @@ import {
   $isTextNode,
 } from 'lexical';
 import invariant from '../utils/invariant';
-import {
-  compareRelativePositions,
-  createAbsolutePositionFromRelativePosition,
-  createRelativePositionFromTypeIndex,
-} from 'yjs';
 
 import {Provider, UserState} from '.';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
@@ -56,72 +51,27 @@ export type Cursor = {
 function createRelativePosition(
   point: Point,
   binding: Binding,
-): null | RelativePosition {
-  const collabNodeMap = binding.collabNodeMap;
-  const collabNode = collabNodeMap.get(point.key);
-
-  if (collabNode === undefined) {
-    return null;
-  }
-
-  let offset = point.offset;
-  let sharedType = collabNode.getSharedType();
-
-  if (collabNode instanceof CollabTextNode) {
-    sharedType = collabNode._parent._xmlText;
-    const currentOffset = collabNode.getOffset();
-
-    if (currentOffset === -1) {
-      return null;
-    }
-
-    offset = currentOffset + 1 + offset;
-  } else if (
-    collabNode instanceof CollabElementNode &&
-    point.type === 'element'
-  ) {
-    const parent = point.getNode();
-    invariant($isElementNode(parent), 'Element point must be an element node');
-    let accumulatedOffset = 0;
-    let i = 0;
-    let node = parent.getFirstChild();
-    while (node !== null && i++ < offset) {
-      if ($isTextNode(node)) {
-        accumulatedOffset += node.getTextContentSize() + 1;
-      } else {
-        accumulatedOffset++;
-      }
-      node = node.getNextSibling();
-    }
-    offset = accumulatedOffset;
-  }
-
-  return createRelativePositionFromTypeIndex(sharedType, offset);
+): null | LoroCursor {
+  // TODO: Implement Loro cursor creation
+  // This is a placeholder for Loro cursor system
+  return null;
 }
 
 function createAbsolutePosition(
-  relativePosition: RelativePosition,
+  cursor: LoroCursor,
   binding: Binding,
-): AbsolutePosition | null {
-  return createAbsolutePositionFromRelativePosition(
-    relativePosition,
-    binding.doc,
-  );
+): any | null {
+  // TODO: Implement Loro cursor to absolute position
+  return null;
 }
 
 function shouldUpdatePosition(
-  currentPos: RelativePosition | null | undefined,
-  pos: RelativePosition | null | undefined,
+  currentPos: LoroCursor | null | undefined,
+  pos: LoroCursor | null | undefined,
 ): boolean {
-  if (currentPos == null) {
-    if (pos != null) {
-      return true;
-    }
-  } else if (pos == null || !compareRelativePositions(currentPos, pos)) {
-    return true;
-  }
-
-  return false;
+  // TODO: Implement Loro cursor comparison
+  // For now, always update (placeholder)
+  return currentPos !== pos;
 }
 
 function createCursor(name: string, color: string): Cursor {
