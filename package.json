@@ -9,8 +9,7 @@
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",
     "server:ws": "cross-env HOST=localhost PORT=1234 YPERSISTENCE=./yjs-wss-db npx y-websocket",
-    "server:ws:min": "fkill -s :1234 && tsx src/collab/yjs/servers/server.ts",
-    "server:ws:full": "fkill -s :1234 && YPERSISTENCE=./data-server node src/collab/yjs/servers/js/server.js",
+    "server:ws:min": "fkill -s :1234 && tsx src/collab/yjs/servers/websocket-server.ts",
     "preview": "vite preview"
   },
   "dependencies": {
