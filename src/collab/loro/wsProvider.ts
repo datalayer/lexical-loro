@@ -37,5 +37,5 @@ export function createWebsocketProvider(
       connect: false,
     },
   );
-  return websocketProvider
+  return websocketProvider;
 }
