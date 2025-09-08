@@ -7,7 +7,7 @@
  */
 
 import type {JSX} from 'react';
-import type {Doc} from 'yjs';
+import type {LoroDoc} from 'loro-crdt';
 
 import {
   type CollaborationContextType,
@@ -27,17 +27,17 @@ import {useEffect, useRef, useState} from 'react';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {
   CursorsContainerRef,
-  useYjsCollaboration,
+  useLoroCollaboration,
   useYjsFocusTracking,
   useYjsHistory,
-} from './useYjsCollaboration';
+} from './useLoroCollaboration';
 
 type Props = {
   id: string;
   providerFactory: (
     // eslint-disable-next-line no-shadow
     id: string,
-    yjsDocMap: Map<string, Doc>,
+    loroDocMap: Map<string, LoroDoc>,
   ) => Provider;
   shouldBootstrap: boolean;
   username?: string;
@@ -67,7 +67,7 @@ export function CollaborationPlugin({
 
   const collabContext = useCollaborationContext(username, cursorColor);
 
-  const {yjsDocMap, name, color} = collabContext;
+  const {loroDocMap, name, color} = collabContext;
 
   const [editor] = useLexicalComposerContext();
 
@@ -84,7 +84,7 @@ export function CollaborationPlugin({
   }, [collabContext, editor]);
 
   const [provider, setProvider] = useState<Provider>();
-  const [doc, setDoc] = useState<Doc>();
+  const [doc, setDoc] = useState<LoroDoc>();
 
   useEffect(() => {
     if (isProviderInitialized.current) {
@@ -93,14 +93,14 @@ export function CollaborationPlugin({
 
     isProviderInitialized.current = true;
 
-    const newProvider = providerFactory(id, yjsDocMap);
+    const newProvider = providerFactory(id, loroDocMap);
     setProvider(newProvider);
-    setDoc(yjsDocMap.get(id));
+    setDoc(loroDocMap.get(id));
 
     return () => {
       newProvider.disconnect();
     };
-  }, [id, providerFactory, yjsDocMap]);
+  }, [id, providerFactory, loroDocMap]);
 
   const [binding, setBinding] = useState<Binding>();
 
@@ -119,8 +119,8 @@ export function CollaborationPlugin({
       editor,
       provider,
       id,
-      doc || yjsDocMap.get(id),
-      yjsDocMap,
+      doc || loroDocMap.get(id),
+      loroDocMap,
       excludedProperties,
     );
     setBinding(newBinding);
@@ -128,14 +128,14 @@ export function CollaborationPlugin({
     return () => {
       newBinding.root.destroy(newBinding);
     };
-  }, [editor, provider, id, yjsDocMap, doc, excludedProperties]);
+  }, [editor, provider, id, loroDocMap, doc, excludedProperties]);
 
   if (!provider || !binding) {
     return <></>;
   }
 
   return (
-    <YjsCollaborationCursors
+    <LoroCollaborationCursors
       awarenessData={awarenessData}
       binding={binding}
       collabContext={collabContext}
@@ -148,17 +148,17 @@ export function CollaborationPlugin({
       provider={provider}
       setDoc={setDoc}
       shouldBootstrap={shouldBootstrap}
-      yjsDocMap={yjsDocMap}
+      loroDocMap={loroDocMap}
       syncCursorPositionsFn={syncCursorPositionsFn}
     />
   );
 }
 
-function YjsCollaborationCursors({
+function LoroCollaborationCursors({
   editor,
   id,
   provider,
-  yjsDocMap,
+  loroDocMap,
   name,
   color,
   shouldBootstrap,
@@ -173,23 +173,23 @@ function YjsCollaborationCursors({
   editor: LexicalEditor;
   id: string;
   provider: Provider;
-  yjsDocMap: Map<string, Doc>;
+  loroDocMap: Map<string, LoroDoc>;
   name: string;
   color: string;
   shouldBootstrap: boolean;
   binding: Binding;
-  setDoc: React.Dispatch<React.SetStateAction<Doc | undefined>>;
+  setDoc: React.Dispatch<React.SetStateAction<LoroDoc | undefined>>;
   cursorsContainerRef?: CursorsContainerRef | undefined;
   initialEditorState?: InitialEditorStateType | undefined;
   awarenessData?: object;
   collabContext: CollaborationContextType;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
 }) {
-  const cursors = useYjsCollaboration(
+  const cursors = useLoroCollaboration(
     editor,
     id,
     provider,
-    yjsDocMap,
+    loroDocMap,
     name,
     color,
     shouldBootstrap,

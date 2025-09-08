@@ -7,7 +7,7 @@
  */
 
 import {Provider} from '@lexical/yjs';
-import {Doc} from 'yjs';
+import {LoroDoc} from 'loro-crdt';
 import {WebsocketProvider} from './servers/loro-websocket';
 
 const url = new URL(window.location.href);
@@ -20,18 +20,16 @@ const WEBSOCKET_ID = params.get('collabId') || '0';
 // parent dom -> child doc
 export function createWebsocketProvider(
   id: string,
-  yjsDocMap: Map<string, Doc>,
+  loroDocMap: Map<string, LoroDoc>,
 ): Provider {
-  let doc = yjsDocMap.get(id);
+  let doc = loroDocMap.get(id);
 
   if (doc === undefined) {
-    doc = new Doc();
-    yjsDocMap.set(id, doc);
-  } else {
-    doc.load();
+    doc = new LoroDoc();
+    loroDocMap.set(id, doc);
   }
 
-  // @ts-expect-error
+  // @ts-expect-error: WebsocketProvider expects YJS Doc but we're using LoroDoc
   return new WebsocketProvider(
     WEBSOCKET_ENDPOINT,
     WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,

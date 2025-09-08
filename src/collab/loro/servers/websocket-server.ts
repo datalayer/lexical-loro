@@ -1,8 +1,8 @@
 import * as Y from 'yjs';
 
-import WebSocket from 'ws'
-import * as http from 'http'
+import WebSocket from 'ws';
 
+import * as http from 'http'
 import * as encoding from 'lib0/dist/encoding.cjs'
 import * as decoding from 'lib0/dist/decoding.cjs'
 import * as mutex from 'lib0/dist/mutex.cjs'
@@ -58,7 +58,7 @@ export const getDoc = (docname) => map.setIfUndefined(DOCS, docname, () => {
 })
 
 const onWsMessage = (conn, doc, message) => {
-  console.log('Received message from client:', message);
+  // console.log('Received message from client:', message);
   const encoder = encoding.createEncoder();
   const decoder = decoding.createDecoder(message);
   const messageType = decoding.readVarUint(decoder);
@@ -95,7 +95,7 @@ const setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[0]
 // Main
 
 const PORT = process.env.PORT || 1234
-const wss = new WebSocket.Server({ noServer: true })
+const wss = new (WebSocket as any).Server({ noServer: true })
 
 const server = http.createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': 'text/plain' })

@@ -1,9 +1,8 @@
 import * as Y from 'yjs';
 
-import WebSocket from 'ws'
+import WebSocket from 'ws';
 
 import * as http from 'http'
-
 import * as encoding from 'lib0/dist/encoding.cjs'
 import * as decoding from 'lib0/dist/decoding.cjs'
 import * as mutex from 'lib0/dist/mutex.cjs'
@@ -18,12 +17,11 @@ const messageSync = 0
 
 export const DOCS = new Map()
 
-const _send = (doc: WSSharedDoc, conn, m) => {
+const _send = (doc, conn, m) => {
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
     onClose(doc, conn)
   }
   try {
-    console.log('----', doc.name, doc);
     conn.send(m, err => { err != null && onClose(doc, conn) })
   } catch (e) {
     onClose(doc, conn)
@@ -31,12 +29,12 @@ const _send = (doc: WSSharedDoc, conn, m) => {
 }
 
 class WSSharedDoc extends Y.Doc {
-  public name = null;
+  private name = null;
   private mux = null;
-  public conns = new Map();
+  private conns = new Map();
 
-  updateHandler(update, origin, doc: WSSharedDoc) {
-    // console.log('Update received:', update);
+  updateHandler(update, origin, doc) {
+    console.log('Update received:', update);
     const encoder = encoding.createEncoder()
     encoding.writeVarUint(encoder, messageSync)
     syncProtocol.writeUpdate(encoder, update)
@@ -53,14 +51,13 @@ class WSSharedDoc extends Y.Doc {
 
 }
 
-export const getDoc = (docname): WSSharedDoc => map.setIfUndefined(DOCS, docname, () => {
+export const getDoc = (docname) => map.setIfUndefined(DOCS, docname, () => {
   const doc = new WSSharedDoc(docname);
   DOCS.set(docname, doc);
-  console.log('Created new doc:', docname, doc);
   return doc;
 })
 
-const onWsMessage = (conn, doc: WSSharedDoc, message) => {
+const onWsMessage = (conn, doc, message) => {
   // console.log('Received message from client:', message);
   const encoder = encoding.createEncoder();
   const decoder = decoding.createDecoder(message);
@@ -98,7 +95,7 @@ const setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[0]
 // Main
 
 const PORT = process.env.PORT || 1234
-const wss = new WebSocket.Server({ noServer: true })
+const wss = new (WebSocket as any).Server({ noServer: true })
 
 const server = http.createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': 'text/plain' })

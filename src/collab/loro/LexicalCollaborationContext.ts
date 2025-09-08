@@ -6,7 +6,7 @@
  *
  */
 
-import type {Doc} from 'yjs';
+import type {LoroDoc} from 'loro-crdt';
 
 import {createContext, useContext} from 'react';
 
@@ -15,7 +15,7 @@ export type CollaborationContextType = {
   color: string;
   isCollabActive: boolean;
   name: string;
-  yjsDocMap: Map<string, Doc>;
+  loroDocMap: Map<string, LoroDoc>;
 };
 
 const entries = [
@@ -43,7 +43,7 @@ export const CollaborationContext = createContext<CollaborationContextType>({
   color: randomEntry[1],
   isCollabActive: false,
   name: randomEntry[0],
-  yjsDocMap: new Map(),
+  loroDocMap: new Map(),
 });
 
 export function useCollaborationContext(

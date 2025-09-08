@@ -27,7 +27,6 @@ export default (() => {
   }
 
   if (INITIAL_SETTINGS.disableBeforeInput) {
-    // @ts-expect-error
     delete window.InputEvent.prototype.getTargetRanges;
   }
 

@@ -287,7 +287,7 @@ export function $syncPropertiesFromYjs(
 
     if (prevValue !== nextValue) {
       if (nextValue instanceof LoroDoc) {
-        const yjsDocMap = binding.docMap;
+        const loroDocMap = binding.docMap;
 
         if (prevValue instanceof LoroDoc) {
           // TODO: Handle document cleanup
@@ -296,7 +296,7 @@ export function $syncPropertiesFromYjs(
         const nestedEditor = createEditor();
         const key = nextValue.peerId.toString();
         nestedEditor._key = key;
-        yjsDocMap.set(key, nextValue);
+        loroDocMap.set(key, nextValue);
 
         nextValue = nestedEditor;
       }
@@ -422,20 +422,20 @@ export function syncPropertiesFromLexical(
 
     if (prevValue !== nextValue) {
       if (nextValue instanceof EditorClass) {
-        const yjsDocMap = binding.docMap;
+        const loroDocMap = binding.docMap;
         let prevDoc;
 
         if (prevValue instanceof EditorClass) {
           const prevKey = prevValue._key;
-          prevDoc = yjsDocMap.get(prevKey);
-          yjsDocMap.delete(prevKey);
+          prevDoc = loroDocMap.get(prevKey);
+          loroDocMap.delete(prevKey);
         }
 
         // If we already have a document, use it, otherwise create new LoroDoc
         const doc = prevDoc || new LoroDoc();
         const key = doc.peerId.toString();
         nextValue._key = key;
-        yjsDocMap.set(key, doc);
+        loroDocMap.set(key, doc);
         nextValue = doc;
         // Mark the node dirty as we've assigned a new key to it
         binding.editor.update(() => {

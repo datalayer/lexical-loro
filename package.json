@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsc -b && vite build",
     "dev": "cross-env NODE_ENV=development concurrently \"npm:server:ws:min\" \"vite  --host --port 3000\"",
     "build:tsc": "tsc",
     "build:dev": "vite build",
@@ -19,6 +20,7 @@
     "@lexical/code-shiki": "0.35.0",
     "@lexical/file": "0.35.0",
     "@lexical/hashtag": "0.35.0",
+    "@lexical/headless": "0.35.0",
     "@lexical/link": "0.35.0",
     "@lexical/list": "0.35.0",
     "@lexical/mark": "0.35.0",

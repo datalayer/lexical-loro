@@ -8,7 +8,7 @@
     "esModuleInterop": true,
     "lib": [
       "DOM",
-      "ES2015"
+      "ES2022"
     ],
     "jsx": "react-jsx",
     "target": "esnext",
@@ -18,7 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true

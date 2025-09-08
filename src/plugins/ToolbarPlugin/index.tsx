@@ -68,7 +68,6 @@ import {
   useToolbarState,
 } from '../../context/ToolbarContext';
 import useModal from '../../hooks/useModal';
-import catTypingGif from '../../images/cat-typing.gif';
 import {$createStickyNode} from '../../nodes/StickyNode';
 import DropDown, {DropDownItem} from '../../ui/DropDown';
 import DropdownColorPicker from '../../ui/DropdownColorPicker';
@@ -102,6 +101,8 @@ import {
   formatParagraph,
   formatQuote,
 } from './utils';
+
+import catTypingGif from '../../images/cat-typing.gif';
 
 const rootTypeToRootName = {
   root: 'Root',
