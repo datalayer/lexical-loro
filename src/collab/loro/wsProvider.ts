@@ -8,7 +8,7 @@
 
 import {Provider} from '@lexical/yjs';
 import {Doc} from 'yjs';
-import {WebsocketProvider} from './servers/y-websocket';
+import {WebsocketProvider} from './servers/loro-websocket';
 
 const url = new URL(window.location.href);
 const params = new URLSearchParams(url.search);

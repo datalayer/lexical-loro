@@ -43,7 +43,7 @@ import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 
-export function useYjsCollaboration(
+export function useLoroCollaboration(
   editor: LexicalEditor,
   id: string,
   provider: Provider,
