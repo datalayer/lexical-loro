@@ -8,73 +8,166 @@ Unlike stated in the LICENSE file, it is not necessary to include the copyright 
 
 /* eslint-env browser */
 
-import * as Y from 'yjs' // eslint-disable-line
-import * as bc from 'lib0/dist/broadcastchannel.cjs'
-import * as time from 'lib0/dist/time.cjs'
-import * as encoding from 'lib0/dist/encoding.cjs'
-import * as decoding from 'lib0/dist/decoding.cjs'
-import * as syncProtocol from 'y-protocols/dist/sync.cjs'
-import * as authProtocol from 'y-protocols/dist/auth.cjs'
-import * as awarenessProtocol from 'y-protocols/dist/awareness.cjs'
-import * as mutex from 'lib0/dist/mutex.cjs'
-import * as math from 'lib0/dist/math.cjs'
-import * as url from 'lib0/dist/url.cjs'
-import { Observable } from 'lib0/dist/observable.cjs'
+import { LoroDoc } from 'loro-crdt'
 
-const messageSync = 0
-const messageQueryAwareness = 3
-const messageAwareness = 1
-const messageAuth = 2
+// Message types for Loro WebSocket protocol
+const MESSAGE_SYNC = 0
+const MESSAGE_AWARENESS = 1
 
 const reconnectTimeoutBase = 1200
 const maxReconnectTimeout = 2500
-// @todo - this should depend on awareness.outdatedTime
 const messageReconnectTimeout = 30000
 
 /**
- * @param {WebsocketProvider} provider
- * @param {string} reason
+ * Simple EventEmitter implementation
  */
-const permissionDeniedHandler = (provider, reason) => console.warn(`Permission denied to access ${provider.url}.\n${reason}`)
-
-/**
- * @param {WebsocketProvider} provider
- * @param {Uint8Array} buf
- * @param {boolean} emitSynced
- * @return {encoding.Encoder}
- */
-const readMessage = (provider, buf, emitSynced) => {
-  const decoder = decoding.createDecoder(buf)
-  const encoder = encoding.createEncoder()
-  const messageType = decoding.readVarUint(decoder)
-  switch (messageType) {
-    case messageSync: {
-      encoding.writeVarUint(encoder, messageSync)
-      const syncMessageType = syncProtocol.readSyncMessage(decoder, encoder, provider.doc, provider)
-      if (emitSynced && syncMessageType === syncProtocol.messageYjsSyncStep2 && !provider.synced) {
-        provider.synced = true
-      }
-      break
-    }
-    case messageQueryAwareness:
-      encoding.writeVarUint(encoder, messageAwareness)
-      encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(provider.awareness, Array.from(provider.awareness.getStates().keys())))
-      break
-    case messageAwareness:
-      awarenessProtocol.applyAwarenessUpdate(provider.awareness, decoding.readVarUint8Array(decoder), provider)
-      break
-    case messageAuth:
-      authProtocol.readAuthMessage(decoder, provider.doc, permissionDeniedHandler)
-      break
-    default:
-      console.error('Unable to compute message')
-      return encoder
+class EventEmitter {
+  constructor() {
+    this.listeners = new Map()
   }
-  return encoder
+
+  on(event, listener) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, [])
+    }
+    this.listeners.get(event).push(listener)
+  }
+
+  off(event, listener) {
+    const listeners = this.listeners.get(event)
+    if (listeners) {
+      const index = listeners.indexOf(listener)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }
+
+  emit(event, ...args) {
+    const listeners = this.listeners.get(event)
+    if (listeners) {
+      listeners.forEach(listener => listener(...args))
+    }
+  }
+
+  destroy() {
+    this.listeners.clear()
+  }
 }
 
 /**
- * @param {WebsocketProvider} provider
+ * Simple awareness implementation for cursor positions
+ */
+class Awareness extends EventEmitter {
+  constructor(doc) {
+    super()
+    this.doc = doc
+    this.states = new Map()
+    this.clientID = doc.peerIdToFrontendId(doc.peerId())
+  }
+
+  getStates() {
+    return this.states
+  }
+
+  getLocalState() {
+    return this.states.get(this.clientID)
+  }
+
+  setLocalState(state) {
+    if (state === null) {
+      this.states.delete(this.clientID)
+    } else {
+      this.states.set(this.clientID, state)
+    }
+    this.emit('update', {
+      added: [this.clientID],
+      updated: [],
+      removed: state === null ? [this.clientID] : []
+    })
+  }
+
+  updateRemoteState(clientID, state) {
+    if (state === null) {
+      this.states.delete(clientID)
+      this.emit('update', { added: [], updated: [], removed: [clientID] })
+    } else {
+      const wasPresent = this.states.has(clientID)
+      this.states.set(clientID, state)
+      this.emit('update', {
+        added: wasPresent ? [] : [clientID],
+        updated: wasPresent ? [clientID] : [],
+        removed: []
+      })
+    }
+  }
+}
+
+/**
+ * Encode a message for the Loro WebSocket protocol
+ */
+const encodeMessage = (type, data) => {
+  const typeArray = new Uint8Array([type])
+  if (!data) {
+    return typeArray
+  }
+  const result = new Uint8Array(typeArray.length + data.length)
+  result.set(typeArray, 0)
+  result.set(data, typeArray.length)
+  return result
+}
+
+/**
+ * Decode a message from the Loro WebSocket protocol
+ */
+const decodeMessage = (buf) => {
+  if (buf.length === 0) return null
+  const type = buf[0]
+  const data = buf.length > 1 ? buf.slice(1) : null
+  return { type, data }
+}
+
+/**
+ * Handle incoming messages
+ */
+const readMessage = (provider, buf, emitSynced) => {
+  const message = decodeMessage(buf)
+  if (!message) return null
+
+  switch (message.type) {
+    case MESSAGE_SYNC: {
+      if (message.data) {
+        // Apply the update to the document
+        provider.doc.import(message.data)
+        if (emitSynced && !provider.synced) {
+          provider.synced = true
+        }
+      }
+      // Send our current state back
+      return encodeMessage(MESSAGE_SYNC, provider.doc.exportFrom())
+    }
+    case MESSAGE_AWARENESS: {
+      if (message.data) {
+        try {
+          const awarenessData = JSON.parse(new TextDecoder().decode(message.data))
+          for (const [clientID, state] of Object.entries(awarenessData)) {
+            provider.awareness.updateRemoteState(parseInt(clientID), state)
+          }
+        } catch (e) {
+          console.error('Failed to parse awareness data:', e)
+        }
+      }
+      break
+    }
+    default:
+      console.error('Unknown message type:', message.type)
+      return null
+  }
+  return null
+}
+
+/**
+ * Setup WebSocket connection
  */
 const setupWS = provider => {
   if (provider.shouldConnect && provider.ws === null) {
@@ -86,277 +179,216 @@ const setupWS = provider => {
     provider.synced = false
 
     websocket.onmessage = event => {
-      provider.wsLastMessageReceived = time.getUnixTime()
-      const encoder = readMessage(provider, new Uint8Array(event.data), true)
-      if (encoding.length(encoder) > 1) {
-        websocket.send(encoding.toUint8Array(encoder))
+      provider.wsLastMessageReceived = Date.now()
+      const response = readMessage(provider, new Uint8Array(event.data), true)
+      if (response) {
+        websocket.send(response)
       }
     }
+
     websocket.onclose = () => {
       provider.ws = null
       provider.wsconnecting = false
       if (provider.wsconnected) {
         provider.wsconnected = false
         provider.synced = false
-        // update awareness (all users except local left)
-        awarenessProtocol.removeAwarenessStates(provider.awareness, Array.from(provider.awareness.getStates().keys()).filter(client => client !== provider.doc.clientID), provider)
-        provider.emit('status', [{
-          status: 'disconnected'
-        }])
+        // Clear remote awareness states
+        for (const clientID of provider.awareness.getStates().keys()) {
+          if (clientID !== provider.awareness.clientID) {
+            provider.awareness.updateRemoteState(clientID, null)
+          }
+        }
+        provider.emit('status', [{ status: 'disconnected' }])
       } else {
         provider.wsUnsuccessfulReconnects++
       }
-      // Start with no reconnect timeout and increase timeout by
-      // log10(wsUnsuccessfulReconnects).
-      // The idea is to increase reconnect timeout slowly and have no reconnect
-      // timeout at the beginning (log(1) = 0)
-      setTimeout(setupWS, math.min(math.log10(provider.wsUnsuccessfulReconnects + 1) * reconnectTimeoutBase, maxReconnectTimeout), provider)
+      // Exponential backoff reconnection
+      const timeout = Math.min(
+        Math.log10(provider.wsUnsuccessfulReconnects + 1) * reconnectTimeoutBase,
+        maxReconnectTimeout
+      )
+      setTimeout(() => setupWS(provider), timeout)
     }
+
     websocket.onopen = () => {
-      provider.wsLastMessageReceived = time.getUnixTime()
+      provider.wsLastMessageReceived = Date.now()
       provider.wsconnecting = false
       provider.wsconnected = true
       provider.wsUnsuccessfulReconnects = 0
-      provider.emit('status', [{
-        status: 'connected'
-      }])
-      // always send sync step 1 when connected
-      const encoder = encoding.createEncoder()
-      encoding.writeVarUint(encoder, messageSync)
-      syncProtocol.writeSyncStep1(encoder, provider.doc)
-      websocket.send(encoding.toUint8Array(encoder))
-      // broadcast local awareness state
+      provider.emit('status', [{ status: 'connected' }])
+      
+      // Send initial sync message
+      const syncMessage = encodeMessage(MESSAGE_SYNC, provider.doc.exportFrom())
+      websocket.send(syncMessage)
+      
+      // Send local awareness state
       if (provider.awareness.getLocalState() !== null) {
-        const encoderAwarenessState = encoding.createEncoder()
-        encoding.writeVarUint(encoderAwarenessState, messageAwareness)
-        encoding.writeVarUint8Array(encoderAwarenessState, awarenessProtocol.encodeAwarenessUpdate(provider.awareness, [provider.doc.clientID]))
-        websocket.send(encoding.toUint8Array(encoderAwarenessState))
+        const awarenessData = JSON.stringify({
+          [provider.awareness.clientID]: provider.awareness.getLocalState()
+        })
+        const awarenessMessage = encodeMessage(
+          MESSAGE_AWARENESS,
+          new TextEncoder().encode(awarenessData)
+        )
+        websocket.send(awarenessMessage)
       }
     }
 
-    provider.emit('status', [{
-      status: 'connecting'
-    }])
-  }
-}
-
-const broadcastMessage = (provider, buf) => {
-  if (provider.wsconnected) {
-    // @ts-ignore We know that wsconnected = true
-    provider.ws.send(buf)
-  }
-  if (provider.bcconnected) {
-    provider.mux(() => {
-      bc.publish(provider.bcChannel, buf)
-    })
+    provider.emit('status', [{ status: 'connecting' }])
   }
 }
 
 /**
- * Websocket Provider for Yjs. Creates a websocket connection to sync the shared document.
- * The document name is attached to the provided url. I.e. the following example
- * creates a websocket connection to http://localhost:1234/my-document-name
- *
- * @example
- *   import * as Y from 'yjs'
- *   import { WebsocketProvider } from 'y-websocket'
- *   const doc = new Y.Doc()
- *   const provider = new WebsocketProvider('http://localhost:1234', 'my-document-name', doc)
- *
- * @extends {Observable<string>}
+ * Broadcast message to WebSocket
  */
-export class WebsocketProvider extends Observable {
+const broadcastMessage = (provider, buf) => {
+  if (provider.wsconnected && provider.ws) {
+    provider.ws.send(buf)
+  }
+}
+
+/**
+ * WebSocket Provider for Loro. Creates a websocket connection to sync the shared document.
+ */
+export class WebsocketProvider extends EventEmitter {
   /**
    * @param {string} serverUrl
    * @param {string} roomname
-   * @param {Y.Doc} doc
+   * @param {LoroDoc} doc
    * @param {object} [opts]
    * @param {boolean} [opts.connect]
-   * @param {awarenessProtocol.Awareness} [opts.awareness]
+   * @param {Awareness} [opts.awareness]
    * @param {Object<string,string>} [opts.params]
-   * @param {typeof WebSocket} [opts.WebSocketPolyfill] Optionall provide a WebSocket polyfill
-   * @param {number} [opts.resyncInterval] Request server state every `resyncInterval` milliseconds
+   * @param {typeof WebSocket} [opts.WebSocketPolyfill]
+   * @param {number} [opts.resyncInterval]
    */
-  constructor (serverUrl, roomname, doc, { connect = true, awareness = new awarenessProtocol.Awareness(doc), params = {}, WebSocketPolyfill = WebSocket, resyncInterval = -1 } = {}) {
+  constructor(
+    serverUrl,
+    roomname,
+    doc,
+    {
+      connect = true,
+      awareness = new Awareness(doc),
+      params = {},
+      WebSocketPolyfill = WebSocket,
+      resyncInterval = -1
+    } = {}
+  ) {
     super()
-    // ensure that url is always ends with /
+    
+    // Ensure URL doesn't end with /
     while (serverUrl[serverUrl.length - 1] === '/') {
       serverUrl = serverUrl.slice(0, serverUrl.length - 1)
     }
-    const encodedParams = url.encodeQueryParams(params)
-    this.bcChannel = serverUrl + '/' + roomname
-    this.url = serverUrl + '/' + roomname + (encodedParams.length === 0 ? '' : '?' + encodedParams)
+    
+    // Build URL with params
+    const urlParams = new URLSearchParams(params)
+    const queryString = urlParams.toString()
+    this.url = serverUrl + '/' + roomname + (queryString ? '?' + queryString : '')
     this.roomname = roomname
     this.doc = doc
     this._WS = WebSocketPolyfill
     this.awareness = awareness
     this.wsconnected = false
     this.wsconnecting = false
-    this.bcconnected = false
     this.wsUnsuccessfulReconnects = 0
-    this.mux = mutex.createMutex()
-    /**
-     * @type {boolean}
-     */
     this._synced = false
-    /**
-     * @type {WebSocket?}
-     */
     this.ws = null
     this.wsLastMessageReceived = 0
-    /**
-     * Whether to connect to other peers or not
-     * @type {boolean}
-     */
     this.shouldConnect = connect
 
-    /**
-     * @type {NodeJS.Timeout | number}
-     */
+    // Setup resync interval
     this._resyncInterval = 0
     if (resyncInterval > 0) {
       this._resyncInterval = setInterval(() => {
-        if (this.ws) {
-          // resend sync step 1
-          const encoder = encoding.createEncoder()
-          encoding.writeVarUint(encoder, messageSync)
-          syncProtocol.writeSyncStep1(encoder, doc)
-          this.ws.send(encoding.toUint8Array(encoder))
+        if (this.ws && this.wsconnected) {
+          const syncMessage = encodeMessage(MESSAGE_SYNC, doc.exportFrom())
+          this.ws.send(syncMessage)
         }
       }, resyncInterval)
     }
 
-    /**
-     * @param {ArrayBuffer} data
-     */
-    this._bcSubscriber = data => {
-      this.mux(() => {
-        const encoder = readMessage(this, new Uint8Array(data), false)
-        if (encoding.length(encoder) > 1) {
-          bc.publish(this.bcChannel, encoding.toUint8Array(encoder))
-        }
+    // Listen to document updates
+    this._updateHandler = (event) => {
+      if (event.by !== 'local') return // Only broadcast local changes
+      
+      const update = this.doc.exportFrom(event.from)
+      const message = encodeMessage(MESSAGE_SYNC, update)
+      broadcastMessage(this, message)
+    }
+    this.doc.subscribe(this._updateHandler)
+
+    // Listen to awareness updates
+    this._awarenessUpdateHandler = ({ added, updated, removed }) => {
+      const changedClients = [...added, ...updated, ...removed]
+      if (changedClients.length > 0) {
+        const awarenessData = JSON.stringify({
+          [this.awareness.clientID]: this.awareness.getLocalState()
+        })
+        const message = encodeMessage(
+          MESSAGE_AWARENESS,
+          new TextEncoder().encode(awarenessData)
+        )
+        broadcastMessage(this, message)
+      }
+    }
+    awareness.on('update', this._awarenessUpdateHandler)
+
+    // Cleanup on page unload
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        awareness.setLocalState(null)
       })
     }
-    /**
-     * Listens to Yjs updates and sends them to remote peers (ws and broadcastchannel)
-     * @param {Uint8Array} update
-     * @param {any} origin
-     */
-    this._updateHandler = (update, origin) => {
-      if (origin !== this || origin === null) {
-        const encoder = encoding.createEncoder()
-        encoding.writeVarUint(encoder, messageSync)
-        syncProtocol.writeUpdate(encoder, update)
-        broadcastMessage(this, encoding.toUint8Array(encoder))
-      }
-    }
-    this.doc.on('update', this._updateHandler)
-    /**
-     * @param {any} changed
-     * @param {any} origin
-     */
-    this._awarenessUpdateHandler = ({ added, updated, removed }, origin) => {
-      const changedClients = added.concat(updated).concat(removed)
-      const encoder = encoding.createEncoder()
-      encoding.writeVarUint(encoder, messageAwareness)
-      encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients))
-      broadcastMessage(this, encoding.toUint8Array(encoder))
-    }
-    window.addEventListener('beforeunload', () => {
-      awarenessProtocol.removeAwarenessStates(this.awareness, [doc.clientID], 'window unload')
-    })
-    awareness.on('update', this._awarenessUpdateHandler)
+
+    // Periodic connection check
     this._checkInterval = setInterval(() => {
-      if (this.wsconnected && messageReconnectTimeout < time.getUnixTime() - this.wsLastMessageReceived) {
-        // no message received in a long time - not even your own awareness
-        // updates (which are updated every 15 seconds)
-        /** @type {WebSocket} */ (this.ws).close()
+      if (
+        this.wsconnected &&
+        messageReconnectTimeout < Date.now() - this.wsLastMessageReceived
+      ) {
+        this.ws?.close()
       }
     }, messageReconnectTimeout / 10)
+
     if (connect) {
       this.connect()
     }
   }
 
-  /**
-   * @type {boolean}
-   */
-  get synced () {
+  get synced() {
     return this._synced
   }
 
-  set synced (state) {
+  set synced(state) {
     if (this._synced !== state) {
       this._synced = state
       this.emit('sync', [state])
     }
   }
 
-  destroy () {
+  destroy() {
     if (this._resyncInterval !== 0) {
-      clearInterval(/** @type {NodeJS.Timeout} */ (this._resyncInterval))
+      clearInterval(this._resyncInterval)
     }
     clearInterval(this._checkInterval)
     this.disconnect()
     this.awareness.off('update', this._awarenessUpdateHandler)
-    this.doc.off('update', this._updateHandler)
+    this.doc.unsubscribe(this._updateHandler)
     super.destroy()
   }
 
-  connectBc () {
-    if (!this.bcconnected) {
-      bc.subscribe(this.bcChannel, this._bcSubscriber)
-      this.bcconnected = true
-    }
-    // send sync step1 to bc
-    this.mux(() => {
-      // write sync step 1
-      const encoderSync = encoding.createEncoder()
-      encoding.writeVarUint(encoderSync, messageSync)
-      syncProtocol.writeSyncStep1(encoderSync, this.doc)
-      bc.publish(this.bcChannel, encoding.toUint8Array(encoderSync))
-      // broadcast local state
-      const encoderState = encoding.createEncoder()
-      encoding.writeVarUint(encoderState, messageSync)
-      syncProtocol.writeSyncStep2(encoderState, this.doc)
-      bc.publish(this.bcChannel, encoding.toUint8Array(encoderState))
-      // write queryAwareness
-      const encoderAwarenessQuery = encoding.createEncoder()
-      encoding.writeVarUint(encoderAwarenessQuery, messageQueryAwareness)
-      bc.publish(this.bcChannel, encoding.toUint8Array(encoderAwarenessQuery))
-      // broadcast local awareness state
-      const encoderAwarenessState = encoding.createEncoder()
-      encoding.writeVarUint(encoderAwarenessState, messageAwareness)
-      encoding.writeVarUint8Array(encoderAwarenessState, awarenessProtocol.encodeAwarenessUpdate(this.awareness, [this.doc.clientID]))
-      bc.publish(this.bcChannel, encoding.toUint8Array(encoderAwarenessState))
-    })
-  }
-
-  disconnectBc () {
-    // broadcast message with local awareness state set to null (indicating disconnect)
-    const encoder = encoding.createEncoder()
-    encoding.writeVarUint(encoder, messageAwareness)
-    encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, [this.doc.clientID], new Map()))
-    broadcastMessage(this, encoding.toUint8Array(encoder))
-    if (this.bcconnected) {
-      bc.unsubscribe(this.bcChannel, this._bcSubscriber)
-      this.bcconnected = false
-    }
-  }
-
-  disconnect () {
+  disconnect() {
     this.shouldConnect = false
-    this.disconnectBc()
     if (this.ws !== null) {
       this.ws.close()
     }
   }
 
-  connect () {
+  connect() {
     this.shouldConnect = true
     if (!this.wsconnected && this.ws === null) {
       setupWS(this)
-      this.connectBc()
     }
   }
 }

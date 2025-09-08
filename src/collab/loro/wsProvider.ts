@@ -29,7 +29,6 @@ export function createWebsocketProvider(
     loroDocMap.set(id, doc);
   }
 
-  // @ts-expect-error: WebsocketProvider expects YJS Doc but we're using LoroDoc
   return new WebsocketProvider(
     WEBSOCKET_ENDPOINT,
     WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,
@@ -37,5 +36,5 @@ export function createWebsocketProvider(
     {
       connect: false,
     },
-  );
+  ) as any; // Type assertion since we're mixing Lexical's Provider interface with Loro's WebsocketProvider
 }

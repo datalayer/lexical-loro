@@ -45,7 +45,7 @@ import {
 import * as React from 'react';
 import {Suspense, useCallback, useEffect, useRef, useState} from 'react';
 
-import {createWebsocketProvider} from '../collaboration';
+import {createWebsocketProvider} from '../collab/yjs/wsProvider';
 import {useSettings} from '../context/SettingsContext';
 import {useSharedHistoryContext} from '../context/SharedHistoryContext';
 import brokenImage from '../images/image-broken.svg';
