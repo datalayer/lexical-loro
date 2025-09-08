@@ -23,7 +23,7 @@ const _send = (doc: WSSharedDoc, conn, m) => {
     onClose(doc, conn)
   }
   try {
-    console.log('----', doc.toJSON)
+    console.log('----', doc.name, doc);
     conn.send(m, err => { err != null && onClose(doc, conn) })
   } catch (e) {
     onClose(doc, conn)
@@ -31,12 +31,12 @@ const _send = (doc: WSSharedDoc, conn, m) => {
 }
 
 class WSSharedDoc extends Y.Doc {
-  private name = null;
+  public name = null;
   private mux = null;
   public conns = new Map();
 
   updateHandler(update, origin, doc: WSSharedDoc) {
-    console.log('Update received:', update);
+    // console.log('Update received:', update);
     const encoder = encoding.createEncoder()
     encoding.writeVarUint(encoder, messageSync)
     syncProtocol.writeUpdate(encoder, update)
@@ -56,6 +56,7 @@ class WSSharedDoc extends Y.Doc {
 export const getDoc = (docname): WSSharedDoc => map.setIfUndefined(DOCS, docname, () => {
   const doc = new WSSharedDoc(docname);
   DOCS.set(docname, doc);
+  console.log('Created new doc:', docname, doc);
   return doc;
 })
 
