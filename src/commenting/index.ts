@@ -8,7 +8,6 @@
 
 import type {LexicalEditor} from 'lexical';
 
-import {Provider, TOGGLE_CONNECT_COMMAND} from '@lexical/yjs';
 import {COMMAND_PRIORITY_LOW} from 'lexical';
 import {useEffect, useState} from 'react';
 import {
@@ -18,6 +17,7 @@ import {
   YArrayEvent,
   YEvent,
 } from 'yjs';
+import { Provider, TOGGLE_CONNECT_COMMAND } from '../collab/yjs/impl';
 
 export type Comment = {
   author: string;

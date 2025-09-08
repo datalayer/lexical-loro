@@ -28,6 +28,7 @@ import {CAN_USE_DOM} from '@lexical/utils';
 
 import {CollaborationPlugin} from './collab/yjs/LexicalCollaborationPlugin';
 import {createWebsocketProvider} from './collab/yjs/wsProvider';
+
 import {useSettings} from './context/SettingsContext';
 import {useSharedHistoryContext} from './context/SharedHistoryContext';
 import ActionsPlugin from './plugins/ActionsPlugin';
@@ -180,9 +181,11 @@ export default function Editor(): JSX.Element {
         <SpeechToTextPlugin />
         <AutoLinkPlugin />
         <DateTimePlugin />
+        {/*
         <CommentPlugin
           providerFactory={isCollab ? createWebsocketProvider : undefined}
         />
+        */}
         {isRichText ? (
           <>
             {isCollab ? (

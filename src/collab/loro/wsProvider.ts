@@ -6,9 +6,9 @@
  *
  */
 
-import {Provider} from '@lexical/yjs';
 import {LoroDoc} from 'loro-crdt';
 import {WebsocketProvider} from './servers/loro-websocket';
+import { Provider } from './impl';
 
 const url = new URL(window.location.href);
 const params = new URLSearchParams(url.search);
