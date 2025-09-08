@@ -11,6 +11,8 @@ import commonjs from '@rollup/plugin-commonjs';
 import react from '@vitejs/plugin-react';
 import {createRequire} from 'node:module';
 import {defineConfig} from 'vite';
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
 
 import viteCopyEsm from './viteCopyEsm';
 import viteCopyExcalidrawAssets from './viteCopyExcalidrawAssets';
@@ -42,8 +44,11 @@ export default defineConfig(({mode}) => ({
       target: 'es2022',
       treeShaking: true,
     },
+    exclude: ['loro-crdt'], // Don't pre-bundle loro-crdt to avoid WASM issues
   },
   plugins: [
+    wasm(),
+    topLevelAwait(),
     babel({
       babelHelpers: 'bundled',
       babelrc: false,

@@ -17,7 +17,7 @@
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
     "@lexical/clipboard": "0.35.0",
-    "@lexical/code": "0.35.0",  
+    "@lexical/code": "0.35.0",
     "@lexical/code-shiki": "0.35.0",
     "@lexical/file": "0.35.0",
     "@lexical/hashtag": "0.35.0",
@@ -58,7 +58,9 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^5.2.11",
-    "vite-plugin-static-copy": "^2.3.0"
+    "vite-plugin-static-copy": "^2.3.0",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
   },
   "sideEffects": false
 }

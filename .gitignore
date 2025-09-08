@@ -1,2 +1,4 @@
+build
 node_modules
+tsconfig.tsbuildinfo
 yjs-wss-db
