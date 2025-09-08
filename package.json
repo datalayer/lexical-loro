@@ -1,5 +1,5 @@
 {
-  "name": "@datalayer/lexical-loro",
+  "name": "@datalayer/lexical-loro-yjs",
   "version": "0.6.0",
   "private": true,
   "type": "module",
