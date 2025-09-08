@@ -10,7 +10,7 @@ import * as React from 'react';
 import type {JSX} from 'react';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider, SyncCursorPositionsFn} from './services';
+import type {Binding, Provider, SyncCursorPositionsFn} from './impl';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
@@ -20,7 +20,7 @@ import {
   syncLexicalUpdateToYjs,
   syncYjsChangesToLexical,
   TOGGLE_CONNECT_COMMAND,
-} from './services';
+} from './impl';
 import {
   $createParagraphNode,
   $getRoot,
