@@ -56,8 +56,8 @@ export type Operation = {
   insert: string | Record<string, unknown>;
 };
 export type Delta = Array<Operation>;
-export type YjsNode = Record<string, unknown>;
-export type YjsEvent = Record<string, unknown>;
+export type LoroNode = Record<string, unknown>;
+export type LoroEvent = Record<string, unknown>;
 export type {Provider};
 export type {Binding, ClientID, ExcludedProperties} from './Bindings';
 export {createBinding} from './Bindings';

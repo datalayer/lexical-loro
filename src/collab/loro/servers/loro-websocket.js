@@ -1,9 +1,5 @@
 import { LoroDoc } from 'loro-crdt'
 
-// Message types for Loro WebSocket protocol
-const MESSAGE_SYNC = 0
-const MESSAGE_AWARENESS = 1
-
 const reconnectTimeoutBase = 1200
 const maxReconnectTimeout = 2500
 const messageReconnectTimeout = 30000
@@ -94,64 +90,17 @@ class Awareness extends EventEmitter {
 }
 
 /**
- * Encode a message for the Loro WebSocket protocol
+ * Handle incoming messages - simplified to just apply updates from Loro
  */
-const encodeMessage = (type, data) => {
-  const typeArray = new Uint8Array([type])
-  if (!data) {
-    return typeArray
-  }
-  const result = new Uint8Array(typeArray.length + data.length)
-  result.set(typeArray, 0)
-  result.set(data, typeArray.length)
-  return result
-}
-
-/**
- * Decode a message from the Loro WebSocket protocol
- */
-const decodeMessage = (buf) => {
-  if (buf.length === 0) return null
-  const type = buf[0]
-  const data = buf.length > 1 ? buf.slice(1) : null
-  return { type, data }
-}
-
-/**
- * Handle incoming messages
- */
-const readMessage = (provider, buf, emitSynced) => {
-  const message = decodeMessage(buf)
-  if (!message) return null
-
-  switch (message.type) {
-    case MESSAGE_SYNC: {
-      if (message.data) {
-        // Apply the update to the document
-        provider.doc.import(message.data)
-        if (emitSynced && !provider.synced) {
-          provider.synced = true
-        }
-      }
-      // Send our current state back
-      return encodeMessage(MESSAGE_SYNC, provider.doc.exportFrom())
+const readMessage = (provider, data, emitSynced) => {
+  try {
+    // Assume all messages are Loro updates and apply them directly
+    provider.doc.import(data)
+    if (emitSynced && !provider.synced) {
+      provider.synced = true
     }
-    case MESSAGE_AWARENESS: {
-      if (message.data) {
-        try {
-          const awarenessData = JSON.parse(new TextDecoder().decode(message.data))
-          for (const [clientID, state] of Object.entries(awarenessData)) {
-            provider.awareness.updateRemoteState(parseInt(clientID), state)
-          }
-        } catch (e) {
-          console.error('Failed to parse awareness data:', e)
-        }
-      }
-      break
-    }
-    default:
-      console.error('Unknown message type:', message.type)
-      return null
+  } catch (e) {
+    console.error('Failed to apply Loro update:', e)
   }
   return null
 }
@@ -170,10 +119,7 @@ const setupWS = provider => {
 
     websocket.onmessage = event => {
       provider.wsLastMessageReceived = Date.now()
-      const response = readMessage(provider, new Uint8Array(event.data), true)
-      if (response) {
-        websocket.send(response)
-      }
+      readMessage(provider, new Uint8Array(event.data), true)
     }
 
     websocket.onclose = () => {
@@ -207,20 +153,10 @@ const setupWS = provider => {
       provider.wsUnsuccessfulReconnects = 0
       provider.emit('status', [{ status: 'connected' }])
       
-      // Send initial sync message
-      const syncMessage = encodeMessage(MESSAGE_SYNC, provider.doc.exportFrom())
-      websocket.send(syncMessage)
-      
-      // Send local awareness state
-      if (provider.awareness.getLocalState() !== null) {
-        const awarenessData = JSON.stringify({
-          [provider.awareness.clientID]: provider.awareness.getLocalState()
-        })
-        const awarenessMessage = encodeMessage(
-          MESSAGE_AWARENESS,
-          new TextEncoder().encode(awarenessData)
-        )
-        websocket.send(awarenessMessage)
+      // Send initial document state
+      const currentState = provider.doc.exportFrom()
+      if (currentState.length > 0) {
+        websocket.send(currentState)
       }
     }
 
@@ -231,9 +167,9 @@ const setupWS = provider => {
 /**
  * Broadcast message to WebSocket
  */
-const broadcastMessage = (provider, buf) => {
+const broadcastMessage = (provider, data) => {
   if (provider.wsconnected && provider.ws) {
-    provider.ws.send(buf)
+    provider.ws.send(data)
   }
 }
 
@@ -292,8 +228,10 @@ export class WebsocketProvider extends EventEmitter {
     if (resyncInterval > 0) {
       this._resyncInterval = setInterval(() => {
         if (this.ws && this.wsconnected) {
-          const syncMessage = encodeMessage(MESSAGE_SYNC, doc.exportFrom())
-          this.ws.send(syncMessage)
+          const currentState = doc.exportFrom()
+          if (currentState.length > 0) {
+            this.ws.send(currentState)
+          }
         }
       }, resyncInterval)
     }
@@ -303,26 +241,9 @@ export class WebsocketProvider extends EventEmitter {
       if (event.by !== 'local') return // Only broadcast local changes
       
       const update = this.doc.exportFrom(event.from)
-      const message = encodeMessage(MESSAGE_SYNC, update)
-      broadcastMessage(this, message)
+      broadcastMessage(this, update)
     }
     this.doc.subscribe(this._updateHandler)
-
-    // Listen to awareness updates
-    this._awarenessUpdateHandler = ({ added, updated, removed }) => {
-      const changedClients = [...added, ...updated, ...removed]
-      if (changedClients.length > 0) {
-        const awarenessData = JSON.stringify({
-          [this.awareness.clientID]: this.awareness.getLocalState()
-        })
-        const message = encodeMessage(
-          MESSAGE_AWARENESS,
-          new TextEncoder().encode(awarenessData)
-        )
-        broadcastMessage(this, message)
-      }
-    }
-    awareness.on('update', this._awarenessUpdateHandler)
 
     // Cleanup on page unload
     if (typeof window !== 'undefined') {
@@ -363,7 +284,6 @@ export class WebsocketProvider extends EventEmitter {
     }
     clearInterval(this._checkInterval)
     this.disconnect()
-    this.awareness.off('update', this._awarenessUpdateHandler)
     this.doc.unsubscribe(this._updateHandler)
     super.destroy()
   }

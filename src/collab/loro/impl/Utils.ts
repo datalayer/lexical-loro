@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding, YjsNode} from '.';
+import type {Binding, LoroNode} from '.';
 
 import {
   $getNodeByKey,
@@ -87,10 +87,10 @@ function isExcludedProperty(
 }
 
 export function getIndexOfYjsNode(
-  yjsParentNode: YjsNode,
-  yjsNode: YjsNode,
+  loroParentNode: LoroNode,
+  loroNode: LoroNode,
 ): number {
-  let node = yjsParentNode.firstChild;
+  let node = loroParentNode.firstChild;
   let i = -1;
 
   if (node === null) {
@@ -100,7 +100,7 @@ export function getIndexOfYjsNode(
   do {
     i++;
 
-    if (node === yjsNode) {
+    if (node === loroNode) {
       return i;
     }
 
