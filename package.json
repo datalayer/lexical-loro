@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
-    "dev": "cross-env NODE_ENV=development concurrently \"npm:server:yjs\" \"vite --host --port 3000\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm:server:loro\" \"npm:server:yjs\" \"vite --host --port 3000\"",
     "build:tsc": "tsc",
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",

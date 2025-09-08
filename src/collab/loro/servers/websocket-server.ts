@@ -165,7 +165,7 @@ const setupWSConnection = (conn: any, req: any, { docName = req.url.slice(1).spl
 
 // Main
 
-const PORT = process.env.PORT || 1234
+const PORT = process.env.PORT || 1235
 const wss = new (WebSocket as any).Server({ noServer: true })
 
 const server = http.createServer((request, response) => {
