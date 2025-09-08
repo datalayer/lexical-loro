@@ -3,7 +3,7 @@
  */
 
 import { LoroDoc } from 'loro-crdt';
-import { LoroXmlText, createLoroXmlText } from './types';
+import { createLoroXmlText } from './../src/collab/loro/types';
 
 // Create a test document
 const doc = new LoroDoc();

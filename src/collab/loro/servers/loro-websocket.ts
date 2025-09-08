@@ -1,4 +1,5 @@
 import { LoroDoc } from 'loro-crdt'
+import { Provider, ProviderAwareness } from '../impl'
 
 const reconnectTimeoutBase = 1200
 const maxReconnectTimeout = 2500
@@ -8,18 +9,19 @@ const messageReconnectTimeout = 30000
  * Simple EventEmitter implementation
  */
 class EventEmitter {
+  listeners: Map<string, Function[]>
   constructor() {
     this.listeners = new Map()
   }
 
-  on(event, listener) {
+  on(event: string, listener: Function) {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, [])
     }
-    this.listeners.get(event).push(listener)
+    this.listeners.get(event)!.push(listener)
   }
 
-  off(event, listener) {
+  off(event: string, listener: Function) {
     const listeners = this.listeners.get(event)
     if (listeners) {
       const index = listeners.indexOf(listener)
@@ -29,7 +31,7 @@ class EventEmitter {
     }
   }
 
-  emit(event, ...args) {
+  emit(event: string, ...args: any[]) {
     const listeners = this.listeners.get(event)
     if (listeners) {
       listeners.forEach(listener => listener(...args))
@@ -45,11 +47,14 @@ class EventEmitter {
  * Simple awareness implementation for cursor positions
  */
 class Awareness extends EventEmitter {
-  constructor(doc) {
+  states: Map<number, any>
+  clientID: number
+  doc: LoroDoc
+  constructor(doc: LoroDoc) {
     super()
     this.doc = doc
     this.states = new Map()
-    this.clientID = doc.peerIdToFrontendId(doc.peerId())
+    this.clientID = Number(doc.peerId.toString().slice(0, 8)) // Convert Loro peer ID to number
   }
 
   getStates() {
@@ -60,7 +65,7 @@ class Awareness extends EventEmitter {
     return this.states.get(this.clientID)
   }
 
-  setLocalState(state) {
+  setLocalState(state: any) {
     if (state === null) {
       this.states.delete(this.clientID)
     } else {
@@ -73,7 +78,13 @@ class Awareness extends EventEmitter {
     })
   }
 
-  updateRemoteState(clientID, state) {
+  setLocalStateField(field: string, value: unknown) {
+    const currentState = this.getLocalState() || {}
+    const newState = { ...currentState, [field]: value }
+    this.setLocalState(newState)
+  }
+
+  updateRemoteState(clientID: number, state: any) {
     if (state === null) {
       this.states.delete(clientID)
       this.emit('update', { added: [], updated: [], removed: [clientID] })
@@ -92,15 +103,29 @@ class Awareness extends EventEmitter {
 /**
  * Handle incoming messages - simplified to just apply updates from Loro
  */
-const readMessage = (provider, data, emitSynced) => {
+const readMessage = (provider: WebsocketProvider, data: Uint8Array, emitSynced: boolean) => {
   try {
-    // Assume all messages are Loro updates and apply them directly
+    // Validate data before importing
+    if (!data || data.length === 0) {
+      console.warn('Received empty or null data from server, skipping import')
+      return null
+    }
+    
+    // Ensure data is a valid Uint8Array
+    if (!(data instanceof Uint8Array)) {
+      console.warn('Received non-Uint8Array data from server, converting')
+      data = new Uint8Array(data)
+    }
+    
+    console.log(`Applying Loro update from server (${data.length} bytes)`)
     provider.doc.import(data)
     if (emitSynced && !provider.synced) {
       provider.synced = true
+      console.log('Document synced with server')
     }
   } catch (e) {
-    console.error('Failed to apply Loro update:', e)
+    console.error('Failed to apply Loro update from server:', e)
+    console.error('Update data length:', data?.length || 0)
   }
   return null
 }
@@ -108,7 +133,7 @@ const readMessage = (provider, data, emitSynced) => {
 /**
  * Setup WebSocket connection
  */
-const setupWS = provider => {
+const setupWS = (provider: WebsocketProvider) => {
   if (provider.shouldConnect && provider.ws === null) {
     const websocket = new provider._WS(provider.url)
     websocket.binaryType = 'arraybuffer'
@@ -129,9 +154,9 @@ const setupWS = provider => {
         provider.wsconnected = false
         provider.synced = false
         // Clear remote awareness states
-        for (const clientID of provider.awareness.getStates().keys()) {
-          if (clientID !== provider.awareness.clientID) {
-            provider.awareness.updateRemoteState(clientID, null)
+        for (const clientID of (provider.awareness as Awareness).getStates().keys()) {
+          if (clientID !== (provider.awareness as Awareness).clientID) {
+            (provider.awareness as Awareness).updateRemoteState(clientID, null)
           }
         }
         provider.emit('status', [{ status: 'disconnected' }])
@@ -152,11 +177,15 @@ const setupWS = provider => {
       provider.wsconnected = true
       provider.wsUnsuccessfulReconnects = 0
       provider.emit('status', [{ status: 'connected' }])
+      console.log(`Connected to Loro WebSocket server: ${provider.url}`)
       
-      // Send initial document state
+      // Send initial document state if we have any
       const currentState = provider.doc.exportFrom()
       if (currentState.length > 0) {
+        console.log(`Sending initial document state to server (${currentState.length} bytes)`)
         websocket.send(currentState)
+      } else {
+        console.log('No initial state to send (empty document)')
       }
     }
 
@@ -167,7 +196,7 @@ const setupWS = provider => {
 /**
  * Broadcast message to WebSocket
  */
-const broadcastMessage = (provider, data) => {
+const broadcastMessage = (provider: WebsocketProvider, data: Uint8Array) => {
   if (provider.wsconnected && provider.ws) {
     provider.ws.send(data)
   }
@@ -176,7 +205,22 @@ const broadcastMessage = (provider, data) => {
 /**
  * WebSocket Provider for Loro. Creates a websocket connection to sync the shared document.
  */
-export class WebsocketProvider extends EventEmitter {
+export class WebsocketProvider extends EventEmitter implements Provider {
+  url: string
+  roomname: string
+  doc: LoroDoc
+  _WS: typeof WebSocket
+  ws: WebSocket | null
+  wsconnected: boolean
+  wsconnecting: boolean
+  wsUnsuccessfulReconnects: number
+  wsLastMessageReceived: number
+  shouldConnect: boolean
+  _checkInterval: any
+  _resyncInterval: any
+  _updateHandler: (event: any) => void
+  _unsubscribeDoc: () => void
+  _synced: boolean
   /**
    * @param {string} serverUrl
    * @param {string} roomname
@@ -189,15 +233,21 @@ export class WebsocketProvider extends EventEmitter {
    * @param {number} [opts.resyncInterval]
    */
   constructor(
-    serverUrl,
-    roomname,
-    doc,
+    serverUrl: string,
+    roomname: string,
+    doc: LoroDoc,
     {
       connect = true,
       awareness = new Awareness(doc),
       params = {},
       WebSocketPolyfill = WebSocket,
       resyncInterval = -1
+    }: {
+      connect?: boolean,
+      awareness?: Awareness,
+      params?: Record<string, string>,
+      WebSocketPolyfill?: typeof WebSocket,
+      resyncInterval?: number
     } = {}
   ) {
     super()
@@ -241,9 +291,12 @@ export class WebsocketProvider extends EventEmitter {
       if (event.by !== 'local') return // Only broadcast local changes
       
       const update = this.doc.exportFrom(event.from)
-      broadcastMessage(this, update)
+      if (update.length > 0) {
+        console.log(`Broadcasting local update to server (${update.length} bytes)`)
+        broadcastMessage(this, update)
+      }
     }
-    this.doc.subscribe(this._updateHandler)
+    this._unsubscribeDoc = this.doc.subscribe(this._updateHandler)
 
     // Cleanup on page unload
     if (typeof window !== 'undefined') {
@@ -266,6 +319,7 @@ export class WebsocketProvider extends EventEmitter {
       this.connect()
     }
   }
+  awareness: ProviderAwareness
 
   get synced() {
     return this._synced
@@ -284,7 +338,9 @@ export class WebsocketProvider extends EventEmitter {
     }
     clearInterval(this._checkInterval)
     this.disconnect()
-    this.doc.unsubscribe(this._updateHandler)
+    if (this._unsubscribeDoc) {
+      this._unsubscribeDoc()
+    }
     super.destroy()
   }
 

@@ -113,4 +113,4 @@ server.on('upgrade', (request, socket, head) => {
 
 server.listen(PORT)
 
-console.log('WebSocket server running on port', PORT)
+console.log('Y.js WebSocket server running on port', PORT)

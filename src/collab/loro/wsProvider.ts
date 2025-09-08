@@ -29,12 +29,13 @@ export function createWebsocketProvider(
     loroDocMap.set(id, doc);
   }
 
-  return new WebsocketProvider(
+  const websocketProvider = new WebsocketProvider(
     WEBSOCKET_ENDPOINT,
     WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,
     doc,
     {
       connect: false,
     },
-  ) as any; // Type assertion since we're mixing Lexical's Provider interface with Loro's WebsocketProvider
+  );
+  return websocketProvider
 }
