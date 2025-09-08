@@ -38,7 +38,7 @@ import { stableNodeIdState } from './stableNodeState';
  * When true, uses sophisticated differential merging instead of wholesale setEditorState.
  * This prevents YouTube/Counter decorator nodes from reloading during collaborative editing.
  */
-const USE_DIFFERENTIAL_UPDATE = false;
+const USE_DIFFERENTIAL_UPDATE = true;
 
 // ============================================================================
 // STABLE NODE UUID SYSTEM using Lexical NodeState
