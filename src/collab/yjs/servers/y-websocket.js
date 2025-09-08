@@ -17,9 +17,9 @@ import * as syncProtocol from 'y-protocols/dist/sync.cjs'
 import * as authProtocol from 'y-protocols/dist/auth.cjs'
 import * as awarenessProtocol from 'y-protocols/dist/awareness.cjs'
 import * as mutex from 'lib0/dist/mutex.cjs'
-import { Observable } from 'lib0/dist/observable.cjs'
 import * as math from 'lib0/dist/math.cjs'
 import * as url from 'lib0/dist/url.cjs'
+import { Observable } from 'lib0/dist/observable.cjs'
 
 const messageSync = 0
 const messageQueryAwareness = 3
