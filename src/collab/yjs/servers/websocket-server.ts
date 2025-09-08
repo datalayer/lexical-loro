@@ -34,7 +34,7 @@ class WSSharedDoc extends Y.Doc {
   private conns = new Map();
 
   updateHandler(update, origin, doc) {
-    console.log('Update received:', update);
+    // console.log('Update received:', update);
     const encoder = encoding.createEncoder()
     encoding.writeVarUint(encoder, messageSync)
     syncProtocol.writeUpdate(encoder, update)
