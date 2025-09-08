@@ -1,14 +1,14 @@
-const bc = require('lib0/dist/broadcastchannel.cjs')
-const time = require('lib0/dist/time.cjs')
-const mutex = require('lib0/dist/mutex.cjs')
-const math = require('lib0/dist/math.cjs')
-const url = require('lib0/dist/url.cjs')
+import * as bc from 'lib0/dist/broadcastchannel.cjs'
+import * as time from 'lib0/dist/time.cjs'
+import * as mutex from 'lib0/dist/mutex.cjs'
+import * as math from 'lib0/dist/math.cjs'
+import * as url from 'lib0/dist/url.cjs'
 
-const Observable = require('lib0/dist/observable.cjs').Observable
+import { Observable } from 'lib0/dist/observable.cjs'
 
-const encoding = require('lib0/dist/encoding.cjs')
-const decoding = require('lib0/dist/decoding.cjs')
-const syncProtocol = require('y-protocols/dist/sync.cjs')
+import * as encoding from 'lib0/dist/encoding.cjs'
+import * as decoding from 'lib0/dist/decoding.cjs'
+import * as syncProtocol from 'y-protocols/dist/sync.cjs'
 
 const messageSync = 0
 const messageQueryAwareness = 3
@@ -109,7 +109,25 @@ const setupWS = provider => {
  * 
  * I.e. the following example creates a websocket connection to http://localhost:1234/my-document-name
  */
-export class WebsocketProvider extends Observable { 
+export class WebsocketProvider extends Observable {
+  broadcastChannel: string;
+  url: string;
+  roomname: string;
+  doc: any;
+  _WS: any;
+  wsconnected: boolean;
+  wsconnecting: boolean;
+  broadcastConnected: boolean;
+  wsUnsuccessfulReconnects: number;
+  mux: any;
+  _synced: boolean;
+  ws: WebSocket | null;
+  wsLastMessageReceived: number;
+  shouldConnect: boolean;
+  _resyncInterval: number | NodeJS.Timeout;
+  _broadcastSubscriber: (data: ArrayBuffer) => void;
+  _updateHandler: (update: Uint8Array, origin: any) => void;
+  _checkInterval: NodeJS.Timeout;
   constructor (serverUrl, roomname, doc, { connect = true, params = {}, WebSocketPolyfill = WebSocket, resyncInterval = -1 } = {}) {
     super()
     // ensure that url is always ends with /
@@ -183,7 +201,7 @@ export class WebsocketProvider extends Observable {
   set synced(state) {
     if (this._synced !== state) {
       this._synced = state
-      this.emit('sync', [state])
+      super.emit('sync', [state])
     }
   }
 

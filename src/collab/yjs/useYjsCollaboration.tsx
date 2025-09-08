@@ -6,9 +6,9 @@
  *
  */
 
-import type {LexicalEditor} from 'lexical';
+import * as React from 'react';
 import type {JSX} from 'react';
-
+import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
 import type {Binding, Provider, SyncCursorPositionsFn} from './services';
 import {
@@ -35,7 +35,6 @@ import {
   SKIP_COLLAB_TAG,
   UNDO_COMMAND,
 } from 'lexical';
-import * as React from 'react';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
 import {Doc, Transaction, UndoManager, YEvent} from 'yjs';
