@@ -76,7 +76,7 @@ function App() {
                 setIsInitialized(false) // Reset initialization when changing tabs
               }}
             >
-              📝 Simple Text Editor
+              📝 Text Editor
             </button>
             <button 
               className={`tab-button ${activeTab === 'lexical' ? 'active' : ''}`}
@@ -85,7 +85,7 @@ function App() {
                 setIsInitialized(false) // Reset initialization when changing tabs
               }}
             >
-              ✨ Rich Text Editor (Lexical)
+              ✨ Lexical Editor
             </button>
           </div>
           

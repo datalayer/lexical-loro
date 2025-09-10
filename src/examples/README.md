@@ -62,8 +62,8 @@ npm run dev:vite
 
 The demo provides two collaborative editors:
 
-1. **Simple Text Editor**: Basic textarea with real-time collaboration
-2. **Rich Text Editor**: Full Lexical editor with formatting toolbar
+1. **Text Editor**: Basic textarea with real-time collaboration
+2. **Lexical Editor**: Full Lexical editor with formatting toolbar
 
 ### Server Selection
 
