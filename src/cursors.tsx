@@ -143,8 +143,16 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
   // Keep last known good positions to avoid snapping to x=0 when mapping fails
   const lastCursorStateRef = useRef<Record<string, { position: { top: number; left: number }, offset: number }>>({});
   
+  // Ref to track cursor count without causing dependency issues
+  const cursorCountRef = useRef(0);
+  
   // Internal state to hold the current cursor data
   const [internalCursors, setInternalCursors] = useState<Record<PeerID, RemoteCursor>>(remoteCursors);
+  
+  // Update cursor count ref whenever internalCursors changes
+  useEffect(() => {
+    cursorCountRef.current = Object.keys(internalCursors).length;
+  }, [internalCursors]);
   
   // Force re-render trigger for scroll updates
   const [scrollVersion, setScrollVersion] = useState(0);
@@ -152,9 +160,16 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
   // Expose update method through ref
   useImperativeHandle(ref, () => ({
     update: (cursors: Record<PeerID, RemoteCursor>) => {
+      console.log('👁️ CursorsContainer.update called:', {
+        newCursorsCount: Object.keys(cursors).length,
+        currentCursorsCount: Object.keys(internalCursors).length,
+        newPeers: Object.keys(cursors),
+        currentPeers: Object.keys(internalCursors),
+        timestamp: Date.now()
+      });
       setInternalCursors(cursors);
     }
-  }), []);
+  }), [internalCursors]); // Add internalCursors to deps to avoid stale closure
   
   // Use internal cursors instead of props for rendering
   const cursorsToRender = internalCursors;
@@ -197,29 +212,64 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
       // Trigger cursor position recalculation by incrementing scroll version
       setScrollVersion(prev => prev + 1);
     };
+    
+    // Simple test handler to ensure scroll detection works
+    const testScrollHandler = (event: Event) => {
+      console.log('🔍 TEST: Scroll event detected on:', event.target, 'scrollY:', window.scrollY);
+    };
 
+    console.log('📡 Setting up scroll listeners...');
+    
     // Listen to scroll events on window and any scrollable containers
     window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', testScrollHandler, { passive: true });
     document.addEventListener('scroll', handleScroll, { passive: true });
+    
+    console.log('📡 Window and document scroll listeners attached');
     
     // Also listen to editor container scroll if it exists
     const editorElement = editor.getElementByKey('root');
     const editorContentEditable = editorElement?.closest('[contenteditable]') as HTMLElement | null;
     if (editorContentEditable) {
-      const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, [data-lexical-editor]');
+      // Look for various possible editor container classes
+      const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, .lexical-editor-container, [data-lexical-editor]');
       if (editorContainer) {
         editorContainer.addEventListener('scroll', handleScroll, { passive: true });
+        editorContainer.addEventListener('scroll', testScrollHandler, { passive: true });
+        console.log('📡 Editor container scroll listener attached:', {
+          tagName: editorContainer.tagName,
+          className: editorContainer.className,
+          hasOverflow: getComputedStyle(editorContainer).overflow
+        });
+      } else {
+        console.log('📡 No editor container found for scroll listening. Available containers:');
+        // Debug: show what containers are available
+        let currentElement = editorContentEditable.parentElement;
+        let level = 0;
+        while (currentElement && level < 5) {
+          console.log(`📡   Level ${level}:`, {
+            tagName: currentElement.tagName,
+            className: currentElement.className,
+            overflow: getComputedStyle(currentElement).overflow
+          });
+          currentElement = currentElement.parentElement;
+          level++;
+        }
       }
+    } else {
+      console.log('📡 No editor contenteditable found for scroll listening');
     }
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', testScrollHandler);
       document.removeEventListener('scroll', handleScroll);
       
       if (editorContentEditable) {
-        const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, [data-lexical-editor]');
+        const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, .lexical-editor-container, [data-lexical-editor]');
         if (editorContainer) {
           editorContainer.removeEventListener('scroll', handleScroll);
+          editorContainer.removeEventListener('scroll', testScrollHandler);
         }
       }
     };
@@ -227,14 +277,27 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
 
   // Recalculate cursor positions when scrollVersion changes due to scroll events
   useEffect(() => {
-    if (Object.keys(cursorsToRender).length === 0) return;
+    // Use ref to check cursor count without adding to dependencies
+    if (cursorCountRef.current === 0) return;
     
     console.log('📍 Recalculating cursor positions due to scroll, version:', scrollVersion);
     
+    // Clear cached positions to force fresh calculations on scroll
+    lastCursorStateRef.current = {};
+    
     // Force update of internal cursors to trigger position recalculation
-    // Use functional update to avoid dependency on internalCursors
-    setInternalCursors(current => ({...current}));
-  }, [scrollVersion, cursorsToRender]); // Include cursorsToRender to satisfy linter
+    // Use a timestamp to ensure React detects the change
+    setInternalCursors(current => {
+      const updated = { ...current };
+      // Force a re-render by creating new cursor objects
+      Object.keys(updated).forEach(peerId => {
+        updated[peerId as PeerID] = {
+          ...updated[peerId as PeerID]
+        };
+      });
+      return updated;
+    });
+  }, [scrollVersion]); // Only depend on scrollVersion to prevent infinite loop
 
   if (!portalContainer) {
     return null;
@@ -257,6 +320,12 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
       try {
         // Get cursor position using standard positioning
         let position = getPositionFromLexicalPosition(anchor.key, anchor.offset);
+        console.log('📍 Initial position calculation for peer:', peerId, {
+          nodeKey: anchor.key,
+          offset: anchor.offset,
+          calculatedPosition: position,
+          scrollVersion: scrollVersion
+        });
         const lastState = lastCursorStateRef.current[peerId];
         
         // Basic position validation
@@ -320,6 +389,16 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
         const color = user?.color || '#007acc';
         const displayName = user?.name || peerId.slice(-8);
         const isCurrentUser = peerId === clientId;
+        
+        // CRITICAL: Skip rendering current user's own cursor
+        if (isCurrentUser) {
+          console.log('👁️ CURSOR FILTER: Skipping current user cursor in render:', {
+            peerId,
+            clientId,
+            reason: 'Current user should not see their own collaborative cursor'
+          });
+          return null;
+        }
 
         // Calculate selection rectangles if there's a focus position different from anchor
         let selection: { rects: Array<{ top: number; left: number; width: number; height: number }> } | undefined;

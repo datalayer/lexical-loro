@@ -18,13 +18,13 @@ import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { LexicalToolbar } from './LexicalToolbar';
 import { CounterNode } from './CounterNode';
-import { LoroCollaborativePlugin } from '../LoroCollaborativePlugin';
 import { YouTubeNode } from './YouTubeNode';
 import { YouTubePlugin } from './YouTubePlugin';
+import { LoroCollaborativePlugin } from '../LoroCollaborativePlugin';
 import { lexicalTheme } from './theme';
+import { UserInfo } from '../types';
 
 import "./LexicalCollaborativeEditor.css";
-import { UserInfo } from '../types';
 
 // Constants
 const DOC_ID = 'example-1';

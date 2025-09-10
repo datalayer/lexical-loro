@@ -128,6 +128,13 @@ export function LoroCollaborativePlugin({
   const isConnectingRef = useRef<boolean>(false);
   // Remove forceUpdate state - no longer needed
   const cursorTimestamps = useRef<Record<string, number>>({});
+  
+  // Cursor position cache to avoid unnecessary recalculations
+  const cursorPositionCache = useRef<Record<string, {
+    stableCursor: any;
+    calculatedPosition: { key: NodeKey; offset: number; type: 'text' };
+    timestamp: number;
+  }>>({});
 
   const updateLoroFromLexical = useCallback((editorState: EditorState) => {
     if (!loroTextRef.current) {
@@ -815,8 +822,20 @@ export function LoroCollaborativePlugin({
             return;
           }
           
-          // Only exclude our own cursor (using current peer ID)
-          if (peerId !== currentPeerId) {
+          // ENHANCED DEBUG: Log exact peer ID comparison
+          console.log('🔍 PEER ID COMPARISON DEBUG:', {
+            peerId: peerId,
+            peerIdType: typeof peerId,
+            currentPeerId: currentPeerId,
+            currentPeerIdType: typeof currentPeerId,
+            strictEqual: peerId === currentPeerId,
+            stringEqual: String(peerId) === String(currentPeerId),
+            peerIdLength: String(peerId).length,
+            currentPeerIdLength: String(currentPeerId).length
+          });
+          
+          // Only exclude our own cursor (using current peer ID) - use string comparison for safety
+          if (String(peerId) !== String(currentPeerId)) {
             console.log('👁️ Processing remote cursor for peer:', peerId, {
               hasAnchor: !!cursorData.anchor,
               hasFocus: !!cursorData.focus,
@@ -832,10 +851,35 @@ export function LoroCollaborativePlugin({
             const stableCursor = (cursorData.user as any)?.stableCursor;
             
             // =================================================================
-            // NEW STABLE UUID RESOLUTION - Replace NodeKey validation
+            // CURSOR POSITION CACHE - Avoid unnecessary recalculations
             // =================================================================
             
-            if (stableCursor && stableCursor.anchorStableId && stableCursor.focusStableId) {
+            const cachedPosition = cursorPositionCache.current[peerId];
+            const cacheKey = JSON.stringify(stableCursor);
+            const isCacheValid = cachedPosition && 
+              JSON.stringify(cachedPosition.stableCursor) === cacheKey &&
+              (Date.now() - cachedPosition.timestamp) < 5000; // 5 second cache
+            
+            if (isCacheValid && cachedPosition) {
+              console.log('👁️ Using cached cursor position for peer:', peerId, {
+                cacheAge: Date.now() - cachedPosition.timestamp,
+                position: cachedPosition.calculatedPosition
+              });
+              
+              anchorPos = cachedPosition.calculatedPosition;
+              focusPos = cachedPosition.calculatedPosition;
+            } else {
+              console.log('👁️ Cache miss - recalculating cursor position for peer:', peerId, {
+                hasCachedPosition: !!cachedPosition,
+                cacheValid: isCacheValid,
+                stableCursorChanged: cachedPosition ? (JSON.stringify(cachedPosition.stableCursor) !== cacheKey) : 'no cache'
+              });
+            
+              // =================================================================
+              // NEW STABLE UUID RESOLUTION - Replace NodeKey validation
+              // =================================================================
+              
+              if (stableCursor && stableCursor.anchorStableId && stableCursor.focusStableId) {
               console.log('👁️ Using NEW stable UUID-based cursor data:', stableCursor);
               
               // Use stable UUIDs to resolve positions
@@ -1244,18 +1288,58 @@ export function LoroCollaborativePlugin({
                   };
                 }
                 
-                // Ultimate fallback to root
-                console.log('🔄 Ultimate emergency fallback to root');
-                return {
-                  key: root.getKey(),
-                  offset: 0,
-                  type: 'text' as const
+                // Ultimate fallback: Try to avoid root (0,0) position that causes top-left jumps
+                console.log('🔄 Ultimate emergency fallback - avoiding root position jump');
+                
+                // Instead of root, find a reasonable text node position
+                const findReasonableTextPosition = (root: any) => {
+                  const children = root.getChildren();
+                  
+                  // Look for a text node that's not at the very beginning
+                  for (const child of children) {
+                    if ($isElementNode(child)) {
+                      const textChildren = child.getChildren().filter($isTextNode);
+                      for (const textNode of textChildren) {
+                        const textContent = textNode.getTextContent();
+                        if (textContent.length > 10) {
+                          // Use a position in the middle of the text, not at the beginning
+                          const middleOffset = Math.floor(textContent.length / 3);
+                          return {
+                            key: textNode.getKey(),
+                            offset: middleOffset,
+                            type: 'text' as const
+                          };
+                        }
+                      }
+                    }
+                  }
+                  
+                  // If no suitable text node found, use root but with a note
+                  console.log('🚨 No suitable text node found for emergency fallback, using root');
+                  return {
+                    key: root.getKey(),
+                    offset: 0,
+                    type: 'text' as const
+                  };
                 };
+                
+                return findReasonableTextPosition(root);
               });
               
               anchorPos = anchorPos || smartPosition;
               focusPos = focusPos || smartPosition;
               console.log('🔄 Applied smart fallback positions:', { anchorPos, focusPos });
+              
+              // Cache the calculated position to avoid future recalculations
+              if (anchorPos && stableCursor) {
+                cursorPositionCache.current[peerId] = {
+                  stableCursor: stableCursor,
+                  calculatedPosition: anchorPos,
+                  timestamp: Date.now()
+                };
+                console.log('👁️ Cached cursor position for peer:', peerId);
+              }
+            }
             }
             
             remoteCursorsData[peerId as PeerID] = {
@@ -1265,7 +1349,13 @@ export function LoroCollaborativePlugin({
               user: cursorData.user
             };
           } else {
-            console.log('👁️ Skipping own cursor for peer:', peerId);
+            console.log('👁️ SKIPPING OWN CURSOR - DETAILED DEBUG:', {
+              peerId: peerId,
+              peerIdType: typeof peerId,
+              currentPeerId: currentPeerId,
+              currentPeerIdType: typeof currentPeerId,
+              reason: 'This is the current user\'s cursor and should not be displayed'
+            });
           }
         });
         
@@ -1290,7 +1380,23 @@ export function LoroCollaborativePlugin({
           cursorTimestamps.current[peerId] = now;
         });
         
-        updateRemoteCursors(remoteCursorsData);
+        // Only update if cursors have actually changed to prevent infinite loops
+        const currentCursorsString = JSON.stringify(remoteCursorsRef.current);
+        const newCursorsString = JSON.stringify(remoteCursorsData);
+        
+        if (currentCursorsString !== newCursorsString) {
+          console.log('👁️ Cursor data changed, updating remote cursors:', {
+            oldCount: Object.keys(remoteCursorsRef.current).length,
+            newCount: Object.keys(remoteCursorsData).length,
+            peersChanged: {
+              old: Object.keys(remoteCursorsRef.current),
+              new: Object.keys(remoteCursorsData)
+            }
+          });
+          updateRemoteCursors(remoteCursorsData);
+        } else {
+          console.log('👁️ Cursor data unchanged, skipping update to prevent infinite loop');
+        }
         
         // Call awareness change callback for UI display (include ALL users, including self)
         if (stableOnAwarenessChange.current) {
