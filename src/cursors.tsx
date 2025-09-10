@@ -213,9 +213,20 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
       setScrollVersion(prev => prev + 1);
     };
     
-    // Simple test handler to ensure scroll detection works
+    // Comprehensive test handler to debug scroll detection
     const testScrollHandler = (event: Event) => {
-      console.log('🔍 TEST: Scroll event detected on:', event.target, 'scrollY:', window.scrollY);
+      const target = event.target as HTMLElement;
+      console.log('🔍 TEST: Scroll event detected on:', {
+        target: target,
+        tagName: target?.tagName || 'unknown',
+        className: target?.className || 'none',
+        id: target?.id || 'none',
+        scrollTop: target?.scrollTop || 0,
+        scrollLeft: target?.scrollLeft || 0,
+        windowScrollY: window.scrollY,
+        windowScrollX: window.scrollX,
+        timestamp: Date.now()
+      });
     };
 
     console.log('📡 Setting up scroll listeners...');
@@ -225,52 +236,168 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
     window.addEventListener('scroll', testScrollHandler, { passive: true });
     document.addEventListener('scroll', handleScroll, { passive: true });
     
-    console.log('📡 Window and document scroll listeners attached');
+    // Also listen on document.body and document.documentElement
+    document.body.addEventListener('scroll', handleScroll, { passive: true });
+    document.body.addEventListener('scroll', testScrollHandler, { passive: true });
+    document.documentElement.addEventListener('scroll', handleScroll, { passive: true });
+    document.documentElement.addEventListener('scroll', testScrollHandler, { passive: true });
     
-    // Also listen to editor container scroll if it exists
-    const editorElement = editor.getElementByKey('root');
-    const editorContentEditable = editorElement?.closest('[contenteditable]') as HTMLElement | null;
-    if (editorContentEditable) {
-      // Look for various possible editor container classes
-      const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, .lexical-editor-container, [data-lexical-editor]');
+    console.log('📡 Window, document, body, and documentElement scroll listeners attached');
+    
+    // Add listeners to common editor containers that might scroll
+    const potentialContainers = [
+      '.editor-container',
+      '.lexical-editor',
+      '.lexical-editor-container',
+      '.lexical-content-editable',
+      '[data-lexical-editor]',
+      '[contenteditable="true"]'
+    ];
+    
+    potentialContainers.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((element, index) => {
+        element.addEventListener('scroll', handleScroll, { passive: true });
+        element.addEventListener('scroll', testScrollHandler, { passive: true });
+        console.log(`📡 Added scroll listener to ${selector}[${index}]:`, {
+          tagName: element.tagName,
+          className: element.className
+        });
+      });
+    });
+    
+    // Function to set up editor container scroll listener
+    const setupEditorScrollListener = () => {
+      console.log('📡 Attempting to find editor container...');
+      
+      // Try multiple ways to find the editor container
+      let editorContainer: Element | null = null;
+      
+      // Method 1: Try via Lexical editor element
+      const editorElement = editor.getElementByKey('root');
+      console.log('📡 Method 1 - Lexical editor element:', !!editorElement);
+      if (editorElement) {
+        const editorContentEditable = editorElement.closest('[contenteditable]') as HTMLElement | null;
+        console.log('📡 Method 1 - Found contenteditable:', !!editorContentEditable);
+        if (editorContentEditable) {
+          editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, .lexical-editor-container, [data-lexical-editor]');
+          console.log('📡 Method 1 - Found container via closest:', !!editorContainer, editorContainer?.className);
+        }
+      }
+      
+      // Method 2: If not found, search DOM directly
+      if (!editorContainer) {
+        console.log('📡 Method 2 - Searching DOM directly...');
+        editorContainer = document.querySelector('.lexical-editor-container');
+        console.log('📡 Method 2 - Found container via querySelector:', !!editorContainer);
+      }
+      
+      // Method 3: Find any container with overflow auto that contains contenteditable
+      if (!editorContainer) {
+        console.log('📡 Method 3 - Searching by overflow property...');
+        const contentEditables = document.querySelectorAll('[contenteditable="true"]');
+        console.log('📡 Method 3 - Found contenteditable elements:', contentEditables.length);
+        for (const ce of contentEditables) {
+          let parent = ce.parentElement;
+          let level = 0;
+          while (parent && level < 10) {
+            const overflow = getComputedStyle(parent).overflow;
+            console.log(`📡 Method 3 - Level ${level}:`, {
+              tagName: parent.tagName,
+              className: parent.className,
+              overflow: overflow
+            });
+            if (overflow === 'auto' || overflow === 'scroll') {
+              editorContainer = parent;
+              console.log('📡 Method 3 - Found scrollable container:', parent.className);
+              break;
+            }
+            parent = parent.parentElement;
+            level++;
+          }
+          if (editorContainer) break;
+        }
+      }
+      
       if (editorContainer) {
         editorContainer.addEventListener('scroll', handleScroll, { passive: true });
         editorContainer.addEventListener('scroll', testScrollHandler, { passive: true });
         console.log('📡 Editor container scroll listener attached:', {
           tagName: editorContainer.tagName,
           className: editorContainer.className,
-          hasOverflow: getComputedStyle(editorContainer).overflow
+          hasOverflow: getComputedStyle(editorContainer).overflow,
+          method: editorElement ? 'lexical-element' : 'dom-search'
         });
+        return editorContainer;
       } else {
         console.log('📡 No editor container found for scroll listening. Available containers:');
         // Debug: show what containers are available
-        let currentElement = editorContentEditable.parentElement;
-        let level = 0;
-        while (currentElement && level < 5) {
-          console.log(`📡   Level ${level}:`, {
-            tagName: currentElement.tagName,
-            className: currentElement.className,
-            overflow: getComputedStyle(currentElement).overflow
-          });
-          currentElement = currentElement.parentElement;
-          level++;
+        const contentEditable = document.querySelector('[contenteditable="true"]') as HTMLElement;
+        if (contentEditable) {
+          let currentElement = contentEditable.parentElement;
+          let level = 0;
+          while (currentElement && level < 5) {
+            console.log(`📡   Level ${level}:`, {
+              tagName: currentElement.tagName,
+              className: currentElement.className,
+              overflow: getComputedStyle(currentElement).overflow
+            });
+            currentElement = currentElement.parentElement;
+            level++;
+          }
         }
+        return null;
       }
-    } else {
-      console.log('📡 No editor contenteditable found for scroll listening');
+    };
+    
+    // Try to set up immediately
+    const container = setupEditorScrollListener();
+    
+    // If not found, retry with more aggressive approach
+    let retryContainer: Element | null = null;
+    let retryInterval: NodeJS.Timeout | null = null;
+    
+    if (!container) {
+      console.log('📡 Editor container not found immediately, setting up retry mechanism...');
+      let retryCount = 0;
+      const maxRetries = 20; // Try for 2 seconds
+      
+      retryInterval = setInterval(() => {
+        retryCount++;
+        console.log(`📡 Retry attempt ${retryCount}/${maxRetries}...`);
+        retryContainer = setupEditorScrollListener();
+        
+        if (retryContainer || retryCount >= maxRetries) {
+          if (retryInterval) {
+            clearInterval(retryInterval);
+            retryInterval = null;
+          }
+          if (!retryContainer && retryCount >= maxRetries) {
+            console.log('📡 Failed to find editor container after maximum retries');
+          }
+        }
+      }, 100);
     }
-
+      
     return () => {
+      // Cleanup interval if it exists
+      if (retryInterval) {
+        clearInterval(retryInterval);
+      }
+      
+      // Remove window and document listeners
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('scroll', testScrollHandler);
       document.removeEventListener('scroll', handleScroll);
       
-      if (editorContentEditable) {
-        const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, .lexical-editor-container, [data-lexical-editor]');
-        if (editorContainer) {
-          editorContainer.removeEventListener('scroll', handleScroll);
-          editorContainer.removeEventListener('scroll', testScrollHandler);
-        }
+      // Remove editor container listeners
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+        container.removeEventListener('scroll', testScrollHandler);
+      }
+      if (retryContainer) {
+        retryContainer.removeEventListener('scroll', handleScroll);
+        retryContainer.removeEventListener('scroll', testScrollHandler);
       }
     };
   }, [editor]);
