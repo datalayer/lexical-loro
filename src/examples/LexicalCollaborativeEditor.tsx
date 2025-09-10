@@ -427,12 +427,14 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
       <div className="lexical-editor-header">
         <div className="lexical-editor-info">
           <div className="connection-status">
-            <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-              {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-            </span>
-            <span className={`status-indicator ${isInitialized ? 'initialized' : 'initializing'}`} style={{ marginLeft: '10px' }}>
-              {isInitialized ? '✅ Initialized' : '⏳ Initializing...'}
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+                {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+              </span>
+              <span className={`status-indicator ${isInitialized ? 'initialized' : 'initializing'}`}>
+                {isInitialized ? '✅ Initialized' : '⏳ Initializing...'}
+              </span>
+            </div>
             {peerId && (
               <span 
                 className="peer-id-tag" 
