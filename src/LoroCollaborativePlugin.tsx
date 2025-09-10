@@ -2220,12 +2220,16 @@ export function LoroCollaborativePlugin({
   const stableOnConnectionChange = useRef(onConnectionChange);
   const stableOnDisconnectReady = useRef(onDisconnectReady);
   const stableOnSendMessageReady = useRef(onSendMessageReady);
+  const stableOnPeerIdChange = useRef(onPeerIdChange);
+  const stableOnInitialization = useRef(onInitialization);
   
   // Update refs when props change without triggering effect
   useEffect(() => {
     stableOnConnectionChange.current = onConnectionChange;
     stableOnDisconnectReady.current = onDisconnectReady;
     stableOnSendMessageReady.current = onSendMessageReady;
+    stableOnPeerIdChange.current = onPeerIdChange;
+    stableOnInitialization.current = onInitialization;
   });
 
   useEffect(() => {
@@ -2440,8 +2444,8 @@ export function LoroCollaborativePlugin({
               }
               
               // Notify parent component about successful initialization (even if empty)
-              if (onInitialization) {
-                onInitialization(true);
+              if (stableOnInitialization.current) {
+                stableOnInitialization.current(true);
               }
             } else if (data.type === 'document-update' && data.docId === docId) {
               // Handle document update broadcasts (e.g., from append-paragraph operations)
@@ -2578,8 +2582,8 @@ export function LoroCollaborativePlugin({
                 // that monitors changes to awarenessRef.current
                 console.log('🎯 Awareness instance updated - listeners will be re-attached by useEffect');
               }              // Notify parent component of the peerId
-              if (onPeerIdChange && data.clientId) {
-                onPeerIdChange(data.clientId);
+              if (stableOnPeerIdChange.current && data.clientId) {
+                stableOnPeerIdChange.current(data.clientId);
               }
               
               // Request current snapshot from server after a small delay
@@ -2646,8 +2650,8 @@ export function LoroCollaborativePlugin({
           } catch (err) {
             console.error('Error processing WebSocket message in Lexical plugin:', err);
             // Notify parent component about failed initialization
-            if (onInitialization) {
-              onInitialization(false);
+            if (stableOnInitialization.current) {
+              stableOnInitialization.current(false);
             }
           }
         };
@@ -2679,8 +2683,8 @@ export function LoroCollaborativePlugin({
           console.error('WebSocket error in Lexical plugin:', err);
           
           // Notify initialization failure if we haven't received initial content yet
-          if (!hasReceivedInitialSnapshot.current && onInitialization) {
-            onInitialization(false);
+          if (!hasReceivedInitialSnapshot.current && stableOnInitialization.current) {
+            stableOnInitialization.current(false);
           }
         };
 
@@ -2702,7 +2706,7 @@ export function LoroCollaborativePlugin({
         wsRef.current.close();
       }
     };
-  }, [websocketUrl, docId, editor, onPeerIdChange, onInitialization, updateLexicalFromLoro, updateRemoteCursors]); // Include all dependencies
+  }, [websocketUrl, docId, editor, updateLexicalFromLoro, updateRemoteCursors]); // Removed unstable callbacks from dependencies
 
   // Cleanup stale cursors periodically
   useEffect(() => {

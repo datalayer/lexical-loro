@@ -28,6 +28,13 @@ import "./LexicalCollaborativeEditor.css";
 // Constants
 const DOC_ID = 'example-1';
 
+// Type for user awareness information
+interface UserInfo {
+  peerId: string;
+  userName: string;
+  isCurrentUser: boolean;
+}
+
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
   onConnectionChange?: (connected: boolean) => void;
@@ -85,7 +92,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [peerId, setPeerId] = useState<string>('');
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
   const [showMcpDropdown, setShowMcpDropdown] = useState(false);
   const [mcpStatus, setMcpStatus] = useState<string>('');
@@ -95,6 +102,12 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const disconnectRef = useRef<(() => void) | null>(null);
   const sendMessageRef = useRef<((message: any) => void) | null>(null);
   const mcpDropdownRef = useRef<HTMLDivElement>(null);
+  const currentUserRef = useRef<UserInfo | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -126,12 +139,38 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   }, [onConnectionChange]);
 
   const handlePeerIdChange = useCallback((newPeerId: string) => {
-    setPeerId(newPeerId);
-  }, []);
+    // Find the current user in awareness data or create a basic user info
+    const currentUserFromAwareness = awarenessData.find(peer => peer.peerId === newPeerId && peer.isCurrentUser);
+    
+    if (currentUserFromAwareness) {
+      setCurrentUser({
+        peerId: currentUserFromAwareness.peerId,
+        userName: currentUserFromAwareness.userName,
+        isCurrentUser: true
+      });
+    } else {
+      // Fallback: create basic user info with just the peer ID
+      setCurrentUser({
+        peerId: newPeerId,
+        userName: `User-${newPeerId.slice(-4)}`, // Generate a default username
+        isCurrentUser: true
+      });
+    }
+  }, [awarenessData]);
 
   const handleAwarenessChange = useCallback((awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => {
     setAwarenessData(awareness);
-  }, []);
+    
+    // Update current user info if found in awareness data
+    const currentUserFromAwareness = awareness.find(peer => peer.isCurrentUser);
+    if (currentUserFromAwareness && currentUserRef.current?.peerId === currentUserFromAwareness.peerId) {
+      setCurrentUser({
+        peerId: currentUserFromAwareness.peerId,
+        userName: currentUserFromAwareness.userName,
+        isCurrentUser: true
+      });
+    }
+  }, []); // Remove the problematic dependency
 
   const handleInitialization = useCallback((success: boolean) => {
     setIsInitialized(success);
@@ -423,39 +462,52 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   };
 
   return (
-    <div className="lexical-collaborative-editor">
-      <div className="lexical-editor-header">
-        <div className="lexical-editor-info">
-          <div className="connection-status">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-                {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-              </span>
-              <span className={`status-indicator ${isInitialized ? 'initialized' : 'initializing'}`}>
-                {isInitialized ? '✅ Initialized' : '⏳ Initializing...'}
-              </span>
-            </div>
-            {peerId && (
-              <span 
-                className="peer-id-tag" 
-                style={{ 
-                  marginLeft: '10px', 
-                  fontSize: '11px', 
-                  color: '#333',
-                  backgroundColor: '#e3f2fd',
-                  border: '1px solid #2196f3',
-                  borderRadius: '12px',
-                  padding: '3px 8px',
-                  display: 'inline-block',
-                  fontWeight: '500'
-                }}
-              >
-                🆔 {peerId}
-              </span>
-            )}
-            {awarenessData.length > 0 && (
-              <div className="awareness-display" style={{ marginLeft: '10px', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                <span style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginRight: '4px' }}>Users:</span>
+    <div className="lexical-collaborative-editor" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="lexical-editor-header" style={{ 
+        width: '100%', 
+        display: 'grid', 
+        gridTemplateColumns: 'auto 1fr auto',
+        alignItems: 'start',
+        gap: '16px',
+        padding: '12px',
+        borderBottom: '2px solid #e0e0e0',
+        backgroundColor: '#f8f9fa',
+        flexShrink: 0
+      }}>
+        {/* Status Column */}
+        <div className="status-column" style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' }}>
+          <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+            {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+          </span>
+          <span className={`status-indicator ${isInitialized ? 'initialized' : 'initializing'}`}>
+            {isInitialized ? '✅ Initialized' : '⏳ Initializing...'}
+          </span>
+        </div>
+
+        {/* User Info Column */}
+        <div className="user-info-column" style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '0' }}>
+          {currentUser && (
+            <span 
+              className="peer-id-tag" 
+              style={{ 
+                fontSize: '11px', 
+                color: '#333',
+                backgroundColor: '#e3f2fd',
+                border: '1px solid #2196f3',
+                borderRadius: '12px',
+                padding: '3px 8px',
+                display: 'inline-block',
+                fontWeight: '500',
+                width: 'fit-content'
+              }}
+            >
+              🆔 {currentUser.peerId} ({currentUser.userName})
+            </span>
+          )}
+          {awarenessData.length > 0 && (
+            <div className="awareness-display" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: '#666', fontWeight: '500' }}>Active Users:</span>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                 {awarenessData.map((peer) => (
                   <span 
                     key={peer.peerId} 
@@ -475,102 +527,131 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
                   </span>
                 ))}
               </div>
-            )}
-          </div>
-          
-          {/* Control buttons section */}
-          {isConnected && (
-            <div className="control-buttons" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <button 
-                onClick={handleDisconnect}
-                className="disconnect-button"
-                title="Disconnect from server"
-              >
-                🔌 Disconnect
-              </button>
-              <button 
-                onClick={() => {
-                  // Send append-paragraph command via websocket
-                  if (sendMessageRef.current) {
-                    const command = {
-                      type: "append-paragraph",
-                      docId: DOC_ID,
-                      message: "Hello"
-                    };
-                    sendMessageRef.current(command);
-                  }
-                }}
-                className="append-paragraph-button"
-                title="Append paragraph with 'Hello' message"
-              >
-                ➕ Append Paragraph
-              </button>
-              <button 
-                onClick={() => {
-                  // Call the global reload function that has access to the editor
-                  if ((window as any).reloadEditorState) {
-                    (window as any).reloadEditorState();
-                  } else {
-                    console.warn('Reload state function not available - editor not initialized');
-                  }
-                }}
-                className="reload-state-button"
-                title="Reload editor state (test YouTube node reloading)"
-                style={{ 
-                  backgroundColor: '#ff9500',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                🔄 Reload State
-              </button>
-              <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
-                <button 
-                  onClick={() => setShowMcpDropdown(!showMcpDropdown)}
-                  className="mcp-tools-button"
-                  title={isInitialized ? "MCP Tools" : "MCP Tools (waiting for initialization...)"}
-                  style={{ 
-                    backgroundColor: isInitialized ? '#1ABC9C' : '#95a5a6',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '6px 12px',
-                    borderRadius: '4px',
-                    cursor: isInitialized ? 'pointer' : 'not-allowed',
-                    opacity: isInitialized ? 1 : 0.7
-                  }}
-                  disabled={!isInitialized}
-                >
-                  🔧 MCP Tools {isInitialized ? '▼' : '⏳'}
-                </button>
-                {showMcpDropdown && isInitialized && (
-                  <div className="mcp-tools-dropdown">
-                    {mcpTools.map((tool) => (
-                      <button
-                        key={tool.name}
-                        onClick={() => {
-                          callMcpTool(tool.name, tool.params);
-                          setShowMcpDropdown(false);
-                        }}
-                        className="mcp-tool-button"
-                        title={`Call MCP tool: ${tool.name}`}
-                      >
-                        {tool.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </div>
+
+        {/* Branding Column */}
+        <div className="branding-column" style={{ textAlign: 'right', minWidth: '120px' }}>
+          <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1976d2' }}>
+            Lexical x Loro
+          </span>
+        </div>
       </div>
       
-      <LexicalComposer initialConfig={initialConfig}>
-        <LexicalToolbar />
-        <div className="lexical-editor-container with-toolbar">
+      {/* Control buttons section */}
+      {isConnected && (
+        <div className="control-buttons" style={{ 
+          width: '100%', 
+          padding: '8px 12px', 
+          backgroundColor: '#f0f0f0',
+          borderBottom: '1px solid #ddd',
+          display: 'flex', 
+          alignItems: 'center', 
+          flexWrap: 'wrap', 
+          gap: '8px',
+          flexShrink: 0
+        }}>
+          <button 
+            onClick={handleDisconnect}
+            className="disconnect-button"
+            title="Disconnect from server"
+          >
+            🔌 Disconnect
+          </button>
+          <button 
+            onClick={() => {
+              // Send append-paragraph command via websocket
+              if (sendMessageRef.current) {
+                const command = {
+                  type: "append-paragraph",
+                  docId: DOC_ID,
+                  message: "Hello"
+                };
+                sendMessageRef.current(command);
+              }
+            }}
+            className="append-paragraph-button"
+            title="Append paragraph with 'Hello' message"
+          >
+            ➕ Append Paragraph
+          </button>
+          <button 
+            onClick={() => {
+              // Call the global reload function that has access to the editor
+              if ((window as any).reloadEditorState) {
+                (window as any).reloadEditorState();
+              } else {
+                console.warn('Reload state function not available - editor not initialized');
+              }
+            }}
+            className="reload-state-button"
+            title="Reload editor state (test YouTube node reloading)"
+            style={{ 
+              backgroundColor: '#ff9500',
+              color: 'white',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            🔄 Reload State
+          </button>
+          <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
+            <button 
+              onClick={() => setShowMcpDropdown(!showMcpDropdown)}
+              className="mcp-tools-button"
+              title={isInitialized ? "MCP Tools" : "MCP Tools (waiting for initialization...)"}
+              style={{ 
+                backgroundColor: isInitialized ? '#1ABC9C' : '#95a5a6',
+                color: '#FFFFFF',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: isInitialized ? 'pointer' : 'not-allowed',
+                opacity: isInitialized ? 1 : 0.7
+              }}
+              disabled={!isInitialized}
+            >
+              🔧 MCP Tools {isInitialized ? '▼' : '⏳'}
+            </button>
+            {showMcpDropdown && isInitialized && (
+              <div className="mcp-tools-dropdown">
+                {mcpTools.map((tool) => (
+                  <button
+                    key={tool.name}
+                    onClick={() => {
+                      callMcpTool(tool.name, tool.params);
+                      setShowMcpDropdown(false);
+                    }}
+                    className="mcp-tool-button"
+                    title={`Call MCP tool: ${tool.name}`}
+                  >
+                    {tool.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      <div className="lexical-editor-content" style={{ 
+        flex: '1 1 0', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        minHeight: 0,
+        maxHeight: 'calc(100vh - 200px)' 
+      }}>
+        <LexicalComposer initialConfig={initialConfig}>
+          <LexicalToolbar />
+          <div className="lexical-editor-container with-toolbar" style={{ 
+            flex: 1, 
+            position: 'relative',
+            overflow: 'auto',
+            minHeight: '200px'
+          }}>
           <RichTextPlugin
             contentEditable={
               <ContentEditable className="lexical-content-editable" />
@@ -606,9 +687,20 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             </>
           )}
         </div>
-      </LexicalComposer>
+        </LexicalComposer>
+      </div>
       
-      <div className="lexical-editor-footer">
+      <div className="lexical-editor-footer" style={{ 
+        padding: '12px',
+        backgroundColor: '#f8f9fa',
+        borderTop: '1px solid #e0e0e0',
+        flexShrink: 0,
+        minHeight: '100px',
+        maxHeight: '40vh',
+        overflowY: 'auto',
+        position: 'relative',
+        zIndex: 1
+      }}>
         {mcpStatus && (
           <div style={{ 
             marginBottom: '10px', 
@@ -623,8 +715,8 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
             MCP: {mcpStatus}
           </div>
         )}
-        <p>Document ID: {DOC_ID}</p>
-        <p>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
+        <p style={{ margin: '4px 0', fontSize: '12px', color: '#666' }}>Document ID: {DOC_ID}</p>
+        <p style={{ margin: '4px 0', fontSize: '12px', color: '#666' }}>Rich text features: Bold, Italic, Lists, Headings, etc.</p>
         
         {/* Document JSON Tree */}
         {showDocumentTree && (
