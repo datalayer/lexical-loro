@@ -244,6 +244,24 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
     
     console.log('📡 Window, document, body, and documentElement scroll listeners attached');
     
+    // Test boundary detection function
+    const testBoundaryDetection = () => {
+      console.log('🧪 Testing boundary detection...');
+      
+      // Test with a sample position inside editor
+      const testPos1 = { top: 200, left: 300 };
+      console.log('🧪 Test position (should be inside):', testPos1);
+      
+      // Test with a position outside editor  
+      const testPos2 = { top: 50, left: 50 };
+      console.log('🧪 Test position (should be outside):', testPos2);
+      
+      // We'll call the actual boundary check in the cursor rendering logic
+    };
+    
+    // Run test after a short delay to ensure DOM is ready
+    setTimeout(testBoundaryDetection, 1000);
+    
     // Add listeners to common editor containers that might scroll
     const potentialContainers = [
       '.editor-container',
@@ -405,7 +423,10 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
   // Recalculate cursor positions when scrollVersion changes due to scroll events
   useEffect(() => {
     // Use ref to check cursor count without adding to dependencies
-    if (cursorCountRef.current === 0) return;
+    if (cursorCountRef.current === 0) {
+      console.log('📍 No cursors to recalculate, skipping scroll update. Version:', scrollVersion);
+      return;
+    }
     
     console.log('📍 Recalculating cursor positions due to scroll, version:', scrollVersion);
     
@@ -455,7 +476,7 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
         });
         const lastState = lastCursorStateRef.current[peerId];
         
-        // Basic position validation
+        // Basic position validation and boundary checking
         const isPositionValid = (pos: { top: number; left: number } | null) => {
           if (!pos) return false;
           
@@ -469,6 +490,71 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
           if (pos.top > window.innerHeight * 3 || pos.left > window.innerWidth * 3) return false;
           
           return true;
+        };
+        
+        // Check if cursor is within editor boundaries (visible viewport)
+        const isWithinEditorBounds = (pos: { top: number; left: number } | null) => {
+          if (!pos) return false;
+          
+          try {
+            // Get the scrolling container (the one that actually scrolls)
+            let scrollContainer: HTMLElement | null = null;
+            
+            // Method 1: Try to find the scrolling container we detected in logs
+            scrollContainer = document.querySelector('.lexical-editor-container.with-toolbar') as HTMLElement;
+            
+            if (!scrollContainer) {
+              // Method 2: Try other potential containers
+              scrollContainer = document.querySelector('.lexical-editor-container') as HTMLElement;
+            }
+            
+            if (!scrollContainer) {
+              // Method 3: Fallback to editor root
+              const editorRoot = editor.getRootElement();
+              if (editorRoot) {
+                scrollContainer = editorRoot.closest('.lexical-editor-container') as HTMLElement || editorRoot;
+              }
+            }
+            
+            if (!scrollContainer) {
+              console.log('⚠️ Could not find scrolling container for boundary check');
+              return true; // Default to visible if we can't determine bounds
+            }
+            
+            const containerRect = scrollContainer.getBoundingClientRect();
+            
+            // For boundary checking, use the visible viewport of the container
+            // Add some padding to allow cursors to be visible slightly outside
+            const padding = 20;
+            const withinBounds = (
+              pos.left >= containerRect.left - padding &&
+              pos.left <= containerRect.right + padding &&
+              pos.top >= containerRect.top - padding &&
+              pos.top <= containerRect.bottom + padding
+            );
+            
+            console.log('📍 Boundary check for peer:', peerId, {
+              cursorPos: pos,
+              containerBounds: {
+                left: containerRect.left,
+                right: containerRect.right,
+                top: containerRect.top,
+                bottom: containerRect.bottom
+              },
+              containerElement: {
+                tagName: scrollContainer.tagName,
+                className: scrollContainer.className,
+                scrollTop: scrollContainer.scrollTop
+              },
+              withinBounds,
+              padding
+            });
+            
+            return withinBounds;
+          } catch (error) {
+            console.warn('Error checking editor bounds:', error);
+            return true; // Default to visible if error occurs
+          }
         };
         
         // If position seems invalid, try to recalculate
@@ -582,6 +668,18 @@ export const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsCon
           } catch (selectionError) {
             console.warn('Error calculating selection for peer:', peerId, selectionError);
           }
+        }
+
+        // Final validation: check if cursor should be visible
+        if (!isPositionValid(position)) {
+          console.log('❌ Skipping cursor render - invalid position for peer:', peerId);
+          return null;
+        }
+        
+        // Check if cursor is within editor boundaries
+        if (!isWithinEditorBounds(position)) {
+          console.log('👁️‍🗨️ Hiding cursor - outside editor bounds for peer:', peerId);
+          return null;
         }
 
         console.log('🟢 Rendering cursor for peer:', peerId, { 
