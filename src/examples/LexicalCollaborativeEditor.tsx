@@ -425,7 +425,6 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   return (
     <div className="lexical-collaborative-editor">
       <div className="lexical-editor-header">
-        <h3>Lexical Rich Text Editor (Collaborative)</h3>
         <div className="lexical-editor-info">
           <div className="connection-status">
             <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
@@ -435,121 +434,135 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
               {isInitialized ? '✅ Initialized' : '⏳ Initializing...'}
             </span>
             {peerId && (
-              <span className="peer-id-display" style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
-                Peer ID: {peerId}
+              <span 
+                className="peer-id-tag" 
+                style={{ 
+                  marginLeft: '10px', 
+                  fontSize: '11px', 
+                  color: '#333',
+                  backgroundColor: '#e3f2fd',
+                  border: '1px solid #2196f3',
+                  borderRadius: '12px',
+                  padding: '3px 8px',
+                  display: 'inline-block',
+                  fontWeight: '500'
+                }}
+              >
+                🆔 {peerId}
               </span>
             )}
             {awarenessData.length > 0 && (
-              <div className="awareness-display" style={{ marginLeft: '10px', fontSize: '12px', color: '#666' }}>
-                <div style={{ marginBottom: '4px', fontWeight: 'bold' }}>Active Users:</div>
+              <div className="awareness-display" style={{ marginLeft: '10px', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: '#666', fontWeight: '500', marginRight: '4px' }}>Users:</span>
                 {awarenessData.map((peer) => (
-                  <div 
+                  <span 
                     key={peer.peerId} 
                     style={{ 
-                      marginLeft: '5px', 
-                      marginBottom: '2px',
-                      padding: '2px 6px', 
-                      backgroundColor: peer.isCurrentUser ? '#e6f3ff' : '#f0f0f0', 
-                      borderRadius: '3px',
-                      border: peer.isCurrentUser ? '1px solid #007acc' : 'none',
-                      display: 'block'
+                      fontSize: '11px',
+                      fontWeight: '500',
+                      padding: '3px 8px', 
+                      backgroundColor: peer.isCurrentUser ? '#e8f5e9' : '#f5f5f5', 
+                      color: peer.isCurrentUser ? '#2e7d32' : '#333',
+                      borderRadius: '12px',
+                      border: `1px solid ${peer.isCurrentUser ? '#4caf50' : '#ccc'}`,
+                      display: 'inline-block',
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    {peer.userName} (peer:{peer.peerId}){peer.isCurrentUser ? ' (Me 👽)' : ''}
-                  </div>
+                    {peer.isCurrentUser ? '👤' : '👥'} {peer.userName}{peer.isCurrentUser ? ' (Me)' : ''}
+                  </span>
                 ))}
               </div>
             )}
-            {isConnected && (
-              <>
+          </div>
+          
+          {/* Control buttons section */}
+          {isConnected && (
+            <div className="control-buttons" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <button 
+                onClick={handleDisconnect}
+                className="disconnect-button"
+                title="Disconnect from server"
+              >
+                🔌 Disconnect
+              </button>
+              <button 
+                onClick={() => {
+                  // Send append-paragraph command via websocket
+                  if (sendMessageRef.current) {
+                    const command = {
+                      type: "append-paragraph",
+                      docId: DOC_ID,
+                      message: "Hello"
+                    };
+                    sendMessageRef.current(command);
+                  }
+                }}
+                className="append-paragraph-button"
+                title="Append paragraph with 'Hello' message"
+              >
+                ➕ Append Paragraph
+              </button>
+              <button 
+                onClick={() => {
+                  // Call the global reload function that has access to the editor
+                  if ((window as any).reloadEditorState) {
+                    (window as any).reloadEditorState();
+                  } else {
+                    console.warn('Reload state function not available - editor not initialized');
+                  }
+                }}
+                className="reload-state-button"
+                title="Reload editor state (test YouTube node reloading)"
+                style={{ 
+                  backgroundColor: '#ff9500',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 Reload State
+              </button>
+              <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
                 <button 
-                  onClick={handleDisconnect}
-                  className="disconnect-button"
-                  title="Disconnect from server"
-                >
-                  🔌 Disconnect
-                </button>
-                <button 
-                  onClick={() => {
-                    // Send append-paragraph command via websocket
-                    if (sendMessageRef.current) {
-                      const command = {
-                        type: "append-paragraph",
-                        docId: DOC_ID,
-                        message: "Hello"
-                      };
-                      sendMessageRef.current(command);
-                    }
-                  }}
-                  className="append-paragraph-button"
-                  title="Append paragraph with 'Hello' message"
-                  style={{ marginLeft: '8px' }}
-                >
-                  ➕ Append Paragraph
-                </button>
-                <button 
-                  onClick={() => {
-                    // Call the global reload function that has access to the editor
-                    if ((window as any).reloadEditorState) {
-                      (window as any).reloadEditorState();
-                    } else {
-                      console.warn('Reload state function not available - editor not initialized');
-                    }
-                  }}
-                  className="reload-state-button"
-                  title="Reload editor state (test YouTube node reloading)"
+                  onClick={() => setShowMcpDropdown(!showMcpDropdown)}
+                  className="mcp-tools-button"
+                  title={isInitialized ? "MCP Tools" : "MCP Tools (waiting for initialization...)"}
                   style={{ 
-                    marginLeft: '8px',
-                    backgroundColor: '#ff9500',
-                    color: 'white',
+                    backgroundColor: isInitialized ? '#1ABC9C' : '#95a5a6',
+                    color: '#FFFFFF',
                     border: 'none',
                     padding: '6px 12px',
                     borderRadius: '4px',
-                    cursor: 'pointer'
+                    cursor: isInitialized ? 'pointer' : 'not-allowed',
+                    opacity: isInitialized ? 1 : 0.7
                   }}
+                  disabled={!isInitialized}
                 >
-                  🔄 Reload State
+                  🔧 MCP Tools {isInitialized ? '▼' : '⏳'}
                 </button>
-                <div ref={mcpDropdownRef} style={{ position: 'relative', display: 'inline-block', marginLeft: '8px' }}>
-                  <button 
-                    onClick={() => setShowMcpDropdown(!showMcpDropdown)}
-                    className="mcp-tools-button"
-                    title={isInitialized ? "MCP Tools" : "MCP Tools (waiting for initialization...)"}
-                    style={{ 
-                      backgroundColor: isInitialized ? '#1ABC9C' : '#95a5a6',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '6px 12px',
-                      borderRadius: '4px',
-                      cursor: isInitialized ? 'pointer' : 'not-allowed',
-                      opacity: isInitialized ? 1 : 0.7
-                    }}
-                    disabled={!isInitialized}
-                  >
-                    🔧 MCP Tools {isInitialized ? '▼' : '⏳'}
-                  </button>
-                  {showMcpDropdown && isInitialized && (
-                    <div className="mcp-tools-dropdown">
-                      {mcpTools.map((tool) => (
-                        <button
-                          key={tool.name}
-                          onClick={() => {
-                            callMcpTool(tool.name, tool.params);
-                            setShowMcpDropdown(false);
-                          }}
-                          className="mcp-tool-button"
-                          title={`Call MCP tool: ${tool.name}`}
-                        >
-                          {tool.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-          <span>Powered by Lexical + Loro CRDT</span>
+                {showMcpDropdown && isInitialized && (
+                  <div className="mcp-tools-dropdown">
+                    {mcpTools.map((tool) => (
+                      <button
+                        key={tool.name}
+                        onClick={() => {
+                          callMcpTool(tool.name, tool.params);
+                          setShowMcpDropdown(false);
+                        }}
+                        className="mcp-tool-button"
+                        title={`Call MCP tool: ${tool.name}`}
+                      >
+                        {tool.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
