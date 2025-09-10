@@ -27,8 +27,8 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {useLexicalEditable} from '@lexical/react/useLexicalEditable';
 import {CAN_USE_DOM} from '@lexical/utils';
 
-import {CollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
-import {createWebsocketProvider} from './collab/loro/wsProvider';
+import {CollaborationPlugin} from './collab/yjs/LexicalCollaborationPlugin';
+import {createWebsocketProvider} from './collab/yjs/wsProvider';
 
 import {useSettings} from './context/SettingsContext';
 import {useSharedHistoryContext} from './context/SharedHistoryContext';
