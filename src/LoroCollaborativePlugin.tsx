@@ -26,18 +26,7 @@ import type { EphemeralStoreEvent, PeerID, VersionVector } from 'loro-crdt';
 import { applyDifferentialUpdate } from './diffMerge';
 import { CursorAwareness, CursorsContainer } from './cursors';
 import { $createStablePositionFromPoint, $ensureAllNodesHaveStableIds, $resolveStablePosition } from './stablePositioning';
-import type { LoroMessage, RemoteCursor } from './types';
-
-// ============================================================================
-// DIFFERENTIAL UPDATE CONFIGURATION
-// ============================================================================
-
-/**
- * Control flag for differential updates to prevent decorator node reloading.
- * When true, uses sophisticated differential merging instead of wholesale setEditorState.
- * This prevents YouTube/Counter decorator nodes from reloading during collaborative editing.
- */
-const USE_DIFFERENTIAL_UPDATE = true;
+import { USE_DIFFERENTIAL_UPDATE, type LoroMessage, type RemoteCursor, type UserInfo } from './types';
 
 
 interface LoroCollaborativePluginProps {
@@ -46,7 +35,7 @@ interface LoroCollaborativePluginProps {
   onConnectionChange?: (connected: boolean) => void;
   onPeerIdChange?: (peerId: string) => void;
   onDisconnectReady?: (disconnectFn: () => void) => void;
-  onAwarenessChange?: (awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => void;
+  onAwarenessChange?: (awareness: Array<UserInfo>) => void;
   onInitialization?: (success: boolean) => void;
   onSendMessageReady?: (sendMessageFn: (message: any) => void) => void;
 }

@@ -7,6 +7,18 @@ import type { NodeKey } from 'lexical';
 import type { PeerID } from 'loro-crdt';
 
 // ============================================================================
+// User TYPES
+// ============================================================================
+
+// Type for user awareness information
+export interface UserInfo {
+  peerId: string;
+  userName: string;
+  isCurrentUser: boolean;
+}
+
+
+// ============================================================================
 // STABLE POSITIONING TYPES
 // ============================================================================
 

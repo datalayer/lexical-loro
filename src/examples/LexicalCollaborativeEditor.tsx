@@ -24,16 +24,11 @@ import { YouTubePlugin } from './YouTubePlugin';
 import { lexicalTheme } from './theme';
 
 import "./LexicalCollaborativeEditor.css";
+import { UserInfo } from '../types';
 
 // Constants
 const DOC_ID = 'example-1';
 
-// Type for user awareness information
-interface UserInfo {
-  peerId: string;
-  userName: string;
-  isCurrentUser: boolean;
-}
 
 interface LexicalCollaborativeEditorProps {
   websocketUrl: string;
@@ -93,7 +88,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
   const [isConnected, setIsConnected] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
-  const [awarenessData, setAwarenessData] = useState<Array<{peerId: string, userName: string, isCurrentUser?: boolean}>>([]);
+  const [awarenessData, setAwarenessData] = useState<Array<UserInfo>>([]);
   const [showMcpDropdown, setShowMcpDropdown] = useState(false);
   const [mcpStatus, setMcpStatus] = useState<string>('');
   const [documentInfo, setDocumentInfo] = useState<string>('');
@@ -158,7 +153,7 @@ export const LexicalCollaborativeEditor: React.FC<LexicalCollaborativeEditorProp
     }
   }, [awarenessData]);
 
-  const handleAwarenessChange = useCallback((awareness: Array<{peerId: string, userName: string, isCurrentUser?: boolean}>) => {
+  const handleAwarenessChange = useCallback((awareness: Array<UserInfo>) => {
     setAwarenessData(awareness);
     
     // Update current user info if found in awareness data
