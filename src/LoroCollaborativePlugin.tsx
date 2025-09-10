@@ -326,6 +326,9 @@ const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsContainerP
   // Internal state to hold the current cursor data
   const [internalCursors, setInternalCursors] = useState<Record<PeerID, RemoteCursor>>(remoteCursors);
   
+  // Force re-render trigger for scroll updates
+  const [scrollVersion, setScrollVersion] = useState(0);
+  
   // Expose update method through ref
   useImperativeHandle(ref, () => ({
     update: (cursors: Record<PeerID, RemoteCursor>) => {
@@ -367,13 +370,60 @@ const CursorsContainer = React.forwardRef<CursorsContainerRef, CursorsContainerP
     };
   }, []);
 
+  // Add scroll listener to update cursor positions when page scrolls
+  useEffect(() => {
+    const handleScroll = () => {
+      console.log('🔄 Scroll detected, recalculating cursor positions');
+      // Trigger cursor position recalculation by incrementing scroll version
+      setScrollVersion(prev => prev + 1);
+    };
+
+    // Listen to scroll events on window and any scrollable containers
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Also listen to editor container scroll if it exists
+    const editorElement = editor.getElementByKey('root');
+    const editorContentEditable = editorElement?.closest('[contenteditable]') as HTMLElement | null;
+    if (editorContentEditable) {
+      const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, [data-lexical-editor]');
+      if (editorContainer) {
+        editorContainer.addEventListener('scroll', handleScroll, { passive: true });
+      }
+    }
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('scroll', handleScroll);
+      
+      if (editorContentEditable) {
+        const editorContainer = editorContentEditable.closest('.editor-container, .lexical-editor, [data-lexical-editor]');
+        if (editorContainer) {
+          editorContainer.removeEventListener('scroll', handleScroll);
+        }
+      }
+    };
+  }, [editor]);
+
+  // Recalculate cursor positions when scrollVersion changes due to scroll events
+  useEffect(() => {
+    if (Object.keys(cursorsToRender).length === 0) return;
+    
+    console.log('📍 Recalculating cursor positions due to scroll, version:', scrollVersion);
+    
+    // Force update of internal cursors to trigger position recalculation
+    // Use functional update to avoid dependency on internalCursors
+    setInternalCursors(current => ({...current}));
+  }, [scrollVersion, cursorsToRender]); // Include cursorsToRender to satisfy linter
+
   if (!portalContainer) {
     return null;
   }
 
   console.log('🎯 Rendering cursors via React portal:', {
     remoteCursorsCount: Object.keys(cursorsToRender).length,
-    clientId
+    clientId,
+    scrollVersion // Include scroll version for debugging
   });
 
   const cursors = Object.values(cursorsToRender)
@@ -3294,39 +3344,7 @@ export function LoroCollaborativePlugin({
     }
   }, [getEditorElement, editor]);
 
-  // Add scroll listener to update cursor positions when page scrolls
-  useEffect(() => {
-    const handleScroll = () => {
-      console.log('🔄 Scroll detected, forcing cursor re-render');
-      // Cursor overlay will handle its own re-rendering through the ref
-    };
-
-    // Listen to scroll events on window and any scrollable containers
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    document.addEventListener('scroll', handleScroll, { passive: true });
-    
-    // Also listen to editor container scroll if it exists
-    const editorElement = getEditorElement();
-    if (editorElement) {
-      const editorContainer = editorElement.closest('.editor-container, .lexical-editor, [data-lexical-editor]');
-      if (editorContainer) {
-        editorContainer.addEventListener('scroll', handleScroll, { passive: true });
-      }
-    }
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      document.removeEventListener('scroll', handleScroll);
-      
-      const editorElement = getEditorElement();
-      if (editorElement) {
-        const editorContainer = editorElement.closest('.editor-container, .lexical-editor, [data-lexical-editor]');
-        if (editorContainer) {
-          editorContainer.removeEventListener('scroll', handleScroll);
-        }
-      }
-    };
-  }, [getEditorElement]);
+  // Render the main collaborative plugin with cursor overlay
 
   console.log('🎬 LoroCollaborativePlugin component render called', {
     remoteCursorsCount: Object.keys(remoteCursorsRef.current).length,
