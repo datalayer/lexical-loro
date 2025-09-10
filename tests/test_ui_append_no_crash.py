@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2023-2025 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
 """
 Test UI append operations to verify no server crashes occur.
 This specifically tests for the Rust locking order violation that was fixed.
