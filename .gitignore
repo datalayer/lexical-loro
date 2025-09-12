@@ -1,6 +1,6 @@
+.DS_Store
+.yjs-wss-db
 build
 node_modules
-tsconfig.tsbuildinfo
-yjs-wss-db
 package-lock.json
-.DS_Store
+tsconfig.tsbuildinfo

@@ -7,7 +7,7 @@
  */
 
 import {Doc} from 'yjs';
-import {WebsocketProvider} from './servers/y-websocket';
+import {WebsocketProvider} from './provider/y-websocket';
 import { Provider } from './impl';
 
 const url = new URL(window.location.href);
@@ -31,7 +31,6 @@ export function createWebsocketProvider(
     doc.load();
   }
 
-  // @ts-expect-error
   return new WebsocketProvider(
     WEBSOCKET_ENDPOINT,
     WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,

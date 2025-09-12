@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
-    "dev": "cross-env NODE_ENV=development concurrently \"npm:server:loro\" \"npm:server:yjs:dist\" \"vite --host --port 3000\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm:server:loro\" \"npm:server:yjs\" \"vite --host --port 3000\"",
     "build:tsc": "tsc",
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",
     "server:loro": "fkill -s :1234 && tsx src/collab/loro/servers/websocket-server.ts",
-    "server:yjs": "fkill -s :1234 && tsx src/collab/yjs/servers/websocket-server.ts",
-    "server:yjs:dist": "cross-env HOST=localhost PORT=1234 YPERSISTENCE=./yjs-wss-db npx y-websocket",
+    "server:yjs": "fkill -s :1234 && cross-env HOST=localhost PORT=1234 YPERSISTENCE=./.yjs-wss-db tsx src/collab/yjs/servers/ws/server.ts",
+    "server:yjs:dist": "cross-env HOST=localhost PORT=1234 YPERSISTENCE=./.yjs-wss-db npx y-websocket",
     "preview": "vite preview"
   },
   "dependencies": {
