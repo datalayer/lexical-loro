@@ -6,11 +6,10 @@
  *
  */
 
+import type {LoroMap} from 'loro-crdt';
 import type {Binding} from '../State';
 import type {CollabElementNode} from './CollabElementNode';
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
-import type {LoroMap} from 'loro-crdt';
-
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
 import invariant from '../../utils/invariant';
 
