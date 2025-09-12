@@ -37,7 +37,7 @@ type Props = {
   providerFactory: (
     // eslint-disable-next-line no-shadow
     id: string,
-    loroDocMap: Map<string, LoroDoc>,
+    docMap: Map<string, LoroDoc>,
   ) => Provider;
   shouldBootstrap: boolean;
   username?: string;
@@ -67,7 +67,7 @@ export function CollaborationPlugin({
 
   const collabContext = useCollaborationContext(username, cursorColor);
 
-  const {loroDocMap, name, color} = collabContext;
+  const {docMap, name, color} = collabContext;
 
   const [editor] = useLexicalComposerContext();
 
@@ -93,14 +93,14 @@ export function CollaborationPlugin({
 
     isProviderInitialized.current = true;
 
-    const newProvider = providerFactory(id, loroDocMap);
+    const newProvider = providerFactory(id, docMap);
     setProvider(newProvider);
-    setDoc(loroDocMap.get(id));
+    setDoc(docMap.get(id));
 
     return () => {
       newProvider.disconnect();
     };
-  }, [id, providerFactory, loroDocMap]);
+  }, [id, providerFactory, docMap]);
 
   const [binding, setBinding] = useState<Binding>();
 
@@ -119,8 +119,8 @@ export function CollaborationPlugin({
       editor,
       provider,
       id,
-      doc || loroDocMap.get(id),
-      loroDocMap,
+      doc || docMap.get(id),
+      docMap,
       excludedProperties,
     );
     setBinding(newBinding);
@@ -128,7 +128,7 @@ export function CollaborationPlugin({
     return () => {
       newBinding.root.destroy(newBinding);
     };
-  }, [editor, provider, id, loroDocMap, doc, excludedProperties]);
+  }, [editor, provider, id, docMap, doc, excludedProperties]);
 
   if (!provider || !binding) {
     return <></>;
@@ -148,7 +148,7 @@ export function CollaborationPlugin({
       provider={provider}
       setDoc={setDoc}
       shouldBootstrap={shouldBootstrap}
-      loroDocMap={loroDocMap}
+      docMap={docMap}
       syncCursorPositionsFn={syncCursorPositionsFn}
     />
   );
@@ -158,7 +158,7 @@ function CRDTCollaborationCursors({
   editor,
   id,
   provider,
-  loroDocMap,
+  docMap,
   name,
   color,
   shouldBootstrap,
@@ -173,7 +173,7 @@ function CRDTCollaborationCursors({
   editor: LexicalEditor;
   id: string;
   provider: Provider;
-  loroDocMap: Map<string, LoroDoc>;
+  docMap: Map<string, LoroDoc>;
   name: string;
   color: string;
   shouldBootstrap: boolean;
@@ -189,7 +189,7 @@ function CRDTCollaborationCursors({
     editor,
     id,
     provider,
-    loroDocMap,
+    docMap,
     name,
     color,
     shouldBootstrap,

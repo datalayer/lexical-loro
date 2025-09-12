@@ -20,13 +20,13 @@ const WEBSOCKET_ID = params.get('collabId') || '0';
 // parent dom -> child doc
 export function createWebsocketProvider(
   id: string,
-  loroDocMap: Map<string, LoroDoc>,
+  docMap: Map<string, LoroDoc>,
 ): Provider {
-  let doc = loroDocMap.get(id);
+  let doc = docMap.get(id);
 
   if (doc === undefined) {
     doc = new LoroDoc();
-    loroDocMap.set(id, doc);
+    docMap.set(id, doc);
   }
 
   const websocketProvider = new WebsocketProvider(

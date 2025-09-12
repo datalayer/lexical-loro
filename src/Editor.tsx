@@ -6,8 +6,10 @@
  *
  */
 
-import {type JSX, useEffect, useState} from 'react';
+import {CollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
+import {createWebsocketProvider} from './collab/loro/wsProvider';
 
+import {type JSX, useEffect, useState} from 'react';
 import {AutoFocusPlugin} from '@lexical/react/LexicalAutoFocusPlugin';
 import {CharacterLimitPlugin} from '@lexical/react/LexicalCharacterLimitPlugin';
 import {CheckListPlugin} from '@lexical/react/LexicalCheckListPlugin';
@@ -26,10 +28,6 @@ import {TabIndentationPlugin} from '@lexical/react/LexicalTabIndentationPlugin';
 import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {useLexicalEditable} from '@lexical/react/useLexicalEditable';
 import {CAN_USE_DOM} from '@lexical/utils';
-
-import {CollaborationPlugin} from './collab/yjs/LexicalCollaborationPlugin';
-import {createWebsocketProvider} from './collab/yjs/wsProvider';
-
 import {useSettings} from './context/SettingsContext';
 import {useSharedHistoryContext} from './context/SharedHistoryContext';
 import ActionsPlugin from './plugins/ActionsPlugin';

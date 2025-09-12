@@ -8,7 +8,7 @@ const CALLBACK_OBJECTS = process.env.CALLBACK_OBJECTS ? JSON.parse(process.env.C
 export const isCallbackSet = !!CALLBACK_URL
 
 /**
- * @param {import('./utils.js').WSSharedDoc} doc
+ * @param {import('./utils.ts').WSSharedDoc} doc
  */
 export const callbackHandler = (doc) => {
   const room = doc.name
@@ -19,9 +19,10 @@ export const callbackHandler = (doc) => {
   const sharedObjectList = Object.keys(CALLBACK_OBJECTS)
   sharedObjectList.forEach(sharedObjectName => {
     const sharedObjectType = CALLBACK_OBJECTS[sharedObjectName]
+    const content = getContent(sharedObjectName, sharedObjectType, doc)
     dataToSend.data[sharedObjectName] = {
       type: sharedObjectType,
-      content: getContent(sharedObjectName, sharedObjectType, doc).toJSON()
+      content: content && typeof content.toJSON === 'function' ? content.toJSON() : content
     }
   })
   CALLBACK_URL && callbackRequest(CALLBACK_URL, CALLBACK_TIMEOUT, dataToSend)
@@ -61,15 +62,29 @@ const callbackRequest = (url, timeout, data) => {
 /**
  * @param {string} objName
  * @param {string} objType
- * @param {import('./utils.js').WSSharedDoc} doc
+ * @param {import('./utils.ts').WSSharedDoc} doc
  */
 const getContent = (objName, objType, doc) => {
-  switch (objType) {
-    case 'Array': return doc.getArray(objName)
-    case 'Map': return doc.getMap(objName)
-    case 'Text': return doc.getText(objName)
-    case 'XmlFragment': return doc.getXmlFragment(objName)
-    case 'XmlElement': return doc.getXmlElement(objName)
-    default : return {}
+  // Loro uses a different API than YJS
+  // Get the container by name and type
+  try {
+    switch (objType) {
+      case 'List':
+      case 'Array': 
+        return doc.doc.getList(objName)
+      case 'Map': 
+        return doc.doc.getMap(objName)
+      case 'Text': 
+        return doc.doc.getText(objName)
+      case 'Tree':
+        return doc.doc.getTree(objName)
+      default: {
+        // For unknown types, return the entire document state
+        return doc.doc.toJSON()
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to get content for ${objName} of type ${objType}:`, error)
+    return {}
   }
 }

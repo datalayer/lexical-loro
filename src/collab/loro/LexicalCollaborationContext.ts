@@ -15,7 +15,7 @@ export type CollaborationContextType = {
   color: string;
   isCollabActive: boolean;
   name: string;
-  loroDocMap: Map<string, LoroDoc>;
+  docMap: Map<string, LoroDoc>;
 };
 
 const entries = [
@@ -43,7 +43,7 @@ export const CollaborationContext = createContext<CollaborationContextType>({
   color: randomEntry[1],
   isCollabActive: false,
   name: randomEntry[0],
-  loroDocMap: new Map(),
+  docMap: new Map(),
 });
 
 export function useCollaborationContext(

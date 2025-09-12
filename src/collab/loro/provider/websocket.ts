@@ -4,98 +4,206 @@
 
 /* eslint-env browser */
 
-import * as Y from 'yjs' // eslint-disable-line
+import type {LoroDoc} from 'loro-crdt'
+import { EphemeralStore } from 'loro-crdt'
+import type { UserState, ProviderAwareness } from '../State'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
-import * as encoding from 'lib0/encoding'
-import * as decoding from 'lib0/decoding'
-import * as syncProtocol from 'y-protocols/sync'
-import * as authProtocol from 'y-protocols/auth'
-import * as awarenessProtocol from 'y-protocols/awareness'
 import { ObservableV2 } from 'lib0/observable'
 import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
 
-export const messageSync = 0
-export const messageQueryAwareness = 3
-export const messageAwareness = 1
-export const messageAuth = 2
+// Loro message types (JSON-based)
+export const messageLoroUpdate = 'loro-update'
+export const messageSnapshot = 'snapshot'
+export const messageEphemeral = 'ephemeral'
+export const messageQueryEphemeral = 'query-ephemeral'
+
+// Message type definitions
+export interface LoroUpdateMessage {
+  type: 'loro-update'
+  update: number[]
+  docId: string
+}
+
+export interface SnapshotMessage {
+  type: 'snapshot'
+  snapshot: number[]
+  docId: string
+}
+
+export interface EphemeralMessage {
+  type: 'ephemeral'
+  ephemeral: number[]
+  docId: string
+}
+
+export interface QueryEphemeralMessage {
+  type: 'query-ephemeral'
+  docId: string
+}
+
+export type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage
 
 /**
- *                       encoder,          decoder,          provider,          emitSynced, messageType
- * @type {Array<function(encoding.Encoder, decoding.Decoder, WebsocketProvider, boolean,    number):void>}
+ * Awareness adapter that wraps EphemeralStore to provide awareness-like API
  */
-const messageHandlers = []
+class AwarenessAdapter implements ProviderAwareness {
+  private ephemeralStore: EphemeralStore
+  private localClientId: number
+  private eventHandlers: Map<string, (() => void)[]> = new Map()
 
-messageHandlers[messageSync] = (
-  encoder,
-  decoder,
-  provider,
-  emitSynced,
-  _messageType
-) => {
-  encoding.writeVarUint(encoder, messageSync)
-  const syncMessageType = syncProtocol.readSyncMessage(
-    decoder,
-    encoder,
-    provider.doc,
-    provider
-  )
-  if (
-    emitSynced && syncMessageType === syncProtocol.messageYjsSyncStep2 &&
-    !provider.synced
-  ) {
-    provider.synced = true
+  constructor(ephemeralStore: EphemeralStore) {
+    this.ephemeralStore = ephemeralStore
+    this.localClientId = Math.floor(Math.random() * 2147483647) // Random client ID
+    
+    // Subscribe to ephemeral store changes and emit awareness updates
+    this.ephemeralStore.subscribe((event) => {
+      // Emit update events when ephemeral state changes
+      const updateHandlers = this.eventHandlers.get('update') || []
+      updateHandlers.forEach(handler => handler())
+    })
+  }
+
+  getLocalState(): UserState | null {
+    const localKey = `user-${this.localClientId}`
+    const state = this.ephemeralStore.get(localKey)
+    return state ? state as UserState : null
+  }
+
+  getStates(): Map<number, UserState> {
+    const states = new Map<number, UserState>()
+    
+    // In a real implementation, you'd need to track all user keys
+    // For now, we'll just add the local state
+    const localState = this.getLocalState()
+    if (localState) {
+      states.set(this.localClientId, localState)
+    }
+    
+    // TODO: Iterate through all ephemeral keys that match user pattern
+    // and build the complete states map
+    
+    return states
+  }
+
+  setLocalState(state: UserState): void {
+    const localKey = `user-${this.localClientId}`
+    this.ephemeralStore.set(localKey, state as any)
+  }
+
+  setLocalStateField(field: string, value: unknown): void {
+    const localState = this.getLocalState() || {
+      anchorPos: null,
+      awarenessData: {},
+      color: '#000000',
+      focusPos: null,
+      focusing: false,
+      name: 'Anonymous',
+    }
+    localState[field] = value
+    this.setLocalState(localState)
+  }
+
+  on(type: 'update', cb: () => void): void {
+    if (!this.eventHandlers.has(type)) {
+      this.eventHandlers.set(type, [])
+    }
+    this.eventHandlers.get(type)!.push(cb)
+  }
+
+  off(type: 'update', cb: () => void): void {
+    const handlers = this.eventHandlers.get(type)
+    if (handlers) {
+      const index = handlers.indexOf(cb)
+      if (index !== -1) {
+        handlers.splice(index, 1)
+      }
+    }
   }
 }
 
-messageHandlers[messageQueryAwareness] = (
-  encoder,
-  _decoder,
-  provider,
-  _emitSynced,
-  _messageType
-) => {
-  encoding.writeVarUint(encoder, messageAwareness)
-  encoding.writeVarUint8Array(
-    encoder,
-    awarenessProtocol.encodeAwarenessUpdate(
-      provider.awareness,
-      Array.from(provider.awareness.getStates().keys())
-    )
-  )
+/**
+ * Message handlers for different Loro message types
+ */
+const messageHandlers: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
+
+messageHandlers[messageLoroUpdate] = (
+  provider: WebsocketProvider,
+  message: LoroUpdateMessage,
+  emitSynced: boolean
+): string | null => {
+  try {
+    // Apply the update to the local document
+    const updateBytes = new Uint8Array(message.update)
+    provider.doc.import(updateBytes)
+    
+    if (emitSynced && !provider._synced) {
+      provider.synced = true
+    }
+    
+    return null // No response needed
+  } catch (error) {
+    console.error('Failed to apply Loro update:', error)
+    return null
+  }
 }
 
-messageHandlers[messageAwareness] = (
-  _encoder,
-  decoder,
-  provider,
-  _emitSynced,
-  _messageType
-) => {
-  awarenessProtocol.applyAwarenessUpdate(
-    provider.awareness,
-    decoding.readVarUint8Array(decoder),
-    provider
-  )
+messageHandlers[messageSnapshot] = (
+  provider: WebsocketProvider,
+  message: SnapshotMessage,
+  emitSynced: boolean
+): string | null => {
+  try {
+    // Import the snapshot into the local document
+    const snapshotBytes = new Uint8Array(message.snapshot)
+    provider.doc.import(snapshotBytes)
+    
+    if (emitSynced && !provider._synced) {
+      provider.synced = true
+    }
+    
+    return null // No response needed
+  } catch (error) {
+    console.error('Failed to import Loro snapshot:', error)
+    return null
+  }
 }
 
-messageHandlers[messageAuth] = (
-  _encoder,
-  decoder,
-  provider,
-  _emitSynced,
-  _messageType
-) => {
-  authProtocol.readAuthMessage(
-    decoder,
-    provider.doc,
-    (_ydoc, reason) => permissionDeniedHandler(provider, reason)
-  )
+messageHandlers[messageQueryEphemeral] = (
+  provider: WebsocketProvider,
+  message: QueryEphemeralMessage,
+  _emitSynced: boolean
+): string | null => {
+  // Respond with current ephemeral state
+  const ephemeralUpdate = provider.ephemeralStore.encodeAll()
+  
+  const response: EphemeralMessage = {
+    type: 'ephemeral',
+    ephemeral: Array.from(ephemeralUpdate),
+    docId: message.docId
+  }
+  
+  return JSON.stringify(response)
 }
 
-// @todo - this should depend on awareness.outdatedTime
+messageHandlers[messageEphemeral] = (
+  provider: WebsocketProvider,
+  message: EphemeralMessage,
+  _emitSynced: boolean
+): string | null => {
+  try {
+    // Apply ephemeral update
+    provider.ephemeralStore.apply(new Uint8Array(message.ephemeral))
+    return null
+  } catch (error) {
+    console.error('Failed to apply ephemeral update:', error)
+    return null
+  }
+}
+
+// @todo - this should depend on ephemeral timeout
 const messageReconnectTimeout = 30000
 
 /**
@@ -106,22 +214,62 @@ const permissionDeniedHandler = (provider, reason) =>
   console.warn(`Permission denied to access ${provider.url}.\n${reason}`)
 
 /**
- * @param {WebsocketProvider} provider
- * @param {Uint8Array} buf
- * @param {boolean} emitSynced
- * @return {encoding.Encoder}
+ * Process incoming message (JSON or binary) and return optional response
  */
-const readMessage = (provider, buf, emitSynced) => {
-  const decoder = decoding.createDecoder(buf)
-  const encoder = encoding.createEncoder()
-  const messageType = decoding.readVarUint(decoder)
-  const messageHandler = provider.messageHandlers[messageType]
-  if (/** @type {any} */ (messageHandler)) {
-    messageHandler(encoder, decoder, provider, emitSynced, messageType)
-  } else {
-    console.error('Unable to compute message')
+const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {
+  // Handle binary data - first try to decode as JSON string, then as raw binary
+  if (data instanceof ArrayBuffer) {
+    try {
+      // Try to decode as UTF-8 string (JSON messages sent as binary)
+      const decoder = new TextDecoder()
+      const jsonString = decoder.decode(data)
+      const message = JSON.parse(jsonString) as LoroWebSocketMessage
+      const messageHandler = messageHandlers[message.type]
+      
+      if (messageHandler) {
+        return messageHandler(provider, message, emitSynced)
+      } else {
+        console.error('Unknown message type:', message.type)
+        return null
+      }
+    } catch (jsonError) {
+      // If JSON parsing fails, treat as raw binary Loro update
+      try {
+        const updateBytes = new Uint8Array(data)
+        provider.doc.import(updateBytes)
+        
+        if (emitSynced && !provider._synced) {
+          provider.synced = true
+        }
+        
+        return null // No response needed for binary updates
+      } catch (binaryError) {
+        console.error('Failed to process binary data as JSON or Loro update:', jsonError, binaryError)
+        return null
+      }
+    }
   }
-  return encoder
+  
+  // Handle string JSON messages
+  if (typeof data === 'string') {
+    try {
+      const message = JSON.parse(data) as LoroWebSocketMessage
+      const messageHandler = messageHandlers[message.type]
+      
+      if (messageHandler) {
+        return messageHandler(provider, message, emitSynced)
+      } else {
+        console.error('Unknown message type:', message.type)
+        return null
+      }
+    } catch (error) {
+      console.error('Failed to process JSON message:', error)
+      return null
+    }
+  }
+  
+  console.error('Unknown message format:', typeof data)
+  return null
 }
 
 /**
@@ -141,14 +289,9 @@ const closeWebsocketConnection = (provider, ws, event) => {
     if (provider.wsconnected) {
       provider.wsconnected = false
       provider.synced = false
-      // update awareness (all users except local left)
-      awarenessProtocol.removeAwarenessStates(
-        provider.awareness,
-        (Array.from(provider.awareness.getStates().keys()) as number[]).filter((client) =>
-          client !== provider.doc.clientID
-        ),
-        provider
-      )
+      // Clear local ephemeral state on disconnect
+      provider.ephemeralStore.delete('presence')
+      provider.ephemeralStore.delete('cursor')
       provider.emit('status', [{
         status: 'disconnected'
       }])
@@ -182,9 +325,9 @@ const setupWS = (provider) => {
 
     websocket.onmessage = (event) => {
       provider.wsLastMessageReceived = time.getUnixTime()
-      const encoder = readMessage(provider, new Uint8Array(event.data), true)
-      if (encoding.length(encoder) > 1) {
-        websocket.send(encoding.toUint8Array(encoder))
+      const response = readMessage(provider, event.data, true)
+      if (response) {
+        websocket.send(response)
       }
     }
     websocket.onerror = (event) => {
@@ -201,22 +344,22 @@ const setupWS = (provider) => {
       provider.emit('status', [{
         status: 'connected'
       }])
-      // always send sync step 1 when connected
-      const encoder = encoding.createEncoder()
-      encoding.writeVarUint(encoder, messageSync)
-      syncProtocol.writeSyncStep1(encoder, provider.doc)
-      websocket.send(encoding.toUint8Array(encoder))
-      // broadcast local awareness state
-      if (provider.awareness.getLocalState() !== null) {
-        const encoderAwarenessState = encoding.createEncoder()
-        encoding.writeVarUint(encoderAwarenessState, messageAwareness)
-        encoding.writeVarUint8Array(
-          encoderAwarenessState,
-          awarenessProtocol.encodeAwarenessUpdate(provider.awareness, [
-            provider.doc.clientID
-          ])
-        )
-        websocket.send(encoding.toUint8Array(encoderAwarenessState))
+      // Request initial ephemeral state from server
+      const ephemeralRequest: QueryEphemeralMessage = {
+        type: 'query-ephemeral',
+        docId: provider.roomname
+      }
+      websocket.send(JSON.stringify(ephemeralRequest))
+      
+      // broadcast local ephemeral state if any
+      const localState = provider.ephemeralStore.getAllStates()
+      if (Object.keys(localState).length > 0) {
+        const ephemeralMessage: EphemeralMessage = {
+          type: 'ephemeral',
+          ephemeral: Array.from(provider.ephemeralStore.encodeAll()),
+          docId: provider.roomname
+        }
+        websocket.send(JSON.stringify(ephemeralMessage))
       }
     }
     provider.emit('status', [{
@@ -226,29 +369,28 @@ const setupWS = (provider) => {
 }
 
 /**
- * @param {WebsocketProvider} provider
- * @param {ArrayBuffer} buf
+ * Broadcast JSON message to WebSocket and BroadcastChannel
  */
-const broadcastMessage = (provider, buf) => {
+const broadcastMessage = (provider: WebsocketProvider, message: string) => {
   const ws = provider.ws
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
-    ws.send(buf)
+    ws.send(message)
   }
   if (provider.bcconnected) {
-    bc.publish(provider.bcChannel, buf, provider)
+    bc.publish(provider.bcChannel, message, provider)
   }
 }
 
 /**
  * Websocket Provider for CRDT. Creates a websocket connection to sync the shared document.
  * The document name is attached to the provided url. I.e. the following example
- * creates a websocket connection to http://localhost:1234/my-document-name
+ * creates a websocket connection to http://localhost:1235/my-document-name
  *
  * @example
  *   import * as Y from 'yjs'
  *   import { WebsocketProvider } from 'y-websocket'
  *   const doc = new Y.Doc()
- *   const provider = new WebsocketProvider('http://localhost:1234', 'my-document-name', doc)
+ *   const provider = new WebsocketProvider('http://localhost:1235', 'my-document-name', doc)
  *
  * @extends {ObservableV2<{ 'connection-close': (event: CloseEvent | null,  provider: WebsocketProvider) => any, 'status': (event: { status: 'connected' | 'disconnected' | 'connecting' }) => any, 'connection-error': (event: Event, provider: WebsocketProvider) => any, 'sync': (state: boolean) => any }>}
  */
@@ -259,6 +401,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _WS = null
   protocols = []
   params = {}
+  ephemeralStore = null
   awareness = null
   ws = null
   wsconnected = false
@@ -275,26 +418,27 @@ export class WebsocketProvider extends ObservableV2<any> {
   _checkInterval = null
   _resyncInterval = null
   _updateHandler = null
-  _awarenessUpdateHandler = null
+  _ephemeralUpdateHandler = null
   _exitHandler = null
   _bcSubscriber = null
+
   /**
    * @param {string} serverUrl
    * @param {string} roomname
-   * @param {Y.Doc} doc
+   * @param {LoroDoc} doc
    * @param {object} opts
    * @param {boolean} [opts.connect]
-   * @param {awarenessProtocol.Awareness} [opts.awareness]
+   * @param {EphemeralStore} [opts.ephemeralStore]
    * @param {Object<string,string>} [opts.params] specify url parameters
    * @param {Array<string>} [opts.protocols] specify websocket protocols
-   * @param {typeof WebSocket} [opts.WebSocketPolyfill] Optionall provide a WebSocket polyfill
+   * @param {typeof WebSocket} [opts.WebSocketPolyfill] Optionally provide a WebSocket polyfill
    * @param {number} [opts.resyncInterval] Request server state every `resyncInterval` milliseconds
    * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
    * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
    */
-  constructor (serverUrl, roomname, doc, {
+  constructor (serverUrl: string, roomname: string, doc: LoroDoc, {
     connect = true,
-    awareness = new awarenessProtocol.Awareness(doc),
+    ephemeralStore = undefined,
     params = {},
     protocols = [],
     WebSocketPolyfill = WebSocket,
@@ -320,13 +464,15 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.roomname = roomname
     this.doc = doc
     this._WS = WebSocketPolyfill
-    this.awareness = awareness
+    // Create standalone ephemeral store instance if not provided (30 second timeout)
+    this.ephemeralStore = ephemeralStore || new EphemeralStore(30000)
+    // Create awareness adapter that wraps ephemeral store
+    this.awareness = new AwarenessAdapter(this.ephemeralStore)
     this.wsconnected = false
     this.wsconnecting = false
     this.bcconnected = false
     this.disableBc = disableBc
     this.wsUnsuccessfulReconnects = 0
-    this.messageHandlers = messageHandlers.slice()
     /**
      * @type {boolean}
      */
@@ -349,73 +495,74 @@ export class WebsocketProvider extends ObservableV2<any> {
     if (resyncInterval > 0) {
       this._resyncInterval = /** @type {any} */ (setInterval(() => {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          // resend sync step 1
-          const encoder = encoding.createEncoder()
-          encoding.writeVarUint(encoder, messageSync)
-          syncProtocol.writeSyncStep1(encoder, doc)
-          this.ws.send(encoding.toUint8Array(encoder))
+          // Request fresh ephemeral state from server
+          const queryMessage: QueryEphemeralMessage = {
+            type: 'query-ephemeral',
+            docId: this.roomname
+          }
+          this.ws.send(JSON.stringify(queryMessage))
         }
       }, resyncInterval))
     }
 
     /**
-     * @param {ArrayBuffer} data
+     * @param {string} data
      * @param {any} origin
      */
-    this._bcSubscriber = (data, origin) => {
+    this._bcSubscriber = (data: string, origin: any) => {
       if (origin !== this) {
-        const encoder = readMessage(this, new Uint8Array(data), false)
-        if (encoding.length(encoder) > 1) {
-          bc.publish(this.bcChannel, encoding.toUint8Array(encoder), this)
+        const response = readMessage(this, data, false)
+        if (response) {
+          bc.publish(this.bcChannel, response, this)
         }
       }
     }
     /**
-     * Listens to CRDT updates and sends them to remote peers (ws and broadcastchannel)
+     * Listens to Loro CRDT updates and sends them to remote peers (ws and broadcastchannel)
      * @param {Uint8Array} update
      * @param {any} origin
      */
-    this._updateHandler = (update, origin) => {
+    this._updateHandler = (update: Uint8Array, origin: any) => {
       if (origin !== this) {
-        const encoder = encoding.createEncoder()
-        encoding.writeVarUint(encoder, messageSync)
-        syncProtocol.writeUpdate(encoder, update)
-        broadcastMessage(this, encoding.toUint8Array(encoder))
+        const updateMessage: LoroUpdateMessage = {
+          type: 'loro-update',
+          update: Array.from(update),
+          docId: this.roomname
+        }
+        broadcastMessage(this, JSON.stringify(updateMessage))
       }
     }
-    this.doc.on('update', this._updateHandler)
+    // Note: LoroDoc doesn't have event listeners like Y.Doc
+    // Update handling will be done through manual calls when changes occur
     /**
-     * @param {any} changed
-     * @param {any} _origin
+     * @param {any} event - EphemeralStoreEvent with added, updated, removed arrays
      */
-    this._awarenessUpdateHandler = ({ added, updated, removed }, _origin) => {
-      const changedClients = added.concat(updated).concat(removed)
-      const encoder = encoding.createEncoder()
-      encoding.writeVarUint(encoder, messageAwareness)
-      encoding.writeVarUint8Array(
-        encoder,
-        awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients)
-      )
-      broadcastMessage(this, encoding.toUint8Array(encoder))
+    this._ephemeralUpdateHandler = (event: any) => {
+      // Only broadcast if there are actual changes
+      if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
+        const ephemeralMessage: EphemeralMessage = {
+          type: 'ephemeral',
+          ephemeral: Array.from(this.ephemeralStore.encodeAll()),
+          docId: this.roomname
+        }
+        broadcastMessage(this, JSON.stringify(ephemeralMessage))
+      }
     }
     this._exitHandler = () => {
-      awarenessProtocol.removeAwarenessStates(
-        this.awareness,
-        [doc.clientID],
-        'app closed'
-      )
+      // Clear all local ephemeral state on exit
+      this.ephemeralStore.destroy()
     }
     if (env.isNode && typeof process !== 'undefined') {
       process.on('exit', this._exitHandler)
     }
-    awareness.on('update', this._awarenessUpdateHandler)
+    this.ephemeralStore.subscribe(this._ephemeralUpdateHandler)
     this._checkInterval = /** @type {any} */ (setInterval(() => {
       if (
         this.wsconnected &&
         messageReconnectTimeout <
           time.getUnixTime() - this.wsLastMessageReceived
       ) {
-        // no message received in a long time - not even your own awareness
+        // no message received in a long time - not even your own ephemeral
         // updates (which are updated every 15 seconds)
         closeWebsocketConnection(this, /** @type {WebSocket} */ (this.ws), null)
       }
@@ -455,8 +602,9 @@ export class WebsocketProvider extends ObservableV2<any> {
     if (env.isNode && typeof process !== 'undefined') {
       process.off('exit', this._exitHandler)
     }
-    this.awareness.off('update', this._awarenessUpdateHandler)
-    this.doc.off('update', this._updateHandler)
+    // Clean up ephemeral store subscription  
+    this.ephemeralStore.destroy()
+    // Note: LoroDoc doesn't have event listeners to remove
     super.destroy()
   }
 
@@ -468,52 +616,49 @@ export class WebsocketProvider extends ObservableV2<any> {
       bc.subscribe(this.bcChannel, this._bcSubscriber)
       this.bcconnected = true
     }
-    // send sync step1 to bc
-    // write sync step 1
-    const encoderSync = encoding.createEncoder()
-    encoding.writeVarUint(encoderSync, messageSync)
-    syncProtocol.writeSyncStep1(encoderSync, this.doc)
-    bc.publish(this.bcChannel, encoding.toUint8Array(encoderSync), this)
-    // broadcast local state
-    const encoderState = encoding.createEncoder()
-    encoding.writeVarUint(encoderState, messageSync)
-    syncProtocol.writeSyncStep2(encoderState, this.doc)
-    bc.publish(this.bcChannel, encoding.toUint8Array(encoderState), this)
-    // write queryAwareness
-    const encoderAwarenessQuery = encoding.createEncoder()
-    encoding.writeVarUint(encoderAwarenessQuery, messageQueryAwareness)
-    bc.publish(
-      this.bcChannel,
-      encoding.toUint8Array(encoderAwarenessQuery),
-      this
-    )
-    // broadcast local awareness state
-    const encoderAwarenessState = encoding.createEncoder()
-    encoding.writeVarUint(encoderAwarenessState, messageAwareness)
-    encoding.writeVarUint8Array(
-      encoderAwarenessState,
-      awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
-        this.doc.clientID
-      ])
-    )
-    bc.publish(
-      this.bcChannel,
-      encoding.toUint8Array(encoderAwarenessState),
-      this
-    )
+    
+    // Send current document snapshot to other tabs
+    try {
+      const snapshot = this.doc.export({ mode: 'snapshot' })
+      const snapshotMessage: SnapshotMessage = {
+        type: 'snapshot',
+        snapshot: Array.from(snapshot),
+        docId: this.roomname
+      }
+      bc.publish(this.bcChannel, JSON.stringify(snapshotMessage), this)
+    } catch (error) {
+      console.warn('Failed to export snapshot for BroadcastChannel:', error)
+    }
+    
+    // Query ephemeral state from other tabs
+    const queryMessage: QueryEphemeralMessage = {
+      type: 'query-ephemeral',
+      docId: this.roomname
+    }
+    bc.publish(this.bcChannel, JSON.stringify(queryMessage), this)
+    
+    // Broadcast local ephemeral state
+    const localState = this.ephemeralStore.getAllStates()
+    if (Object.keys(localState).length > 0) {
+      const ephemeralMessage: EphemeralMessage = {
+        type: 'ephemeral',
+        ephemeral: Array.from(this.ephemeralStore.encodeAll()),
+        docId: this.roomname
+      }
+      bc.publish(this.bcChannel, JSON.stringify(ephemeralMessage), this)
+    }
   }
 
   disconnectBc () {
-    // broadcast message with local awareness state set to null (indicating disconnect)
-    const encoder = encoding.createEncoder()
-    encoding.writeVarUint(encoder, messageAwareness)
-    encoding.writeVarUint8Array(
-      encoder,
-      awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
-        this.doc.clientID
-      ], new Map())
-    )
-    broadcastMessage(this, encoding.toUint8Array(encoder))
+    // broadcast message with local ephemeral state cleared (indicating disconnect)
+    this.ephemeralStore.delete('presence')
+    this.ephemeralStore.delete('cursor')
+    const ephemeralMessage: EphemeralMessage = {
+      type: 'ephemeral',
+      ephemeral: Array.from(this.ephemeralStore.encodeAll()),
+      docId: this.roomname
+    }
+    broadcastMessage(this, JSON.stringify(ephemeralMessage))
     if (this.bcconnected) {
       bc.unsubscribe(this.bcChannel, this._bcSubscriber)
       this.bcconnected = false
@@ -534,5 +679,14 @@ export class WebsocketProvider extends ObservableV2<any> {
       setupWS(this)
       this.connectBc()
     }
+  }
+
+  /**
+   * Manually send a Loro document update to connected peers
+   * Call this method after making changes to the LoroDoc
+   * @param {Uint8Array} update The update bytes from LoroDoc
+   */
+  sendUpdate (update: Uint8Array) {
+    this._updateHandler(update, null)
   }
 }

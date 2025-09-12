@@ -7,7 +7,6 @@
  */
 
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
-import type {Cursor as LoroCursor} from 'loro-crdt';
 import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import {
   $getNodeByKey,
@@ -17,13 +16,14 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
+import type {Cursor as LoroCursor} from 'loro-crdt';
+import invariant from '../../utils/invariant';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
 import type {Binding} from '../Bindings';
 import {Provider, UserState} from '../State';
-import invariant from '../../utils/invariant';
 import {getPositionFromElementAndOffset} from '../Utils';
 
 export type CursorSelection = {
