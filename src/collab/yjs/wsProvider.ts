@@ -8,7 +8,7 @@
 
 import {Doc} from 'yjs';
 import {WebsocketProvider} from './provider/websocket';
-import { Provider } from './state/State';
+import { Provider } from './State';
 
 const url = new URL(window.location.href);
 const params = new URLSearchParams(url.search);

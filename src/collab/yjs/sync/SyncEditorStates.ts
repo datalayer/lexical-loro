@@ -34,7 +34,7 @@ import {
 } from 'yjs';
 
 import {Binding} from '../Bindings';
-import {Provider} from '../state/State';
+import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';

@@ -18,7 +18,7 @@ import {Klass, LexicalNode} from 'lexical';
 import invariant from '../utils/invariant';
 import {XmlText} from './types/XmlText';
 
-import {Provider} from './state/State';
+import {Provider} from './State';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
 
 export type ClientID = number;

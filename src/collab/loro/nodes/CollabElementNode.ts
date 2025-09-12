@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from '../state/State';
+import type {Binding} from '../State';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import type {XmlText} from '../types/XmlText';
 

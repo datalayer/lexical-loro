@@ -8,9 +8,13 @@
 
 import * as React from 'react';
 import type {JSX} from 'react';
+import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {createPortal} from 'react-dom';
+import {Doc, Transaction, UndoManager, YEvent} from 'yjs';
+import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider, SyncCursorPositionsFn} from './state/State';
+import type {Binding, Provider, SyncCursorPositionsFn} from './State';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
@@ -20,7 +24,7 @@ import {
   syncLexicalUpdateToCRDT,
   syncCRDTChangesToLexical,
   TOGGLE_CONNECT_COMMAND,
-} from './state/State';
+} from './State';
 import {
   $createParagraphNode,
   $getRoot,
@@ -35,11 +39,6 @@ import {
   SKIP_COLLAB_TAG,
   UNDO_COMMAND,
 } from 'lexical';
-import {useCallback, useEffect, useMemo, useRef} from 'react';
-import {createPortal} from 'react-dom';
-import {Doc, Transaction, UndoManager, YEvent} from 'yjs';
-
-import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 

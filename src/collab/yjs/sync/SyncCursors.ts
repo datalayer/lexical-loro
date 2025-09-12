@@ -24,7 +24,7 @@ import {
 } from 'lexical';
 import invariant from '../../utils/invariant';
 import type {Binding} from '../Bindings';
-import {UserState, Provider} from '../state/State';
+import {UserState, Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';

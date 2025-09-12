@@ -7,7 +7,8 @@
  */
 
 import type {EditorState, NodeKey} from 'lexical';
-
+import {LoroMap, LoroEvent} from 'loro-crdt';
+import {XmlText} from '../types/XmlText';
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -22,11 +23,7 @@ import {
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-
-import {LoroMap, LoroEvent} from 'loro-crdt';
-import {XmlText} from '../types/XmlText';
-
-import {Binding, Provider} from '../state/State';
+import {Binding, Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';

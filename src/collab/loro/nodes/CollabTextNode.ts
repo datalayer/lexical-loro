@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from '../state/State';
+import type {Binding} from '../State';
 import type {CollabElementNode} from './CollabElementNode';
 import type {NodeKey, NodeMap, TextNode} from 'lexical';
 import type {LoroMap} from 'loro-crdt';

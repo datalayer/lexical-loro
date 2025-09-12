@@ -17,7 +17,7 @@ import {
   YArrayEvent,
   YEvent,
 } from 'yjs';
-import { Provider, TOGGLE_CONNECT_COMMAND } from '../collab/yjs/state/State';
+import { Provider, TOGGLE_CONNECT_COMMAND } from '../collab/yjs/State';
 
 export type Comment = {
   author: string;

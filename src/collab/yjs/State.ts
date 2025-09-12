@@ -10,7 +10,7 @@ import type {LexicalCommand} from 'lexical';
 import {createCommand} from 'lexical';
 import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';
 import {UndoManager as CRDTUndoManager} from 'yjs';
-import type {Binding} from '../Bindings';
+import type {Binding} from './Bindings';
 
 export type UserState = {
   anchorPos: null | RelativePosition;
@@ -57,8 +57,8 @@ export type Delta = Array<Operation>;
 export type CRDTNode = Record<string, unknown>;
 export type CRDTEvent = Record<string, unknown>;
 export type {Provider};
-export type {Binding, ClientID, ExcludedProperties} from '../Bindings';
-export {createBinding} from '../Bindings';
+export type {Binding, ClientID, ExcludedProperties} from './Bindings';
+export {createBinding} from './Bindings';
 
 export function createUndoManager(
   binding: Binding,
@@ -115,9 +115,9 @@ export {
   getAnchorAndFocusCollabNodesForUserState,
   syncCursorPositions,
   type SyncCursorPositionsFn,
-} from '../sync/SyncCursors';
+} from './sync/SyncCursors';
 
 export {
   syncLexicalUpdateToCRDT,
   syncCRDTChangesToLexical,
-} from '../sync/SyncEditorStates';
+} from './sync/SyncEditorStates';

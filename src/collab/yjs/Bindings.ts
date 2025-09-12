@@ -17,7 +17,7 @@ import type {CollabLineBreakNode} from './nodes/CollabLineBreakNode';
 import type {CollabTextNode} from './nodes/CollabTextNode';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
 import type {Cursor} from './sync/SyncCursors';
-import {Provider} from './state/State';
+import {Provider} from './State';
 
 export type ClientID = number;
 export type Binding = {

@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding, CRDTNode} from './state/State';
+import type {Binding, CRDTNode} from './State';
 
 import {
   $getNodeByKey,

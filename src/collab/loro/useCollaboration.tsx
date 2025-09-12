@@ -10,7 +10,7 @@ import * as React from 'react';
 import type {JSX} from 'react';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider, SyncCursorPositionsFn} from './state/State';
+import type {Binding, Provider, SyncCursorPositionsFn} from './State';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
@@ -20,7 +20,7 @@ import {
   syncLexicalUpdateToCRDT,
   syncCRDTChangesToLexical,
   TOGGLE_CONNECT_COMMAND,
-} from './state/State';
+} from './State';
 import {
   $createParagraphNode,
   $getRoot,
@@ -38,7 +38,6 @@ import {
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
 import {LoroDoc, UndoManager} from 'loro-crdt';
-
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
