@@ -23,12 +23,12 @@ import {
   $isTextNode,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-import type {Binding} from '../Bindings';
-import {UserState, Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
+import type {Binding} from '../Bindings';
+import {UserState, Provider} from '../State';
 import {getPositionFromElementAndOffset} from '../Utils';
 
 export type CursorSelection = {

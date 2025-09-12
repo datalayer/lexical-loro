@@ -7,8 +7,7 @@
  */
 
 import type {EditorState, NodeKey} from 'lexical';
-import {LoroMap, LoroEvent} from 'loro-crdt';
-import {XmlText} from '../types/XmlText';
+
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -23,6 +22,12 @@ import {
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import invariant from '../../utils/invariant';
+import {
+  LoroMap,
+  LoroEvent,
+} from 'loro-crdt';
+
+import {XmlText} from '../types/XmlText';
 import {Binding, Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
@@ -42,29 +47,77 @@ import {
 } from '../Utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncStateEvent(binding: Binding, event: any): boolean {
-  // TODO: Implement Loro state event handling
-  // This is a placeholder for Loro event system
-  return false;
+  const {target} = event;
+  if (
+    !(
+      target &&
+      (target as any)._container &&
+      (target as any)._container.parentSub === '__state' &&
+      getNodeTypeFromSharedType(target) === undefined &&
+      (target.parent instanceof XmlText ||
+        target.parent instanceof LoroMap)
+    )
+  ) {
+    // TODO there might be a case to handle in here when a LoroMap
+    // is used as a value of __state? It would probably be desirable
+    // to mark the node as dirty when that happens.
+    return false;
+  }
+  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target.parent);
+  const node = collabNode.getNode();
+  if (node) {
+    const state = $getWritableNodeState(node.getWritable());
+    for (const k of (event as any).keysChanged || []) {
+      state.updateFromUnknown(k, target.get(k));
+    }
+  }
+  return true;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncEvent(binding: Binding, event: any): void {
-  // TODO: Implement Loro event synchronization
-  // This will need to be redesigned for Loro's event system
+  if ((event as any).isMapEvent && $syncStateEvent(binding, event)) {
+    return;
+  }
   const {target} = event;
   const collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
 
-  if (collabNode instanceof CollabElementNode) {
-    // Handle element node changes
-    collabNode.syncPropertiesFromCRDT(binding, new Set());
-    collabNode.syncChildrenFromCRDT(binding);
-  } else if (collabNode instanceof CollabTextNode) {
-    // Handle text node changes
-    collabNode.syncPropertiesAndTextFromCRDT(binding, new Set());
-  } else if (collabNode instanceof CollabDecoratorNode) {
-    // Handle decorator node changes
-    collabNode.syncPropertiesFromCRDT(binding, new Set());
+  if (collabNode instanceof CollabElementNode && (event as any).isTextEvent) {
+    const {keysChanged, childListChanged, delta} = event as any;
+
+    // Update
+    if (keysChanged && keysChanged.size > 0) {
+      collabNode.syncPropertiesFromCRDT(binding, keysChanged);
+    }
+
+    if (childListChanged) {
+      collabNode.applyChildrenCRDTDelta(binding, delta);
+      collabNode.syncChildrenFromCRDT(binding);
+    }
+  } else if (
+    collabNode instanceof CollabTextNode &&
+    (event as any).isMapEvent
+  ) {
+    const {keysChanged} = event;
+
+    // Update
+    if (keysChanged && keysChanged.size > 0) {
+      collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
+    }
+  } else if (
+    collabNode instanceof CollabDecoratorNode &&
+    ((event as any).isMapEvent || (event as any).isXmlEvent)
+  ) {
+    const {attributesChanged, keysChanged} = event;
+    const changedKeys = attributesChanged || keysChanged;
+
+    // Update
+    if (changedKeys && changedKeys.size > 0) {
+      collabNode.syncPropertiesFromCRDT(binding, changedKeys);
+    }
   } else {
     invariant(false, 'Expected text, element, or decorator event');
   }
@@ -73,16 +126,24 @@ function $syncEvent(binding: Binding, event: any): void {
 export function syncCRDTChangesToLexical(
   binding: Binding,
   provider: Provider,
-  events: Array<any>, // TODO: Define proper Loro event types
+  events: Array<LoroEvent>,
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
-  // This line precompute the delta before editor update. 
-  // TODO: Adapt this for Loro event system
-  // events.forEach((event) => event.delta);
+  // This line precompute the delta before editor update. The reason is
+  // delta is computed when it is accessed. Note that this can only be
+  // safely computed during the event call. If it is accessed after event
+  // call it might result in unexpected behavior.
+  // For Loro, we need to ensure deltas are computed during event processing
+  events.forEach((event) => {
+    if ((event as any).delta) {
+      // Access delta to trigger computation if needed
+      (event as any).delta;
+    }
+  });
 
   editor.update(
     () => {
