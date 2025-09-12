@@ -37,7 +37,7 @@ import {
 } from 'lexical';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
-import {LoroDoc, UndoManager} from 'loro-crdt';
+import {LoroDoc, UndoManager, LoroEvent, LoroEventBatch} from 'loro-crdt';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
@@ -122,25 +122,23 @@ export function useCollaboration(
     };
 
     const onLoroTreeChanges = (
-      // Loro event has different signature than YJS
-      event: any, // LoroEventBatch
+      // Loro event batch containing multiple events
+      event: LoroEventBatch,
     ) => {
       console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
         event: event,
         eventBy: event.by,
-        eventByLocal: event.by_local,
         eventOrigin: event.origin,
         hasEvents: !!event.events,
         eventsCount: event.events?.length,
         skipCollab: skipCollaborationUpdateRef.current
       });
       
-      // In Loro, event.by_local indicates local vs remote:
-      // We need to determine if this event originated from local changes or remote updates
-      // When applying updates from WebSocket, this should be marked as remote
-      // The challenge is that the WebSocket provider is also subscribing to these events
-      const isLocalChange = event.by_local === true;
-      const origin = isLocalChange ? 'local' : 'remote';
+      // In Loro, event.by indicates the source of the change:
+      // - event.by === 'import': remote changes (from WebSocket import)
+      // - event.by === 'local': local changes (from Lexical edits)
+      const isRemoteChange = event.by === 'import';
+      const origin = isRemoteChange ? 'remote' : 'local';
       
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
@@ -149,7 +147,7 @@ export function useCollaboration(
         return;
       }
       
-      if (origin !== 'local') { // Only process remote changes
+      if (origin === 'remote') { // Only process remote changes
         console.log(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
         
         // Check if this change is from the undo manager
@@ -163,7 +161,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by_local: ${event.by_local})`);
+        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
       }
     };
 

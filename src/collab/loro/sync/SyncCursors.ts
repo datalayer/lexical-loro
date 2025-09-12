@@ -362,7 +362,7 @@ function updateCursor(
   }
 }
 
-type AnyCollabNode =
+export type AnyCollabNode =
   | CollabDecoratorNode
   | CollabElementNode
   | CollabTextNode

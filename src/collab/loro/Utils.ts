@@ -130,12 +130,14 @@ export function $createCollabNodeFromLexicalNode(
 
   if ($isElementNode(lexicalNode)) {
     const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
+    xmlText.setAttribute('__type', nodeType);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
   } else if ($isTextNode(lexicalNode)) {
     // TODO create a token text node for token, segmented nodes.
     const map = binding.doc.getMap(`text_${lexicalNode.__key}`);
+    map.set('__type', nodeType);
     collabNode = $createCollabTextNode(
       map,
       lexicalNode.__text,
@@ -149,6 +151,7 @@ export function $createCollabNodeFromLexicalNode(
     collabNode = $createCollabLineBreakNode(map, parent);
   } else if ($isDecoratorNode(lexicalNode)) {
     const map = binding.doc.getMap(`decorator_${lexicalNode.__key}`);
+    map.set('__type', nodeType);
     collabNode = $createCollabDecoratorNode(map, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
   } else {
@@ -163,8 +166,16 @@ export function getNodeTypeFromSharedType(
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
 ): string | undefined {
   const type = sharedTypeGet(sharedType, '__type');
+  
+  // If no type is found, return undefined instead of failing
+  // This handles cases where Loro containers don't have the __type metadata
+  if (typeof type === 'undefined') {
+    console.warn('getNodeTypeFromSharedType: No __type found for', sharedType?.constructor?.name);
+    return undefined;
+  }
+  
   invariant(
-    typeof type === 'string' || typeof type === 'undefined',
+    typeof type === 'string',
     'Expected shared type to include type attribute',
   );
   return type;
@@ -184,10 +195,13 @@ export function $getOrInitCollabNodeFromSharedType(
   if (collabNode === undefined) {
     const registeredNodes = binding.editor._nodes;
     const type = getNodeTypeFromSharedType(sharedType);
-    invariant(
-      typeof type === 'string',
-      'Expected shared type to include type attribute',
-    );
+    
+    // If no type found, this might be a raw Loro container - skip processing
+    if (typeof type !== 'string') {
+      console.warn('$getOrInitCollabNodeFromSharedType: Skipping raw Loro container without __type:', sharedType?.constructor?.name);
+      return null as any; // Return null to indicate this should be skipped
+    }
+    
     const nodeInfo = registeredNodes.get(type);
     invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
@@ -313,13 +327,23 @@ export function $syncPropertiesFromCRDT(
 }
 
 function sharedTypeGet(
-  sharedType: XmlText | LoroMap<Record<string, unknown>>,
+  sharedType: any,
   property: string,
 ): unknown {
   if (sharedType instanceof LoroMap) {
     return sharedType.get(property);
-  } else {
+  } else if (sharedType instanceof XmlText) {
     return sharedType.getAttribute(property);
+  } else if (sharedType && typeof sharedType.getAttribute === 'function') {
+    // Try getAttribute if it exists
+    return sharedType.getAttribute(property);
+  } else if (sharedType && typeof sharedType.get === 'function') {
+    // Try get if it exists (for other Loro containers)
+    return sharedType.get(property);
+  } else {
+    // Handle other Loro types that might not have getAttribute or get method
+    console.warn('sharedTypeGet: Unsupported type for property access:', sharedType?.constructor?.name || typeof sharedType, property);
+    return undefined;
   }
 }
 

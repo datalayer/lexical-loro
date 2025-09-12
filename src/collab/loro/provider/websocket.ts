@@ -4,7 +4,7 @@
 
 /* eslint-env browser */
 
-import { LoroDoc, EphemeralStore, EphemeralStoreEvent } from 'loro-crdt'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEventBatch } from 'loro-crdt'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
 import { ObservableV2 } from 'lib0/observable'
@@ -550,7 +550,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   
   serverUrl = ''
   roomname = ''
-  doc = null
+  doc: LoroDoc | null = null
   _WS = null
   protocols = []
   params = {}
@@ -752,8 +752,8 @@ export class WebsocketProvider extends ObservableV2<any> {
       // Clear only our local ephemeral state on exit, don't destroy the global store
       if (this.ephemeralStore && this.awareness) {
         try {
-          const clientId = this.doc.clientId || 0
-          const userKey = `user-${clientId}`
+          const peerId = this.doc.peerId || 0
+          const userKey = `user-${peerId}`
           this.ephemeralStore.delete(userKey)
           console.debug(`[Client] Process exit - Cleared user state: ${userKey}`)
         } catch (error) {
@@ -769,10 +769,10 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Use Loro's native event system to listen for document changes
     console.log(`[Client] WebsocketProvider - Setting up Loro document event subscription`)
     try {
-      this.doc.subscribe((event) => {
+      this.doc.subscribe((event: LoroEventBatch) => {
         console.log(`[Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
-          by_local: event.by_local,
-          hasLocalChanges: !!event.by_local,
+          by: event.by,
+          hasLocalChanges: event.by === 'local',
           origin: event.origin,
           eventType: typeof event,
           eventKeys: Object.keys(event),
@@ -790,10 +790,10 @@ export class WebsocketProvider extends ObservableV2<any> {
           return;
         }
         
-        // Only skip if by_local is explicitly false (indicating remote change)
-        // by_local === undefined typically means local change that should be sent
-        if (event.by_local === false) {
-          console.log(`[Client] WebsocketProvider - Skipping export for remote change (by_local: ${event.by_local})`);
+        // Skip if this is a remote change (from import)
+        // event.by === 'import' means this change came from importing remote updates
+        if (event.by === 'import') {
+          console.log(`[Client] WebsocketProvider - Skipping export for remote change (by: ${event.by})`);
           return;
         }
         
@@ -867,8 +867,8 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Only clear our local state from it
     if (this.ephemeralStore && this.awareness) {
       try {
-        const clientId = this.doc.clientId || 0
-        const userKey = `user-${clientId}`
+        const peerId = this.doc.peerId || 0
+        const userKey = `user-${peerId}`
         this.ephemeralStore.delete(userKey)
         console.debug(`[Client] WebsocketProvider.destroy - Cleared user state from persistent store: ${userKey}`)
       } catch (error) {
