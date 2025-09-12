@@ -125,15 +125,26 @@ export function useCollaboration(
       // Loro event has different signature than YJS
       event: any, // LoroEventBatch
     ) => {
+      console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
+        eventBy: event.by,
+        eventOrigin: event.origin,
+        hasEvents: !!event.events,
+        eventsCount: event.events?.length,
+        skipCollab: skipCollaborationUpdateRef.current
+      });
+      
       const origin = event.by; // 'local' | 'import' | 'checkout'
       
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
+        console.log(`[UseCollaboration] Skipping collaboration update (skipCollaborationUpdateRef)`);
         skipCollaborationUpdateRef.current = false;
         return;
       }
       
       if (origin !== 'local') { // Only process remote changes
+        console.log(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
+        
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
         
@@ -144,6 +155,8 @@ export function useCollaboration(
           isFromUndoManager,
           syncCursorPositionsFn,
         );
+      } else {
+        console.log(`[UseCollaboration] Skipping local change (origin: ${origin})`);
       }
     };
 
@@ -178,7 +191,17 @@ export function useCollaboration(
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
+    console.log(`[UseCollaboration] Setting up document subscription:`, {
+      id,
+      hasDoc: !!doc,
+      docMapSize: docMap.size,
+      docMapKeys: Array.from(docMap.keys())
+    });
     const unsubscribe = doc?.subscribe(onLoroTreeChanges);
+    console.log(`[UseCollaboration] Document subscription result:`, {
+      hasUnsubscribe: !!unsubscribe,
+      subscribed: !!doc && !!unsubscribe
+    });
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,

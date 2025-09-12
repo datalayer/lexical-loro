@@ -100,16 +100,20 @@ export class CollabTextNode {
   }
 
   spliceText(index: number, delCount: number, newText: string): void {
+    console.log(`[CollabTextNode] spliceText called - index: ${index}, delCount: ${delCount}, newText: "${newText}"`);
+    
     const collabElementNode = this._parent;
     const xmlText = collabElementNode._xmlText;
-    const offset = this.getOffset() + 1 + index;
+    const offset = this.getOffset() + index;
 
     if (delCount !== 0) {
       xmlText.delete(offset, delCount);
     }
 
     if (newText !== '') {
+      console.log(`[CollabTextNode] About to call xmlText.insert(${offset}, "${newText}")`);
       xmlText.insert(offset, newText);
+      console.log(`[CollabTextNode] xmlText.insert completed - text inserted into XmlText but NO document update event generated`);
     }
   }
 
