@@ -6,20 +6,18 @@
  *
  */
 
+import type {Doc} from 'yjs';
+import {XmlText} from 'yjs';
+import type {LexicalEditor, NodeKey} from 'lexical';
+import {Klass, LexicalNode} from 'lexical';
+import invariant from '../utils/invariant';
 import type {CollabDecoratorNode} from './nodes/CollabDecoratorNode';
 import type {CollabElementNode} from './nodes/CollabElementNode';
 import type {CollabLineBreakNode} from './nodes/CollabLineBreakNode';
 import type {CollabTextNode} from './nodes/CollabTextNode';
-import type {Cursor} from './sync/SyncCursors';
-import type {LexicalEditor, NodeKey} from 'lexical';
-import type {Doc} from 'yjs';
-
-import {Klass, LexicalNode} from 'lexical';
-import invariant from '../utils/invariant';
-import {XmlText} from 'yjs';
-
-import {Provider} from './state/State';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
+import type {Cursor} from './sync/SyncCursors';
+import {Provider} from './state/State';
 
 export type ClientID = number;
 export type Binding = {

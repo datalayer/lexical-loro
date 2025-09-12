@@ -6,13 +6,12 @@
  *
  */
 
-import type {Binding} from '../Bindings';
 import type {LexicalCommand} from 'lexical';
+import {createCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
 import {UndoManager} from 'loro-crdt';
 import type {XmlText} from '../types/XmlText';
-
-import {createCommand} from 'lexical';
+import type {Binding} from '../Bindings';
 
 export type UserState = {
   anchorPos: null | Cursor;
@@ -85,7 +84,6 @@ export function createUndoManager(
         // TODO: Convert Lexical selection to Loro cursors
         // This would need to be implemented based on the specific selection format
       }
-      
       return {
         value: doc.toJSON(), // Save document state
         cursors: cursors
@@ -101,7 +99,6 @@ export function createUndoManager(
       }
     }
   });
-
   return undoManager;
 }
 

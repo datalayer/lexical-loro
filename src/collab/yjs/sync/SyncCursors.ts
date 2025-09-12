@@ -6,10 +6,13 @@
  *
  */
 
-import type {Binding} from '../Bindings';
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
 import type {AbsolutePosition, RelativePosition} from 'yjs';
-
+import {
+  compareRelativePositions,
+  createAbsolutePositionFromRelativePosition,
+  createRelativePositionFromTypeIndex,
+} from 'yjs';
 import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import {
   $getNodeByKey,
@@ -20,12 +23,7 @@ import {
   $isTextNode,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-import {
-  compareRelativePositions,
-  createAbsolutePositionFromRelativePosition,
-  createRelativePositionFromTypeIndex,
-} from 'yjs';
-
+import type {Binding} from '../Bindings';
 import {UserState, Provider} from '../state/State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';

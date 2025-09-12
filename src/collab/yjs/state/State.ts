@@ -6,12 +6,11 @@
  *
  */
 
-import type {Binding} from '../Bindings';
 import type {LexicalCommand} from 'lexical';
-import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';
-
 import {createCommand} from 'lexical';
+import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';
 import {UndoManager as CRDTUndoManager} from 'yjs';
+import type {Binding} from '../Bindings';
 
 export type UserState = {
   anchorPos: null | RelativePosition;
