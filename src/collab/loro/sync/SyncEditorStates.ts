@@ -22,22 +22,14 @@ import {
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-import {
-  Map as YMap,
-  Text as YText,
-  XmlElement,
-  XmlText,
-  YEvent,
-  YMapEvent,
-  YTextEvent,
-  YXmlEvent,
-} from 'yjs';
 
-import {Binding} from '../Bindings';
-import {Provider} from '../types/Types';
-import {CollabDecoratorNode} from './CollabDecoratorNode';
-import {CollabElementNode} from './CollabElementNode';
-import {CollabTextNode} from './CollabTextNode';
+import {LoroMap, LoroEvent} from 'loro-crdt';
+import {XmlText} from '../types';
+
+import {Binding, Provider} from '../types/Types';
+import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
+import {CollabElementNode} from '../nodes/CollabElementNode';
+import {CollabTextNode} from '../nodes/CollabTextNode';
 import {
   $syncLocalCursorPosition,
   syncCursorPositions,
@@ -50,78 +42,32 @@ import {
   doesSelectionNeedRecovering,
   getNodeTypeFromSharedType,
   syncWithTransaction,
-} from './Utils';
+} from '../Utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {
-  const {target} = event;
-  if (
-    !(
-      target._item &&
-      target._item.parentSub === '__state' &&
-      getNodeTypeFromSharedType(target) === undefined &&
-      (target.parent instanceof XmlText ||
-        target.parent instanceof XmlElement ||
-        target.parent instanceof YMap)
-    )
-  ) {
-    // TODO there might be a case to handle in here when a YMap
-    // is used as a value  of __state? It would probably be desirable
-    // to mark the node as dirty when that happens.
-    return false;
-  }
-  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target.parent);
-  const node = collabNode.getNode();
-  if (node) {
-    const state = $getWritableNodeState(node.getWritable());
-    for (const k of event.keysChanged) {
-      state.updateFromUnknown(k, target.get(k));
-    }
-  }
-  return true;
+function $syncStateEvent(binding: Binding, event: any): boolean {
+  // TODO: Implement Loro state event handling
+  // This is a placeholder for Loro event system
+  return false;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncEvent(binding: Binding, event: any): void {
-  if (event instanceof YMapEvent && $syncStateEvent(binding, event)) {
-    return;
-  }
+  // TODO: Implement Loro event synchronization
+  // This will need to be redesigned for Loro's event system
   const {target} = event;
   const collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
 
-  if (collabNode instanceof CollabElementNode && event instanceof YTextEvent) {
-    // @ts-expect-error We need to access the private childListChanged property of the class
-    const {keysChanged, childListChanged, delta} = event;
-
-    // Update
-    if (keysChanged.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, keysChanged);
-    }
-
-    if (childListChanged) {
-      collabNode.applyChildrenCRDTDelta(binding, delta);
-      collabNode.syncChildrenFromCRDT(binding);
-    }
-  } else if (
-    collabNode instanceof CollabTextNode &&
-    event instanceof YMapEvent
-  ) {
-    const {keysChanged} = event;
-
-    // Update
-    if (keysChanged.size > 0) {
-      collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
-    }
-  } else if (
-    collabNode instanceof CollabDecoratorNode &&
-    event instanceof YXmlEvent
-  ) {
-    const {attributesChanged} = event;
-
-    // Update
-    if (attributesChanged.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, attributesChanged);
-    }
+  if (collabNode instanceof CollabElementNode) {
+    // Handle element node changes
+    collabNode.syncPropertiesFromCRDT(binding, new Set());
+    collabNode.syncChildrenFromCRDT(binding);
+  } else if (collabNode instanceof CollabTextNode) {
+    // Handle text node changes
+    collabNode.syncPropertiesAndTextFromCRDT(binding, new Set());
+  } else if (collabNode instanceof CollabDecoratorNode) {
+    // Handle decorator node changes
+    collabNode.syncPropertiesFromCRDT(binding, new Set());
   } else {
     invariant(false, 'Expected text, element, or decorator event');
   }
@@ -130,19 +76,16 @@ function $syncEvent(binding: Binding, event: any): void {
 export function syncCRDTChangesToLexical(
   binding: Binding,
   provider: Provider,
-  events: Array<YEvent<YText>>,
+  events: Array<any>, // TODO: Define proper Loro event types
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
-  // This line precompute the delta before editor update. The reason is
-  // delta is computed when it is accessed. Note that this can only be
-  // safely computed during the event call. If it is accessed after event
-  // call it might result in unexpected behavior.
-  // https://github.com/yjs/yjs/blob/00ef472d68545cb260abd35c2de4b3b78719c9e4/src/utils/YEvent.js#L132
-  events.forEach((event) => event.delta);
+  // This line precompute the delta before editor update. 
+  // TODO: Adapt this for Loro event system
+  // events.forEach((event) => event.delta);
 
   editor.update(
     () => {

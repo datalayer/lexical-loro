@@ -21,11 +21,11 @@ import {
 } from 'lexical';
 
 import {Provider, UserState} from '../types/Types';
-import {CollabDecoratorNode} from './CollabDecoratorNode';
-import {CollabElementNode} from './CollabElementNode';
-import {CollabLineBreakNode} from './CollabLineBreakNode';
-import {CollabTextNode} from './CollabTextNode';
-import {getPositionFromElementAndOffset} from './Utils';
+import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
+import {CollabElementNode} from '../nodes/CollabElementNode';
+import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
+import {CollabTextNode} from '../nodes/CollabTextNode';
+import {getPositionFromElementAndOffset} from '../Utils';
 
 export type CursorSelection = {
   anchor: {

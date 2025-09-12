@@ -151,9 +151,9 @@ export {
   getAnchorAndFocusCollabNodesForUserState,
   syncCursorPositions,
   type SyncCursorPositionsFn,
-} from '../services/SyncCursors';
+} from '../sync/SyncCursors';
 
 export {
   syncLexicalUpdateToCRDT,
   syncCRDTChangesToLexical,
-} from '../services/SyncEditorStates';
+} from '../sync/SyncEditorStates';

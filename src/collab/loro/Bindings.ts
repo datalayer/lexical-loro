@@ -6,11 +6,11 @@
  *
  */
 
-import type {CollabDecoratorNode} from './services/CollabDecoratorNode';
-import type {CollabElementNode} from './services/CollabElementNode';
-import type {CollabLineBreakNode} from './services/CollabLineBreakNode';
-import type {CollabTextNode} from './services/CollabTextNode';
-import type {Cursor} from './services/SyncCursors';
+import type {CollabDecoratorNode} from './nodes/CollabDecoratorNode';
+import type {CollabElementNode} from './nodes/CollabElementNode';
+import type {CollabLineBreakNode} from './nodes/CollabLineBreakNode';
+import type {CollabTextNode} from './nodes/CollabTextNode';
+import type {Cursor} from './sync/SyncCursors';
 import type {LexicalEditor, NodeKey} from 'lexical';
 import type {LoroDoc} from 'loro-crdt';
 
@@ -19,7 +19,7 @@ import invariant from '../utils/invariant';
 import {XmlText} from './types';
 
 import {Provider} from './types/Types';
-import {$createCollabElementNode} from './services/CollabElementNode';
+import {$createCollabElementNode} from './nodes/CollabElementNode';
 
 export type ClientID = number;
 export type Binding = {

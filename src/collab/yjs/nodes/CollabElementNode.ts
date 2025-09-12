@@ -6,9 +6,9 @@
  *
  */
 
-import type {Binding} from '../types/Types';
+import type {Binding} from '../Bindings';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
-import type {XmlText} from '../types/XmlText';
+import type {AbstractType, Map as YMap, XmlElement, XmlText} from 'yjs';
 
 import {$createChildrenArray} from '@lexical/offset';
 import {
@@ -32,7 +32,7 @@ import {
   getPositionFromElementAndOffset,
   spliceString,
   syncPropertiesFromLexical,
-} from './Utils';
+} from '../Utils';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
@@ -119,7 +119,7 @@ export class CollabElementNode {
   applyChildrenCRDTDelta(
     binding: Binding,
     deltas: Array<{
-      insert?: string | object | XmlText;
+      insert?: string | object | AbstractType<unknown>;
       delete?: number;
       retain?: number;
       attributes?: {
@@ -219,7 +219,7 @@ export class CollabElementNode {
           );
           const collabNode = $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedType as XmlText,
+            sharedType as XmlText | YMap<unknown> | XmlElement,
             this,
           );
           if (
@@ -578,7 +578,7 @@ export class CollabElementNode {
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
-      xmlText.insertEmbed(offset, collabNode._map);
+      xmlText.insertEmbed(offset, collabNode._xmlElem);
     }
 
     this._children.push(collabNode);
@@ -630,7 +630,7 @@ export class CollabElementNode {
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
-      xmlText.insertEmbed(offset, collabNode._map);
+      xmlText.insertEmbed(offset, collabNode._xmlElem);
     }
 
     if (delCount !== 0) {

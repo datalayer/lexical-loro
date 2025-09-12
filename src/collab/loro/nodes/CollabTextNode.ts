@@ -20,7 +20,7 @@ import {
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
-import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from './Utils';
+import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../Utils';
 
 function $diffTextContentAndApplyDelta(
   collabNode: CollabTextNode,
