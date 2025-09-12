@@ -53,9 +53,14 @@ export function createBinding(
     'root',
   );
   root._key = 'root';
+  
+  // Create the collaboration node map and add the root node
+  const collabNodeMap = new Map();
+  collabNodeMap.set('root', root);
+  
   return {
     clientID: Number(doc.peerId.toString().slice(0, 8)), // Convert Loro peer ID to number
-    collabNodeMap: new Map(),
+    collabNodeMap,
     cursors: new Map(),
     cursorsContainer: null,
     doc,

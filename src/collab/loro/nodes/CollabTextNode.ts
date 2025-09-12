@@ -114,6 +114,8 @@ export class CollabTextNode {
     nextLexicalNode: TextNode,
     prevNodeMap: null | NodeMap,
   ): void {
+    console.log('[CollabTextNode] syncPropertiesAndTextFromLexical called for node:', nextLexicalNode.__key, 'text:', nextLexicalNode.__text);
+    
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const nextText = nextLexicalNode.__text;
 
@@ -126,12 +128,19 @@ export class CollabTextNode {
 
     if (prevLexicalNode !== null) {
       const prevText = prevLexicalNode.__text;
+      console.log('[CollabTextNode] Text comparison - prev:', JSON.stringify(prevText), 'next:', JSON.stringify(nextText));
 
       if (prevText !== nextText) {
+        console.log('[CollabTextNode] Text changed, calling diffTextContentAndApplyDelta');
         const key = nextLexicalNode.__key;
         $diffTextContentAndApplyDelta(this, key, prevText, nextText);
         this._text = nextText;
+      } else {
+        console.log('[CollabTextNode] Text unchanged, skipping delta');
       }
+    } else {
+      console.log('[CollabTextNode] No previous node, setting initial text:', JSON.stringify(nextText));
+      this._text = nextText;
     }
   }
 
