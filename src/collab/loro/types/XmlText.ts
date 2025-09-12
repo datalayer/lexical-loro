@@ -5,7 +5,7 @@
  * and LoroMap underneath to maintain compatibility with existing code.
  */
 
-import { LoroList, LoroMap, LoroDoc, Cursor } from 'loro-crdt';
+import { LoroText, LoroMap, LoroDoc, Cursor } from 'loro-crdt';
 
 export interface EmbedObject {
   type: 'embed';
@@ -31,7 +31,7 @@ export interface XmlTextEvent {
 }
 
 export class XmlText {
-  private _list: LoroList;
+  private _text: LoroText;
   private _attributes: LoroMap;
   private _doc: LoroDoc;
   private _observers: Array<(event: XmlTextEvent) => void> = [];
@@ -40,8 +40,32 @@ export class XmlText {
 
   constructor(doc: LoroDoc, id?: string) {
     this._doc = doc;
-    this._list = doc.getList(id || `xml_${Math.random().toString(36).substr(2, 9)}`);
-    this._attributes = doc.getMap(`${this._list.id}_attrs`);
+    try {
+      const textId = id || `xml_${Math.random().toString(36).substr(2, 9)}`;
+      this._text = doc.getText(textId);
+      this._attributes = doc.getMap(`${textId}_attrs`);
+      
+      // Validate the text was created properly
+      this._validateText();
+    } catch (error) {
+      console.error('Error creating XmlText:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validate that the Loro text is in a valid state
+   */
+  private _validateText(): void {
+    try {
+      // Try to access basic properties to ensure the text is valid
+      const length = this._text.length;
+      const id = this._text.id;
+      console.log(`XmlText initialized - ID: ${id}, Length: ${length}`);
+    } catch (error) {
+      console.error('Text validation failed:', error);
+      throw new Error('XmlText is in invalid state: ' + error.message);
+    }
   }
 
   /**
@@ -70,50 +94,145 @@ export class XmlText {
       return;
     }
     
-    // Store character with attributes if provided
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (attributes && Object.keys(attributes).length > 0) {
-        // Store character with formatting information
-        const formattedChar = {
-          char,
-          attributes: { ...attributes }
-        };
-        this._list.insert(offset + i, formattedChar);
-      } else {
-        this._list.insert(offset + i, char);
-      }
-    }
+    console.log(`insert called with offset: ${offset}, text: "${text}", attributes:`, attributes);
     
-    this._notifyObservers({
-      delta: [{ retain: offset }, { insert: text, attributes }],
-      target: this,
-      transaction: null
-    });
+    try {
+      // Get current length safely
+      const currentLength = this._text.length;
+      
+      // Validate and clamp offset
+      if (offset < 0 || offset > currentLength) {
+        console.warn(`Invalid offset ${offset} for text length ${currentLength}, clamping`);
+        offset = Math.max(0, Math.min(offset, currentLength));
+      }
+      
+      // LoroText.insert(pos, content) - attributes handled separately
+      this._text.insert(offset, text);
+      
+      // If we have attributes, store them in the attributes map
+      if (attributes && Object.keys(attributes).length > 0) {
+        const attrKey = `format_${offset}_${text.length}_${Date.now()}`;
+        this._attributes.set(attrKey, {
+          type: 'text_format',
+          offset: offset,
+          length: text.length,
+          attributes: attributes
+        });
+      }
+      
+      console.log(`Successfully inserted text at offset ${offset}`);
+      
+      this._notifyObservers({
+        delta: [{ retain: offset }, { insert: text, attributes }],
+        target: this,
+        transaction: null
+      });
+      
+    } catch (error) {
+      console.error('Error inserting text into LoroText:', error);
+      console.error('Text:', text, 'Offset:', offset);
+      console.error('Attributes:', attributes);
+      throw error;
+    }
   }
 
   /**
    * Insert an embedded object at the specified offset
+   * 
+   * LoroText doesn't directly support embedded objects like Y.js XmlText,
+   * so we use a placeholder character approach combined with metadata storage
    */
   insertEmbed(offset: number, object: any, attributes?: TextAttributes): void {
-    // Create a reference object to store the embedded item
-    const embed: EmbedObject = {
-      type: 'embed',
-      object: object,
-      id: Math.random().toString(36).substr(2, 9)
-    };
+    console.log(`insertEmbed called - offset: ${offset}, object type: ${object?.constructor?.name}`);
     
-    if (attributes && Object.keys(attributes).length > 0) {
-      (embed as any).attributes = { ...attributes };
+    try {
+      // Validate offset
+      const currentLength = this._text.length;
+      if (offset < 0 || offset > currentLength) {
+        console.warn(`Invalid embed offset ${offset} for text length ${currentLength}, clamping`);
+        offset = Math.max(0, Math.min(offset, currentLength));
+      }
+      
+      // Create a unique placeholder character for the embedded object
+      // Using Unicode Private Use Area characters that won't appear in normal text
+      const embedId = Math.random().toString(36).substr(2, 9);
+      const placeholderChar = '\uE000'; // Private Use Area start
+      
+      // Insert the placeholder character into the text
+      this._text.insert(offset, placeholderChar);
+      
+      // Store the embedded object metadata in the attributes map
+      const embedKey = `embed_${offset}_${embedId}`;
+      const embedData = {
+        type: 'embed',
+        id: embedId,
+        offset: offset,
+        placeholder: placeholderChar,
+        object: this._serializeObject(object),
+        attributes: attributes || {},
+        timestamp: Date.now()
+      };
+      
+      this._attributes.set(embedKey, embedData);
+      
+      console.log(`Successfully inserted embed placeholder at offset ${offset}, stored as ${embedKey}`);
+      
+      // Notify observers
+      this._notifyObservers({
+        delta: [{ retain: offset }, { insert: object, attributes }],
+        target: this,
+        transaction: null
+      });
+      
+    } catch (error) {
+      console.error('Error in insertEmbed:', error);
+      console.error('Offset:', offset, 'Object:', object);
+      throw error;
     }
-    
-    this._list.insert(offset, embed);
-    
-    this._notifyObservers({
-      delta: [{ retain: offset }, { insert: object, attributes }],
-      target: this,
-      transaction: null
-    });
+  }
+
+  /**
+   * Serialize an object for storage in LoroMap
+   */
+  private _serializeObject(object: any): any {
+    if (object instanceof XmlText) {
+      return {
+        type: 'xmltext_ref',
+        id: object._text.id,
+        textId: object._text.id
+      };
+    } else if (object && typeof object === 'object' && object.id) {
+      return {
+        type: 'loro_ref',
+        id: object.id,
+        refType: object.constructor?.name || 'unknown'
+      };
+    } else if (typeof object === 'string' || typeof object === 'number' || typeof object === 'boolean') {
+      return {
+        type: 'primitive',
+        value: object
+      };
+    } else if (object === null || object === undefined) {
+      return {
+        type: 'null',
+        value: null
+      };
+    } else {
+      try {
+        return {
+          type: 'serialized',
+          data: JSON.stringify(object),
+          originalType: object.constructor?.name || 'unknown'
+        };
+      } catch (serializationError) {
+        console.warn('Failed to serialize object for embed:', serializationError);
+        return {
+          type: 'placeholder',
+          id: Math.random().toString(36).substr(2, 9),
+          originalType: object.constructor?.name || 'unknown'
+        };
+      }
+    }
   }
 
   /**
@@ -124,52 +243,24 @@ export class XmlText {
       return;
     }
 
-    const items = this._list.toArray();
-    for (let i = index; i < Math.min(index + length, items.length); i++) {
-      const item = items[i];
-      if (typeof item === 'string') {
-        // Convert string to formatted object
-        this._list.delete(i, 1);
-        this._list.insert(i, {
-          char: item,
-          attributes: { ...attributes }
-        });
-      } else if (item && typeof item === 'object') {
-        // Merge attributes with existing formatted object
-        const existingAttrs = (item as any).attributes || {};
-        const newAttrs = { ...existingAttrs, ...attributes };
-        
-        // Remove null/undefined attributes (YJS style)
-        Object.keys(newAttrs).forEach(key => {
-          if (newAttrs[key] === null || newAttrs[key] === undefined) {
-            delete newAttrs[key];
-          }
-        });
-        
-        this._list.delete(i, 1);
-        if ((item as any).char !== undefined) {
-          this._list.insert(i, {
-            char: (item as any).char,
-            attributes: newAttrs
-          });
-        } else {
-          // Embed object
-          this._list.insert(i, {
-            ...item,
-            attributes: newAttrs
-          });
-        }
-      }
-    }
-
+    // Store formatting information in the attributes map
+    // LoroText doesn't support character-level formatting like Y.js
+    const formatKey = `format_${index}_${length}_${Date.now()}`;
+    this._attributes.set(formatKey, {
+      type: 'text_format',
+      index: index,
+      length: length,
+      attributes: { ...attributes }
+    });
+    
+    console.log(`Applied formatting to range [${index}, ${index + length}):`, attributes);
+    
     this._notifyObservers({
       delta: [{ retain: index }, { retain: length, attributes }],
       target: this,
       transaction: null
     });
-  }
-
-  /**
+  }  /**
    * Apply delta operations (Quill-style)
    */
   applyDelta(delta: Delta[]): void {
@@ -203,10 +294,11 @@ export class XmlText {
       return;
     }
     
-    for (let i = 0; i < length; i++) {
-      if (offset < this._list.length) {
-        this._list.delete(offset, 1);
-      }
+    // LoroText.delete(pos, len)
+    const textLength = this._text.length;
+    if (offset >= 0 && offset < textLength) {
+      const actualLength = Math.min(length, textLength - offset);
+      this._text.delete(offset, actualLength);
     }
     
     this._notifyObservers({
@@ -220,23 +312,8 @@ export class XmlText {
    * Get the current length of the content (YJS compatible)
    */
   get length(): number {
-    // Count actual characters, not list items
-    const items = this._list.toArray();
-    let count = 0;
-    for (const item of items) {
-      if (typeof item === 'string') {
-        count += 1;
-      } else if (item && typeof item === 'object') {
-        if ((item as any).char !== undefined) {
-          count += 1; // Formatted character
-        } else if ((item as EmbedObject).type === 'embed') {
-          count += 1; // Embedded object counts as 1
-        } else {
-          count += 1; // Other objects
-        }
-      }
-    }
-    return count;
+    // LoroText.length gives us the character count directly
+    return this._text.length;
   }
 
   /**
@@ -244,71 +321,17 @@ export class XmlText {
    */
   toDelta(): Delta[] {
     const deltas: Delta[] = [];
-    const items = this._list.toArray();
+    // For LoroText, we'll create a simple delta with the text content
+    const textContent = this._text.toString();
     
-    let currentText = '';
-    let currentAttributes: TextAttributes | undefined;
-    
-    for (const item of items) {
-      if (typeof item === 'string') {
-        if (currentAttributes) {
-          // Flush previous formatted text
-          if (currentText) {
-            deltas.push({ insert: currentText, attributes: currentAttributes });
-            currentText = '';
-          }
-          currentAttributes = undefined;
-        }
-        currentText += item;
-      } else if (item && typeof item === 'object') {
-        const itemObj = item as any;
-        
-        if (itemObj.type === 'embed') {
-          // Flush any accumulated text
-          if (currentText) {
-            deltas.push({ insert: currentText, attributes: currentAttributes });
-            currentText = '';
-          }
-          
-          // Add the embedded object
-          const embedObj = itemObj as EmbedObject;
-          const embedDelta: Delta = { insert: embedObj.object };
-          if (itemObj.attributes) {
-            embedDelta.attributes = itemObj.attributes;
-          }
-          deltas.push(embedDelta);
-          currentAttributes = undefined;
-        } else if (itemObj.char !== undefined) {
-          // Formatted character
-          const newAttrs = itemObj.attributes;
-          
-          // Check if attributes changed
-          if (JSON.stringify(currentAttributes) !== JSON.stringify(newAttrs)) {
-            // Flush previous text with old attributes
-            if (currentText) {
-              deltas.push({ insert: currentText, attributes: currentAttributes });
-              currentText = '';
-            }
-            currentAttributes = newAttrs;
-          }
-          
-          currentText += itemObj.char;
-        } else {
-          // Other object type
-          if (currentText) {
-            deltas.push({ insert: currentText, attributes: currentAttributes });
-            currentText = '';
-          }
-          deltas.push({ insert: item });
-          currentAttributes = undefined;
-        }
-      }
+    if (textContent.length > 0) {
+      deltas.push({
+        insert: textContent
+      });
     }
     
-    // Flush any remaining text
-    if (currentText) {
-      deltas.push({ insert: currentText, attributes: currentAttributes });
-    }
+    // TODO: Add support for embedded objects stored in _attributes map
+    // For now, this is a simplified implementation
     
     return deltas;
   }
@@ -403,17 +426,8 @@ export class XmlText {
    * Get plain text content only (excluding embedded objects and formatting)
    */
   toPlainString(): string {
-    const items = this._list.toArray();
-    return items
-      .map(item => {
-        if (typeof item === 'string') {
-          return item;
-        } else if (item && typeof item === 'object' && (item as any).char) {
-          return (item as any).char;
-        }
-        return '';
-      })
-      .join('');
+    // LoroText.toString() gives us the plain text content
+    return this._text.toString();
   }
 
   /**
@@ -435,10 +449,10 @@ export class XmlText {
   }
 
   /**
-   * Get the underlying LoroList for advanced operations
+   * Get the underlying LoroText for advanced operations
    */
-  getLoroList(): LoroList {
-    return this._list;
+  getLoroText(): LoroText {
+    return this._text;
   }
 
   /**
@@ -454,8 +468,8 @@ export class XmlText {
   observe(callback: (event: XmlTextEvent) => void): () => void {
     this._observers.push(callback);
     
-    // Subscribe to list changes
-    const unsubscribeList = this._list.subscribe(() => {
+    // Subscribe to text changes
+    const unsubscribeText = this._text.subscribe(() => {
       // Convert to YJS-style event format
       const event: XmlTextEvent = {
         delta: this.toDelta(),
@@ -480,7 +494,7 @@ export class XmlText {
       if (index > -1) {
         this._observers.splice(index, 1);
       }
-      unsubscribeList();
+      unsubscribeText();
       unsubscribeAttrs();
     };
   }
@@ -538,18 +552,19 @@ export class XmlText {
   }
 
   /**
-   * Get the item at a specific index
+   * Get the character at a specific index
    */
-  get(index: number): unknown {
-    return this._list.get(index);
+  get(index: number): string {
+    const text = this._text.toString();
+    return text[index] || '';
   }
 
   /**
-   * Get a range of items
+   * Get a range of characters
    */
-  slice(start?: number, end?: number): unknown[] {
-    const items = this._list.toArray();
-    return items.slice(start, end);
+  slice(start?: number, end?: number): string {
+    const text = this._text.toString();
+    return text.slice(start, end);
   }
 
   /**
@@ -566,15 +581,14 @@ export class XmlText {
   getCursor(pos: number, side?: -1 | 0 | 1): Cursor | null {
     try {
       // Convert position-based access to Loro cursor
-      // For LoroXmlText backed by LoroList, we need to create cursors based on list positions
-      const textContent = this.toString();
-      if (pos < 0 || pos > textContent.length) {
+      // For LoroText, we can create cursors based on text positions
+      const textLength = this._text.length;
+      if (pos < 0 || pos > textLength) {
         return null;
       }
       
-      // Create a cursor using the underlying list structure
-      // Since we store characters individually in the list, position maps directly
-      return this._list.getCursor(Math.min(pos, this._list.length), side || 0);
+      // Create a cursor using the underlying text structure
+      return this._text.getCursor(Math.min(pos, textLength), side || 0);
     } catch (error) {
       console.warn('Failed to create cursor:', error);
       return null;
@@ -601,10 +615,9 @@ export class XmlText {
    * Check if this XmlText has formatting attributes
    */
   get hasFormatting(): boolean {
-    const items = this._list.toArray();
-    return items.some(item => 
-      item && typeof item === 'object' && (item as any).attributes
-    );
+    // Check if we have any formatting attributes stored
+    const attrKeys = Array.from(this._attributes.keys());
+    return attrKeys.some(key => key.startsWith('format_'));
   }
 
   /**

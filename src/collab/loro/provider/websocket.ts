@@ -4,15 +4,14 @@
 
 /* eslint-env browser */
 
-import type {LoroDoc} from 'loro-crdt'
-import { EphemeralStore } from 'loro-crdt'
-import type { UserState, ProviderAwareness } from '../State'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent } from 'loro-crdt'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
 import { ObservableV2 } from 'lib0/observable'
 import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
+import type { UserState, ProviderAwareness } from '../State'
 
 // Loro message types (JSON-based)
 export const messageLoroUpdate = 'loro-update'
@@ -68,8 +67,23 @@ class AwarenessAdapter implements ProviderAwareness {
 
   getLocalState(): UserState | null {
     const localKey = `user-${this.localClientId}`
-    const state = this.ephemeralStore.get(localKey)
-    return state ? state as UserState : null
+    console.log(`[Client] AwarenessAdapter.getLocalState() - ENTRY - key: ${localKey}, clientId: ${this.localClientId}`)
+    
+    try {
+      console.log(`[Client] AwarenessAdapter.getLocalState() - About to call ephemeralStore.get()`)
+      const state = this.ephemeralStore.get(localKey)
+      console.log(`[Client] AwarenessAdapter.getLocalState() - ephemeralStore.get() SUCCESS:`, !!state)
+      return state ? state as UserState : null
+    } catch (error) {
+      console.error(`[Client] AwarenessAdapter.getLocalState() - ephemeralStore.get() FAILED:`, {
+        error: error.message,
+        stack: error.stack,
+        localKey,
+        clientId: this.localClientId,
+        storeExists: !!this.ephemeralStore
+      })
+      throw error
+    }
   }
 
   getStates(): Map<number, UserState> {
@@ -90,7 +104,24 @@ class AwarenessAdapter implements ProviderAwareness {
 
   setLocalState(state: UserState): void {
     const localKey = `user-${this.localClientId}`
-    this.ephemeralStore.set(localKey, state as any)
+    console.log(`[Client] AwarenessAdapter.setLocalState() - ENTRY - key: ${localKey}, clientId: ${this.localClientId}`)
+    console.log(`[Client] AwarenessAdapter.setLocalState() - State object:`, state)
+    
+    try {
+      console.log(`[Client] AwarenessAdapter.setLocalState() - About to call ephemeralStore.set()`)
+      this.ephemeralStore.set(localKey, state as any)
+      console.log(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() SUCCESS`)
+    } catch (error) {
+      console.error(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() FAILED:`, {
+        error: error.message,
+        stack: error.stack,
+        localKey,
+        clientId: this.localClientId,
+        stateKeys: Object.keys(state || {}),
+        storeExists: !!this.ephemeralStore
+      })
+      throw error
+    }
   }
 
   setLocalStateField(field: string, value: unknown): void {
@@ -176,16 +207,21 @@ messageHandlers[messageQueryEphemeral] = (
   message: QueryEphemeralMessage,
   _emitSynced: boolean
 ): string | null => {
-  // Respond with current ephemeral state
-  const ephemeralUpdate = provider.ephemeralStore.encodeAll()
-  
-  const response: EphemeralMessage = {
-    type: 'ephemeral',
-    ephemeral: Array.from(ephemeralUpdate),
-    docId: message.docId
+  try {
+    // Use encodeAll() to encode all ephemeral store data
+    const encodedData = provider.ephemeralStore.encodeAll()
+    
+    const response: EphemeralMessage = {
+      type: 'ephemeral',
+      ephemeral: Array.from(encodedData),
+      docId: message.docId
+    }
+    
+    return JSON.stringify(response)
+  } catch (error) {
+    console.error('Error in messageQueryEphemeral handler:', error.message)
+    return null
   }
-  
-  return JSON.stringify(response)
 }
 
 messageHandlers[messageEphemeral] = (
@@ -193,12 +229,73 @@ messageHandlers[messageEphemeral] = (
   message: EphemeralMessage,
   _emitSynced: boolean
 ): string | null => {
+  console.log(`[Client] messageHandlers[messageEphemeral] - Received ephemeral message:`, {
+    messageType: message.type,
+    ephemeralLength: message.ephemeral?.length,
+    docId: message.docId,
+    ephemeralSample: message.ephemeral?.slice(0, 10)
+  })
+  
   try {
+    // Validate message data before processing
+    if (!message.ephemeral || message.ephemeral.length === 0) {
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Skipping empty ephemeral data`)
+      return null
+    }
+    
+    // Reject obviously corrupted data (too small, common corrupt patterns)
+    if (message.ephemeral.length < 8) {
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Rejecting suspiciously small ephemeral data:`, message.ephemeral.length)
+      return null
+    }
+    
+    // Additional validation - check for specific known bad patterns
+    if (message.ephemeral.length === 1) {
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Rejecting single-byte ephemeral data (likely corrupted):`, message.ephemeral)
+      return null
+    }
+    
+    // Validate ephemeral data format by checking if it starts with reasonable values
+    // Ephemeral data should have a structured format - single random bytes are invalid
+    const firstBytes = message.ephemeral.slice(0, 4)
+    if (firstBytes.every(b => b === 0) || firstBytes.every(b => b === 255)) {
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Rejecting ephemeral data with suspicious pattern:`, firstBytes)
+      return null
+    }
+    
     // Apply ephemeral update
-    provider.ephemeralStore.apply(new Uint8Array(message.ephemeral))
+    const ephemeralBytes = new Uint8Array(message.ephemeral)
+    console.log(`[Client] messageHandlers[messageEphemeral] - Applying ephemeral update of size:`, ephemeralBytes.length)
+    
+    // Use a try-catch specifically for the apply operation to isolate WASM errors
+    try {
+      provider.ephemeralStore.apply(ephemeralBytes)
+      console.log(`[Client] messageHandlers[messageEphemeral] - Successfully applied ephemeral update`)
+    } catch (applyError) {
+      console.error(`[Client] messageHandlers[messageEphemeral] - WASM apply() failed:`, {
+        error: applyError.message,
+        ephemeralLength: ephemeralBytes.length,
+        ephemeralSample: Array.from(ephemeralBytes.slice(0, 20))
+      })
+      
+      // If this is a WASM memory error, don't attempt any more ephemeral operations
+      if (applyError.message && applyError.message.includes('memory access out of bounds')) {
+        console.error(`[Client] messageHandlers[messageEphemeral] - CRITICAL: WASM memory corruption in apply(). Stopping ephemeral processing.`)
+        return null
+      }
+      
+      throw applyError // Re-throw if not a WASM error 
+    }
+    
     return null
   } catch (error) {
-    console.error('Failed to apply ephemeral update:', error)
+    console.error(`[Client] messageHandlers[messageEphemeral] - ERROR in ephemeral message handler:`, {
+      error: error.message,
+      stack: error.stack,
+      messageLength: message.ephemeral?.length,
+      ephemeralSample: message.ephemeral?.slice(0, 10)
+    })
+    
     return null
   }
 }
@@ -349,17 +446,60 @@ const setupWS = (provider) => {
         type: 'query-ephemeral',
         docId: provider.roomname
       }
-      websocket.send(JSON.stringify(ephemeralRequest))
+      // Send a simple test message first to verify connection
+      const testMessage = JSON.stringify({ type: 'test', data: 'hello' })
+      console.log(`[Client] setupWS - Sending test message:`, testMessage)
+      try {
+        websocket.send(testMessage)
+        console.log(`[Client] setupWS - Test message sent successfully`)
+      } catch (testError) {
+        console.error(`[Client] setupWS - Failed to send test message:`, testError)
+      }
+      
+      const requestString = JSON.stringify(ephemeralRequest)
+      console.log(`[Client] setupWS - Sending ephemeral query:`, requestString)
+      websocket.send(requestString)
       
       // broadcast local ephemeral state if any
+      console.log(`[Client] setupWS - Getting local ephemeral state`)
       const localState = provider.ephemeralStore.getAllStates()
+      console.log(`[Client] setupWS - Local ephemeral state:`, localState)
+      
       if (Object.keys(localState).length > 0) {
-        const ephemeralMessage: EphemeralMessage = {
-          type: 'ephemeral',
-          ephemeral: Array.from(provider.ephemeralStore.encodeAll()),
-          docId: provider.roomname
+        console.log(`[Client] setupWS - Encoding ephemeral data using encodeAll()`)
+        try {
+          // Use encodeAll() to encode all ephemeral store data
+          console.log(`[Client] setupWS - Encoding ephemeral store with encodeAll()`)
+          const encodedData = provider.ephemeralStore.encodeAll()
+          console.log(`[Client] setupWS - encodeAll() SUCCESS - length:`, encodedData.length)
+          console.log(`[Client] setupWS - Encoded data first 20 bytes:`, Array.from(encodedData.slice(0, 20)))
+          
+          console.log(`[Client] setupWS - Creating ephemeral message object`)
+          const ephemeralMessage: EphemeralMessage = {
+            type: 'ephemeral',
+            ephemeral: Array.from(encodedData),
+            docId: provider.roomname
+          }
+          console.log(`[Client] setupWS - Message object created successfully`)
+          
+          console.log(`[Client] setupWS - About to JSON.stringify()`)
+          const messageString = JSON.stringify(ephemeralMessage)
+          console.log(`[Client] setupWS - JSON.stringify() SUCCESS - length:`, messageString.length)
+          console.log(`[Client] setupWS - Message sample:`, messageString.substring(0, 200))
+          
+          console.log(`[Client] setupWS - About to websocket.send()`)
+          websocket.send(messageString)
+          console.log(`[Client] setupWS - websocket.send() SUCCESS`)
+          
+          console.log(`[Client] setupWS - Awareness broadcast completed successfully using encodeAll()`)
+        } catch (error) {
+          console.error(`[Client] setupWS - MAJOR ERROR in ephemeral process:`, {
+            error: error.message,
+            stack: error.stack,
+            localStateKeys: Object.keys(localState),
+            storeExists: !!provider.ephemeralStore
+          })
         }
-        websocket.send(JSON.stringify(ephemeralMessage))
       }
     }
     provider.emit('status', [{
@@ -395,6 +535,8 @@ const broadcastMessage = (provider: WebsocketProvider, message: string) => {
  * @extends {ObservableV2<{ 'connection-close': (event: CloseEvent | null,  provider: WebsocketProvider) => any, 'status': (event: { status: 'connected' | 'disconnected' | 'connecting' }) => any, 'connection-error': (event: Event, provider: WebsocketProvider) => any, 'sync': (state: boolean) => any }>}
  */
 export class WebsocketProvider extends ObservableV2<any> {
+  static globalEphemeralStore: EphemeralStore | null = null
+  
   serverUrl = ''
   roomname = ''
   doc = null
@@ -464,10 +606,41 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.roomname = roomname
     this.doc = doc
     this._WS = WebSocketPolyfill
-    // Create standalone ephemeral store instance if not provided (30 second timeout)
-    this.ephemeralStore = ephemeralStore || new EphemeralStore(30000)
+    // Create or reuse persistent ephemeral store for the entire user session
+    console.log(`[Client] WebsocketProvider constructor - Setting up persistent EphemeralStore for room:`, roomname)
+    try {
+      if (ephemeralStore) {
+        // Use provided ephemeral store (already persistent)
+        this.ephemeralStore = ephemeralStore
+        console.log(`[Client] WebsocketProvider constructor - Using provided persistent EphemeralStore`)
+      } else {
+        // Create or reuse global ephemeral store for session persistence
+        if (!WebsocketProvider.globalEphemeralStore) {
+          console.log(`[Client] WebsocketProvider constructor - Creating new global EphemeralStore`)
+          WebsocketProvider.globalEphemeralStore = new EphemeralStore(300000) // 5 minute timeout
+          console.log(`[Client] WebsocketProvider constructor - Global EphemeralStore created`)
+        } else {
+          console.log(`[Client] WebsocketProvider constructor - Reusing existing global EphemeralStore`)
+        }
+        this.ephemeralStore = WebsocketProvider.globalEphemeralStore
+      }
+      
+      // Test the ephemeral store
+      const testData = this.ephemeralStore.getAllStates()
+      console.log(`[Client] WebsocketProvider constructor - EphemeralStore test getAllStates():`, testData)
+    } catch (error) {
+      console.error(`[Client] WebsocketProvider constructor - ERROR setting up EphemeralStore:`, {
+        error: error.message,
+        stack: error.stack,
+        roomname
+      })
+      throw error
+    }
+    
     // Create awareness adapter that wraps ephemeral store
+    console.log(`[Client] WebsocketProvider constructor - Creating AwarenessAdapter`)
     this.awareness = new AwarenessAdapter(this.ephemeralStore)
+    console.log(`[Client] WebsocketProvider constructor - AwarenessAdapter created successfully`)
     this.wsconnected = false
     this.wsconnecting = false
     this.bcconnected = false
@@ -535,22 +708,43 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Note: LoroDoc doesn't have event listeners like Y.Doc
     // Update handling will be done through manual calls when changes occur
     /**
-     * @param {any} event - EphemeralStoreEvent with added, updated, removed arrays
+     * @param {EphemeralStoreEvent} event - EphemeralStoreEvent with added, updated, removed arrays
      */
-    this._ephemeralUpdateHandler = (event: any) => {
+    this._ephemeralUpdateHandler = (event: EphemeralStoreEvent) => {
       // Only broadcast if there are actual changes
       if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
-        const ephemeralMessage: EphemeralMessage = {
-          type: 'ephemeral',
-          ephemeral: Array.from(this.ephemeralStore.encodeAll()),
-          docId: this.roomname
+        try {
+          // Use encodeAll() to encode all ephemeral store data
+          console.log(`[Client] _ephemeralUpdateHandler - Encoding ephemeral store with encodeAll()`)
+          const encodedData = this.ephemeralStore.encodeAll()
+          console.log(`[Client] _ephemeralUpdateHandler - encodeAll() SUCCESS - length:`, encodedData.length)
+          
+          const ephemeralMessage: EphemeralMessage = {
+            type: 'ephemeral',
+            ephemeral: Array.from(encodedData),
+            docId: this.roomname
+          }
+          broadcastMessage(this, JSON.stringify(ephemeralMessage))
+          
+          console.log(`[Client] _ephemeralUpdateHandler - Awareness broadcast completed`)
+        } catch (error) {
+          console.error(`[Client] _ephemeralUpdateHandler - ERROR:`, error.message)
+          // Fallback: skip this update rather than crash
         }
-        broadcastMessage(this, JSON.stringify(ephemeralMessage))
       }
     }
     this._exitHandler = () => {
-      // Clear all local ephemeral state on exit
-      this.ephemeralStore.destroy()
+      // Clear only our local ephemeral state on exit, don't destroy the global store
+      if (this.ephemeralStore && this.awareness) {
+        try {
+          const clientId = this.doc.clientId || 0
+          const userKey = `user-${clientId}`
+          this.ephemeralStore.delete(userKey)
+          console.log(`[Client] Process exit - Cleared user state: ${userKey}`)
+        } catch (error) {
+          console.log(`[Client] Process exit - Could not clear user state:`, error.message)
+        }
+      }
     }
     if (env.isNode && typeof process !== 'undefined') {
       process.on('exit', this._exitHandler)
@@ -602,8 +796,18 @@ export class WebsocketProvider extends ObservableV2<any> {
     if (env.isNode && typeof process !== 'undefined') {
       process.off('exit', this._exitHandler)
     }
-    // Clean up ephemeral store subscription  
-    this.ephemeralStore.destroy()
+    // DON'T destroy the ephemeral store - it's shared across the session
+    // Only clear our local state from it
+    if (this.ephemeralStore && this.awareness) {
+      try {
+        const clientId = this.doc.clientId || 0
+        const userKey = `user-${clientId}`
+        this.ephemeralStore.delete(userKey)
+        console.log(`[Client] WebsocketProvider.destroy - Cleared user state from persistent store: ${userKey}`)
+      } catch (error) {
+        console.log(`[Client] WebsocketProvider.destroy - Could not clear user state:`, error.message)
+      }
+    }
     // Note: LoroDoc doesn't have event listeners to remove
     super.destroy()
   }
@@ -637,15 +841,22 @@ export class WebsocketProvider extends ObservableV2<any> {
     }
     bc.publish(this.bcChannel, JSON.stringify(queryMessage), this)
     
-    // Broadcast local ephemeral state
+    // Broadcast local ephemeral state using container approach
     const localState = this.ephemeralStore.getAllStates()
     if (Object.keys(localState).length > 0) {
-      const ephemeralMessage: EphemeralMessage = {
-        type: 'ephemeral',
-        ephemeral: Array.from(this.ephemeralStore.encodeAll()),
-        docId: this.roomname
+      try {
+        // Use encodeAll() to encode all ephemeral store data
+        const encodedData = this.ephemeralStore.encodeAll()
+        const ephemeralMessage: EphemeralMessage = {
+          type: 'ephemeral',
+          ephemeral: Array.from(encodedData),
+          docId: this.roomname
+        }
+        bc.publish(this.bcChannel, JSON.stringify(ephemeralMessage), this)
+        
+      } catch (error) {
+        console.error('Error broadcasting ephemeral state in connectBc:', error.message)
       }
-      bc.publish(this.bcChannel, JSON.stringify(ephemeralMessage), this)
     }
   }
 
@@ -653,12 +864,20 @@ export class WebsocketProvider extends ObservableV2<any> {
     // broadcast message with local ephemeral state cleared (indicating disconnect)
     this.ephemeralStore.delete('presence')
     this.ephemeralStore.delete('cursor')
-    const ephemeralMessage: EphemeralMessage = {
-      type: 'ephemeral',
-      ephemeral: Array.from(this.ephemeralStore.encodeAll()),
-      docId: this.roomname
+    
+    try {
+      // Use encodeAll() to encode ephemeral store data for disconnect broadcast
+      const encodedData = this.ephemeralStore.encodeAll()
+      const ephemeralMessage: EphemeralMessage = {
+        type: 'ephemeral',
+        ephemeral: Array.from(encodedData),
+        docId: this.roomname
+      }
+      broadcastMessage(this, JSON.stringify(ephemeralMessage))
+      
+    } catch (error) {
+      console.error('Error broadcasting disconnect in disconnectBc:', error.message)
     }
-    broadcastMessage(this, JSON.stringify(ephemeralMessage))
     if (this.bcconnected) {
       bc.unsubscribe(this.bcChannel, this._bcSubscriber)
       this.bcconnected = false
