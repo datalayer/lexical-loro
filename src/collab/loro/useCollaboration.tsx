@@ -126,14 +126,21 @@ export function useCollaboration(
       event: any, // LoroEventBatch
     ) => {
       console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
+        event: event,
         eventBy: event.by,
+        eventByLocal: event.by_local,
         eventOrigin: event.origin,
         hasEvents: !!event.events,
         eventsCount: event.events?.length,
         skipCollab: skipCollaborationUpdateRef.current
       });
       
-      const origin = event.by; // 'local' | 'import' | 'checkout'
+      // In Loro, event.by_local indicates local vs remote:
+      // We need to determine if this event originated from local changes or remote updates
+      // When applying updates from WebSocket, this should be marked as remote
+      // The challenge is that the WebSocket provider is also subscribing to these events
+      const isLocalChange = event.by_local === true;
+      const origin = isLocalChange ? 'local' : 'remote';
       
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
@@ -156,7 +163,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.log(`[UseCollaboration] Skipping local change (origin: ${origin})`);
+        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by_local: ${event.by_local})`);
       }
     };
 

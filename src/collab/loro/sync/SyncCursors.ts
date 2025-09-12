@@ -108,6 +108,13 @@ function createAbsolutePosition(
 ): {type: any; index: number} | null {
   if (!cursor) return null;
   
+  // Validate that cursor is a proper Cursor instance
+  if (typeof cursor !== 'object' || !cursor.containerId || typeof cursor.containerId !== 'function') {
+    // Cursor objects may be serialized/deserialized through awareness, losing their methods
+    // Silently return null instead of warning to avoid console spam
+    return null;
+  }
+  
   try {
     // Use the document to resolve cursor position
     const doc = binding.doc;
@@ -141,7 +148,11 @@ function createAbsolutePosition(
       }
     }
   } catch (error) {
-    console.warn('Failed to resolve Loro cursor to absolute position:', error);
+    // Silently handle cursor resolution errors - often due to serialization issues
+    // Only log if it's not the common "expected instance of Cursor" error
+    if (error instanceof Error && !error.message.includes('expected instance of Cursor')) {
+      console.warn('Failed to resolve Loro cursor to absolute position:', error);
+    }
   }
   
   return null;
