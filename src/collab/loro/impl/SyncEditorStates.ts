@@ -21,9 +21,9 @@ import {
   HISTORIC_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 import {LoroMap, LoroEvent} from 'loro-crdt';
-import {LoroXmlText} from '../types/LoroXmlText';
+import {XmlText} from '../types';
 
 import {Binding, Provider} from '.';
 import {CollabDecoratorNode} from './CollabDecoratorNode';

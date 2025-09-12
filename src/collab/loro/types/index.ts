@@ -2,4 +2,4 @@
  * Loro types and compatibility layers
  */
 
-export { LoroXmlText, createLoroXmlText, type Delta, type EmbedObject } from './LoroXmlText';
+export { XmlText, createXmlText, type Delta, type EmbedObject } from './XmlText';

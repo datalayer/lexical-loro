@@ -19,7 +19,7 @@ import {
   $isTextNode,
   removeFromParent,
 } from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';

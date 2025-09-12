@@ -26,7 +26,7 @@ import {
   RangeSelection,
   TextNode,
 } from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 import {Doc, Map as YMap, XmlElement, XmlText} from 'yjs';
 
 import {

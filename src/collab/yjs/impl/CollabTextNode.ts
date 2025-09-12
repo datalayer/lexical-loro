@@ -17,8 +17,8 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
-import invariant from '../utils/invariant';
-import simpleDiffWithCursor from '../utils/simpleDiffWithCursor';
+import invariant from '../../utils/invariant';
+import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
 import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from './Utils';
 

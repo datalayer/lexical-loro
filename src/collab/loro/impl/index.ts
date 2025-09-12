@@ -10,7 +10,7 @@ import type {Binding} from './Bindings';
 import type {LexicalCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
 import {UndoManager} from 'loro-crdt';
-import type {LoroXmlText} from '../types/LoroXmlText';
+import type {XmlText} from '../types';
 
 import {createCommand} from 'lexical';
 
@@ -56,15 +56,15 @@ export type Operation = {
   insert: string | Record<string, unknown>;
 };
 export type Delta = Array<Operation>;
-export type LoroNode = Record<string, unknown>;
-export type LoroEvent = Record<string, unknown>;
+export type CRDTNode = Record<string, unknown>;
+export type CRDTEvent = Record<string, unknown>;
 export type {Provider};
 export type {Binding, ClientID, ExcludedProperties} from './Bindings';
 export {createBinding} from './Bindings';
 
 export function createUndoManager(
   binding: Binding,
-  root: LoroXmlText,
+  root: XmlText,
 ): UndoManager {
   const doc = root.getDoc();
   

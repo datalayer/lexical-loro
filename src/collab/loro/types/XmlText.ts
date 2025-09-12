@@ -20,11 +20,11 @@ export interface Delta {
   attributes?: { [key: string]: unknown };
 }
 
-export class LoroXmlText {
+export class XmlText {
   private _list: LoroList;
   private _attributes: LoroMap;
   private _doc: LoroDoc;
-  public parent: LoroXmlText | null = null;
+  public parent: XmlText | null = null;
 
   constructor(doc: LoroDoc, id?: string) {
     this._doc = doc;
@@ -148,8 +148,8 @@ export class LoroXmlText {
   /**
    * Clone this XmlText
    */
-  clone(): LoroXmlText {
-    const cloned = new LoroXmlText(this._doc);
+  clone(): XmlText {
+    const cloned = new XmlText(this._doc);
     // Copy the content
     const items = this._list.toArray();
     for (let i = 0; i < items.length; i++) {
@@ -262,6 +262,6 @@ export class LoroXmlText {
 /**
  * Factory function to create a new LoroXmlText
  */
-export function createLoroXmlText(doc: LoroDoc, id?: string): LoroXmlText {
-  return new LoroXmlText(doc, id);
+export function createXmlText(doc: LoroDoc, id?: string): XmlText {
+  return new XmlText(doc, id);
 }

@@ -12,7 +12,7 @@ import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import type {LoroMap} from 'loro-crdt';
 
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 
 import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from './Utils';
 

@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding, LoroNode} from '.';
+import type {Binding, CRDTNode} from '.';
 
 import {
   $getNodeByKey,
@@ -26,9 +26,9 @@ import {
   RangeSelection,
   TextNode,
 } from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 import {LoroMap, LoroDoc} from 'loro-crdt';
-import {LoroXmlText} from '../types/LoroXmlText';
+import {XmlText} from '../types';
 
 import {
   $createCollabDecoratorNode,
@@ -88,8 +88,8 @@ function isExcludedProperty(
 }
 
 export function getIndexOfCRDTNode(
-  loroParentNode: LoroNode,
-  loroNode: LoroNode,
+  loroParentNode: CRDTNode,
+  loroNode: CRDTNode,
 ): number {
   let node = loroParentNode.firstChild;
   let i = -1;
@@ -129,7 +129,7 @@ export function $createCollabNodeFromLexicalNode(
   let collabNode;
 
   if ($isElementNode(lexicalNode)) {
-    const xmlText = new LoroXmlText(binding.doc, `element_${lexicalNode.__key}`);
+    const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
@@ -160,7 +160,7 @@ export function $createCollabNodeFromLexicalNode(
 }
 
 export function getNodeTypeFromSharedType(
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
 ): string | undefined {
   const type = sharedTypeGet(sharedType, '__type');
   invariant(
@@ -172,7 +172,7 @@ export function getNodeTypeFromSharedType(
 
 export function $getOrInitCollabNodeFromSharedType(
   binding: Binding,
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   parent?: CollabElementNode,
 ):
   | CollabElementNode
@@ -196,7 +196,7 @@ export function $getOrInitCollabNodeFromSharedType(
       parent === undefined && sharedParent !== null
         ? $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedParent as LoroXmlText | LoroMap<Record<string, unknown>>,
+            sharedParent as XmlText | LoroMap<Record<string, unknown>>,
           )
         : parent || null;
 
@@ -205,7 +205,7 @@ export function $getOrInitCollabNodeFromSharedType(
       'Expected parent to be a collab element node',
     );
 
-    if (sharedType instanceof LoroXmlText) {
+    if (sharedType instanceof XmlText) {
       return $createCollabElementNode(sharedType, targetParent, type);
     } else if (sharedType instanceof LoroMap) {
       if (type === 'linebreak') {
@@ -259,7 +259,7 @@ export function createLexicalNodeFromCollabNode(
 
 export function $syncPropertiesFromCRDT(
   binding: Binding,
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,
   keysChanged: null | Set<string>,
 ): void {
@@ -313,7 +313,7 @@ export function $syncPropertiesFromCRDT(
 }
 
 function sharedTypeGet(
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   property: string,
 ): unknown {
   if (sharedType instanceof LoroMap) {
@@ -324,7 +324,7 @@ function sharedTypeGet(
 }
 
 function sharedTypeSet(
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   property: string,
   nextValue: unknown,
 ): void {
@@ -337,7 +337,7 @@ function sharedTypeSet(
 
 function $syncNodeStateToLexical(
   binding: Binding,
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,
 ): void {
   const existingState = sharedTypeGet(sharedType, '__state');
@@ -352,7 +352,7 @@ function $syncNodeStateToLexical(
 
 function syncNodeStateFromLexical(
   binding: Binding,
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {
@@ -391,7 +391,7 @@ function syncNodeStateFromLexical(
 
 export function syncPropertiesFromLexical(
   binding: Binding,
-  sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {

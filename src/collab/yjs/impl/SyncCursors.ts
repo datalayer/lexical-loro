@@ -19,7 +19,7 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 import {
   compareRelativePositions,
   createAbsolutePositionFromRelativePosition,

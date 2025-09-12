@@ -15,8 +15,8 @@ import type {LexicalEditor, NodeKey} from 'lexical';
 import type {LoroDoc} from 'loro-crdt';
 
 import {Klass, LexicalNode} from 'lexical';
-import invariant from '../utils/invariant';
-import {LoroXmlText} from '../types/LoroXmlText';
+import invariant from '../../utils/invariant';
+import {XmlText} from '../types';
 
 import {Provider} from '.';
 import {$createCollabElementNode} from './CollabElementNode';
@@ -55,7 +55,7 @@ export function createBinding(
     doc !== undefined && doc !== null,
     'createBinding: doc is null or undefined',
   );
-  const rootXmlText = new LoroXmlText(doc, 'root');
+  const rootXmlText = new XmlText(doc, 'root');
   const root: CollabElementNode = $createCollabElementNode(
     rootXmlText,
     null,

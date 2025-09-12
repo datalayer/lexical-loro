@@ -8,7 +8,7 @@
 
 import type {Binding} from '.';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
-import type {LoroXmlText} from '../types';
+import type {XmlText} from '../types';
 
 import {$createChildrenArray} from '@lexical/offset';
 import {
@@ -19,7 +19,7 @@ import {
   $isTextNode,
   removeFromParent,
 } from 'lexical';
-import invariant from '../utils/invariant';
+import invariant from '../../utils/invariant';
 
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
@@ -44,12 +44,12 @@ export class CollabElementNode {
     | CollabDecoratorNode
     | CollabLineBreakNode
   >;
-  _xmlText: LoroXmlText;
+  _xmlText: XmlText;
   _type: string;
   _parent: null | CollabElementNode;
 
   constructor(
-    xmlText: LoroXmlText,
+    xmlText: XmlText,
     parent: null | CollabElementNode,
     type: string,
   ) {
@@ -74,7 +74,7 @@ export class CollabElementNode {
     return $isElementNode(node) ? node : null;
   }
 
-  getSharedType(): LoroXmlText {
+  getSharedType(): XmlText {
     return this._xmlText;
   }
 
@@ -119,7 +119,7 @@ export class CollabElementNode {
   applyChildrenCRDTDelta(
     binding: Binding,
     deltas: Array<{
-      insert?: string | object | LoroXmlText;
+      insert?: string | object | XmlText;
       delete?: number;
       retain?: number;
       attributes?: {
@@ -219,7 +219,7 @@ export class CollabElementNode {
           );
           const collabNode = $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedType as LoroXmlText,
+            sharedType as XmlText,
             this,
           );
           if (
@@ -686,7 +686,7 @@ export class CollabElementNode {
 }
 
 export function $createCollabElementNode(
-  xmlText: LoroXmlText,
+  xmlText: XmlText,
   parent: null | CollabElementNode,
   type: string,
 ): CollabElementNode {
