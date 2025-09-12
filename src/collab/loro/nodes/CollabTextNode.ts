@@ -6,17 +6,16 @@
  *
  */
 
-import type {Binding} from '../State';
-import type {CollabElementNode} from './CollabElementNode';
 import type {NodeKey, NodeMap, TextNode} from 'lexical';
-import type {LoroMap} from 'loro-crdt';
-
 import {
   $getNodeByKey,
   $getSelection,
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
+import type {LoroMap} from 'loro-crdt';
+import type {Binding} from '../Bindings';
+import type {CollabElementNode} from './CollabElementNode';
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 

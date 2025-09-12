@@ -6,17 +6,16 @@
  *
  */
 
-import type {Binding} from '../Bindings';
-import type {CollabElementNode} from './CollabElementNode';
 import type {NodeKey, NodeMap, TextNode} from 'lexical';
-import type {Map as YMap} from 'yjs';
-
 import {
   $getNodeByKey,
   $getSelection,
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
+import type {Map as YMap} from 'yjs';
+import type {Binding} from '../Bindings';
+import type {CollabElementNode} from './CollabElementNode';
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 

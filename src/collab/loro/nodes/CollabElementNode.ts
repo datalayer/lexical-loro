@@ -9,7 +9,6 @@
 import type {Binding} from '../State';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import type {XmlText} from '../types/XmlText';
-
 import {$createChildrenArray} from '@lexical/offset';
 import {
   $getNodeByKey,
@@ -20,7 +19,6 @@ import {
   removeFromParent,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
 import {CollabTextNode} from './CollabTextNode';
