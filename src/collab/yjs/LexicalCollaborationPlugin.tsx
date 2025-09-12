@@ -27,17 +27,17 @@ import {useEffect, useRef, useState} from 'react';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {
   CursorsContainerRef,
-  useYjsCollaboration,
-  useYjsFocusTracking,
-  useYjsHistory,
-} from './useYjsCollaboration';
+  useCollaboration,
+  useFocusTracking,
+  useHistory,
+} from './useCollaboration';
 
 type Props = {
   id: string;
   providerFactory: (
     // eslint-disable-next-line no-shadow
     id: string,
-    yjsDocMap: Map<string, Doc>,
+    docMap: Map<string, Doc>,
   ) => Provider;
   shouldBootstrap: boolean;
   username?: string;
@@ -67,7 +67,7 @@ export function CollaborationPlugin({
 
   const collabContext = useCollaborationContext(username, cursorColor);
 
-  const {yjsDocMap, name, color} = collabContext;
+  const {docMap, name, color} = collabContext;
 
   const [editor] = useLexicalComposerContext();
 
@@ -93,14 +93,14 @@ export function CollaborationPlugin({
 
     isProviderInitialized.current = true;
 
-    const newProvider = providerFactory(id, yjsDocMap);
+    const newProvider = providerFactory(id, docMap);
     setProvider(newProvider);
-    setDoc(yjsDocMap.get(id));
+    setDoc(docMap.get(id));
 
     return () => {
       newProvider.disconnect();
     };
-  }, [id, providerFactory, yjsDocMap]);
+  }, [id, providerFactory, docMap]);
 
   const [binding, setBinding] = useState<Binding>();
 
@@ -119,8 +119,8 @@ export function CollaborationPlugin({
       editor,
       provider,
       id,
-      doc || yjsDocMap.get(id),
-      yjsDocMap,
+      doc || docMap.get(id),
+      docMap,
       excludedProperties,
     );
     setBinding(newBinding);
@@ -128,7 +128,7 @@ export function CollaborationPlugin({
     return () => {
       newBinding.root.destroy(newBinding);
     };
-  }, [editor, provider, id, yjsDocMap, doc, excludedProperties]);
+  }, [editor, provider, id, docMap, doc, excludedProperties]);
 
   if (!provider || !binding) {
     return <></>;
@@ -148,7 +148,7 @@ export function CollaborationPlugin({
       provider={provider}
       setDoc={setDoc}
       shouldBootstrap={shouldBootstrap}
-      yjsDocMap={yjsDocMap}
+      docMap={docMap}
       syncCursorPositionsFn={syncCursorPositionsFn}
     />
   );
@@ -158,7 +158,7 @@ function YjsCollaborationCursors({
   editor,
   id,
   provider,
-  yjsDocMap,
+  docMap,
   name,
   color,
   shouldBootstrap,
@@ -173,7 +173,7 @@ function YjsCollaborationCursors({
   editor: LexicalEditor;
   id: string;
   provider: Provider;
-  yjsDocMap: Map<string, Doc>;
+  docMap: Map<string, Doc>;
   name: string;
   color: string;
   shouldBootstrap: boolean;
@@ -185,11 +185,11 @@ function YjsCollaborationCursors({
   collabContext: CollaborationContextType;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
 }) {
-  const cursors = useYjsCollaboration(
+  const cursors = useCollaboration(
     editor,
     id,
     provider,
-    yjsDocMap,
+    docMap,
     name,
     color,
     shouldBootstrap,
@@ -203,8 +203,8 @@ function YjsCollaborationCursors({
 
   collabContext.clientID = binding.clientID;
 
-  useYjsHistory(editor, binding);
-  useYjsFocusTracking(editor, provider, name, color, awarenessData);
+  useHistory(editor, binding);
+  useFocusTracking(editor, provider, name, color, awarenessData);
 
   return cursors;
 }

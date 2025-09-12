@@ -1,5 +1,6 @@
 .DS_Store
-.yjs-wss-db
+.wss-loro
+.wss-yjs
 build
 node_modules
 package-lock.json

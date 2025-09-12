@@ -285,16 +285,16 @@ export function $syncPropertiesFromYjs(
 
     if (prevValue !== nextValue) {
       if (nextValue instanceof Doc) {
-        const yjsDocMap = binding.docMap;
+        const docMap = binding.docMap;
 
         if (prevValue instanceof Doc) {
-          yjsDocMap.delete(prevValue.guid);
+          docMap.delete(prevValue.guid);
         }
 
         const nestedEditor = createEditor();
         const key = nextValue.guid;
         nestedEditor._key = key;
-        yjsDocMap.set(key, nextValue);
+        docMap.set(key, nextValue);
 
         nextValue = nestedEditor;
       }
@@ -420,20 +420,20 @@ export function syncPropertiesFromLexical(
 
     if (prevValue !== nextValue) {
       if (nextValue instanceof EditorClass) {
-        const yjsDocMap = binding.docMap;
+        const docMap = binding.docMap;
         let prevDoc;
 
         if (prevValue instanceof EditorClass) {
           const prevKey = prevValue._key;
-          prevDoc = yjsDocMap.get(prevKey);
-          yjsDocMap.delete(prevKey);
+          prevDoc = docMap.get(prevKey);
+          docMap.delete(prevKey);
         }
 
         // If we already have a document, use it.
         const doc = prevDoc || new Doc();
         const key = doc.guid;
         nextValue._key = key;
-        yjsDocMap.set(key, doc);
+        docMap.set(key, doc);
         nextValue = doc;
         // Mark the node dirty as we've assigned a new key to it
         binding.editor.update(() => {

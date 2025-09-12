@@ -15,7 +15,7 @@ export type CollaborationContextType = {
   color: string;
   isCollabActive: boolean;
   name: string;
-  yjsDocMap: Map<string, Doc>;
+  docMap: Map<string, Doc>;
 };
 
 const entries = [
@@ -43,7 +43,7 @@ export const CollaborationContext = createContext<CollaborationContextType>({
   color: randomEntry[1],
   isCollabActive: false,
   name: randomEntry[0],
-  yjsDocMap: new Map(),
+  docMap: new Map(),
 });
 
 export function useCollaborationContext(

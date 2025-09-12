@@ -20,13 +20,13 @@ const WEBSOCKET_ID = params.get('collabId') || '0';
 // parent dom -> child doc
 export function createWebsocketProvider(
   id: string,
-  yjsDocMap: Map<string, Doc>,
+  docMap: Map<string, Doc>,
 ): Provider {
-  let doc = yjsDocMap.get(id);
+  let doc = docMap.get(id);
 
   if (doc === undefined) {
     doc = new Doc();
-    yjsDocMap.set(id, doc);
+    docMap.set(id, doc);
   } else {
     doc.load();
   }

@@ -27,10 +27,10 @@ import {useEffect, useRef, useState} from 'react';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {
   CursorsContainerRef,
-  useLoroCollaboration,
-  useYjsFocusTracking,
-  useYjsHistory,
-} from './useLoroCollaboration';
+  useCollaboration,
+  useFocusTracking,
+  useHistory,
+} from './useCollaboration';
 
 type Props = {
   id: string;
@@ -185,7 +185,7 @@ function LoroCollaborationCursors({
   collabContext: CollaborationContextType;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
 }) {
-  const cursors = useLoroCollaboration(
+  const cursors = useCollaboration(
     editor,
     id,
     provider,
@@ -203,8 +203,8 @@ function LoroCollaborationCursors({
 
   collabContext.clientID = binding.clientID;
 
-  useYjsHistory(editor, binding);
-  useYjsFocusTracking(editor, provider, name, color, awarenessData);
+  useHistory(editor, binding);
+  useFocusTracking(editor, provider, name, color, awarenessData);
 
   return cursors;
 }
