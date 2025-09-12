@@ -46,7 +46,7 @@ import {
   SPEECH_TO_TEXT_COMMAND,
   SUPPORT_SPEECH_RECOGNITION,
 } from '../SpeechToTextPlugin';
-import { CONNECTED_COMMAND, TOGGLE_CONNECT_COMMAND } from '../../collab/yjs/impl';
+import { CONNECTED_COMMAND, TOGGLE_CONNECT_COMMAND } from '../../collab/yjs/services';
 
 async function sendEditorState(editor: LexicalEditor): Promise<void> {
   const stringifiedEditorState = JSON.stringify(editor.getEditorState());

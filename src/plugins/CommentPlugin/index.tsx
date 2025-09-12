@@ -76,7 +76,7 @@ import useModal from '../../hooks/useModal';
 import CommentEditorTheme from '../../themes/CommentEditorTheme';
 import Button from '../../ui/Button';
 import ContentEditable from '../../ui/ContentEditable';
-import { Provider } from '../../collab/yjs/impl';
+import { Provider } from '../../collab/yjs/services';
 
 export const INSERT_INLINE_COMMAND: LexicalCommand<void> = createCommand(
   'INSERT_INLINE_COMMAND',

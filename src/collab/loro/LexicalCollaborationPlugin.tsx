@@ -20,7 +20,7 @@ import {
   ExcludedProperties,
   Provider,
   SyncCursorPositionsFn,
-} from './impl';
+} from './services';
 import {LexicalEditor} from 'lexical';
 import {useEffect, useRef, useState} from 'react';
 
@@ -135,7 +135,7 @@ export function CollaborationPlugin({
   }
 
   return (
-    <LoroCollaborationCursors
+    <CRDTCollaborationCursors
       awarenessData={awarenessData}
       binding={binding}
       collabContext={collabContext}
@@ -154,7 +154,7 @@ export function CollaborationPlugin({
   );
 }
 
-function LoroCollaborationCursors({
+function CRDTCollaborationCursors({
   editor,
   id,
   provider,

@@ -8,7 +8,7 @@
 
 import {LoroDoc} from 'loro-crdt';
 import {WebsocketProvider} from './provider/websocket';
-import { Provider } from './impl';
+import { Provider } from './services';
 
 const url = new URL(window.location.href);
 const params = new URLSearchParams(url.search);
