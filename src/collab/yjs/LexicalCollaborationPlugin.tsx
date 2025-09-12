@@ -20,7 +20,7 @@ import {
   ExcludedProperties,
   Provider,
   SyncCursorPositionsFn,
-} from './services';
+} from './types/Types';
 import {LexicalEditor} from 'lexical';
 import {useEffect, useRef, useState} from 'react';
 

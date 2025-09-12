@@ -33,7 +33,8 @@ import {
   YXmlEvent,
 } from 'yjs';
 
-import {Binding, Provider} from '.';
+import {Binding} from '../Bindings';
+import {Provider} from '../types/Types';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabElementNode} from './CollabElementNode';
 import {CollabTextNode} from './CollabTextNode';

@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from './Bindings';
+import type {Binding} from '../Bindings';
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
 import type {Cursor as LoroCursor} from 'loro-crdt';
 
@@ -19,9 +19,8 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
-import invariant from '../../utils/invariant';
 
-import {Provider, UserState} from '.';
+import {Provider, UserState} from '../types/Types';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabElementNode} from './CollabElementNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';

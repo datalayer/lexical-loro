@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from '.';
+import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
 import type {LineBreakNode, NodeKey} from 'lexical';
 import type {Map as YMap} from 'yjs';

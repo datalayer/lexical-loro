@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from '.';
+import type {Binding} from '../Bindings';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import type {AbstractType, Map as YMap, XmlElement, XmlText} from 'yjs';
 

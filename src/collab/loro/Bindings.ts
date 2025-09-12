@@ -6,20 +6,20 @@
  *
  */
 
-import type {CollabDecoratorNode} from './CollabDecoratorNode';
-import type {CollabElementNode} from './CollabElementNode';
-import type {CollabLineBreakNode} from './CollabLineBreakNode';
-import type {CollabTextNode} from './CollabTextNode';
-import type {Cursor} from './SyncCursors';
+import type {CollabDecoratorNode} from './services/CollabDecoratorNode';
+import type {CollabElementNode} from './services/CollabElementNode';
+import type {CollabLineBreakNode} from './services/CollabLineBreakNode';
+import type {CollabTextNode} from './services/CollabTextNode';
+import type {Cursor} from './services/SyncCursors';
 import type {LexicalEditor, NodeKey} from 'lexical';
-import type {Doc} from 'yjs';
+import type {LoroDoc} from 'loro-crdt';
 
 import {Klass, LexicalNode} from 'lexical';
-import invariant from '../../utils/invariant';
-import {XmlText} from 'yjs';
+import invariant from '../utils/invariant';
+import {XmlText} from './types';
 
-import {Provider} from '.';
-import {$createCollabElementNode} from './CollabElementNode';
+import {Provider} from './types/Types';
+import {$createCollabElementNode} from './services/CollabElementNode';
 
 export type ClientID = number;
 export type Binding = {
@@ -33,8 +33,8 @@ export type Binding = {
   >;
   cursors: Map<ClientID, Cursor>;
   cursorsContainer: null | HTMLElement;
-  doc: Doc;
-  docMap: Map<string, Doc>;
+  doc: LoroDoc;
+  docMap: Map<string, LoroDoc>;
   editor: LexicalEditor;
   id: string;
   nodeProperties: Map<string, Array<string>>;
@@ -47,15 +47,15 @@ export function createBinding(
   editor: LexicalEditor,
   provider: Provider,
   id: string,
-  doc: Doc | null | undefined,
-  docMap: Map<string, Doc>,
+  doc: LoroDoc | null | undefined,
+  docMap: Map<string, LoroDoc>,
   excludedProperties?: ExcludedProperties,
 ): Binding {
   invariant(
     doc !== undefined && doc !== null,
     'createBinding: doc is null or undefined',
   );
-  const rootXmlText = doc.get('root', XmlText) as XmlText;
+  const rootXmlText = new XmlText(doc, 'root');
   const root: CollabElementNode = $createCollabElementNode(
     rootXmlText,
     null,
@@ -63,7 +63,7 @@ export function createBinding(
   );
   root._key = 'root';
   return {
-    clientID: doc.clientID,
+    clientID: Number(doc.peerId.toString().slice(0, 8)), // Convert Loro peer ID to number
     collabNodeMap: new Map(),
     cursors: new Map(),
     cursorsContainer: null,

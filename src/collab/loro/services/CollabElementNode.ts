@@ -6,9 +6,9 @@
  *
  */
 
-import type {Binding} from '.';
+import type {Binding} from '../types/Types';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
-import type {XmlText} from '../types';
+import type {XmlText} from '../types/XmlText';
 
 import {$createChildrenArray} from '@lexical/offset';
 import {

@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from './Bindings';
+import type {Binding} from '../Bindings';
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
 import type {AbsolutePosition, RelativePosition} from 'yjs';
 
@@ -26,7 +26,7 @@ import {
   createRelativePositionFromTypeIndex,
 } from 'yjs';
 
-import {Provider, UserState} from '.';
+import {UserState, Provider} from '../types/Types';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabElementNode} from './CollabElementNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';

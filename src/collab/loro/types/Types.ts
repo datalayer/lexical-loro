@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from './Bindings';
+import type {Binding} from './../Bindings';
 import type {LexicalCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
 import {UndoManager} from 'loro-crdt';
@@ -59,8 +59,8 @@ export type Delta = Array<Operation>;
 export type CRDTNode = Record<string, unknown>;
 export type CRDTEvent = Record<string, unknown>;
 export type {Provider};
-export type {Binding, ClientID, ExcludedProperties} from './Bindings';
-export {createBinding} from './Bindings';
+export type {Binding, ClientID, ExcludedProperties} from './../Bindings';
+export {createBinding} from './../Bindings';
 
 export function createUndoManager(
   binding: Binding,
@@ -146,12 +146,14 @@ export function setLocalStateFocus(
   localState.focusing = focusing;
   awareness.setLocalState(localState);
 }
+
 export {
   getAnchorAndFocusCollabNodesForUserState,
   syncCursorPositions,
   type SyncCursorPositionsFn,
-} from './SyncCursors';
+} from '../services/SyncCursors';
+
 export {
   syncLexicalUpdateToCRDT,
   syncCRDTChangesToLexical,
-} from './SyncEditorStates';
+} from '../services/SyncEditorStates';

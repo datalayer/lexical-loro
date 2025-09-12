@@ -17,7 +17,7 @@ import {
   YArrayEvent,
   YEvent,
 } from 'yjs';
-import { Provider, TOGGLE_CONNECT_COMMAND } from '../collab/yjs/services';
+import { Provider, TOGGLE_CONNECT_COMMAND } from '../collab/yjs/types/Types';
 
 export type Comment = {
   author: string;
@@ -233,8 +233,7 @@ export class CommentStore {
   _withRemoteTransaction(fn: () => void): void {
     const provider = this._collabProvider;
     if (provider !== null) {
-      // @ts-expect-error doc does exist
-      const doc = provider.doc;
+      const doc = (provider as any).doc;
       doc.transact(fn, this);
     }
   }
@@ -253,8 +252,7 @@ export class CommentStore {
   _getCollabComments(): null | YArray<any> {
     const provider = this._collabProvider;
     if (provider !== null) {
-      // @ts-expect-error doc does exist
-      const doc = provider.doc;
+      const doc = (provider as any).doc;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return doc.get('comments', YArray) as YArray<any>;
     }
