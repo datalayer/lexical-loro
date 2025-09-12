@@ -1,19 +1,4 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
-import type {AbsolutePosition, RelativePosition} from 'yjs';
-import {
-  compareRelativePositions,
-  createAbsolutePositionFromRelativePosition,
-  createRelativePositionFromTypeIndex,
-} from 'yjs';
-import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import {
   $getNodeByKey,
   $getSelection,
@@ -22,6 +7,13 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
+import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
+import type {AbsolutePosition, RelativePosition} from 'yjs';
+import {
+  compareRelativePositions,
+  createAbsolutePositionFromRelativePosition,
+  createRelativePositionFromTypeIndex,
+} from 'yjs';
 import invariant from '../../utils/invariant';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
@@ -45,11 +37,18 @@ export type CursorSelection = {
   name: HTMLSpanElement;
   selections: Array<HTMLElement>;
 };
+
 export type Cursor = {
   color: string;
   name: string;
   selection: null | CursorSelection;
 };
+
+export type AnyCollabNode =
+  | CollabDecoratorNode
+  | CollabElementNode
+  | CollabTextNode
+  | CollabLineBreakNode;
 
 function createRelativePosition(
   point: Point,
@@ -292,12 +291,6 @@ function updateCursor(
     selections.pop();
   }
 }
-
-type AnyCollabNode =
-  | CollabDecoratorNode
-  | CollabElementNode
-  | CollabTextNode
-  | CollabLineBreakNode;
 
 export function getAnchorAndFocusCollabNodesForUserState(
   binding: Binding,

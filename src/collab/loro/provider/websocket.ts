@@ -5,9 +5,9 @@
 /* eslint-env browser */
 
 import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEventBatch } from 'loro-crdt'
+import { ObservableV2 } from 'lib0/observable'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
-import { ObservableV2 } from 'lib0/observable'
 import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'

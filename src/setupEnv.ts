@@ -1,11 +1,3 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import {INITIAL_SETTINGS, Settings} from './appSettings';
 
 // Export a function so this is not tree-shaken,

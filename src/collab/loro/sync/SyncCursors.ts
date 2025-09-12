@@ -1,13 +1,4 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import type {BaseSelection, NodeKey, NodeMap, Point} from 'lexical';
-import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import {
   $getNodeByKey,
   $getSelection,
@@ -16,6 +7,7 @@ import {
   $isRangeSelection,
   $isTextNode,
 } from 'lexical';
+import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import type {Cursor as LoroCursor} from 'loro-crdt';
 import invariant from '../../utils/invariant';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
@@ -40,11 +32,18 @@ export type CursorSelection = {
   name: HTMLSpanElement;
   selections: Array<HTMLElement>;
 };
+
 export type Cursor = {
   color: string;
   name: string;
   selection: null | CursorSelection;
 };
+
+export type AnyCollabNode =
+  | CollabDecoratorNode
+  | CollabElementNode
+  | CollabTextNode
+  | CollabLineBreakNode;
 
 function createRelativePosition(
   point: Point,
@@ -361,12 +360,6 @@ function updateCursor(
     selections.pop();
   }
 }
-
-export type AnyCollabNode =
-  | CollabDecoratorNode
-  | CollabElementNode
-  | CollabTextNode
-  | CollabLineBreakNode;
 
 export function getAnchorAndFocusCollabNodesForUserState(
   binding: Binding,
