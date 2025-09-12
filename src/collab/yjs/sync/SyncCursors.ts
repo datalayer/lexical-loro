@@ -26,7 +26,7 @@ import {
   createRelativePositionFromTypeIndex,
 } from 'yjs';
 
-import {UserState, Provider} from '../types/Types';
+import {UserState, Provider} from '../state/State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';

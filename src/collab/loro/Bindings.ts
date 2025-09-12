@@ -16,9 +16,9 @@ import type {LoroDoc} from 'loro-crdt';
 
 import {Klass, LexicalNode} from 'lexical';
 import invariant from '../utils/invariant';
-import {XmlText} from './types';
+import {XmlText} from './types/XmlText';
 
-import {Provider} from './types/Types';
+import {Provider} from './state/State';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
 
 export type ClientID = number;

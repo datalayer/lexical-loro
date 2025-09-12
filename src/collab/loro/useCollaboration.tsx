@@ -10,7 +10,7 @@ import * as React from 'react';
 import type {JSX} from 'react';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider, SyncCursorPositionsFn} from './types/Types';
+import type {Binding, Provider, SyncCursorPositionsFn} from './state/State';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
@@ -20,7 +20,7 @@ import {
   syncLexicalUpdateToCRDT,
   syncCRDTChangesToLexical,
   TOGGLE_CONNECT_COMMAND,
-} from './types/Types';
+} from './state/State';
 import {
   $createParagraphNode,
   $getRoot,

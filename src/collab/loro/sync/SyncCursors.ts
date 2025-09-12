@@ -20,7 +20,7 @@ import {
   $isTextNode,
 } from 'lexical';
 
-import {Provider, UserState} from '../types/Types';
+import {Provider, UserState} from '../state/State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';

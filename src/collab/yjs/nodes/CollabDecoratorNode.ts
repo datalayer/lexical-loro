@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding} from '../types/Types';
+import type {Binding} from '../state/State';
 import type {CollabElementNode} from './CollabElementNode';
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import type {XmlElement} from 'yjs';

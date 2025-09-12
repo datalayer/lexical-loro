@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding, CRDTNode} from './types/Types';
+import type {Binding, CRDTNode} from './state/State';
 
 import {
   $getNodeByKey,
@@ -28,7 +28,7 @@ import {
 } from 'lexical';
 import invariant from '../utils/invariant';
 import {LoroMap, LoroDoc} from 'loro-crdt';
-import {XmlText} from './types';
+import {XmlText} from './types/XmlText';
 
 import {
   $createCollabDecoratorNode,

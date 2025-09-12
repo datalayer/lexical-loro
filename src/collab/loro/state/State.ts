@@ -6,11 +6,11 @@
  *
  */
 
-import type {Binding} from './../Bindings';
+import type {Binding} from '../Bindings';
 import type {LexicalCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
 import {UndoManager} from 'loro-crdt';
-import type {XmlText} from '../types';
+import type {XmlText} from '../types/XmlText';
 
 import {createCommand} from 'lexical';
 
@@ -59,8 +59,8 @@ export type Delta = Array<Operation>;
 export type CRDTNode = Record<string, unknown>;
 export type CRDTEvent = Record<string, unknown>;
 export type {Provider};
-export type {Binding, ClientID, ExcludedProperties} from './../Bindings';
-export {createBinding} from './../Bindings';
+export type {Binding, ClientID, ExcludedProperties} from '../Bindings';
+export {createBinding} from '../Bindings';
 
 export function createUndoManager(
   binding: Binding,

@@ -24,9 +24,9 @@ import {
 import invariant from '../../utils/invariant';
 
 import {LoroMap, LoroEvent} from 'loro-crdt';
-import {XmlText} from '../types';
+import {XmlText} from '../types/XmlText';
 
-import {Binding, Provider} from '../types/Types';
+import {Binding, Provider} from '../state/State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
