@@ -152,6 +152,6 @@ export {
   type SyncCursorPositionsFn,
 } from './SyncCursors';
 export {
-  syncLexicalUpdateToYjs,
-  syncYjsChangesToLexical,
+  syncLexicalUpdateToCRDT,
+  syncCRDTChangesToLexical,
 } from './SyncEditorStates';

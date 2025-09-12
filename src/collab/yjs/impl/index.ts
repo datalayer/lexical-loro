@@ -11,7 +11,7 @@ import type {LexicalCommand} from 'lexical';
 import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';
 
 import {createCommand} from 'lexical';
-import {UndoManager as YjsUndoManager} from 'yjs';
+import {UndoManager as CRDTUndoManager} from 'yjs';
 
 export type UserState = {
   anchorPos: null | RelativePosition;
@@ -55,8 +55,8 @@ export type Operation = {
   insert: string | Record<string, unknown>;
 };
 export type Delta = Array<Operation>;
-export type YjsNode = Record<string, unknown>;
-export type YjsEvent = Record<string, unknown>;
+export type CRDTNode = Record<string, unknown>;
+export type CRDTEvent = Record<string, unknown>;
 export type {Provider};
 export type {Binding, ClientID, ExcludedProperties} from './Bindings';
 export {createBinding} from './Bindings';
@@ -65,7 +65,7 @@ export function createUndoManager(
   binding: Binding,
   root: XmlText,
 ): UndoManager {
-  return new YjsUndoManager(root, {
+  return new CRDTUndoManager(root, {
     trackedOrigins: new Set([binding, null]),
   });
 }
@@ -117,6 +117,6 @@ export {
   type SyncCursorPositionsFn,
 } from './SyncCursors';
 export {
-  syncLexicalUpdateToYjs,
-  syncYjsChangesToLexical,
+  syncLexicalUpdateToCRDT,
+  syncCRDTChangesToLexical,
 } from './SyncEditorStates';

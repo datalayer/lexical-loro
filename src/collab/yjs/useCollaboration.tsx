@@ -17,8 +17,8 @@ import {
   initLocalState,
   setLocalStateFocus,
   syncCursorPositions,
-  syncLexicalUpdateToYjs,
-  syncYjsChangesToLexical,
+  syncLexicalUpdateToCRDT,
+  syncCRDTChangesToLexical,
   TOGGLE_CONNECT_COMMAND,
 } from './impl';
 import {
@@ -96,7 +96,7 @@ export function useCollaboration(
       syncCursorPositionsFn(binding, provider);
     };
 
-    const onYjsTreeChanges = (
+    const onCRDTTreeChanges = (
       // The below `any` type is taken directly from the vendor types for YJS.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       events: Array<YEvent<any>>,
@@ -105,7 +105,7 @@ export function useCollaboration(
       const origin = transaction.origin;
       if (origin !== binding) {
         const isFromUndoManger = origin instanceof UndoManager;
-        syncYjsChangesToLexical(
+        syncCRDTChangesToLexical(
           binding,
           provider,
           events,
@@ -135,7 +135,7 @@ export function useCollaboration(
     provider.on('sync', onSync);
     awareness.on('update', onAwarenessUpdate);
     // This updates the local editor state when we receive updates from other clients
-    root.getSharedType().observeDeep(onYjsTreeChanges);
+    root.getSharedType().observeDeep(onCRDTTreeChanges);
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,
@@ -146,7 +146,7 @@ export function useCollaboration(
         tags,
       }) => {
         if (tags.has(SKIP_COLLAB_TAG) === false) {
-          syncLexicalUpdateToYjs(
+          syncLexicalUpdateToCRDT(
             binding,
             provider,
             prevEditorState,
@@ -182,7 +182,7 @@ export function useCollaboration(
       provider.off('status', onStatus);
       provider.off('reload', onProviderDocReload);
       awareness.off('update', onAwarenessUpdate);
-      root.getSharedType().unobserveDeep(onYjsTreeChanges);
+      root.getSharedType().unobserveDeep(onCRDTTreeChanges);
       docMap.delete(id);
       removeListener();
     };

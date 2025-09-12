@@ -93,7 +93,7 @@ const updateHandler = (update, _origin, doc: WSSharedDoc, _tr) => {
 let contentInitializor = _ydoc => Promise.resolve()
 
 /**
- * This function is called once every time a Yjs document is created. You can
+ * This function is called once every time a CRDT document is created. You can
  * use it to pull data from an external source or initialize content.
  *
  * @param {(ydoc: Y.Doc) => Promise<void>} f

@@ -17,8 +17,8 @@ import {
   initLocalState,
   setLocalStateFocus,
   syncCursorPositions,
-  syncLexicalUpdateToYjs,
-  syncYjsChangesToLexical,
+  syncLexicalUpdateToCRDT,
+  syncCRDTChangesToLexical,
   TOGGLE_CONNECT_COMMAND,
 } from './impl';
 import {
@@ -138,7 +138,7 @@ export function useCollaboration(
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
         
-        syncYjsChangesToLexical(
+        syncCRDTChangesToLexical(
           binding,
           provider,
           event.events, // Array of LoroEvent
@@ -196,7 +196,7 @@ export function useCollaboration(
             doc.setNextCommitOrigin('lexical-edit');
           }
           
-          syncLexicalUpdateToYjs(
+          syncLexicalUpdateToCRDT(
             binding,
             provider,
             prevEditorState,

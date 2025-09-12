@@ -33,7 +33,7 @@ import {
   $syncLocalCursorPosition,
   syncCursorPositions,
   SyncCursorPositionsFn,
-  syncLexicalSelectionToYjs,
+  syncLexicalSelectionToCRDT,
 } from './SyncCursors';
 import {
   $getOrInitCollabNodeFromSharedType,
@@ -59,20 +59,20 @@ function $syncEvent(binding: Binding, event: any): void {
 
   if (collabNode instanceof CollabElementNode) {
     // Handle element node changes
-    collabNode.syncPropertiesFromYjs(binding, new Set());
-    collabNode.syncChildrenFromYjs(binding);
+    collabNode.syncPropertiesFromCRDT(binding, new Set());
+    collabNode.syncChildrenFromCRDT(binding);
   } else if (collabNode instanceof CollabTextNode) {
     // Handle text node changes
-    collabNode.syncPropertiesAndTextFromYjs(binding, new Set());
+    collabNode.syncPropertiesAndTextFromCRDT(binding, new Set());
   } else if (collabNode instanceof CollabDecoratorNode) {
     // Handle decorator node changes
-    collabNode.syncPropertiesFromYjs(binding, new Set());
+    collabNode.syncPropertiesFromCRDT(binding, new Set());
   } else {
     invariant(false, 'Expected text, element, or decorator event');
   }
 }
 
-export function syncYjsChangesToLexical(
+export function syncCRDTChangesToLexical(
   binding: Binding,
   provider: Provider,
   events: Array<any>, // TODO: Define proper Loro event types
@@ -108,7 +108,7 @@ export function syncYjsChangesToLexical(
             }
           }
 
-          syncLexicalSelectionToYjs(
+          syncLexicalSelectionToCRDT(
             binding,
             provider,
             prevSelection,
@@ -196,7 +196,7 @@ function $handleNormalizationMergeConflicts(
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
-export function syncLexicalUpdateToYjs(
+export function syncLexicalUpdateToCRDT(
   binding: Binding,
   provider: Provider,
   prevEditorState: EditorState,
@@ -243,7 +243,7 @@ export function syncLexicalUpdateToYjs(
 
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
-      syncLexicalSelectionToYjs(binding, provider, prevSelection, selection);
+      syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
     });
   });
 }

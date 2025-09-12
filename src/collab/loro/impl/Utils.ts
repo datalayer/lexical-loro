@@ -52,6 +52,7 @@ const elementExcludedProperties = new Set<string>([
   '__first',
   '__last',
   '__size',
+  '__dir',
 ]);
 const rootExcludedProperties = new Set<string>(['__cachedText']);
 const textExcludedProperties = new Set<string>(['__text']);
@@ -86,7 +87,7 @@ function isExcludedProperty(
   return excludedProperties != null && excludedProperties.has(name);
 }
 
-export function getIndexOfYjsNode(
+export function getIndexOfCRDTNode(
   loroParentNode: LoroNode,
   loroNode: LoroNode,
 ): number {
@@ -243,20 +244,20 @@ export function createLexicalNodeFromCollabNode(
 
   if (collabNode instanceof CollabElementNode) {
     const xmlText = collabNode._xmlText;
-    collabNode.syncPropertiesFromYjs(binding, null);
-    collabNode.applyChildrenYjsDelta(binding, xmlText.toDelta());
-    collabNode.syncChildrenFromYjs(binding);
+    collabNode.syncPropertiesFromCRDT(binding, null);
+    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+    collabNode.syncChildrenFromCRDT(binding);
   } else if (collabNode instanceof CollabTextNode) {
-    collabNode.syncPropertiesAndTextFromYjs(binding, null);
+    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
   } else if (collabNode instanceof CollabDecoratorNode) {
-    collabNode.syncPropertiesFromYjs(binding, null);
+    collabNode.syncPropertiesFromCRDT(binding, null);
   }
 
   binding.collabNodeMap.set(lexicalNode.__key, collabNode);
   return lexicalNode;
 }
 
-export function $syncPropertiesFromYjs(
+export function $syncPropertiesFromCRDT(
   binding: Binding,
   sharedType: LoroXmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,

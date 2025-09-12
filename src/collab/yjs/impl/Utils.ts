@@ -6,7 +6,7 @@
  *
  */
 
-import type {Binding, YjsNode} from '.';
+import type {Binding, CRDTNode} from '.';
 
 import {
   $getNodeByKey,
@@ -51,6 +51,7 @@ const elementExcludedProperties = new Set<string>([
   '__first',
   '__last',
   '__size',
+  '__dir',
 ]);
 const rootExcludedProperties = new Set<string>(['__cachedText']);
 const textExcludedProperties = new Set<string>(['__text']);
@@ -85,9 +86,9 @@ function isExcludedProperty(
   return excludedProperties != null && excludedProperties.has(name);
 }
 
-export function getIndexOfYjsNode(
-  yjsParentNode: YjsNode,
-  yjsNode: YjsNode,
+export function getIndexOfCRDTNode(
+  yjsParentNode: CRDTNode,
+  yjsNode: CRDTNode,
 ): number {
   let node = yjsParentNode.firstChild;
   let i = -1;
@@ -241,20 +242,20 @@ export function createLexicalNodeFromCollabNode(
 
   if (collabNode instanceof CollabElementNode) {
     const xmlText = collabNode._xmlText;
-    collabNode.syncPropertiesFromYjs(binding, null);
-    collabNode.applyChildrenYjsDelta(binding, xmlText.toDelta());
-    collabNode.syncChildrenFromYjs(binding);
+    collabNode.syncPropertiesFromCRDT(binding, null);
+    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+    collabNode.syncChildrenFromCRDT(binding);
   } else if (collabNode instanceof CollabTextNode) {
-    collabNode.syncPropertiesAndTextFromYjs(binding, null);
+    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
   } else if (collabNode instanceof CollabDecoratorNode) {
-    collabNode.syncPropertiesFromYjs(binding, null);
+    collabNode.syncPropertiesFromCRDT(binding, null);
   }
 
   binding.collabNodeMap.set(lexicalNode.__key, collabNode);
   return lexicalNode;
 }
 
-export function $syncPropertiesFromYjs(
+export function $syncPropertiesFromCRDT(
   binding: Binding,
   sharedType: XmlText | YMap<unknown> | XmlElement,
   lexicalNode: LexicalNode,

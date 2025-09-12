@@ -41,7 +41,7 @@ import {
   $syncLocalCursorPosition,
   syncCursorPositions,
   SyncCursorPositionsFn,
-  syncLexicalSelectionToYjs,
+  syncLexicalSelectionToCRDT,
 } from './SyncCursors';
 import {
   $getOrInitCollabNodeFromSharedType,
@@ -94,12 +94,12 @@ function $syncEvent(binding: Binding, event: any): void {
 
     // Update
     if (keysChanged.size > 0) {
-      collabNode.syncPropertiesFromYjs(binding, keysChanged);
+      collabNode.syncPropertiesFromCRDT(binding, keysChanged);
     }
 
     if (childListChanged) {
-      collabNode.applyChildrenYjsDelta(binding, delta);
-      collabNode.syncChildrenFromYjs(binding);
+      collabNode.applyChildrenCRDTDelta(binding, delta);
+      collabNode.syncChildrenFromCRDT(binding);
     }
   } else if (
     collabNode instanceof CollabTextNode &&
@@ -109,7 +109,7 @@ function $syncEvent(binding: Binding, event: any): void {
 
     // Update
     if (keysChanged.size > 0) {
-      collabNode.syncPropertiesAndTextFromYjs(binding, keysChanged);
+      collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
     }
   } else if (
     collabNode instanceof CollabDecoratorNode &&
@@ -119,14 +119,14 @@ function $syncEvent(binding: Binding, event: any): void {
 
     // Update
     if (attributesChanged.size > 0) {
-      collabNode.syncPropertiesFromYjs(binding, attributesChanged);
+      collabNode.syncPropertiesFromCRDT(binding, attributesChanged);
     }
   } else {
     invariant(false, 'Expected text, element, or decorator event');
   }
 }
 
-export function syncYjsChangesToLexical(
+export function syncCRDTChangesToLexical(
   binding: Binding,
   provider: Provider,
   events: Array<YEvent<YText>>,
@@ -165,7 +165,7 @@ export function syncYjsChangesToLexical(
             }
           }
 
-          syncLexicalSelectionToYjs(
+          syncLexicalSelectionToCRDT(
             binding,
             provider,
             prevSelection,
@@ -253,7 +253,7 @@ function $handleNormalizationMergeConflicts(
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
-export function syncLexicalUpdateToYjs(
+export function syncLexicalUpdateToCRDT(
   binding: Binding,
   provider: Provider,
   prevEditorState: EditorState,
@@ -300,7 +300,7 @@ export function syncLexicalUpdateToYjs(
 
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
-      syncLexicalSelectionToYjs(binding, provider, prevSelection, selection);
+      syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
     });
   });
 }

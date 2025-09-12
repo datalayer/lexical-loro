@@ -14,7 +14,7 @@ import type {LoroMap} from 'loro-crdt';
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
 import invariant from '../utils/invariant';
 
-import {$syncPropertiesFromYjs, syncPropertiesFromLexical} from './Utils';
+import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from './Utils';
 
 export class CollabDecoratorNode {
   _map: LoroMap<Record<string, unknown>>;
@@ -80,17 +80,17 @@ export class CollabDecoratorNode {
     );
   }
 
-  syncPropertiesFromYjs(
+  syncPropertiesFromCRDT(
     binding: Binding,
     keysChanged: null | Set<string>,
   ): void {
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
-      'syncPropertiesFromYjs: could not find decorator node',
+      'syncPropertiesFromCRDT: could not find decorator node',
     );
     const map = this._map;
-    $syncPropertiesFromYjs(binding, map, lexicalNode, keysChanged);
+    $syncPropertiesFromCRDT(binding, map, lexicalNode, keysChanged);
   }
 
   destroy(binding: Binding): void {

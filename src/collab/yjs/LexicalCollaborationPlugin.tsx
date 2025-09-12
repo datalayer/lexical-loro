@@ -135,7 +135,7 @@ export function CollaborationPlugin({
   }
 
   return (
-    <YjsCollaborationCursors
+    <CRDTCollaborationCursors
       awarenessData={awarenessData}
       binding={binding}
       collabContext={collabContext}
@@ -154,7 +154,7 @@ export function CollaborationPlugin({
   );
 }
 
-function YjsCollaborationCursors({
+function CRDTCollaborationCursors({
   editor,
   id,
   provider,
