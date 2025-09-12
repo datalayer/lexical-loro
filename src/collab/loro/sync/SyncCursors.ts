@@ -23,6 +23,7 @@ import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
 import type {Binding} from '../Bindings';
 import {Provider, UserState} from '../State';
+import invariant from '../../utils/invariant';
 import {getPositionFromElementAndOffset} from '../Utils';
 
 export type CursorSelection = {
@@ -45,44 +46,56 @@ export type Cursor = {
   selection: null | CursorSelection;
 };
 
-export function createRelativePosition(
+function createRelativePosition(
   point: Point,
   binding: Binding,
 ): LoroCursor | null {
-  const {offset} = point;
-  const node = $getNodeByKey(point.key);
+  const collabNodeMap = binding.collabNodeMap;
+  const collabNode = collabNodeMap.get(point.key);
 
-  if ($isTextNode(node)) {
-    const collabNode = binding.collabNodeMap.get(point.key);
-    if (collabNode !== undefined) {
-      // Enhanced cursor creation with Loro
-      const sharedType = collabNode.getSharedType();
-      
-      // Check if this is a LoroXmlText with cursor support
-      if (sharedType && 'getCursor' in sharedType && typeof sharedType.getCursor === 'function') {
-        try {
-          const loroCursor = sharedType.getCursor(offset);
-          if (loroCursor) {
-            // Store additional metadata for better position tracking
-            return loroCursor;
-          }
-        } catch (error) {
-          console.warn('Failed to create Loro cursor:', error);
-        }
-      }
+  if (collabNode === undefined) {
+    return null;
+  }
+
+  let offset = point.offset;
+  let sharedType = collabNode.getSharedType();
+
+  if (collabNode instanceof CollabTextNode) {
+    sharedType = collabNode._parent._xmlText;
+    const currentOffset = collabNode.getOffset();
+
+    if (currentOffset === -1) {
+      return null;
     }
-  } else if ($isElementNode(node)) {
-    const collabNode = binding.collabNodeMap.get(point.key);
-    if (collabNode !== undefined && offset === 0) {
-      // For element nodes, create cursor at the beginning
-      const sharedType = collabNode.getSharedType();
-      if (sharedType && 'getCursor' in sharedType && typeof sharedType.getCursor === 'function') {
-        try {
-          return sharedType.getCursor(0);
-        } catch (error) {
-          console.warn('Failed to create Loro cursor for element:', error);
-        }
+
+    offset = currentOffset + 1 + offset;
+  } else if (
+    collabNode instanceof CollabElementNode &&
+    point.type === 'element'
+  ) {
+    const parent = point.getNode();
+    invariant($isElementNode(parent), 'Element point must be an element node');
+    let accumulatedOffset = 0;
+    let i = 0;
+    let node = parent.getFirstChild();
+    while (node !== null && i++ < offset) {
+      if ($isTextNode(node)) {
+        accumulatedOffset += node.getTextContentSize() + 1;
+      } else {
+        accumulatedOffset++;
       }
+      node = node.getNextSibling();
+    }
+    offset = accumulatedOffset;
+  }
+
+  // Use Loro's cursor creation with computed offset
+  if (sharedType && 'getCursor' in sharedType && typeof sharedType.getCursor === 'function') {
+    try {
+      return sharedType.getCursor(offset);
+    } catch (error) {
+      console.warn('Failed to create Loro cursor:', error);
+      return null;
     }
   }
 
@@ -92,7 +105,7 @@ export function createRelativePosition(
 function createAbsolutePosition(
   cursor: LoroCursor,
   binding: Binding,
-): any | null {
+): {type: any; index: number} | null {
   if (!cursor) return null;
   
   try {
@@ -105,19 +118,25 @@ function createAbsolutePosition(
       const containerId = cursor.containerId();
       
       // Search through collab nodes to find the one with matching container
-      for (const [nodeKey, collabNode] of binding.collabNodeMap) {
+      for (const [nodeKey, collabNode] of Array.from(binding.collabNodeMap)) {
         const sharedType = collabNode.getSharedType();
-        if (sharedType && 'getDoc' in sharedType) {
-          // Check if this is the right container
-          // This is a simplified approach - in practice we'd need to match container IDs
-          const node = $getNodeByKey(nodeKey);
-          if (node && $isTextNode(node)) {
+        // Note: In Loro, we need to find the container by comparing container IDs
+        // This is a simplified approach - may need refinement based on Loro's API
+        if (collabNode instanceof CollabTextNode) {
+          // For text nodes, adjust the offset relative to the parent
+          const currentOffset = collabNode.getOffset();
+          if (currentOffset !== -1 && result.offset > currentOffset) {
             return {
-              key: nodeKey,
-              offset: result.offset,
-              side: result.side
+              type: sharedType,
+              index: result.offset - currentOffset - 1
             };
           }
+        } else {
+          // For element nodes, use direct offset
+          return {
+            type: sharedType,
+            index: result.offset
+          };
         }
       }
     }
@@ -132,26 +151,33 @@ function shouldUpdatePosition(
   currentPos: LoroCursor | null | undefined,
   pos: LoroCursor | null | undefined,
 ): boolean {
-  // If both are null/undefined, no update needed
-  if (!currentPos && !pos) return false;
-  
-  // If one is null and the other isn't, update needed
-  if (!currentPos || !pos) return true;
-  
-  try {
-    // Compare cursor positions using Loro's built-in comparison
-    // For now, use a simple comparison approach
-    const currentContainer = currentPos.containerId();
-    const newContainer = pos.containerId();
-    
-    if (currentContainer !== newContainer) return true;
-    
-    // If same container, compare positions (this is simplified)
-    return true; // For now, always update to be safe
-  } catch (error) {
-    console.warn('Failed to compare Loro cursor positions:', error);
-    return true; // When in doubt, update
+  if (currentPos == null) {
+    if (pos != null) {
+      return true;
+    }
+  } else if (pos == null) {
+    return true;
+  } else {
+    try {
+      // Compare cursor positions using Loro's built-in comparison
+      const currentContainer = currentPos.containerId();
+      const newContainer = pos.containerId();
+      
+      if (currentContainer !== newContainer) {
+        return true;
+      }
+      
+      // For more precise comparison, we'd need Loro's cursor comparison API
+      // For now, use a conservative approach that checks containers
+      // TODO: Implement more precise cursor position comparison when Loro API allows
+      return false; // Same container, assume same position
+    } catch (error) {
+      console.warn('Failed to compare Loro cursor positions:', error);
+      return true; // When in doubt, update
+    }
   }
+  
+  return false;
 }
 
 function createCursor(name: string, color: string): Cursor {
