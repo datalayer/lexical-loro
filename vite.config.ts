@@ -47,8 +47,8 @@ export default defineConfig(({mode}) => ({
     exclude: ['loro-crdt'], // Don't pre-bundle loro-crdt to avoid WASM issues
   },
   plugins: [
-    wasm(),
-    topLevelAwait(),
+    react(),
+    viteCopyEsm(),
     babel({
       babelHelpers: 'bundled',
       babelrc: false,
@@ -63,9 +63,9 @@ export default defineConfig(({mode}) => ({
       ],
       presets: [['@babel/preset-react', {runtime: 'automatic'}]],
     }),
-    react(),
     ...viteCopyExcalidrawAssets(),
-    viteCopyEsm(),
+    wasm(),
+    topLevelAwait(),
     commonjs({
       // This is required for React 19 (at least 19.0.0-beta-26f2496093-20240514)
       // because @rollup/plugin-commonjs does not analyze it correctly

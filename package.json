@@ -9,7 +9,7 @@
     "build:tsc": "tsc",
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",
-    "server:loro": "fkill -s :1234 && tsx src/collab/loro/servers/websocket-server.ts",
+    "server:loro": "fkill -s :1234 && tsx src/collab/loro/servers/ws/server.ts",
     "server:yjs": "fkill -s :1234 && cross-env HOST=localhost PORT=1234 YPERSISTENCE=./.yjs-wss-db tsx src/collab/yjs/servers/ws/server.ts",
     "server:yjs:dist": "cross-env HOST=localhost PORT=1234 YPERSISTENCE=./.yjs-wss-db npx y-websocket",
     "preview": "vite preview"

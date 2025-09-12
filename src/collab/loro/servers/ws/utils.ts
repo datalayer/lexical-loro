@@ -1,20 +1,22 @@
-const Y = require('yjs')
+import * as Y from 'yjs'
+import * as syncProtocol from 'y-protocols/sync'
+import * as awarenessProtocol from 'y-protocols/awareness'
 
-const syncProtocol = require('y-protocols/dist/sync.cjs')
-const awarenessProtocol = require('y-protocols/dist/awareness.cjs')
+import * as encoding from 'lib0/encoding'
+import * as decoding from 'lib0/decoding'
+import * as map from 'lib0/map'
 
-const encoding = require('lib0/dist/encoding.cjs')
-const decoding = require('lib0/dist/decoding.cjs')
-const mutex = require('lib0/dist/mutex.cjs')
-const map = require('lib0/dist/map.cjs')
+import * as eventloop from 'lib0/eventloop'
 
-const debounce = require('lodash.debounce')
+import { callbackHandler, isCallbackSet } from './callback'
 
-const callbackHandler = require('./callback.js').callbackHandler
-const isCallbackSet = require('./callback.js').isCallbackSet
+import * as yleveldb from 'y-leveldb';
 
-const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT) || 2000
-const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT) || 10000
+
+const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT || '2000')
+const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT || '10000')
+
+const debouncer = eventloop.createDebouncer(CALLBACK_DEBOUNCE_WAIT, CALLBACK_DEBOUNCE_MAXWAIT)
 
 const wsReadyStateConnecting = 0
 const wsReadyStateOpen = 1
@@ -29,12 +31,10 @@ const persistenceDir = process.env.YPERSISTENCE
  * @type {{bindState: function(string,WSSharedDoc):void, writeState:function(string,WSSharedDoc):Promise<any>, provider: any}|null}
  */
 let persistence = null
-
 if (typeof persistenceDir === 'string') {
   console.info('Persisting documents to "' + persistenceDir + '"')
   // @ts-ignore
-  const LeveldbPersistence = require('y-leveldb').LeveldbPersistence
-  const ldb = new LeveldbPersistence(persistenceDir)
+  const ldb = new yleveldb.LeveldbPersistence(persistenceDir)
   persistence = {
     provider: ldb,
     bindState: async (docName, ydoc) => {
@@ -54,7 +54,7 @@ if (typeof persistenceDir === 'string') {
  * @param {{bindState: function(string,WSSharedDoc):void,
  * writeState:function(string,WSSharedDoc):Promise<any>,provider:any}|null} persistence_
  */
-exports.setPersistence = persistence_ => {
+export const setPersistence = persistence_ => {
   persistence = persistence_
 }
 
@@ -62,14 +62,12 @@ exports.setPersistence = persistence_ => {
  * @return {null|{bindState: function(string,WSSharedDoc):void,
   * writeState:function(string,WSSharedDoc):Promise<any>}|null} used persistence layer
   */
-exports.getPersistence = () => persistence
+export const getPersistence = () => persistence
 
 /**
  * @type {Map<string,WSSharedDoc>}
  */
-const docs = new Map()
-// exporting docs so that others can use it
-exports.docs = docs
+export const docs = new Map()
 
 const messageSync = 0
 const messageAwareness = 1
@@ -77,10 +75,11 @@ const messageAwareness = 1
 
 /**
  * @param {Uint8Array} update
- * @param {any} origin
+ * @param {any} _origin
  * @param {WSSharedDoc} doc
+ * @param {any} _tr
  */
-const updateHandler = (update, origin, doc) => {
+const updateHandler = (update, _origin, doc: WSSharedDoc, _tr) => {
   const encoder = encoding.createEncoder()
   encoding.writeVarUint(encoder, messageSync)
   syncProtocol.writeUpdate(encoder, update)
@@ -88,14 +87,32 @@ const updateHandler = (update, origin, doc) => {
   doc.conns.forEach((_, conn) => send(doc, conn, message))
 }
 
-class WSSharedDoc extends Y.Doc {
+/**
+ * @type {(ydoc: Y.Doc) => Promise<void>}
+ */
+let contentInitializor = _ydoc => Promise.resolve()
+
+/**
+ * This function is called once every time a Yjs document is created. You can
+ * use it to pull data from an external source or initialize content.
+ *
+ * @param {(ydoc: Y.Doc) => Promise<void>} f
+ */
+export const setContentInitializor = (f) => {
+  contentInitializor = f
+}
+
+export class WSSharedDoc extends Y.Doc {
+  name = ''
+  conns = null
+  awareness = null
+  whenInitialized = null
   /**
    * @param {string} name
    */
   constructor (name) {
     super({ gc: gcEnabled })
     this.name = name
-    this.mux = mutex.createMutex()
     /**
      * Maps from conn to set of controlled user ids. Delete all user ids from awareness when this conn is closed
      * @type {Map<Object, Set<number>>}
@@ -129,14 +146,13 @@ class WSSharedDoc extends Y.Doc {
       })
     }
     this.awareness.on('update', awarenessChangeHandler)
-    this.on('update', updateHandler)
+    this.on('update', /** @type {any} */ (updateHandler))
     if (isCallbackSet) {
-      this.on('update', debounce(
-        callbackHandler,
-        CALLBACK_DEBOUNCE_WAIT,
-        { maxWait: CALLBACK_DEBOUNCE_MAXWAIT }
-      ))
+      this.on('update', (_update, _origin, doc) => {
+        debouncer(() => callbackHandler(/** @type {WSSharedDoc} */ (doc)))
+      })
     }
+    this.whenInitialized = contentInitializor(this)
   }
 }
 
@@ -147,7 +163,7 @@ class WSSharedDoc extends Y.Doc {
  * @param {boolean} gc - whether to allow gc on the doc (applies only when created)
  * @return {WSSharedDoc}
  */
-const getYDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, () => {
+export const getYDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, () => {
   const doc = new WSSharedDoc(docname)
   doc.gc = gc
   if (persistence !== null) {
@@ -157,30 +173,37 @@ const getYDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, () => 
   return doc
 })
 
-exports.getYDoc = getYDoc
-
 /**
  * @param {any} conn
  * @param {WSSharedDoc} doc
  * @param {Uint8Array} message
  */
-const messageListener = (conn, doc, message) => {
-//  console.log('---', doc);
-  const encoder = encoding.createEncoder()
-  const decoder = decoding.createDecoder(message)
-  const messageType = decoding.readVarUint(decoder)
-  switch (messageType) {
-    case messageSync:
-      encoding.writeVarUint(encoder, messageSync)
-      syncProtocol.readSyncMessage(decoder, encoder, doc, null)
-      if (encoding.length(encoder) > 1) {
-        send(doc, conn, encoding.toUint8Array(encoder))
+const messageListener = (conn, doc: WSSharedDoc, message) => {
+  try {
+    const encoder = encoding.createEncoder()
+    const decoder = decoding.createDecoder(message)
+    const messageType = decoding.readVarUint(decoder)
+    switch (messageType) {
+      case messageSync:
+        encoding.writeVarUint(encoder, messageSync)
+        syncProtocol.readSyncMessage(decoder, encoder, doc, conn)
+
+        // If the `encoder` only contains the type of reply message and no
+        // message, there is no need to send the message. When `encoder` only
+        // contains the type of reply, its length is 1.
+        if (encoding.length(encoder) > 1) {
+          send(doc, conn, encoding.toUint8Array(encoder))
+        }
+        break
+      case messageAwareness: {
+        awarenessProtocol.applyAwarenessUpdate(doc.awareness, decoding.readVarUint8Array(decoder), conn)
+        break
       }
-      break
-    case messageAwareness: {
-      awarenessProtocol.applyAwarenessUpdate(doc.awareness, decoding.readVarUint8Array(decoder), conn)
-      break
     }
+  } catch (err) {
+    console.error(err)
+    // @ts-ignore
+    doc.emit('error', [err])
   }
 }
 
@@ -210,15 +233,15 @@ const closeConn = (doc, conn) => {
 
 /**
  * @param {WSSharedDoc} doc
- * @param {any} conn
+ * @param {import('ws').WebSocket} conn
  * @param {Uint8Array} m
  */
-const send = (doc, conn, m) => {
+const send = (doc: WSSharedDoc, conn, m) => {
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
     closeConn(doc, conn)
   }
   try {
-    conn.send(m, /** @param {any} err */ err => { err != null && closeConn(doc, conn) })
+    conn.send(m, {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
     closeConn(doc, conn)
   }
@@ -227,15 +250,11 @@ const send = (doc, conn, m) => {
 const pingTimeout = 30000
 
 /**
- * @param {any} conn
- * @param {any} req
+ * @param {import('ws').WebSocket} conn
+ * @param {import('http').IncomingMessage} req
  * @param {any} opts
  */
-exports.setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[0], gc = true } = {}) => {
-
-  console.log('-------', req.url);
-//  console.log('-------', docName);
-
+export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0], gc = true } = {}) => {
   conn.binaryType = 'arraybuffer'
   // get doc, initialize if it does not exist yet
   const doc = getYDoc(docName, gc)

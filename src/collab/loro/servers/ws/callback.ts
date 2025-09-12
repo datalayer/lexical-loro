@@ -1,20 +1,19 @@
-const http = require('http')
+import http from 'http'
+import * as number from 'lib0/number'
 
 const CALLBACK_URL = process.env.CALLBACK_URL ? new URL(process.env.CALLBACK_URL) : null
-const CALLBACK_TIMEOUT = process.env.CALLBACK_TIMEOUT || 5000
+const CALLBACK_TIMEOUT = number.parseInt(process.env.CALLBACK_TIMEOUT || '5000')
 const CALLBACK_OBJECTS = process.env.CALLBACK_OBJECTS ? JSON.parse(process.env.CALLBACK_OBJECTS) : {}
 
-exports.isCallbackSet = !!CALLBACK_URL
+export const isCallbackSet = !!CALLBACK_URL
 
 /**
- * @param {Uint8Array} update
- * @param {any} origin
- * @param {WSSharedDoc} doc
+ * @param {import('./utils.js').WSSharedDoc} doc
  */
-exports.callbackHandler = (update, origin, doc) => {
+export const callbackHandler = (doc) => {
   const room = doc.name
   const dataToSend = {
-    room: room,
+    room,
     data: {}
   }
   const sharedObjectList = Object.keys(CALLBACK_OBJECTS)
@@ -25,7 +24,7 @@ exports.callbackHandler = (update, origin, doc) => {
       content: getContent(sharedObjectName, sharedObjectType, doc).toJSON()
     }
   })
-  callbackRequest(CALLBACK_URL, CALLBACK_TIMEOUT, dataToSend)
+  CALLBACK_URL && callbackRequest(CALLBACK_URL, CALLBACK_TIMEOUT, dataToSend)
 }
 
 /**
@@ -39,14 +38,14 @@ const callbackRequest = (url, timeout, data) => {
     hostname: url.hostname,
     port: url.port,
     path: url.pathname,
-    timeout: timeout,
+    timeout,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Content-Length': data.length
+      'Content-Length': Buffer.byteLength(data)
     }
   }
-  var req = http.request(options)
+  const req = http.request(options)
   req.on('timeout', () => {
     console.warn('Callback request timed out.')
     req.abort()
@@ -62,7 +61,7 @@ const callbackRequest = (url, timeout, data) => {
 /**
  * @param {string} objName
  * @param {string} objType
- * @param {WSSharedDoc} doc
+ * @param {import('./utils.js').WSSharedDoc} doc
  */
 const getContent = (objName, objType, doc) => {
   switch (objType) {

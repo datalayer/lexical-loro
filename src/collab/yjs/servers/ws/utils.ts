@@ -10,6 +10,9 @@ import * as eventloop from 'lib0/eventloop'
 
 import { callbackHandler, isCallbackSet } from './callback'
 
+import * as yleveldb from 'y-leveldb';
+
+
 const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT || '2000')
 const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT || '10000')
 
@@ -22,11 +25,30 @@ const wsReadyStateClosed = 3 // eslint-disable-line
 
 // disable gc when using snapshots!
 const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
-// const persistenceDir = process.env.YPERSISTENCE
+const persistenceDir = process.env.YPERSISTENCE
+
 /**
  * @type {{bindState: function(string,WSSharedDoc):void, writeState:function(string,WSSharedDoc):Promise<any>, provider: any}|null}
  */
 let persistence = null
+if (typeof persistenceDir === 'string') {
+  console.info('Persisting documents to "' + persistenceDir + '"')
+  // @ts-ignore
+  const ldb = new yleveldb.LeveldbPersistence(persistenceDir)
+  persistence = {
+    provider: ldb,
+    bindState: async (docName, ydoc) => {
+      const persistedYdoc = await ldb.getYDoc(docName)
+      const newUpdates = Y.encodeStateAsUpdate(ydoc)
+      ldb.storeUpdate(docName, newUpdates)
+      Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc))
+      ydoc.on('update', update => {
+        ldb.storeUpdate(docName, update)
+      })
+    },
+    writeState: async (docName, ydoc) => {}
+  }
+}
 
 /**
  * @param {{bindState: function(string,WSSharedDoc):void,
@@ -57,7 +79,7 @@ const messageAwareness = 1
  * @param {WSSharedDoc} doc
  * @param {any} _tr
  */
-const updateHandler = (update, _origin, doc, _tr) => {
+const updateHandler = (update, _origin, doc: WSSharedDoc, _tr) => {
   const encoder = encoding.createEncoder()
   encoding.writeVarUint(encoder, messageSync)
   syncProtocol.writeUpdate(encoder, update)
@@ -156,7 +178,7 @@ export const getYDoc = (docname, gc = true) => map.setIfUndefined(docs, docname,
  * @param {WSSharedDoc} doc
  * @param {Uint8Array} message
  */
-const messageListener = (conn, doc, message) => {
+const messageListener = (conn, doc: WSSharedDoc, message) => {
   try {
     const encoder = encoding.createEncoder()
     const decoder = decoding.createDecoder(message)
@@ -214,7 +236,7 @@ const closeConn = (doc, conn) => {
  * @param {import('ws').WebSocket} conn
  * @param {Uint8Array} m
  */
-const send = (doc, conn, m) => {
+const send = (doc: WSSharedDoc, conn, m) => {
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
     closeConn(doc, conn)
   }
