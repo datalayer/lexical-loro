@@ -7,7 +7,7 @@
  */
 
 import {LoroDoc} from 'loro-crdt';
-import {WebsocketProvider} from './servers/loro-websocket';
+import {WebsocketProvider} from './provider/websocket';
 import { Provider } from './impl';
 
 const url = new URL(window.location.href);

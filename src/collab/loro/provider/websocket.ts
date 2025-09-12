@@ -43,7 +43,7 @@ messageHandlers[messageSync] = (
     provider
   )
   if (
-    emitSynced && syncMessageType === syncProtocol.messageCRDTSyncStep2 &&
+    emitSynced && syncMessageType === syncProtocol.messageYjsSyncStep2 &&
     !provider.synced
   ) {
     provider.synced = true
