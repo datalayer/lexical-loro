@@ -140,7 +140,25 @@ export function useCollaboration(
           initializeEditor(editor, initialEditorState);
           console.log(`[UseCollaboration] INITIALIZATION COMPLETE - initializeEditor returned`);
         } else if (isSynced && !lexicalIsEmpty) {
-          console.log(`[UseCollaboration] Lexical already has content, skipping initialization`);
+          console.log(`[UseCollaboration] Lexical already has content, checking if CRDT sync is needed`);
+          
+          // CRITICAL FIX: If Lexical has content but CRDT is empty, we need to force a sync
+          if (root.isEmpty() && root._xmlText.length === 0) {
+            console.log(`[UseCollaboration] FORCING SYNC - Lexical has content but CRDT is empty`);
+            
+            // Force a sync from Lexical to CRDT by triggering an update without collaboration tags
+            editor.update(() => {
+              console.log(`[UseCollaboration] Force sync update - marking root as dirty`);
+              // This update will trigger the registerUpdateListener without SKIP_COLLAB_TAG
+              // which should sync the existing Lexical content to CRDT
+              const lexicalRoot = $getRoot();
+              // Force a change that will mark the root as dirty
+              lexicalRoot.markDirty();
+            }, {
+              // Explicitly avoid collaboration tags to ensure sync happens
+              tag: undefined
+            });
+          }
         }
       });
 

@@ -2,7 +2,22 @@
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
+ * LI  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
+
+  // Skip processing if collabNode is null (raw Loro container without __type)
+  if (!collabNode) {
+    console.warn('$syncEvent: Skipping event for raw Loro container:', target?.constructor?.name, 'Event:', event);
+    return;
+  }
+  
+  console.log('🔄 $syncEvent: About to process event with CollabNode:', {
+    collabNodeType: collabNode.constructor.name,
+    collabNodeKey: collabNode._key,
+    eventType: event.constructor?.name,
+    eventTarget: target?.constructor?.name
+  });
+  
+  processCollabNodeEvent(binding, collabNode, event);e in the root directory of this source tree.
  *
  */
 
@@ -45,6 +60,8 @@ import {
   getNodeTypeFromSharedType,
   syncWithTransaction,
 } from '../Utils';
+import { AnyCollabNode } from '../../yjs/sync/SyncCursors';
+import { CollabLineBreakNode } from '../nodes/CollabLineBreakNode';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -142,50 +159,87 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   processCollabNodeEvent(binding, collabNode, event);
 }
 
-function processCollabNodeEvent(binding: Binding, collabNode: any, event: any): void {
-  if (collabNode instanceof CollabElementNode && (event as any).isTextEvent) {
-    const {keysChanged, childListChanged, delta} = event as any;
+function processCollabNodeEvent(binding: Binding, collabNode: | CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode, event: LoroEvent): void {
+  console.log('🔧 [ProcessCollabNodeEvent] ENTRY:', {
+    collabNodeType: collabNode.constructor.name,
+    collabNodeKey: collabNode._key,
+    isCollabElementNode: collabNode instanceof CollabElementNode,
+    eventHasDiff: !!event.diff,
+    eventHasPath: !!event.path,
+    eventHasTarget: !!event.target,
+    eventDiffType: event.diff?.type
+  });
 
-    // Update
-    if (keysChanged && keysChanged.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, keysChanged);
-    }
+  // Handle Loro-style events based on actual LoroEvent structure
+  if (collabNode instanceof CollabElementNode && event.diff) {
+    console.log('📝 [ProcessCollabNodeEvent] Processing CollabElementNode with diff:', {
+      diffType: event.diff.type,
+      hasDiff: !!event.diff,
+      diffString: JSON.stringify(event.diff)
+    });
 
-    if (childListChanged) {
-      collabNode.applyChildrenCRDTDelta(binding, delta);
+    // For Loro events, we need to handle different diff types
+    try {
+      console.log('� [ProcessCollabNodeEvent] Syncing children from CRDT (Loro-style)');
       collabNode.syncChildrenFromCRDT(binding);
+    } catch (error) {
+      console.warn('Failed to sync children from CRDT:', error);
     }
-  } else if (
-    collabNode instanceof CollabTextNode &&
-    (event as any).isMapEvent
-  ) {
-    const {keysChanged} = event;
-
-    // Update
-    if (keysChanged && keysChanged.size > 0) {
-      collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
+  } else if (collabNode instanceof CollabTextNode && event.diff) {
+    console.log('📄 [ProcessCollabNodeEvent] Processing CollabTextNode with diff');
+    
+    // For CollabTextNode, sync properties and text from CRDT
+    try {
+      console.log('🔧 [ProcessCollabNodeEvent] Syncing CollabTextNode properties and text from CRDT');
+      collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+    } catch (error) {
+      console.warn('Failed to sync CollabTextNode:', error);
     }
-  } else if (
-    collabNode instanceof CollabDecoratorNode &&
-    ((event as any).isMapEvent || (event as any).isXmlEvent)
-  ) {
-    const {attributesChanged, keysChanged} = event;
-    const changedKeys = attributesChanged || keysChanged;
-
-    // Update
-    if (changedKeys && changedKeys.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, changedKeys);
+  } else if (collabNode instanceof CollabDecoratorNode && event.diff) {
+    console.log('🎨 [ProcessCollabNodeEvent] Processing CollabDecoratorNode with diff');
+    
+    // For CollabDecoratorNode, sync properties from CRDT
+    try {
+      console.log('🔧 [ProcessCollabNodeEvent] Syncing CollabDecoratorNode properties from CRDT');
+      collabNode.syncPropertiesFromCRDT(binding, null);
+    } catch (error) {
+      console.warn('Failed to sync CollabDecoratorNode:', error);
     }
   } else {
-    // Log the issue but don't crash - this allows us to debug what events we're actually getting
-    console.warn('processCollabNodeEvent: Unexpected event type:', {
-      collabNodeType: collabNode.constructor.name,
-      eventKeys: Object.keys(event),
-      isTextEvent: (event as any).isTextEvent,
-      isMapEvent: (event as any).isMapEvent,
-      isXmlEvent: (event as any).isXmlEvent
-    });
-    // Don't try to handle it gracefully - let the original behavior take precedence
+    // Handle other Loro event types
+    console.log('🔧 [ProcessCollabNodeEvent] Handling other Loro event type');
+    
+    if (event.diff) {
+      console.log('📝 [ProcessCollabNodeEvent] Event has diff, attempting generic sync');
+      
+      // Generic fallback: try to sync from CRDT based on node type
+      try {
+        if (collabNode instanceof CollabElementNode) {
+          console.log('� [ProcessCollabNodeEvent] Syncing CollabElementNode children from CRDT');
+          collabNode.syncChildrenFromCRDT(binding);
+        } else if (collabNode instanceof CollabTextNode) {
+          console.log('🔄 [ProcessCollabNodeEvent] Syncing CollabTextNode from CRDT');
+          collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+        } else {
+          console.log('🔄 [ProcessCollabNodeEvent] Syncing generic CollabNode properties from CRDT');
+          (collabNode as any).syncPropertiesFromCRDT?.(binding, null);
+        }
+      } catch (error) {
+        console.warn('Failed to sync from CRDT:', error);
+      }
+    } else {
+      // Log unhandled event for debugging
+      console.warn('⚠️ [ProcessCollabNodeEvent] UNHANDLED EVENT TYPE:', {
+        collabNodeType: collabNode.constructor.name,
+        collabNodeKey: collabNode._key,
+        eventKeys: Object.keys(event),
+        eventConstructor: event.constructor?.name,
+        hasDiff: !!event.diff,
+        hasPath: !!event.path,
+        hasTarget: !!event.target
+      });
+      console.log('📋 [ProcessCollabNodeEvent] Full event object:', event);
+    }
   }
 }
 
@@ -343,7 +397,9 @@ export function syncLexicalUpdateToCRDT(
     bindingRootKey: binding?.root?._key,
     collabNodeMapSize: binding?.collabNodeMap?.size,
     bindingRootIsEmpty: binding?.root?.isEmpty(),
-    bindingRootHasSharedType: !!binding?.root?.getSharedType()
+    bindingRootHasSharedType: !!binding?.root?.getSharedType(),
+    // Detailed dirty elements inspection
+    dirtyElementsDetailed: Array.from(dirtyElements.entries()).map(([key, value]) => ({key, value}))
   });
   
   syncWithTransaction(binding, () => {
@@ -358,12 +414,28 @@ export function syncLexicalUpdateToCRDT(
       // types a character and we get it, we don't want to then insert
       // the same character again. The exception to this heuristic is
       // when we need to handle normalization merge conflicts.
-      if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) {
+      
+      // CRITICAL FIX: Check for initial sync scenario
+      const lexicalRoot = $getRoot();
+      const crdtRoot = binding.root;
+      const isInitialSyncNeeded = crdtRoot.isEmpty() && 
+                                  crdtRoot.getSharedType()?.length === 0 && 
+                                  lexicalRoot.getChildren().length > 0;
+      
+      if ((tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) && !isInitialSyncNeeded) {
         console.log('⏭️ syncLexicalUpdateToCRDT: Skipping - has collab/historic tag');
         if (normalizedNodes.size > 0) {
           $handleNormalizationMergeConflicts(binding, normalizedNodes);
         }
         return;
+      } else if (isInitialSyncNeeded) {
+        console.log('🔄 [SyncLexicalUpdateToCRDT] FORCING INITIAL SYNC - CRDT empty but Lexical has content', {
+          crdtRootIsEmpty: crdtRoot.isEmpty(),
+          crdtRootLength: crdtRoot.getSharedType()?.length,
+          lexicalRootChildrenCount: lexicalRoot.getChildren().length,
+          hasCollabTag: tags.has(COLLABORATION_TAG),
+          hasHistoricTag: tags.has(HISTORIC_TAG)
+        });
       }
 
       if (dirtyElements.has('root')) {
