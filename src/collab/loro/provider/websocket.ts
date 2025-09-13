@@ -165,19 +165,18 @@ messageHandlers[messageLoroUpdate] = (
   message: LoroUpdateMessage,
   emitSynced: boolean
 ): string | null => {
-  console.info(`[Client] messageHandlers[messageLoroUpdate] - DOCUMENT UPDATE RECEIVED from server - update length: ${message.update?.length}`)
+  console.info(`[Client] messageLoroUpdate - Received update from server (${message.update?.length} bytes)`)
   
   try {
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
-    console.info(`[Client] messageHandlers[messageLoroUpdate] - Applying update to local LoroDoc`)
     
     // Set flag to indicate we're applying a remote update
     provider._applyingRemoteUpdate = true
     provider.doc.import(updateBytes)
     provider._applyingRemoteUpdate = false
     
-    console.info(`[Client] messageHandlers[messageLoroUpdate] - Document update applied successfully`)
+    console.info(`[Client] messageLoroUpdate - Applied remote update successfully`)
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
@@ -525,7 +524,15 @@ const setupWS = (provider) => {
 const broadcastMessage = (provider: WebsocketProvider, message: string) => {
   const ws = provider.ws
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
+    console.info(`[Client] broadcastMessage - Sending to WebSocket (${message.length} chars)`)
     ws.send(message)
+  } else {
+    console.warn(`[Client] broadcastMessage - WebSocket not ready:`, {
+      wsconnected: provider.wsconnected,
+      hasWs: !!ws,
+      readyState: ws?.readyState,
+      OPEN: ws?.OPEN
+    })
   }
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, message, provider)
@@ -708,17 +715,14 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {any} origin
      */
     this._updateHandler = (update: Uint8Array, origin: any) => {
-      console.debug(`[Client] _updateHandler - DOCUMENT UPDATE EVENT - length: ${update.length}, origin: ${origin}`)
       if (origin !== this) {
-        console.debug(`[Client] _updateHandler - Sending document update to server`)
+        console.info(`[Client] _updateHandler - Sending update to server (${update.length} bytes)`)
         const updateMessage: LoroUpdateMessage = {
           type: 'loro-update',
           update: Array.from(update),
           docId: this.roomname
         }
         broadcastMessage(this, JSON.stringify(updateMessage))
-      } else {
-        console.debug(`[Client] _updateHandler - Skipping echo from self`)
       }
     }
     // Document update handler - called when Loro emits document change events

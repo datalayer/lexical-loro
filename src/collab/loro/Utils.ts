@@ -155,15 +155,26 @@ export function $createCollabNodeFromLexicalNode(
 }
 
 export function getNodeTypeFromSharedType(
-  sharedType: XmlText | LoroMap<Record<string, unknown>>,
+  sharedType: XmlText | LoroMap | any,
 ): string | undefined {
   console.debug('getNodeTypeFromSharedType: Called with sharedType:', sharedType, 'type:', typeof sharedType, 'constructor:', sharedType?.constructor?.name);
+  
+  // Handle XmlText - similar to Y.js, XmlText doesn't have __type, it's identified by instanceof
+  if (sharedType instanceof XmlText) {
+    console.debug('getNodeTypeFromSharedType: Found XmlText, returning undefined (handled by instanceof in $getOrInitCollabNodeFromSharedType)');
+    return undefined; // XmlText type is determined by instanceof check, not __type
+  }
+  
   const type = sharedTypeGet(sharedType, '__type');
   
-  // If no type is found, return undefined instead of failing
-  // This handles cases where Loro containers don't have the __type metadata
+  // If no type is found, try to infer from constructor name
   if (typeof type === 'undefined') {
-    console.warn('getNodeTypeFromSharedType: No __type found for', sharedType?.constructor?.name);
+    // Handle LoroText - assume it's a text node
+    if (sharedType?.constructor?.name === 'LoroText') {
+      console.debug('getNodeTypeFromSharedType: Inferred text type from LoroText constructor');
+      return 'text';
+    }
+    console.debug('getNodeTypeFromSharedType: No __type found for', sharedType?.constructor?.name);
     return undefined;
   }
   
@@ -188,15 +199,6 @@ export function $getOrInitCollabNodeFromSharedType(
   if (collabNode === undefined) {
     const registeredNodes = binding.editor._nodes;
     const type = getNodeTypeFromSharedType(sharedType);
-    
-    // If no type found, this might be a raw Loro container - skip processing
-    if (typeof type !== 'string') {
-      console.warn('$getOrInitCollabNodeFromSharedType: Skipping raw Loro container without __type:', sharedType?.constructor?.name);
-      return null as any; // Return null to indicate this should be skipped
-    }
-    
-    const nodeInfo = registeredNodes.get(type);
-    invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
     const sharedParent = typeof sharedType.parent === 'function' ? sharedType.parent() : sharedType.parent;
     console.debug('$getOrInitCollabNodeFromSharedType: sharedParent:', sharedParent, 'type:', typeof sharedParent, 'constructor:', sharedParent?.constructor?.name);
@@ -215,16 +217,36 @@ export function $getOrInitCollabNodeFromSharedType(
       'Expected parent to be a collab element node',
     );
 
+    // Handle XmlText like Y.js - XmlText creates CollabElementNode
     if (sharedType instanceof XmlText) {
       return $createCollabElementNode(sharedType, targetParent, type);
     } else if (sharedType instanceof LoroMap) {
+      // For LoroMap, we need the type to determine what to create
+      if (typeof type !== 'string') {
+        console.debug('$getOrInitCollabNodeFromSharedType: No __type found for LoroMap, cannot create node');
+        return null as any;
+      }
+      
+      const nodeInfo = registeredNodes.get(type);
+      invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+
       if (type === 'linebreak') {
         return $createCollabLineBreakNode(sharedType, targetParent);
       }
       return $createCollabTextNode(sharedType, '', targetParent, type);
     } else {
-      // For decorator nodes, we use LoroMap as well
-      return $createCollabDecoratorNode(sharedType as LoroMap<Record<string, unknown>>, targetParent, type);
+      // For other types, we need the type string
+      if (typeof type !== 'string') {
+        console.debug('$getOrInitCollabNodeFromSharedType: No __type found, attempting to infer from constructor for:', (sharedType as any)?.constructor?.name);
+        return null as any;
+      }
+      
+      const nodeInfo = registeredNodes.get(type);
+      invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+      
+      // This shouldn't happen in normal cases
+      console.warn('$getOrInitCollabNodeFromSharedType: Unknown shared type:', (sharedType as any)?.constructor?.name);
+      return null as any;
     }
   }
 

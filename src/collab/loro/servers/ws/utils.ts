@@ -89,19 +89,37 @@ const messageEphemeral = 'ephemeral'
 const messageQueryEphemeral = 'query-ephemeral'
 
 /**
- * Handle Loro document updates and broadcast to connected clients
+ * Handle Loro document updates and broadcast to connected clients (excluding sender)
  * @param {Uint8Array} update
- * @param {any} _origin
+ * @param {any} senderConn - The connection that sent the update (to exclude from broadcast)
  * @param {WSSharedDoc} doc
  */
-const updateHandler = (update: Uint8Array, _origin: any, doc: WSSharedDoc) => {
+const updateHandler = (update: Uint8Array, senderConn: any, doc: WSSharedDoc) => {
+  console.info(`[Server] updateHandler - Broadcasting document update:`, {
+    docName: doc.name,
+    updateSize: update.length,
+    connectedClients: doc.conns.size,
+    senderConn: !!senderConn,
+    updatePreview: Array.from(update.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+  })
+  
   const message: LoroUpdateMessage = {
     type: messageLoroUpdate,
     update: Array.from(update),
     docId: doc.name
   }
   const messageData = new TextEncoder().encode(JSON.stringify(message))
-  doc.conns.forEach((_, conn) => send(doc, conn, messageData))
+  
+  // Broadcast to all connected clients except the sender
+  let broadcastCount = 0
+  doc.conns.forEach((_, conn) => {
+    if (conn !== senderConn) {
+      send(doc, conn, messageData)
+      broadcastCount++
+    }
+  })
+  
+  console.info(`[Server] updateHandler - Update broadcasted to ${broadcastCount} other clients (excluding sender)`)
   
   // Trigger callback if configured
   if (isCallbackSet) {
@@ -145,45 +163,30 @@ export class WSSharedDoc {
     /**
      * @type {EphemeralStore}
      */
-    console.log(`[Server] WSSharedDoc constructor - Creating EphemeralStore for doc:`, name)
     this.ephemeralStore = new EphemeralStore(30000) // 30 second timeout
-    console.log(`[Server] WSSharedDoc constructor - EphemeralStore created successfully`)
+    
+    console.info(`[Server] WSSharedDoc created: ${name}`)
     
     /**
      * @type {Array<function>}
      */
     const ephemeralChangeHandler = (event) => {
-      console.log(`[Server] ephemeralChangeHandler - Change event:`, {
-        added: event.added.length,
-        updated: event.updated.length,
-        removed: event.removed.length,
-        docName: name
-      })
-      
       // Only broadcast if there are actual changes
       if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
         try {
-          console.log(`[Server] ephemeralChangeHandler - Broadcasting ephemeral update`)
-          
           const encodedData = this.ephemeralStore.encodeAll()
-          console.log(`[Server] ephemeralChangeHandler - Encoded data length:`, encodedData.length)
-          
           const message: EphemeralMessage = {
             type: messageEphemeral,
             ephemeral: Array.from(encodedData),
             docId: name
           }
           const messageData = new TextEncoder().encode(JSON.stringify(message))
-          console.log(`[Server] ephemeralChangeHandler - Broadcasting to ${this.connections.size} connections`)
           
           this.connections.forEach((_, c) => {
             send(this, c, messageData)
           })
         } catch (broadcastError) {
-          console.error(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
-            error: broadcastError.message,
-            stack: broadcastError.stack
-          })
+          console.error(`[Server] ephemeralChangeHandler - ERROR:`, broadcastError.message)
         }
       }
     }
@@ -216,52 +219,35 @@ export const getYDoc = (docname) => map.setIfUndefined(docs, docname, () => {
  */
 const messageListener = (conn, doc: WSSharedDoc, message) => {
   try {
-    console.log(`[Server] messageListener - Received message of length:`, message.length)
-    
     // Handle empty messages
     if (message.length === 0) {
-      console.log(`[Server] messageListener - Received empty message, ignoring`)
       return
     }
     
     const messageStr = new TextDecoder().decode(message)
-    console.log(`[Server] messageListener - Decoded message string length:`, messageStr.length)
-    console.log(`[Server] messageListener - Message string sample:`, messageStr.substring(0, 200))
     
     // Handle empty string after decoding
     if (messageStr.length === 0) {
-      console.log(`[Server] messageListener - Decoded empty string, ignoring`)
       return
     }
     
     const messageData: LoroWebSocketMessage = JSON.parse(messageStr)
-    console.log(`[Server] messageListener - Parsed message data:`, {
-      type: messageData.type,
-      docId: messageData.docId,
-      hasUpdate: !!(messageData as any).update,
-      hasSnapshot: !!(messageData as any).snapshot,
-      hasEphemeral: !!(messageData as any).ephemeral,
-      ephemeralLength: (messageData as any).ephemeral?.length
-    })
     
     switch (messageData.type) {
       case messageLoroUpdate:
+        console.info(`[Server] messageLoroUpdate - Received update from client:`, {
+          docName: doc.name,
+          updateSize: messageData.update.length,
+          connectedClients: doc.conns.size
+        })
+        
         // Apply the Loro update to the document
         const updateData = messageData as LoroUpdateMessage;
         const updateBytes = new Uint8Array(updateData.update)
         doc.doc.import(updateBytes)
         
-        // Send the update to all other connections
-        doc.conns.forEach((_, c) => {
-          if (c !== conn) {
-            send(doc, c, message)
-          }
-        })
-        
-        // Trigger callback if configured
-        if (isCallbackSet) {
-          debouncer(() => callbackHandler(doc))
-        }
+        // Use updateHandler to broadcast to all other clients (excluding sender)
+        updateHandler(updateBytes, conn, doc)
         break
         
       case messageSnapshot:
@@ -278,53 +264,26 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
       case messageEphemeral:
         // Apply ephemeral update
         const ephemeralData = messageData as EphemeralMessage;
-        console.log(`[Server] messageEphemeral - Processing ephemeral update:`, {
-          ephemeralLength: ephemeralData.ephemeral?.length,
-          ephemeralSample: ephemeralData.ephemeral?.slice(0, 10),
-          docName: doc.name
-        })
-        
         try {
           const ephemeralBytes = new Uint8Array(ephemeralData.ephemeral)
-          console.log(`[Server] messageEphemeral - Created Uint8Array of length:`, ephemeralBytes.length)
-          
           doc.ephemeralStore.apply(ephemeralBytes)
-          console.log(`[Server] messageEphemeral - Successfully applied ephemeral update`)
         } catch (ephemeralError) {
-          console.error(`[Server] messageEphemeral - ERROR applying ephemeral update:`, {
-            error: ephemeralError.message,
-            stack: ephemeralError.stack,
-            ephemeralLength: ephemeralData.ephemeral?.length,
-            ephemeralSample: ephemeralData.ephemeral?.slice(0, 10)
-          })
+          console.error(`[Server] messageEphemeral - ERROR applying ephemeral update:`, ephemeralError.message)
         }
         break
         
       case messageQueryEphemeral:
         // Send current ephemeral state to requesting client
-        console.log(`[Server] messageQueryEphemeral - Query for ephemeral state, docName:`, doc.name)
-        
         try {
           const ephemeralUpdate = doc.ephemeralStore.encodeAll()
-          console.log(`[Server] messageQueryEphemeral - Encoded ephemeral update length:`, ephemeralUpdate.length)
-          
           const ephemeralResponse: EphemeralMessage = {
             type: messageEphemeral,
             ephemeral: Array.from(ephemeralUpdate),
             docId: doc.name
           }
-          console.log(`[Server] messageQueryEphemeral - Sending ephemeral response:`, {
-            type: ephemeralResponse.type,
-            ephemeralLength: ephemeralResponse.ephemeral.length,
-            ephemeralSample: ephemeralResponse.ephemeral.slice(0, 10)
-          })
-          
           send(doc, conn, new TextEncoder().encode(JSON.stringify(ephemeralResponse)))
         } catch (queryError) {
-          console.error(`[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:`, {
-            error: queryError.message,
-            stack: queryError.stack
-          })
+          console.error(`[Server] messageQueryEphemeral - ERROR:`, queryError.message)
         }
         break
     }
@@ -399,7 +358,18 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   const doc = getYDoc(docName)
   doc.conns.set(conn, new Set())
   // listen and reply to events
-  conn.on('message', /** @param {ArrayBuffer} message */ message => messageListener(conn, doc, new Uint8Array(message)))
+  conn.on('message', /** @param {ArrayBuffer|string} message */ message => {
+    // Handle both string and binary messages
+    let messageData: Uint8Array
+    if (typeof message === 'string') {
+      messageData = new TextEncoder().encode(message)
+    } else if (message instanceof ArrayBuffer) {
+      messageData = new Uint8Array(message)
+    } else {
+      messageData = new Uint8Array(message)
+    }
+    messageListener(conn, doc, messageData)
+  })
 
   // Check if connection is still alive
   let pongReceived = true
