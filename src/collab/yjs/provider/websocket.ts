@@ -4,7 +4,6 @@
 
 /* eslint-env browser */
 
-import * as Y from 'yjs' // eslint-disable-line
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
 import * as encoding from 'lib0/encoding'

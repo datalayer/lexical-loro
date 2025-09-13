@@ -17,7 +17,6 @@ import {
   LoroMap,
   LoroEvent,
 } from 'loro-crdt';
-
 import {XmlText} from '../types/XmlText';
 import {Binding, Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
