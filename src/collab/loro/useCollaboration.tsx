@@ -183,12 +183,21 @@ export function useCollaboration(
         skipCollab: skipCollaborationUpdateRef.current
       });
       
-      // In Loro, event.by_local indicates local vs remote:
-      // We need to determine if this event originated from local changes or remote updates
-      // When applying updates from WebSocket, this should be marked as remote
-      // The challenge is that the WebSocket provider is also subscribing to these events
-      const isLocalChange = event.by_local === true;
+      // In Loro, we need to determine if this event originated from local changes or remote updates
+      // Check multiple indicators:
+      // 1. event.origin === 'lexical-edit' means it's from our local editor changes
+      // 2. event.by_local === true would also indicate local
+      // 3. event.by === 'local' can also indicate local
+      const isLocalChange = event.origin === 'lexical-edit' || event.by_local === true || event.by === 'local';
       const origin = isLocalChange ? 'local' : 'remote';
+      
+      console.log(`[UseCollaboration] Change classification:`, {
+        isLocalChange,
+        origin,
+        eventOrigin: event.origin,
+        eventBy: event.by,
+        eventByLocal: event.by_local
+      });
       
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
@@ -197,7 +206,7 @@ export function useCollaboration(
         return;
       }
       
-      if (origin !== 'local') { // Only process remote changes
+      if (!isLocalChange) { // Only process remote changes
         console.log(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
         
         // Check if this change is from the undo manager
@@ -279,6 +288,12 @@ export function useCollaboration(
         });
         
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
+          // Only sync if there are actual changes
+          if (dirtyElements.size === 0 && dirtyLeaves.size === 0 && normalizedNodes.size === 0) {
+            console.log('⏭️ useCollaboration: Skipping sync - no dirty elements, leaves, or normalized nodes');
+            return;
+          }
+          
           // Set origin to indicate this is a local edit for undo manager
           const doc = docMap.get(id);
           if (doc) {

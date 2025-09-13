@@ -147,6 +147,7 @@ export class CollabTextNode {
     binding: Binding,
     keysChanged: null | Set<string>,
   ): void {
+    console.log(`🔧 [CollabTextNode.syncPropertiesAndTextFromCRDT] ENTRY: {key: '${this._key}'}`);
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
@@ -156,9 +157,19 @@ export class CollabTextNode {
     $syncPropertiesFromCRDT(binding, this._map, lexicalNode, keysChanged);
 
     const collabText = this._text;
+    const lexicalText = lexicalNode.__text;
+    
+    console.log(`📝 [CollabTextNode.syncPropertiesAndTextFromCRDT] Text comparison:`, {
+      collabText,
+      lexicalText,
+      needsUpdate: lexicalText !== collabText
+    });
 
-    if (lexicalNode.__text !== collabText) {
+    if (lexicalText !== collabText) {
+      console.log(`✏️ [CollabTextNode.syncPropertiesAndTextFromCRDT] Setting text content from '${lexicalText}' to '${collabText}'`);
       lexicalNode.setTextContent(collabText);
+    } else {
+      console.log(`⏭️ [CollabTextNode.syncPropertiesAndTextFromCRDT] Text already matches, no update needed`);
     }
   }
 

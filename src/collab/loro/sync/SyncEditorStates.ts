@@ -34,6 +34,7 @@ import {
   $isTextNode,
   COLLABORATION_TAG,
   HISTORIC_TAG,
+  SKIP_COLLAB_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import invariant from '../../utils/invariant';
@@ -317,7 +318,7 @@ export function syncCRDTChangesToLexical(
         });
       },
       skipTransforms: true,
-      tag: isFromUndoManger ? HISTORIC_TAG : COLLABORATION_TAG,
+      tag: isFromUndoManger ? HISTORIC_TAG : SKIP_COLLAB_TAG,
     },
   );
 }

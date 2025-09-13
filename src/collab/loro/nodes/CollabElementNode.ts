@@ -245,12 +245,27 @@ export class CollabElementNode {
   }
 
   syncChildrenFromCRDT(binding: Binding): void {
+    console.log('🔄 [CollabElementNode.syncChildrenFromCRDT] ENTRY:', {
+      nodeKey: this._key,
+      nodeType: this._type,
+      collabChildrenCount: this._children.length,
+      xmlTextLength: this._xmlText.length
+    });
+    
     // Now diff the children of the collab node with that of our existing Lexical node.
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
       'syncChildrenFromCRDT: could not find element node',
     );
+    
+    console.log('📋 [CollabElementNode.syncChildrenFromCRDT] Lexical node found:', {
+      lexicalNodeKey: lexicalNode.__key,
+      lexicalNodeType: lexicalNode.getType(),
+      lexicalChildrenCount: lexicalNode.getChildren().length,
+      lexicalChildrenKeys: lexicalNode.getChildren().map(c => c.getKey()),
+      lexicalChildrenTypes: lexicalNode.getChildren().map(c => c.getType())
+    });
 
     const key = lexicalNode.__key;
     const prevLexicalChildrenKeys = $createChildrenArray(lexicalNode, null);
@@ -265,8 +280,18 @@ export class CollabElementNode {
     let prevIndex = 0;
     let prevChildNode = null;
 
+    console.log('📊 [CollabElementNode.syncChildrenFromCRDT] Children comparison:', {
+      prevLexicalChildrenKeysLength: lexicalChildrenKeysLength,
+      collabChildrenLength: collabChildrenLength,
+      prevLexicalChildrenKeys,
+      collabChildrenTypes: collabChildren.map(c => c.constructor.name),
+      collabChildrenKeys: collabChildren.map(c => c._key),
+      needsWritableNode: collabChildrenLength !== lexicalChildrenKeysLength
+    });
+
     if (collabChildrenLength !== lexicalChildrenKeysLength) {
       writableLexicalNode = lexicalNode.getWritable();
+      console.log('✏️ [CollabElementNode.syncChildrenFromCRDT] Created writable lexical node');
     }
 
     for (let i = 0; i < collabChildrenLength; i++) {
@@ -274,21 +299,40 @@ export class CollabElementNode {
       const childCollabNode = collabChildren[i];
       const collabLexicalChildNode = childCollabNode.getNode();
       const collabKey = childCollabNode._key;
+      
+      console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Processing child ${i}/${collabChildrenLength}:`, {
+        i,
+        prevIndex,
+        lexicalChildKey,
+        collabKey,
+        childType: childCollabNode.constructor.name,
+        hasLexicalNode: collabLexicalChildNode !== null,
+        lexicalNodeType: collabLexicalChildNode?.getType()
+      });
 
       if (collabLexicalChildNode !== null && lexicalChildKey === collabKey) {
         const childNeedsUpdating = $isTextNode(collabLexicalChildNode);
+        console.log(`✅ [CollabElementNode.syncChildrenFromCRDT] Update path - matching child found:`, {
+          childNeedsUpdating,
+          lexicalNodeType: collabLexicalChildNode.getType()
+        });
         // Update
         visitedKeys.add(lexicalChildKey);
 
-        if (childNeedsUpdating) {
+        // Always sync CollabElementNodes recursively, even if they don't need updating themselves
+        // because their children might have changed (like text content inside paragraphs)
+        if (childCollabNode instanceof CollabElementNode) {
+          console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Recursively syncing CollabElementNode child`);
+          childCollabNode._key = lexicalChildKey;
+          const xmlText = childCollabNode._xmlText;
+          childCollabNode.syncPropertiesFromCRDT(binding, null);
+          childCollabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+          childCollabNode.syncChildrenFromCRDT(binding);
+        } else if (childNeedsUpdating) {
           childCollabNode._key = lexicalChildKey;
 
-          if (childCollabNode instanceof CollabElementNode) {
-            const xmlText = childCollabNode._xmlText;
-            childCollabNode.syncPropertiesFromCRDT(binding, null);
-            childCollabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-            childCollabNode.syncChildrenFromCRDT(binding);
-          } else if (childCollabNode instanceof CollabTextNode) {
+          if (childCollabNode instanceof CollabTextNode) {
+            console.log(`📝 [CollabElementNode.syncChildrenFromCRDT] Calling syncPropertiesAndTextFromCRDT for CollabTextNode`);
             childCollabNode.syncPropertiesAndTextFromCRDT(binding, null);
           } else if (childCollabNode instanceof CollabDecoratorNode) {
             childCollabNode.syncPropertiesFromCRDT(binding, null);
@@ -304,6 +348,7 @@ export class CollabElementNode {
         prevChildNode = collabLexicalChildNode;
         prevIndex++;
       } else {
+        console.log(`🆕 [CollabElementNode.syncChildrenFromCRDT] Create/Replace path - no matching child found`);
         if (collabKeys === undefined) {
           collabKeys = new Set();
 
@@ -331,12 +376,21 @@ export class CollabElementNode {
 
         writableLexicalNode = lexicalNode.getWritable();
         // Create/Replace
+        console.log(`🔨 [CollabElementNode.syncChildrenFromCRDT] Creating lexical node from collab node:`, {
+          collabNodeType: childCollabNode.constructor.name,
+          collabKey: childCollabNode._key
+        });
         const lexicalChildNode = createLexicalNodeFromCollabNode(
           binding,
           childCollabNode,
           key,
         );
         const childKey = lexicalChildNode.__key;
+        console.log(`✨ [CollabElementNode.syncChildrenFromCRDT] Created lexical node:`, {
+          lexicalNodeType: lexicalChildNode.getType(),
+          lexicalNodeKey: childKey,
+          text: lexicalChildNode.getTextContent ? lexicalChildNode.getTextContent() : 'N/A'
+        });
         collabNodeMap.set(childKey, childCollabNode);
         nextLexicalChildrenKeys[i] = childKey;
         if (prevChildNode === null) {
