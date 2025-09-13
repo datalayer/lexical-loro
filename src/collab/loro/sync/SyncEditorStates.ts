@@ -76,19 +76,7 @@ function $syncStateEvent(binding: Binding, event: any): boolean {
   return true;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function $syncEvent(binding: Binding, event: any): void {
-  // Debug: Log all events to understand what we're receiving
-  console.log('$syncEvent: Received event:', {
-    target: event.target,
-    targetType: typeof event.target,
-    eventKeys: Object.keys(event),
-    isMapEvent: (event as any).isMapEvent,
-    isTextEvent: (event as any).isTextEvent,
-    isXmlEvent: (event as any).isXmlEvent
-  });
-  
+function $syncEvent(binding: Binding, event: LoroEvent): void {
   if ((event as any).isMapEvent && $syncStateEvent(binding, event)) {
     return;
   }
@@ -147,7 +135,7 @@ function $syncEvent(binding: Binding, event: any): void {
 
   // Skip processing if collabNode is null (raw Loro container without __type)
   if (!collabNode) {
-    console.warn('$syncEvent: Skipping event for raw Loro container:', target?.constructor?.name, 'Event:', event);
+    console.warn('$syncEvent: Skipping event for raw Loro container:', (target as any).constructor?.name, 'Event:', event);
     return;
   }
   
@@ -155,19 +143,6 @@ function $syncEvent(binding: Binding, event: any): void {
 }
 
 function processCollabNodeEvent(binding: Binding, collabNode: any, event: any): void {
-  // Debug logging to understand event structure
-  console.log('processCollabNodeEvent: collabNode type:', collabNode.constructor.name);
-  console.log('processCollabNodeEvent: event structure:', {
-    isTextEvent: (event as any).isTextEvent,
-    isMapEvent: (event as any).isMapEvent,
-    isXmlEvent: (event as any).isXmlEvent,
-    keysChanged: event.keysChanged,
-    childListChanged: event.childListChanged,
-    attributesChanged: event.attributesChanged,
-    delta: event.delta,
-    eventKeys: Object.keys(event)
-  });
-
   if (collabNode instanceof CollabElementNode && (event as any).isTextEvent) {
     const {keysChanged, childListChanged, delta} = event as any;
 
@@ -202,34 +177,15 @@ function processCollabNodeEvent(binding: Binding, collabNode: any, event: any): 
       collabNode.syncPropertiesFromCRDT(binding, changedKeys);
     }
   } else {
-    // More graceful handling - log and skip instead of throwing error
-    console.warn('processCollabNodeEvent: Unhandled event type for collab node:', {
+    // Log the issue but don't crash - this allows us to debug what events we're actually getting
+    console.warn('processCollabNodeEvent: Unexpected event type:', {
       collabNodeType: collabNode.constructor.name,
-      eventType: event.constructor?.name,
+      eventKeys: Object.keys(event),
       isTextEvent: (event as any).isTextEvent,
       isMapEvent: (event as any).isMapEvent,
-      isXmlEvent: (event as any).isXmlEvent,
-      eventKeys: Object.keys(event)
+      isXmlEvent: (event as any).isXmlEvent
     });
-    
-    // Try to handle based on what properties the event has
-    if (event.keysChanged || event.attributesChanged) {
-      const changedKeys = event.keysChanged || event.attributesChanged;
-      if (changedKeys && changedKeys.size > 0) {
-        if (collabNode.syncPropertiesFromCRDT) {
-          collabNode.syncPropertiesFromCRDT(binding, changedKeys);
-        } else if (collabNode.syncPropertiesAndTextFromCRDT) {
-          collabNode.syncPropertiesAndTextFromCRDT(binding, changedKeys);
-        }
-      }
-    }
-    
-    if (event.childListChanged && event.delta) {
-      if (collabNode.applyChildrenCRDTDelta && collabNode.syncChildrenFromCRDT) {
-        collabNode.applyChildrenCRDTDelta(binding, event.delta);
-        collabNode.syncChildrenFromCRDT(binding);
-      }
-    }
+    // Don't try to handle it gracefully - let the original behavior take precedence
   }
 }
 
@@ -375,8 +331,26 @@ export function syncLexicalUpdateToCRDT(
   normalizedNodes: Set<NodeKey>,
   tags: Set<string>,
 ): void {
+  console.log('🚀 [SyncLexicalUpdateToCRDT] STARTING SYNC:', {
+    dirtyElementsCount: dirtyElements.size,
+    dirtyElementsKeys: Array.from(dirtyElements.keys()),
+    dirtyLeavesCount: dirtyLeaves.size,
+    dirtyLeavesKeys: Array.from(dirtyLeaves),
+    normalizedNodesCount: normalizedNodes.size,
+    normalizedNodesKeys: Array.from(normalizedNodes),
+    tagsArray: Array.from(tags),
+    hasRootInDirtyElements: dirtyElements.has('root'),
+    bindingRootKey: binding?.root?._key,
+    collabNodeMapSize: binding?.collabNodeMap?.size,
+    bindingRootIsEmpty: binding?.root?.isEmpty(),
+    bindingRootHasSharedType: !!binding?.root?.getSharedType()
+  });
+  
   syncWithTransaction(binding, () => {
+    console.log('🔄 syncLexicalUpdateToCRDT: Inside syncWithTransaction');
     currEditorState.read(() => {
+      console.log('📖 syncLexicalUpdateToCRDT: Inside currEditorState.read()');
+      
       // We check if the update has come from a origin where the origin
       // was the collaboration binding previously. This can help us
       // prevent unnecessarily re-diffing and possible re-applying
@@ -385,22 +359,41 @@ export function syncLexicalUpdateToCRDT(
       // the same character again. The exception to this heuristic is
       // when we need to handle normalization merge conflicts.
       if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) {
+        console.log('⏭️ syncLexicalUpdateToCRDT: Skipping - has collab/historic tag');
         if (normalizedNodes.size > 0) {
           $handleNormalizationMergeConflicts(binding, normalizedNodes);
         }
-
         return;
       }
 
       if (dirtyElements.has('root')) {
+        console.log('🌳 [SyncLexicalUpdateToCRDT] Processing root dirty element');
         const prevNodeMap = prevEditorState._nodeMap;
         const nextLexicalRoot = $getRoot();
         const collabRoot = binding.root;
+        
+        console.log('� [SyncLexicalUpdateToCRDT] Root analysis:', {
+          lexicalRootKey: nextLexicalRoot.getKey(),
+          lexicalRootType: nextLexicalRoot.getType(),
+          lexicalRootChildrenCount: nextLexicalRoot.getChildren().length,
+          lexicalRootChildrenKeys: nextLexicalRoot.getChildren().map(c => c.getKey()),
+          lexicalRootChildrenTypes: nextLexicalRoot.getChildren().map(c => c.getType()),
+          collabRootKey: collabRoot._key,
+          collabRootType: collabRoot.getType(),
+          collabRootIsEmpty: collabRoot.isEmpty(),
+          collabRootHasSharedType: !!collabRoot.getSharedType(),
+          isRootInCollabNodeMap: binding.collabNodeMap.has('root'),
+          collabNodeMapHasLexicalRoot: binding.collabNodeMap.has(nextLexicalRoot.getKey())
+        });
+        
+        console.log('�🔧 [SyncLexicalUpdateToCRDT] Calling syncPropertiesFromLexical');
         collabRoot.syncPropertiesFromLexical(
           binding,
           nextLexicalRoot,
           prevNodeMap,
         );
+        
+        console.log('👶 [SyncLexicalUpdateToCRDT] Calling syncChildrenFromLexical');
         collabRoot.syncChildrenFromLexical(
           binding,
           nextLexicalRoot,
@@ -408,10 +401,22 @@ export function syncLexicalUpdateToCRDT(
           dirtyElements,
           dirtyLeaves,
         );
+        
+        console.log('✅ [SyncLexicalUpdateToCRDT] Root processing complete');
+      } else {
+        console.log('⚠️ [SyncLexicalUpdateToCRDT] No root in dirty elements - this might be the problem!');
+        console.log('🔍 [SyncLexicalUpdateToCRDT] Dirty elements analysis:', {
+          dirtyElementsKeys: Array.from(dirtyElements.keys()),
+          dirtyElementsSize: dirtyElements.size,
+          lexicalRootExists: !!$getRoot(),
+          lexicalRootKey: $getRoot().getKey(),
+          lexicalRootChildrenCount: $getRoot().getChildren().length
+        });
       }
 
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
+      console.log('👆 syncLexicalUpdateToCRDT: Calling syncLexicalSelectionToCRDT');
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
     });
   });

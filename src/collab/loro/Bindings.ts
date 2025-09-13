@@ -49,19 +49,42 @@ export function createBinding(
   docMap: Map<string, LoroDoc>,
   excludedProperties?: ExcludedProperties,
 ): Binding {
+  console.log(`[CreateBinding] STARTING binding creation:`, {
+    editorHasRootElement: !!editor.getRootElement(),
+    docId: id,
+    hasDoc: !!doc,
+    docPeerId: doc?.peerId?.toString()
+  });
+  
   invariant(
     doc !== undefined && doc !== null,
     'createBinding: doc is null or undefined',
   );
+  
+  console.log(`[CreateBinding] Creating root XmlText`);
   const rootXmlText = new XmlText(doc, 'root');
   rootXmlText.setAttribute('__type', 'root');
+  console.log(`[CreateBinding] Created root XmlText:`, {
+    rootXmlTextLength: rootXmlText.length,
+    rootXmlTextIsEmpty: rootXmlText.length === 0,
+    rootXmlTextType: rootXmlText.getAttribute('__type')
+  });
+  
+  console.log(`[CreateBinding] Creating root CollabElementNode`);
   const root: CollabElementNode = $createCollabElementNode(
     rootXmlText,
     null,
     'root',
   );
   root._key = 'root';
-  return {
+  console.log(`[CreateBinding] Created root CollabElementNode:`, {
+    rootKey: root._key,
+    rootType: root.getType(),
+    rootHasSharedType: !!root.getSharedType(),
+    rootSharedTypeLength: root.getSharedType()?.length
+  });
+  
+  const binding = {
     clientID: Number(doc.peerId.toString().slice(0, 8)), // Convert Loro peer ID to number
     collabNodeMap: new Map(),
     cursors: new Map(),
@@ -74,4 +97,24 @@ export function createBinding(
     nodeProperties: new Map(),
     root,
   };
+  
+  // CRITICAL: We need to register the root CollabElementNode in the collabNodeMap
+  // This is essential for the sync system to work
+  console.log(`[CreateBinding] Registering root CollabElementNode in collabNodeMap with key 'root'`);
+  binding.collabNodeMap.set('root', root);
+  
+  // ADDITIONAL CRITICAL FIX: Also register the root with the shared type mapping
+  // This ensures that when CRDT events come in for the root container, they find the right CollabElementNode
+  console.log(`[CreateBinding] Also registering root in collabNodeMap with sharedType as key`);
+  binding.collabNodeMap.set(rootXmlText, root);
+  
+  console.log(`[CreateBinding] COMPLETED binding creation:`, {
+    bindingClientID: binding.clientID,
+    bindingId: binding.id,
+    collabNodeMapSize: binding.collabNodeMap.size,
+    hasRootInBinding: !!binding.root,
+    rootRegisteredInMap: binding.collabNodeMap.has('root')
+  });
+  
+  return binding;
 }

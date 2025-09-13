@@ -606,13 +606,17 @@ export function doesSelectionNeedRecovering(
 }
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
-  console.debug('[syncWithTransaction] Starting sync transaction');
+  console.log('🔄 [syncWithTransaction] Starting sync transaction');
   
   // For now, just call the function directly
   // Loro should handle change batching automatically
-  fn();
-  
-  console.debug('[syncWithTransaction] Sync transaction completed');
+  try {
+    fn();
+    console.log('✅ [syncWithTransaction] Sync transaction completed successfully');
+  } catch (error) {
+    console.error('❌ [syncWithTransaction] Error in sync transaction:', error);
+    throw error;
+  }
 }
 
 export function $moveSelectionToPreviousNode(

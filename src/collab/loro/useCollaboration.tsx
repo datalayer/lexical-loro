@@ -104,15 +104,45 @@ export function useCollaboration(
     };
 
     const onSync = (isSynced: boolean) => {
-      if (
-        shouldBootstrap &&
-        isSynced &&
-        root.isEmpty() &&
-        root._xmlText.length === 0 &&
-        isReloadingDoc.current === false
-      ) {
-        initializeEditor(editor, initialEditorState);
-      }
+      console.log(`[UseCollaboration] onSync CALLED:`, {
+        isSynced,
+        shouldBootstrap,
+        rootIsEmpty: root.isEmpty(),
+        rootXmlTextLength: root._xmlText.length,
+        isReloadingDoc: isReloadingDoc.current,
+        willInitialize: shouldBootstrap && isSynced && root.isEmpty() && root._xmlText.length === 0 && isReloadingDoc.current === false
+      });
+      
+      // CRITICAL FIX: Check if the Lexical editor is empty even if the CRDT root is not
+      // This handles the case where CRDT events have been processed but no Lexical content exists
+      editor.getEditorState().read(() => {
+        const lexicalRoot = $getRoot();
+        const lexicalIsEmpty = lexicalRoot.isEmpty();
+        
+        console.log(`[UseCollaboration] Lexical state check:`, {
+          lexicalIsEmpty,
+          lexicalChildrenCount: lexicalRoot.getChildren().length,
+          crdtRootIsEmpty: root.isEmpty(),
+          crdtRootLength: root._xmlText.length
+        });
+        
+        if (
+          shouldBootstrap &&
+          isSynced &&
+          lexicalIsEmpty && // Check Lexical state instead of just CRDT state
+          isReloadingDoc.current === false
+        ) {
+          console.log(`[UseCollaboration] INITIALIZING EDITOR - Lexical is empty, creating initial content`);
+          
+          // CRITICAL: Set flag to ensure the next sync doesn't get skipped
+          skipCollaborationUpdateRef.current = false;
+          
+          initializeEditor(editor, initialEditorState);
+          console.log(`[UseCollaboration] INITIALIZATION COMPLETE - initializeEditor returned`);
+        } else if (isSynced && !lexicalIsEmpty) {
+          console.log(`[UseCollaboration] Lexical already has content, skipping initialization`);
+        }
+      });
 
       isReloadingDoc.current = false;
     };
@@ -191,10 +221,12 @@ export function useCollaboration(
       // Create new undo manager for the reloaded document  
       const newUndoManager = createUndoManager(binding, binding.root.getSharedType());
       undoManagerRef.current = newUndoManager;
-    };    provider.on('reload', onProviderDocReload);
+    };    console.log(`[UseCollaboration] Setting up provider event listeners`);
+    provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
     provider.on('sync', onSync);
     awareness.on('update', onAwarenessUpdate);
+    console.log(`[UseCollaboration] Provider event listeners setup complete`);
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
@@ -218,13 +250,27 @@ export function useCollaboration(
         normalizedNodes,
         tags,
       }) => {
+        console.log('🔥 useCollaboration: registerUpdateListener TRIGGERED', {
+          hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
+          skipCollaborationUpdate: skipCollaborationUpdateRef.current,
+          dirtyElementsKeys: Array.from(dirtyElements.keys()),
+          dirtyLeavesKeys: Array.from(dirtyLeaves),
+          dirtyLeavesSize: dirtyLeaves.size,
+          tagsArray: Array.from(tags),
+          editorStateDiff: editorState !== prevEditorState
+        });
+        
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
           // Set origin to indicate this is a local edit for undo manager
           const doc = docMap.get(id);
           if (doc) {
             doc.setNextCommitOrigin('lexical-edit');
+            console.log('useCollaboration: Set commit origin to lexical-edit');
+          } else {
+            console.warn('useCollaboration: Could not find doc in docMap for id:', id);
           }
           
+          console.log('🚀 useCollaboration: Calling syncLexicalUpdateToCRDT');
           syncLexicalUpdateToCRDT(
             binding,
             provider,
@@ -235,11 +281,18 @@ export function useCollaboration(
             normalizedNodes,
             tags,
           );
+        } else {
+          console.log('⏭️ useCollaboration: Skipping syncLexicalUpdateToCRDT', {
+            hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
+            skipCollaborationUpdate: skipCollaborationUpdateRef.current
+          });
         }
       },
     );
 
+    console.log(`[UseCollaboration] About to call connect()`);
     const connectionPromise = connect();
+    console.log(`[UseCollaboration] connect() called, connectionPromise:`, !!connectionPromise);
 
     return () => {
       if (isReloadingDoc.current === false) {
@@ -420,9 +473,19 @@ function initializeEditor(
   editor: LexicalEditor,
   initialEditorState?: InitialEditorStateType,
 ): void {
+  console.log(`[InitializeEditor] STARTING initialization:`, {
+    hasInitialEditorState: !!initialEditorState,
+    initialEditorStateType: typeof initialEditorState
+  });
+  
   editor.update(
     () => {
       const root = $getRoot();
+      console.log(`[InitializeEditor] Inside editor.update:`, {
+        rootIsEmpty: root.isEmpty(),
+        rootChildren: root.getChildren().length,
+        rootChildrenKeys: root.getChildren().map(c => c.getKey())
+      });
 
       if (root.isEmpty()) {
         if (initialEditorState) {
@@ -455,8 +518,20 @@ function initializeEditor(
             }
           }
         } else {
+          console.log(`[InitializeEditor] Creating default paragraph (no initialEditorState provided)`);
           const paragraph = $createParagraphNode();
+          console.log(`[InitializeEditor] Created paragraph:`, {
+            paragraphKey: paragraph.getKey(),
+            paragraphType: paragraph.getType()
+          });
+          
           root.append(paragraph);
+          console.log(`[InitializeEditor] Appended paragraph to root:`, {
+            rootChildren: root.getChildren().length,
+            rootChildrenKeys: root.getChildren().map(c => c.getKey()),
+            rootChildrenTypes: root.getChildren().map(c => c.getType())
+          });
+          
           const {activeElement} = document;
 
           if (
@@ -464,15 +539,16 @@ function initializeEditor(
             (activeElement !== null &&
               activeElement === editor.getRootElement())
           ) {
+            console.log(`[InitializeEditor] Selecting paragraph`);
             paragraph.select();
           }
         }
       }
     },
-    {
-      tag: HISTORY_MERGE_TAG,
-    },
+    {tag: HISTORY_MERGE_TAG},
   );
+  
+  console.log(`[InitializeEditor] COMPLETED initialization`);
 }
 
 function clearEditorSkipCollab(editor: LexicalEditor, binding: Binding) {

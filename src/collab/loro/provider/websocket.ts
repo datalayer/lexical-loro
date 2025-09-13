@@ -770,7 +770,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     console.log(`[Client] WebsocketProvider - Setting up Loro document event subscription`)
     try {
       this.doc.subscribe((event) => {
-        console.log(`[Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
+        console.log(`🔥 [Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
           by_local: event.by_local,
           hasLocalChanges: !!event.by_local,
           origin: event.origin,
