@@ -2,9 +2,30 @@
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
- * LI  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
+ * LI  const collabNode = $getOrInitCollabNodeFromSharedType(binding,   // Handle Loro-style events based on actual LoroEvent structure
+  if (collabNode instanceof CollabElementNode && event.diff) {
+    console.log('📝 [ProcessCollabNodeEvent] Processing CollabElementNode with diff:', {
+      diffType: event.diff.type,
+      hasDiff: !!event.diff,
+      diffString: JSON.stringify(event.diff)
+    });
 
-  // Skip processing if collabNode is null (raw Loro container without __type)
+    // Handle different diff types appropriately (align with Y.js approach)
+    try {
+      if (event.diff.type === 'text') {
+        console.log('📝 [ProcessCollabNodeEvent] Text diff - applying delta and syncing children');
+        // For text diffs, we need to apply the delta and then sync children
+        const xmlText = collabNode._xmlText;
+        collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+        collabNode.syncChildrenFromCRDT(binding);
+      } else {
+        console.log('🔧 [ProcessCollabNodeEvent] Non-text diff - syncing children only');
+        // For other diffs, just sync children
+        collabNode.syncChildrenFromCRDT(binding);
+      }
+    } catch (error) {
+      console.warn('Failed to sync children from CRDT:', error);
+    }Skip processing if collabNode is null (raw Loro container without __type)
   if (!collabNode) {
     console.warn('$syncEvent: Skipping event for raw Loro container:', target?.constructor?.name, 'Event:', event);
     return;
@@ -128,13 +149,38 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
     let foundCollabNode;
     
     // Search through all existing collaboration nodes to find one with matching container
+    console.log('$syncEvent: Searching for collab node matching target:', target);
+    console.log('$syncEvent: Available collab nodes:', Array.from(binding.collabNodeMap.entries()).map(([k, v]) => ({ key: k.toString(), nodeKey: v._key, nodeType: v._type })));
+    
+    // First, try to find element-specific matches (highest priority)
     for (const [sharedType, collabNode] of binding.collabNodeMap.entries()) {
-      // Check if this collaboration node's shared type matches the target container ID
-      const sharedTypeStr = sharedType.toString();
-      if (sharedTypeStr.includes(target) || (target.includes('root') && collabNode._key === 'root')) {
+      if (target.includes(`element_${collabNode._key}`) && collabNode._key !== 'root') {
         foundCollabNode = collabNode;
-        console.log('$syncEvent: Found existing collab node for', target, ':', collabNode);
+        console.log('$syncEvent: Found ELEMENT match for', target, ':', collabNode);
         break;
+      }
+    }
+    
+    // If no element match, try root-specific matches
+    if (!foundCollabNode) {
+      for (const [sharedType, collabNode] of binding.collabNodeMap.entries()) {
+        if (target === 'cid:root-root:Text' && collabNode._key === 'root') {
+          foundCollabNode = collabNode;
+          console.log('$syncEvent: Found ROOT match for', target, ':', collabNode);
+          break;
+        }
+      }
+    }
+    
+    // If still no match, try generic shared type matches (lowest priority)
+    if (!foundCollabNode) {
+      for (const [sharedType, collabNode] of binding.collabNodeMap.entries()) {
+        const sharedTypeStr = sharedType.toString();
+        if (target.includes(sharedTypeStr) && sharedTypeStr.length > 0) {
+          foundCollabNode = collabNode;
+          console.log('$syncEvent: Found GENERIC match for', target, ':', collabNode);
+          break;
+        }
       }
     }
     

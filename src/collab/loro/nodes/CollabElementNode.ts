@@ -117,6 +117,9 @@ export class CollabElementNode {
       };
     }>,
   ): void {
+    console.log(`🔧 [CollabElementNode.applyChildrenCRDTDelta] ENTRY: {nodeKey: '${this._key}', nodeType: '${this._type}', deltasLength: ${deltas.length}, childrenCount: ${this._children.length}}`);
+    console.log(`📋 [CollabElementNode.applyChildrenCRDTDelta] Deltas:`, deltas);
+    
     const children = this._children;
     let currIndex = 0;
     let pendingSplitText = null;
@@ -311,27 +314,28 @@ export class CollabElementNode {
       });
 
       if (collabLexicalChildNode !== null && lexicalChildKey === collabKey) {
+        // Keep Y.js alignment: only TextNodes need updating in syncChildrenFromCRDT
         const childNeedsUpdating = $isTextNode(collabLexicalChildNode);
         console.log(`✅ [CollabElementNode.syncChildrenFromCRDT] Update path - matching child found:`, {
           childNeedsUpdating,
-          lexicalNodeType: collabLexicalChildNode.getType()
+          lexicalNodeType: collabLexicalChildNode.getType(),
+          isTextNode: childNeedsUpdating
         });
         // Update
         visitedKeys.add(lexicalChildKey);
 
-        // Always sync CollabElementNodes recursively, even if they don't need updating themselves
-        // because their children might have changed (like text content inside paragraphs)
-        if (childCollabNode instanceof CollabElementNode) {
-          console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Recursively syncing CollabElementNode child`);
-          childCollabNode._key = lexicalChildKey;
-          const xmlText = childCollabNode._xmlText;
-          childCollabNode.syncPropertiesFromCRDT(binding, null);
-          childCollabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-          childCollabNode.syncChildrenFromCRDT(binding);
-        } else if (childNeedsUpdating) {
+        if (childNeedsUpdating) {
+          console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Child needs updating - processing sync`);
           childCollabNode._key = lexicalChildKey;
 
-          if (childCollabNode instanceof CollabTextNode) {
+          if (childCollabNode instanceof CollabElementNode) {
+            console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Syncing CollabElementNode child (YJS-style)`);
+            const xmlText = childCollabNode._xmlText;
+            console.log(`📋 [CollabElementNode.syncChildrenFromCRDT] XmlText delta:`, xmlText.toDelta());
+            childCollabNode.syncPropertiesFromCRDT(binding, null);
+            childCollabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+            childCollabNode.syncChildrenFromCRDT(binding);
+          } else if (childCollabNode instanceof CollabTextNode) {
             console.log(`📝 [CollabElementNode.syncChildrenFromCRDT] Calling syncPropertiesAndTextFromCRDT for CollabTextNode`);
             childCollabNode.syncPropertiesAndTextFromCRDT(binding, null);
           } else if (childCollabNode instanceof CollabDecoratorNode) {
@@ -342,6 +346,8 @@ export class CollabElementNode {
               'syncChildrenFromCRDT: expected text, element, decorator, or linebreak collab node',
             );
           }
+        } else {
+          console.log(`⏭️ [CollabElementNode.syncChildrenFromCRDT] Child doesn't need updating - skipping sync`);
         }
 
         nextLexicalChildrenKeys[i] = lexicalChildKey;

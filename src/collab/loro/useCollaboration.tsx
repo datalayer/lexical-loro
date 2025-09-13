@@ -8,19 +8,10 @@
 
 import * as React from 'react';
 import type {JSX} from 'react';
+import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {createPortal} from 'react-dom';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider, SyncCursorPositionsFn} from './State';
-import {
-  CONNECTED_COMMAND,
-  createUndoManager,
-  initLocalState,
-  setLocalStateFocus,
-  syncCursorPositions,
-  syncLexicalUpdateToCRDT,
-  syncCRDTChangesToLexical,
-  TOGGLE_CONNECT_COMMAND,
-} from './State';
 import {
   $createParagraphNode,
   $getRoot,
@@ -35,10 +26,19 @@ import {
   SKIP_COLLAB_TAG,
   UNDO_COMMAND,
 } from 'lexical';
-import {useCallback, useEffect, useMemo, useRef} from 'react';
-import {createPortal} from 'react-dom';
-import {LoroDoc, UndoManager} from 'loro-crdt';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
+import {LoroDoc, LoroEventBatch, UndoManager} from 'loro-crdt';
+import type {Binding, Provider, SyncCursorPositionsFn} from './State';
+import {
+  CONNECTED_COMMAND,
+  createUndoManager,
+  initLocalState,
+  setLocalStateFocus,
+  syncCursorPositions,
+  syncLexicalUpdateToCRDT,
+  syncCRDTChangesToLexical,
+  TOGGLE_CONNECT_COMMAND,
+} from './State';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 
@@ -80,11 +80,6 @@ export function useCollaboration(
     skipCollaborationUpdateRef.current = false;
   }, []);
 
-  // Function to skip next collaboration update
-  const setSkipCollaborationUpdate = useCallback(() => {
-    skipCollaborationUpdateRef.current = true;
-  }, []);
-
   const connect = useCallback(() => provider.connect(), [provider]);
 
   const disconnect = useCallback(() => {
@@ -104,7 +99,7 @@ export function useCollaboration(
     };
 
     const onSync = (isSynced: boolean) => {
-      console.log(`[UseCollaboration] onSync CALLED:`, {
+      console.log(`[UseCollaboration] onSync CALLED (YJS-style):`, {
         isSynced,
         shouldBootstrap,
         rootIsEmpty: root.isEmpty(),
@@ -113,54 +108,16 @@ export function useCollaboration(
         willInitialize: shouldBootstrap && isSynced && root.isEmpty() && root._xmlText.length === 0 && isReloadingDoc.current === false
       });
       
-      // CRITICAL FIX: Check if the Lexical editor is empty even if the CRDT root is not
-      // This handles the case where CRDT events have been processed but no Lexical content exists
-      editor.getEditorState().read(() => {
-        const lexicalRoot = $getRoot();
-        const lexicalIsEmpty = lexicalRoot.isEmpty();
-        
-        console.log(`[UseCollaboration] Lexical state check:`, {
-          lexicalIsEmpty,
-          lexicalChildrenCount: lexicalRoot.getChildren().length,
-          crdtRootIsEmpty: root.isEmpty(),
-          crdtRootLength: root._xmlText.length
-        });
-        
-        if (
-          shouldBootstrap &&
-          isSynced &&
-          lexicalIsEmpty && // Check Lexical state instead of just CRDT state
-          isReloadingDoc.current === false
-        ) {
-          console.log(`[UseCollaboration] INITIALIZING EDITOR - Lexical is empty, creating initial content`);
-          
-          // CRITICAL: Set flag to ensure the next sync doesn't get skipped
-          skipCollaborationUpdateRef.current = false;
-          
-          initializeEditor(editor, initialEditorState);
-          console.log(`[UseCollaboration] INITIALIZATION COMPLETE - initializeEditor returned`);
-        } else if (isSynced && !lexicalIsEmpty) {
-          console.log(`[UseCollaboration] Lexical already has content, checking if CRDT sync is needed`);
-          
-          // CRITICAL FIX: If Lexical has content but CRDT is empty, we need to force a sync
-          if (root.isEmpty() && root._xmlText.length === 0) {
-            console.log(`[UseCollaboration] FORCING SYNC - Lexical has content but CRDT is empty`);
-            
-            // Force a sync from Lexical to CRDT by triggering an update without collaboration tags
-            editor.update(() => {
-              console.log(`[UseCollaboration] Force sync update - marking root as dirty`);
-              // This update will trigger the registerUpdateListener without SKIP_COLLAB_TAG
-              // which should sync the existing Lexical content to CRDT
-              const lexicalRoot = $getRoot();
-              // Force a change that will mark the root as dirty
-              lexicalRoot.markDirty();
-            }, {
-              // Explicitly avoid collaboration tags to ensure sync happens
-              tag: undefined
-            });
-          }
-        }
-      });
+      if (
+        shouldBootstrap &&
+        isSynced &&
+        root.isEmpty() &&
+        isReloadingDoc.current === false
+      ) {
+        console.log(`[UseCollaboration] INITIALIZING EDITOR (YJS-style)`);
+        initializeEditor(editor, initialEditorState);
+        console.log(`[UseCollaboration] INITIALIZATION COMPLETE`);
+      }
 
       isReloadingDoc.current = false;
     };
@@ -170,13 +127,11 @@ export function useCollaboration(
     };
 
     const onLoroTreeChanges = (
-      // Loro event has different signature than YJS
-      event: any, // LoroEventBatch
+      event: LoroEventBatch,
     ) => {
       console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
         event: event,
         eventBy: event.by,
-        eventByLocal: event.by_local,
         eventOrigin: event.origin,
         hasEvents: !!event.events,
         eventsCount: event.events?.length,
@@ -186,17 +141,15 @@ export function useCollaboration(
       // In Loro, we need to determine if this event originated from local changes or remote updates
       // Check multiple indicators:
       // 1. event.origin === 'lexical-edit' means it's from our local editor changes
-      // 2. event.by_local === true would also indicate local
-      // 3. event.by === 'local' can also indicate local
-      const isLocalChange = event.origin === 'lexical-edit' || event.by_local === true || event.by === 'local';
+      // 2. event.by === 'local' can also indicate local
+      const isLocalChange = event.origin === 'lexical-edit' || event.by === 'local';
       const origin = isLocalChange ? 'local' : 'remote';
       
       console.log(`[UseCollaboration] Change classification:`, {
         isLocalChange,
         origin,
         eventOrigin: event.origin,
-        eventBy: event.by,
-        eventByLocal: event.by_local
+        eventBy: event.by
       });
       
       // Skip processing if we should skip collaboration updates
@@ -220,7 +173,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by_local: ${event.by_local})`);
+        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
       }
     };
 
@@ -249,11 +202,15 @@ export function useCollaboration(
       const newUndoManager = createUndoManager(binding, binding.root.getSharedType());
       undoManagerRef.current = newUndoManager;
     };    console.log(`[UseCollaboration] Setting up provider event listeners`);
+
     provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
     provider.on('sync', onSync);
+
     awareness.on('update', onAwarenessUpdate);
+
     console.log(`[UseCollaboration] Provider event listeners setup complete`);
+
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
