@@ -1,5 +1,3 @@
-import type {Binding, CRDTNode} from './State';
-
 import {
   $getNodeByKey,
   $getRoot,
@@ -18,19 +16,20 @@ import {
   RangeSelection,
   TextNode,
 } from 'lexical';
-import invariant from '../utils/invariant';
-import {Doc, Map as YMap, XmlElement, XmlText} from 'yjs';
-
+import {LoroMap, LoroDoc} from 'loro-crdt';
+import invariant from '../../utils/invariant';
+import {XmlText} from './../types/XmlText';
+import type {Binding, CRDTNode} from './../State';
 import {
   $createCollabDecoratorNode,
   CollabDecoratorNode,
-} from './nodes/CollabDecoratorNode';
-import {$createCollabElementNode, CollabElementNode} from './nodes/CollabElementNode';
+} from './../nodes/CollabDecoratorNode';
+import {$createCollabElementNode, CollabElementNode} from './../nodes/CollabElementNode';
 import {
   $createCollabLineBreakNode,
   CollabLineBreakNode,
-} from './nodes/CollabLineBreakNode';
-import {$createCollabTextNode, CollabTextNode} from './nodes/CollabTextNode';
+} from './../nodes/CollabLineBreakNode';
+import {$createCollabTextNode, CollabTextNode} from './../nodes/CollabTextNode';
 
 const baseExcludedProperties = new Set<string>([
   '__key',
@@ -79,10 +78,10 @@ function isExcludedProperty(
 }
 
 export function getIndexOfCRDTNode(
-  yjsParentNode: CRDTNode,
-  yjsNode: CRDTNode,
+  loroParentNode: CRDTNode,
+  loroNode: CRDTNode,
 ): number {
-  let node = yjsParentNode.firstChild;
+  let node = loroParentNode.firstChild;
   let i = -1;
 
   if (node === null) {
@@ -92,7 +91,7 @@ export function getIndexOfCRDTNode(
   do {
     i++;
 
-    if (node === yjsNode) {
+    if (node === loroNode) {
       return i;
     }
 
@@ -120,13 +119,15 @@ export function $createCollabNodeFromLexicalNode(
   let collabNode;
 
   if ($isElementNode(lexicalNode)) {
-    const xmlText = new XmlText();
+    const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
+    xmlText.setAttribute('__type', nodeType);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
   } else if ($isTextNode(lexicalNode)) {
     // TODO create a token text node for token, segmented nodes.
-    const map = new YMap();
+    const map = binding.doc.getMap(`text_${lexicalNode.__key}`);
+    map.set('__type', nodeType);
     collabNode = $createCollabTextNode(
       map,
       lexicalNode.__text,
@@ -135,12 +136,13 @@ export function $createCollabNodeFromLexicalNode(
     );
     collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
   } else if ($isLineBreakNode(lexicalNode)) {
-    const map = new YMap();
+    const map = binding.doc.getMap(`linebreak_${lexicalNode.__key}`);
     map.set('__type', 'linebreak');
     collabNode = $createCollabLineBreakNode(map, parent);
   } else if ($isDecoratorNode(lexicalNode)) {
-    const xmlElem = new XmlElement();
-    collabNode = $createCollabDecoratorNode(xmlElem, parent, nodeType);
+    const map = binding.doc.getMap(`decorator_${lexicalNode.__key}`);
+    map.set('__type', nodeType);
+    collabNode = $createCollabDecoratorNode(map, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
   } else {
     invariant(false, 'Expected text, element, decorator, or linebreak node');
@@ -151,11 +153,31 @@ export function $createCollabNodeFromLexicalNode(
 }
 
 export function getNodeTypeFromSharedType(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap | any,
 ): string | undefined {
+  console.debug('getNodeTypeFromSharedType: Called with sharedType:', sharedType, 'type:', typeof sharedType, 'constructor:', sharedType?.constructor?.name);
+  
+  // Handle XmlText - similar to Y.js, XmlText doesn't have __type, it's identified by instanceof
+  if (sharedType instanceof XmlText) {
+    console.debug('getNodeTypeFromSharedType: Found XmlText, returning undefined (handled by instanceof in $getOrInitCollabNodeFromSharedType)');
+    return undefined; // XmlText type is determined by instanceof check, not __type
+  }
+  
   const type = sharedTypeGet(sharedType, '__type');
+  
+  // If no type is found, try to infer from constructor name
+  if (typeof type === 'undefined') {
+    // Handle LoroText - assume it's a text node
+    if (sharedType?.constructor?.name === 'LoroText') {
+      console.debug('getNodeTypeFromSharedType: Inferred text type from LoroText constructor');
+      return 'text';
+    }
+    console.debug('getNodeTypeFromSharedType: No __type found for', sharedType?.constructor?.name);
+    return undefined;
+  }
+  
   invariant(
-    typeof type === 'string' || typeof type === 'undefined',
+    typeof type === 'string',
     'Expected shared type to include type attribute',
   );
   return type;
@@ -163,7 +185,7 @@ export function getNodeTypeFromSharedType(
 
 export function $getOrInitCollabNodeFromSharedType(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   parent?: CollabElementNode,
 ):
   | CollabElementNode
@@ -175,19 +197,16 @@ export function $getOrInitCollabNodeFromSharedType(
   if (collabNode === undefined) {
     const registeredNodes = binding.editor._nodes;
     const type = getNodeTypeFromSharedType(sharedType);
-    invariant(
-      typeof type === 'string',
-      'Expected shared type to include type attribute',
-    );
-    const nodeInfo = registeredNodes.get(type);
-    invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
-    const sharedParent = sharedType.parent;
+    const sharedParent = typeof sharedType.parent === 'function' ? sharedType.parent() : sharedType.parent;
+    console.debug('$getOrInitCollabNodeFromSharedType: sharedParent:', sharedParent, 'type:', typeof sharedParent, 'constructor:', sharedParent?.constructor?.name);
+    console.debug('$getOrInitCollabNodeFromSharedType: parent arg:', parent, 'parent === undefined:', parent === undefined);
+    
     const targetParent =
-      parent === undefined && sharedParent !== null
+      parent === undefined && sharedParent !== null && sharedParent !== undefined
         ? $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedParent as XmlText | YMap<unknown> | XmlElement,
+            sharedParent as XmlText | LoroMap<Record<string, unknown>>,
           )
         : parent || null;
 
@@ -196,15 +215,39 @@ export function $getOrInitCollabNodeFromSharedType(
       'Expected parent to be a collab element node',
     );
 
+    // Handle XmlText like Y.js - XmlText creates CollabElementNode
     if (sharedType instanceof XmlText) {
-      return $createCollabElementNode(sharedType, targetParent, type);
-    } else if (sharedType instanceof YMap) {
+      // For XmlText, if no type is specified, default to 'paragraph' (most common case)
+      const elementType = type || 'paragraph';
+      console.debug('$getOrInitCollabNodeFromSharedType: Creating CollabElementNode for XmlText with type:', elementType);
+      return $createCollabElementNode(sharedType, targetParent, elementType);
+    } else if (sharedType instanceof LoroMap) {
+      // For LoroMap, we need the type to determine what to create
+      if (typeof type !== 'string') {
+        console.debug('$getOrInitCollabNodeFromSharedType: No __type found for LoroMap, cannot create node');
+        return null as any;
+      }
+      
+      const nodeInfo = registeredNodes.get(type);
+      invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+
       if (type === 'linebreak') {
         return $createCollabLineBreakNode(sharedType, targetParent);
       }
       return $createCollabTextNode(sharedType, '', targetParent, type);
-    } else if (sharedType instanceof XmlElement) {
-      return $createCollabDecoratorNode(sharedType, targetParent, type);
+    } else {
+      // For other types, we need the type string
+      if (typeof type !== 'string') {
+        console.debug('$getOrInitCollabNodeFromSharedType: No __type found, attempting to infer from constructor for:', (sharedType as any)?.constructor?.name);
+        return null as any;
+      }
+      
+      const nodeInfo = registeredNodes.get(type);
+      invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+      
+      // This shouldn't happen in normal cases
+      console.warn('$getOrInitCollabNodeFromSharedType: Unknown shared type:', (sharedType as any)?.constructor?.name);
+      return null as any;
     }
   }
 
@@ -249,13 +292,13 @@ export function createLexicalNodeFromCollabNode(
 
 export function $syncPropertiesFromCRDT(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,
   keysChanged: null | Set<string>,
 ): void {
   const properties =
     keysChanged === null
-      ? sharedType instanceof YMap
+      ? sharedType instanceof LoroMap
         ? Array.from(sharedType.keys())
         : Object.keys(sharedType.getAttributes())
       : Array.from(keysChanged);
@@ -277,15 +320,15 @@ export function $syncPropertiesFromCRDT(
     let nextValue = sharedTypeGet(sharedType, property);
 
     if (prevValue !== nextValue) {
-      if (nextValue instanceof Doc) {
+      if (nextValue instanceof LoroDoc) {
         const docMap = binding.docMap;
 
-        if (prevValue instanceof Doc) {
-          docMap.delete(prevValue.guid);
+        if (prevValue instanceof LoroDoc) {
+          // TODO: Handle document cleanup
         }
 
         const nestedEditor = createEditor();
-        const key = nextValue.guid;
+        const key = nextValue.peerId.toString();
         nestedEditor._key = key;
         docMap.set(key, nextValue);
 
@@ -303,22 +346,37 @@ export function $syncPropertiesFromCRDT(
 }
 
 function sharedTypeGet(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: any,
   property: string,
 ): unknown {
-  if (sharedType instanceof YMap) {
+  if (sharedType instanceof LoroMap) {
+    console.debug('sharedTypeGet: Calling LoroMap.get for property:', property);
+    console.debug('sharedTypeGet: LoroMap instance:', sharedType);
+    console.debug('sharedTypeGet: LoroMap.get method:', sharedType.get);
+    const result = sharedType.get(property);
+    console.debug('sharedTypeGet: LoroMap.get result:', result, 'type:', typeof result);
+    return result;
+  } else if (sharedType instanceof XmlText) {
+    return sharedType.getAttribute(property);
+  } else if (sharedType && typeof sharedType.getAttribute === 'function') {
+    // Try getAttribute if it exists
+    return sharedType.getAttribute(property);
+  } else if (sharedType && typeof sharedType.get === 'function') {
+    // Try get if it exists (for other Loro containers)
     return sharedType.get(property);
   } else {
-    return sharedType.getAttribute(property);
+    // Handle other Loro types that might not have getAttribute or get method
+    console.warn('sharedTypeGet: Unsupported type for property access:', sharedType?.constructor?.name || typeof sharedType, property);
+    return undefined;
   }
 }
 
 function sharedTypeSet(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   property: string,
   nextValue: unknown,
 ): void {
-  if (sharedType instanceof YMap) {
+  if (sharedType instanceof LoroMap) {
     sharedType.set(property, nextValue);
   } else {
     sharedType.setAttribute(property, nextValue as string);
@@ -327,22 +385,22 @@ function sharedTypeSet(
 
 function $syncNodeStateToLexical(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   lexicalNode: LexicalNode,
 ): void {
   const existingState = sharedTypeGet(sharedType, '__state');
-  if (!(existingState instanceof YMap)) {
+  if (!(existingState instanceof LoroMap)) {
     return;
   }
   // This should only called when creating the node initially,
-  // incremental updates to state come in through YMapEvent
+  // incremental updates to state come in through LoroMap events
   // with the __state as the target.
   $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 function syncNodeStateFromLexical(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {
@@ -353,13 +411,13 @@ function syncNodeStateFromLexical(
   }
   const [unknown, known] = nextState.getInternalState();
   const prevState = prevLexicalNode && prevLexicalNode.__state;
-  const stateMap: YMap<unknown> =
-    existingState instanceof YMap ? existingState : new YMap();
+  const stateMap: LoroMap<Record<string, unknown>> =
+    existingState instanceof LoroMap ? existingState : binding.doc.getMap('nodestate_' + nextLexicalNode.__key);
   if (prevState === nextState) {
     return;
   }
   const [prevUnknown, prevKnown] =
-    prevState && stateMap.doc
+    prevState && stateMap
       ? prevState.getInternalState()
       : [undefined, new Map()];
   if (unknown) {
@@ -381,7 +439,7 @@ function syncNodeStateFromLexical(
 
 export function syncPropertiesFromLexical(
   binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {
@@ -422,9 +480,9 @@ export function syncPropertiesFromLexical(
           docMap.delete(prevKey);
         }
 
-        // If we already have a document, use it.
-        const doc = prevDoc || new Doc();
-        const key = doc.guid;
+        // If we already have a document, use it, otherwise create new LoroDoc
+        const doc = prevDoc || new LoroDoc();
+        const key = doc.peerId.toString();
         nextValue._key = key;
         docMap.set(key, doc);
         nextValue = doc;
@@ -548,7 +606,13 @@ export function doesSelectionNeedRecovering(
 }
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
-  binding.doc.transact(fn, binding);
+  console.debug('[syncWithTransaction] Starting sync transaction');
+  
+  // For now, just call the function directly
+  // Loro should handle change batching automatically
+  fn();
+  
+  console.debug('[syncWithTransaction] Sync transaction completed');
 }
 
 export function $moveSelectionToPreviousNode(

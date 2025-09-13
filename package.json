@@ -9,7 +9,7 @@
     "build:tsc": "tsc",
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",
-    "server:loro": "fkill -s :1235 && cross-env HOST=localhost PORT=1235 YPERSISTENCE=./.wss-loro LOG_LEVEL=info tsx src/collab/loro/servers/ws/server.ts",
+    "server:loro": "fkill -s :1235 && cross-env HOST=localhost PORT=1235 YPERSISTENCE=./.wss-loro tsx src/collab/loro/servers/ws/server.ts",
     "server:yjs": "fkill -s :1234 && cross-env HOST=localhost PORT=1234 YPERSISTENCE=./.wss-yjs tsx src/collab/yjs/servers/ws/server.ts",
     "server:yjs:dist": "cross-env HOST=localhost PORT=1234 YPERSISTENCE=./.yjs-wss-db npx y-websocket",
     "preview": "vite preview",

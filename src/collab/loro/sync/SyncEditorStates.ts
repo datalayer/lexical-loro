@@ -1,4 +1,13 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ */
+
 import type {EditorState, NodeKey} from 'lexical';
+
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -16,9 +25,8 @@ import invariant from '../../utils/invariant';
 import {
   LoroMap,
   LoroEvent,
-  ContainerID,
-  ContainerType,
 } from 'loro-crdt';
+
 import {XmlText} from '../types/XmlText';
 import {Binding, Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
@@ -26,7 +34,6 @@ import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
 import {
   $syncLocalCursorPosition,
-  AnyCollabNode,
   syncCursorPositions,
   SyncCursorPositionsFn,
   syncLexicalSelectionToCRDT,
@@ -35,175 +42,196 @@ import {
   $getOrInitCollabNodeFromSharedType,
   $moveSelectionToPreviousNode,
   doesSelectionNeedRecovering,
+  getNodeTypeFromSharedType,
   syncWithTransaction,
 } from '../Utils';
 
-function getChangedKeys(event: LoroEvent): Set<string> {
-  if (event.diff?.type === 'map' && (event.diff as any).updated) {
-    return new Set(Object.keys((event.diff as any).updated));
-  }
-  return new Set();
-}
-
-// Extract base container ID from Loro event 
-function extractBaseContainerId(event: LoroEvent): string | null {
-  // For now, let's handle the simple case where we assume root container
-  // In a full implementation, this would parse the event.target or event.path
-  // to determine which container the event belongs to
-  if (event.target) {
-    // Convert ContainerID to string representation
-    const target = event.target;
-    if (typeof target === 'string') {
-      return target;
-    }
-    // For ContainerID objects, we might need different handling
-    // For now, assume root
-    return 'root';
-  }
-  return 'root';
-}
-
-// For Loro, state events are events that target attribute containers (_attrs:Map)
-// This mimics Y.js $syncStateEvent which checks target._item.parentSub === '__state'
-function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
-  try {
-    // For now, let's skip state events and only handle text/content events
-    // State events in Loro would be for attributes/properties, but we need
-    // to better understand the event structure first
-    console.debug('$syncStateEvent: Skipping state event for now, event:', event);
-    return false;
-  } catch (error) {
-    console.error('Error in $syncStateEvent:', error);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function $syncStateEvent(binding: Binding, event: any): boolean {
+  const {target} = event;
+  if (
+    !(
+      target &&
+      (target as any)._container &&
+      (target as any)._container.parentSub === '__state' &&
+      getNodeTypeFromSharedType(target) === undefined &&
+      (target.parent instanceof XmlText ||
+        target.parent instanceof LoroMap)
+    )
+  ) {
+    // TODO there might be a case to handle in here when a LoroMap
+    // is used as a value of __state? It would probably be desirable
+    // to mark the node as dirty when that happens.
     return false;
   }
-}
-
-// Helper to get parent shared type from state target
-function getParentSharedTypeFromStateTarget(binding: Binding, baseContainerId: string): any {
-  // Find the parent container that this state belongs to
-  if (baseContainerId === 'root') {
-    // Return the root's shared type, not the CollabElementNode
-    return binding.root.getSharedType(); // This returns the XmlText
-  }
-  
-  // For element/text containers, get the corresponding shared type
-  if (baseContainerId.startsWith('element_')) {
-    const elementId = baseContainerId.replace('element_', '');
-    return binding.doc.getMap(elementId); // Element nodes are typically backed by maps
-  } else if (baseContainerId.startsWith('text_')) {
-    const textId = baseContainerId.replace('text_', '');
-    const loroText = binding.doc.getText(textId);
-    if (loroText) {
-      let xmlText = (loroText as any)._xmlText;
-      if (!xmlText) {
-        xmlText = new XmlText(binding.doc, textId);
-        (loroText as any)._xmlText = xmlText;
-      }
-      return xmlText;
+  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target.parent);
+  const node = collabNode.getNode();
+  if (node) {
+    const state = $getWritableNodeState(node.getWritable());
+    for (const k of (event as any).keysChanged || []) {
+      state.updateFromUnknown(k, target.get(k));
     }
   }
-  
-  return null;
+  return true;
 }
 
-// Helper to get value from Loro event diff for a specific key
-function getValueFromEventDiff(event: LoroEvent, key: string): any {
-  if (event.diff?.type === 'map' && (event.diff as any).updated) {
-    return (event.diff as any).updated[key];
-  }
-  return undefined;
-}
-
-function $syncEvent(binding: Binding, event: LoroEvent): void {
-  console.info('[$syncEvent] Processing event:', {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function $syncEvent(binding: Binding, event: any): void {
+  // Debug: Log all events to understand what we're receiving
+  console.log('$syncEvent: Received event:', {
     target: event.target,
-    diff: event.diff
+    targetType: typeof event.target,
+    eventKeys: Object.keys(event),
+    isMapEvent: (event as any).isMapEvent,
+    isTextEvent: (event as any).isTextEvent,
+    isXmlEvent: (event as any).isXmlEvent
   });
   
-  // First check if this is a state event that should be handled specially
-  // In Y.js: if (event instanceof YMapEvent && $syncStateEvent(binding, event))
-  if (event.diff?.type === 'map' && $syncStateEvent(binding, event)) {
+  if ((event as any).isMapEvent && $syncStateEvent(binding, event)) {
+    return;
+  }
+  const {target} = event;
+  
+  // Handle container ID strings - these are the actual document containers we need to process
+  if (typeof target === 'string') {
+    console.log('$syncEvent: Processing container ID event:', target, event);
+    
+    // Check for infinite loop condition with repeated "root-" prefixes
+    if (target.includes('root-root-root')) {
+      console.warn('$syncEvent: Detected infinite loop pattern, using root container instead');
+      const rootCollabNode = binding.root;
+      if (rootCollabNode) {
+        processCollabNodeEvent(binding, rootCollabNode, event);
+        return;
+      }
+    }
+    
+    // For root-related events, always use the existing root collaboration node
+    if (target.includes('root') && target.includes('_attrs:Map')) {
+      const rootCollabNode = binding.root;
+      if (rootCollabNode) {
+        console.log('$syncEvent: Using root collab node for root attributes event');
+        processCollabNodeEvent(binding, rootCollabNode, event);
+        return;
+      }
+    }
+    
+    // Try to find the corresponding collaboration node by searching existing nodes
+    let foundCollabNode;
+    
+    // Search through all existing collaboration nodes to find one with matching container
+    for (const [sharedType, collabNode] of binding.collabNodeMap.entries()) {
+      // Check if this collaboration node's shared type matches the target container ID
+      const sharedTypeStr = sharedType.toString();
+      if (sharedTypeStr.includes(target) || (target.includes('root') && collabNode._key === 'root')) {
+        foundCollabNode = collabNode;
+        console.log('$syncEvent: Found existing collab node for', target, ':', collabNode);
+        break;
+      }
+    }
+    
+    if (foundCollabNode) {
+      // Process the event with the found collaboration node
+      processCollabNodeEvent(binding, foundCollabNode, event);
+      return;
+    }
+    
+    // Skip creating new containers for repeated/invalid IDs to prevent infinite loops
+    console.warn('$syncEvent: Skipping container creation for potentially problematic ID:', target);
     return;
   }
   
-  const target = event.target;
-  
-  // Handle text container events differently - these represent content within elements
-  if (typeof target === 'string' && target.includes(':Text')) {
-    // Text container changes should be applied to existing element nodes
-    console.info('[$syncEvent] Text container event, finding parent element');
-    handleTextContainerEvent(binding, event);
-    return;
-  }
-  
-  // For Map containers, get the shared type and create/sync collab nodes
-  const sharedType = getSharedTypeFromTarget(binding, event.target);
-  if (!sharedType) {
-    console.warn('[$syncEvent] Could not resolve shared type for target:', event.target);
-    return;
-  }
-  
-  // Get or create collab node from shared type (same as Y.js)
-  const collabNode = $getOrInitCollabNodeFromSharedType(binding, sharedType as any, binding.root);
-  
-  // Process event based on collab node and event type (matching Y.js patterns)
-  if (
-    collabNode instanceof CollabTextNode &&
-    event.diff?.type === 'map'
-  ) {
-    // Similar to Y.js: CollabTextNode && event instanceof YMapEvent
-    const keysChanged = getChangedKeys(event);
+  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
 
-    // Update properties and text
-    if (keysChanged.size > 0) {
+  // Skip processing if collabNode is null (raw Loro container without __type)
+  if (!collabNode) {
+    console.warn('$syncEvent: Skipping event for raw Loro container:', target?.constructor?.name, 'Event:', event);
+    return;
+  }
+  
+  processCollabNodeEvent(binding, collabNode, event);
+}
+
+function processCollabNodeEvent(binding: Binding, collabNode: any, event: any): void {
+  // Debug logging to understand event structure
+  console.log('processCollabNodeEvent: collabNode type:', collabNode.constructor.name);
+  console.log('processCollabNodeEvent: event structure:', {
+    isTextEvent: (event as any).isTextEvent,
+    isMapEvent: (event as any).isMapEvent,
+    isXmlEvent: (event as any).isXmlEvent,
+    keysChanged: event.keysChanged,
+    childListChanged: event.childListChanged,
+    attributesChanged: event.attributesChanged,
+    delta: event.delta,
+    eventKeys: Object.keys(event)
+  });
+
+  if (collabNode instanceof CollabElementNode && (event as any).isTextEvent) {
+    const {keysChanged, childListChanged, delta} = event as any;
+
+    // Update
+    if (keysChanged && keysChanged.size > 0) {
+      collabNode.syncPropertiesFromCRDT(binding, keysChanged);
+    }
+
+    if (childListChanged) {
+      collabNode.applyChildrenCRDTDelta(binding, delta);
+      collabNode.syncChildrenFromCRDT(binding);
+    }
+  } else if (
+    collabNode instanceof CollabTextNode &&
+    (event as any).isMapEvent
+  ) {
+    const {keysChanged} = event;
+
+    // Update
+    if (keysChanged && keysChanged.size > 0) {
       collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
     }
   } else if (
     collabNode instanceof CollabDecoratorNode &&
-    event.diff?.type === 'map'
+    ((event as any).isMapEvent || (event as any).isXmlEvent)
   ) {
-    // Similar to Y.js: CollabDecoratorNode && event instanceof YXmlEvent
-    const attributesChanged = getChangedKeys(event);
+    const {attributesChanged, keysChanged} = event;
+    const changedKeys = attributesChanged || keysChanged;
 
-    // Update properties
-    if (attributesChanged.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, attributesChanged);
+    // Update
+    if (changedKeys && changedKeys.size > 0) {
+      collabNode.syncPropertiesFromCRDT(binding, changedKeys);
     }
   } else {
-    console.warn('[$syncEvent] Unhandled event type for collab node:', collabNode?.constructor?.name, 'event type:', event.diff?.type);
-  }
-}
-
-// Handle text container events by finding the parent element
-function handleTextContainerEvent(binding: Binding, event: LoroEvent): void {
-  // Find existing CollabElementNode that should contain this text
-  // For now, apply to root if we can't find a specific parent
-  const rootCollabNode = binding.root;
-  
-  if (event.diff?.type === 'text' && event.diff.diff && Array.isArray(event.diff.diff)) {
-    console.info('[handleTextContainerEvent] Applying text delta to root element');
-    rootCollabNode.applyChildrenCRDTDelta(binding, event.diff.diff);
-    rootCollabNode.syncChildrenFromCRDT(binding);
-  }
-}
-
-// Helper function to get shared type from target (mimics Y.js event.target)
-function getSharedTypeFromTarget(binding: Binding, target: string | ContainerID): any {
-  try {
-    if (typeof target === 'string') {
-      if (target.includes(':Map')) {
-        // Get LoroMap directly
-        const mapId = target.replace(/^cid:/, '').replace(/:Map$/, '');
-        return binding.doc.getMap(mapId);
+    // More graceful handling - log and skip instead of throwing error
+    console.warn('processCollabNodeEvent: Unhandled event type for collab node:', {
+      collabNodeType: collabNode.constructor.name,
+      eventType: event.constructor?.name,
+      isTextEvent: (event as any).isTextEvent,
+      isMapEvent: (event as any).isMapEvent,
+      isXmlEvent: (event as any).isXmlEvent,
+      eventKeys: Object.keys(event)
+    });
+    
+    // Try to handle based on what properties the event has
+    if (event.keysChanged || event.attributesChanged) {
+      const changedKeys = event.keysChanged || event.attributesChanged;
+      if (changedKeys && changedKeys.size > 0) {
+        if (collabNode.syncPropertiesFromCRDT) {
+          collabNode.syncPropertiesFromCRDT(binding, changedKeys);
+        } else if (collabNode.syncPropertiesAndTextFromCRDT) {
+          collabNode.syncPropertiesAndTextFromCRDT(binding, changedKeys);
+        }
       }
     }
-  } catch (error) {
-    console.warn('[getSharedTypeFromTarget] Error resolving shared type:', error);
+    
+    if (event.childListChanged && event.delta) {
+      if (collabNode.applyChildrenCRDTDelta && collabNode.syncChildrenFromCRDT) {
+        collabNode.applyChildrenCRDTDelta(binding, event.delta);
+        collabNode.syncChildrenFromCRDT(binding);
+      }
+    }
   }
-  return null;
 }
-
-
 
 export function syncCRDTChangesToLexical(
   binding: Binding,
@@ -212,18 +240,25 @@ export function syncCRDTChangesToLexical(
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {
-  console.info('[syncCRDTChangesToLexical] Processing', events.length, 'events');
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
-  // Loro events already have computed diffs, no pre-processing needed
-  // (Unlike Y.js which requires delta pre-computation)
+  // This line precompute the delta before editor update. The reason is
+  // delta is computed when it is accessed. Note that this can only be
+  // safely computed during the event call. If it is accessed after event
+  // call it might result in unexpected behavior.
+  // For Loro, we need to ensure deltas are computed during event processing
+  events.forEach((event) => {
+    if ((event as any).delta) {
+      // Access delta to trigger computation if needed
+      (event as any).delta;
+    }
+  });
 
   editor.update(
     () => {
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
-        console.debug('[syncCRDTChangesToLexical] Processing event', i, ':', event);
         $syncEvent(binding, event);
       }
 
@@ -342,15 +377,21 @@ export function syncLexicalUpdateToCRDT(
 ): void {
   syncWithTransaction(binding, () => {
     currEditorState.read(() => {
-      // Skip if this update originated from collaboration to prevent loops
+      // We check if the update has come from a origin where the origin
+      // was the collaboration binding previously. This can help us
+      // prevent unnecessarily re-diffing and possible re-applying
+      // the same change editor state again. For example, if a user
+      // types a character and we get it, we don't want to then insert
+      // the same character again. The exception to this heuristic is
+      // when we need to handle normalization merge conflicts.
       if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) {
         if (normalizedNodes.size > 0) {
           $handleNormalizationMergeConflicts(binding, normalizedNodes);
         }
+
         return;
       }
 
-      // Sync root changes if root is dirty
       if (dirtyElements.has('root')) {
         const prevNodeMap = prevEditorState._nodeMap;
         const nextLexicalRoot = $getRoot();
@@ -369,7 +410,6 @@ export function syncLexicalUpdateToCRDT(
         );
       }
 
-      // Sync selection changes
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);

@@ -1,7 +1,5 @@
-import type {Binding} from '../Bindings';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import type {AbstractType, Map as YMap, XmlElement, XmlText} from 'yjs';
-
 import {$createChildrenArray} from '@lexical/offset';
 import {
   $getNodeByKey,
@@ -12,7 +10,7 @@ import {
   removeFromParent,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-
+import type {Binding} from '../Bindings';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
 import {CollabTextNode} from './CollabTextNode';
@@ -24,7 +22,7 @@ import {
   getPositionFromElementAndOffset,
   spliceString,
   syncPropertiesFromLexical,
-} from '../Utils';
+} from '../utils/Utils';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 

@@ -12,7 +12,6 @@ import {
   HISTORIC_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
-import invariant from '../../utils/invariant';
 import {
   Map as YMap,
   Text as YText,
@@ -23,6 +22,7 @@ import {
   YTextEvent,
   YXmlEvent,
 } from 'yjs';
+import invariant from '../../utils/invariant';
 import {Binding} from '../Bindings';
 import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
@@ -40,7 +40,7 @@ import {
   doesSelectionNeedRecovering,
   getNodeTypeFromSharedType,
   syncWithTransaction,
-} from '../Utils';
+} from '../utils/Utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {

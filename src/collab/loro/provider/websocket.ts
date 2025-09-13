@@ -4,10 +4,10 @@
 
 /* eslint-env browser */
 
-import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEventBatch } from 'loro-crdt'
-import { ObservableV2 } from 'lib0/observable'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent } from 'loro-crdt'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
+import { ObservableV2 } from 'lib0/observable'
 import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
@@ -24,7 +24,6 @@ export interface LoroUpdateMessage {
   type: 'loro-update'
   update: number[]
   docId: string
-  clientId?: string
 }
 
 export interface SnapshotMessage {
@@ -37,7 +36,6 @@ export interface EphemeralMessage {
   type: 'ephemeral'
   ephemeral: number[]
   docId: string
-  clientId?: string
 }
 
 export interface QueryEphemeralMessage {
@@ -55,9 +53,9 @@ class AwarenessAdapter implements ProviderAwareness {
   private localClientId: number
   private eventHandlers: Map<string, (() => void)[]> = new Map()
 
-  constructor(ephemeralStore: EphemeralStore, clientId: number) {
+  constructor(ephemeralStore: EphemeralStore) {
     this.ephemeralStore = ephemeralStore
-    this.localClientId = clientId // Use provided client ID
+    this.localClientId = Math.floor(Math.random() * 2147483647) // Random client ID
     
     // Subscribe to ephemeral store changes and emit awareness updates
     this.ephemeralStore.subscribe((event) => {
@@ -167,18 +165,19 @@ messageHandlers[messageLoroUpdate] = (
   message: LoroUpdateMessage,
   emitSynced: boolean
 ): string | null => {
-  console.info(`[Client] messageLoroUpdate - Received update from server (${message.update?.length} bytes)`)
+  console.log(`[Client] messageHandlers[messageLoroUpdate] - DOCUMENT UPDATE RECEIVED from server - update length: ${message.update?.length}`)
   
   try {
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
+    console.log(`[Client] messageHandlers[messageLoroUpdate] - Applying update to local LoroDoc`)
     
     // Set flag to indicate we're applying a remote update
     provider._applyingRemoteUpdate = true
     provider.doc.import(updateBytes)
     provider._applyingRemoteUpdate = false
     
-    console.info(`[Client] messageLoroUpdate - Applied remote update successfully`)
+    console.log(`[Client] messageHandlers[messageLoroUpdate] - Document update applied successfully`)
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
@@ -526,15 +525,7 @@ const setupWS = (provider) => {
 const broadcastMessage = (provider: WebsocketProvider, message: string) => {
   const ws = provider.ws
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
-    console.info(`[Client] broadcastMessage - Sending to WebSocket (${message.length} chars)`)
     ws.send(message)
-  } else {
-    console.warn(`[Client] broadcastMessage - WebSocket not ready:`, {
-      wsconnected: provider.wsconnected,
-      hasWs: !!ws,
-      readyState: ws?.readyState,
-      OPEN: ws?.OPEN
-    })
   }
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, message, provider)
@@ -559,7 +550,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   
   serverUrl = ''
   roomname = ''
-  doc: LoroDoc | null = null
+  doc = null
   _WS = null
   protocols = []
   params = {}
@@ -584,7 +575,6 @@ export class WebsocketProvider extends ObservableV2<any> {
   _exitHandler = null
   _bcSubscriber = null
   _applyingRemoteUpdate = false
-  _clientId = null // Will be set to doc.peerId when document is available
 
   /**
    * @param {string} serverUrl
@@ -627,7 +617,6 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.protocols = protocols
     this.roomname = roomname
     this.doc = doc
-    this._clientId = doc.peerId.toString() // Use Loro document's peer ID as client identifier
     this._WS = WebSocketPolyfill
     // Create or reuse persistent ephemeral store for the entire user session
     console.debug(`[Client] WebsocketProvider constructor - Setting up persistent EphemeralStore for room:`, roomname)
@@ -662,7 +651,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     
     // Create awareness adapter that wraps ephemeral store
     console.debug(`[Client] WebsocketProvider constructor - Creating AwarenessAdapter`)
-    this.awareness = new AwarenessAdapter(this.ephemeralStore, parseInt(this._clientId))
+    this.awareness = new AwarenessAdapter(this.ephemeralStore)
     console.debug(`[Client] WebsocketProvider constructor - AwarenessAdapter created successfully`)
     this.wsconnected = false
     this.wsconnecting = false
@@ -719,15 +708,17 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {any} origin
      */
     this._updateHandler = (update: Uint8Array, origin: any) => {
+      console.log(`[Client] _updateHandler - DOCUMENT UPDATE EVENT - length: ${update.length}, origin: ${origin}`)
       if (origin !== this) {
-        console.info(`[Client] _updateHandler - Sending update to server (${update.length} bytes) from client ${this._clientId}`)
+        console.log(`[Client] _updateHandler - Sending document update to server`)
         const updateMessage: LoroUpdateMessage = {
           type: 'loro-update',
           update: Array.from(update),
-          docId: this.roomname,
-          clientId: this._clientId
+          docId: this.roomname
         }
         broadcastMessage(this, JSON.stringify(updateMessage))
+      } else {
+        console.log(`[Client] _updateHandler - Skipping echo from self`)
       }
     }
     // Document update handler - called when Loro emits document change events
@@ -746,8 +737,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           const ephemeralMessage: EphemeralMessage = {
             type: 'ephemeral',
             ephemeral: Array.from(encodedData),
-            docId: this.roomname,
-            clientId: this._clientId
+            docId: this.roomname
           }
           broadcastMessage(this, JSON.stringify(ephemeralMessage))
           
@@ -762,8 +752,8 @@ export class WebsocketProvider extends ObservableV2<any> {
       // Clear only our local ephemeral state on exit, don't destroy the global store
       if (this.ephemeralStore && this.awareness) {
         try {
-          const peerId = this.doc.peerId || 0
-          const userKey = `user-${peerId}`
+          const clientId = this.doc.clientId || 0
+          const userKey = `user-${clientId}`
           this.ephemeralStore.delete(userKey)
           console.debug(`[Client] Process exit - Cleared user state: ${userKey}`)
         } catch (error) {
@@ -777,12 +767,12 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.ephemeralStore.subscribe(this._ephemeralUpdateHandler)
     
     // Use Loro's native event system to listen for document changes
-    console.debug(`[Client] WebsocketProvider - Setting up Loro document event subscription`)
+    console.log(`[Client] WebsocketProvider - Setting up Loro document event subscription`)
     try {
-      this.doc.subscribe((event: LoroEventBatch) => {
-        console.debug(`[Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
-          by: event.by,
-          hasLocalChanges: event.by === 'local',
+      this.doc.subscribe((event) => {
+        console.log(`[Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
+          by_local: event.by_local,
+          hasLocalChanges: !!event.by_local,
           origin: event.origin,
           eventType: typeof event,
           eventKeys: Object.keys(event),
@@ -796,33 +786,33 @@ export class WebsocketProvider extends ObservableV2<any> {
         // Check if this is a remote update being applied (from WebSocket)
         // We should not send these back to the server to avoid loops
         if (this._applyingRemoteUpdate) {
-          console.debug(`[Client] WebsocketProvider - Skipping export during remote update application`);
+          console.log(`[Client] WebsocketProvider - Skipping export during remote update application`);
           return;
         }
         
-        // Skip if this is a remote change (from import)
-        // event.by === 'import' means this change came from importing remote updates
-        if (event.by === 'import') {
-          console.debug(`[Client] WebsocketProvider - Skipping export for remote change (by: ${event.by})`);
+        // Only skip if by_local is explicitly false (indicating remote change)
+        // by_local === undefined typically means local change that should be sent
+        if (event.by_local === false) {
+          console.log(`[Client] WebsocketProvider - Skipping export for remote change (by_local: ${event.by_local})`);
           return;
         }
         
         // For local changes, export and send updates to the server
-        console.debug(`[Client] WebsocketProvider - Local document event, exporting update`);
+        console.log(`[Client] WebsocketProvider - Local document event, exporting update`);
         
         try {
           const update = this.doc.export({ mode: 'update' });
           if (update.length > 0) {
-            console.debug(`[Client] WebsocketProvider - Exported local update - size: ${update.length}`);
+            console.log(`[Client] WebsocketProvider - Exported local update - size: ${update.length}`);
             this._updateHandler(update, null);
           } else {
-            console.debug(`[Client] WebsocketProvider - No update to export (empty)`);
+            console.log(`[Client] WebsocketProvider - No update to export (empty)`);
           }
         } catch (error) {
           console.error(`[Client] WebsocketProvider - Error exporting document update:`, error);
         }
       });
-      console.debug(`[Client] WebsocketProvider - Successfully subscribed to Loro document events`);
+      console.log(`[Client] WebsocketProvider - Successfully subscribed to Loro document events`);
     } catch (error) {
       console.error(`[Client] ERROR setting up Loro document subscription:`, error);
     }
@@ -877,8 +867,8 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Only clear our local state from it
     if (this.ephemeralStore && this.awareness) {
       try {
-        const peerId = this.doc.peerId || 0
-        const userKey = `user-${peerId}`
+        const clientId = this.doc.clientId || 0
+        const userKey = `user-${clientId}`
         this.ephemeralStore.delete(userKey)
         console.debug(`[Client] WebsocketProvider.destroy - Cleared user state from persistent store: ${userKey}`)
       } catch (error) {

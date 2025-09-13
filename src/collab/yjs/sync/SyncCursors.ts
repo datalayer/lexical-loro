@@ -21,7 +21,7 @@ import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
 import type {Binding} from '../Bindings';
 import {UserState, Provider} from '../State';
-import {getPositionFromElementAndOffset} from '../Utils';
+import {getPositionFromElementAndOffset} from '../utils/Utils';
 
 export type CursorSelection = {
   anchor: {

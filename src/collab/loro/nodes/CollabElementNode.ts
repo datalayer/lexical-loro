@@ -3,7 +3,6 @@ import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import type {XmlText} from '../types/XmlText';
 import {$createChildrenArray} from '@lexical/offset';
 import {
-  $createTextNode,
   $getNodeByKey,
   $getNodeByKeyOrThrow,
   $isDecoratorNode,

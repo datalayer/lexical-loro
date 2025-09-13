@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ */
+
 import type {LexicalEditor, NodeKey} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
 import type {LoroDoc} from 'loro-crdt';
@@ -53,14 +61,9 @@ export function createBinding(
     'root',
   );
   root._key = 'root';
-  
-  // Create the collaboration node map and add the root node
-  const collabNodeMap = new Map();
-  collabNodeMap.set('root', root);
-  
   return {
     clientID: Number(doc.peerId.toString().slice(0, 8)), // Convert Loro peer ID to number
-    collabNodeMap,
+    collabNodeMap: new Map(),
     cursors: new Map(),
     cursorsContainer: null,
     doc,

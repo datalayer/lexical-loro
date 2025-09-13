@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ */
+
 import type {NodeKey, NodeMap, TextNode} from 'lexical';
 import {
   $getNodeByKey,
@@ -92,7 +100,7 @@ export class CollabTextNode {
   }
 
   spliceText(index: number, delCount: number, newText: string): void {
-    console.debug(`[CollabTextNode] spliceText called - index: ${index}, delCount: ${delCount}, newText: "${newText}"`);
+    console.log(`[CollabTextNode] spliceText called - index: ${index}, delCount: ${delCount}, newText: "${newText}"`);
     
     const collabElementNode = this._parent;
     const xmlText = collabElementNode._xmlText;
@@ -103,9 +111,9 @@ export class CollabTextNode {
     }
 
     if (newText !== '') {
-      console.debug(`[CollabTextNode] About to call xmlText.insert(${offset}, "${newText}")`);
+      console.log(`[CollabTextNode] About to call xmlText.insert(${offset}, "${newText}")`);
       xmlText.insert(offset, newText);
-      console.debug(`[CollabTextNode] xmlText.insert completed - text inserted into XmlText but NO document update event generated`);
+      console.log(`[CollabTextNode] xmlText.insert completed - text inserted into XmlText but NO document update event generated`);
     }
   }
 
@@ -114,8 +122,6 @@ export class CollabTextNode {
     nextLexicalNode: TextNode,
     prevNodeMap: null | NodeMap,
   ): void {
-    console.debug('[CollabTextNode] syncPropertiesAndTextFromLexical called for node:', nextLexicalNode.__key, 'text:', nextLexicalNode.__text);
-    
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const nextText = nextLexicalNode.__text;
 
@@ -128,19 +134,12 @@ export class CollabTextNode {
 
     if (prevLexicalNode !== null) {
       const prevText = prevLexicalNode.__text;
-      console.debug('[CollabTextNode] Text comparison - prev:', JSON.stringify(prevText), 'next:', JSON.stringify(nextText));
 
       if (prevText !== nextText) {
-        console.debug('[CollabTextNode] Text changed, calling diffTextContentAndApplyDelta');
         const key = nextLexicalNode.__key;
         $diffTextContentAndApplyDelta(this, key, prevText, nextText);
         this._text = nextText;
-      } else {
-        console.debug('[CollabTextNode] Text unchanged, skipping delta');
       }
-    } else {
-      console.debug('[CollabTextNode] No previous node, setting initial text:', JSON.stringify(nextText));
-      this._text = nextText;
     }
   }
 

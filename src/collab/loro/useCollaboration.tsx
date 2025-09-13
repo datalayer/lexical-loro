@@ -1,3 +1,11 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ */
+
 import * as React from 'react';
 import type {JSX} from 'react';
 import type {LexicalEditor} from 'lexical';
@@ -29,7 +37,7 @@ import {
 } from 'lexical';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
-import {LoroDoc, UndoManager, LoroEvent, LoroEventBatch} from 'loro-crdt';
+import {LoroDoc, UndoManager} from 'loro-crdt';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
@@ -114,33 +122,35 @@ export function useCollaboration(
     };
 
     const onLoroTreeChanges = (
-      // Loro event batch containing multiple events
-      event: LoroEventBatch,
+      // Loro event has different signature than YJS
+      event: any, // LoroEventBatch
     ) => {
-      console.info(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
+      console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
         event: event,
         eventBy: event.by,
+        eventByLocal: event.by_local,
         eventOrigin: event.origin,
         hasEvents: !!event.events,
         eventsCount: event.events?.length,
         skipCollab: skipCollaborationUpdateRef.current
       });
       
-      // In Loro, event.by indicates the source of the change:
-      // - event.by === 'import': remote changes (from WebSocket import)
-      // - event.by === 'local': local changes (from Lexical edits)
-      const isRemoteChange = event.by === 'import';
-      const origin = isRemoteChange ? 'remote' : 'local';
+      // In Loro, event.by_local indicates local vs remote:
+      // We need to determine if this event originated from local changes or remote updates
+      // When applying updates from WebSocket, this should be marked as remote
+      // The challenge is that the WebSocket provider is also subscribing to these events
+      const isLocalChange = event.by_local === true;
+      const origin = isLocalChange ? 'local' : 'remote';
       
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
-        console.debug(`[UseCollaboration] Skipping collaboration update (skipCollaborationUpdateRef)`);
+        console.log(`[UseCollaboration] Skipping collaboration update (skipCollaborationUpdateRef)`);
         skipCollaborationUpdateRef.current = false;
         return;
       }
       
-      if (origin === 'remote') { // Only process remote changes
-        console.info(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
+      if (origin !== 'local') { // Only process remote changes
+        console.log(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
         
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
@@ -153,7 +163,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.debug(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
+        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by_local: ${event.by_local})`);
       }
     };
 
@@ -188,14 +198,14 @@ export function useCollaboration(
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
-    console.debug(`[UseCollaboration] Setting up document subscription:`, {
+    console.log(`[UseCollaboration] Setting up document subscription:`, {
       id,
       hasDoc: !!doc,
       docMapSize: docMap.size,
       docMapKeys: Array.from(docMap.keys())
     });
     const unsubscribe = doc?.subscribe(onLoroTreeChanges);
-    console.debug(`[UseCollaboration] Document subscription result:`, {
+    console.log(`[UseCollaboration] Document subscription result:`, {
       hasUnsubscribe: !!unsubscribe,
       subscribed: !!doc && !!unsubscribe
     });
@@ -291,11 +301,11 @@ export function useCollaboration(
 
         if (shouldConnect) {
           // eslint-disable-next-line no-console
-          console.info('Collaboration connected!');
+          console.log('Collaboration connected!');
           connect();
         } else {
           // eslint-disable-next-line no-console
-          console.info('Collaboration disconnected!');
+          console.log('Collaboration disconnected!');
           disconnect();
         }
 
