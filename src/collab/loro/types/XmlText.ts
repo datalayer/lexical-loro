@@ -74,7 +74,7 @@ export class XmlText {
   get nextSibling(): XmlText | null {
     // In a full implementation, this would traverse the document structure
     // For now, return null as we don't have a complete document tree
-    return null;
+    throw new Error('Not implemented');
   }
 
   /**
@@ -83,7 +83,7 @@ export class XmlText {
   get prevSibling(): XmlText | null {
     // In a full implementation, this would traverse the document structure
     // For now, return null as we don't have a complete document tree
-    return null;
+    throw new Error('Not implemented');
   }
 
   /**

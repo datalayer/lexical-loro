@@ -107,41 +107,6 @@ export class CollabElementNode {
     $syncPropertiesFromCRDT(binding, this._xmlText, lexicalNode, keysChanged);
   }
 
-  syncTextContentFromCRDT(binding: Binding, textContent: string): void {
-    const lexicalNode = this.getNode();
-    invariant(
-      lexicalNode !== null,
-      'syncTextContentFromCRDT: could not find element node',
-    );
-    
-    console.log('syncTextContentFromCRDT: Updating element text content to:', textContent);
-    console.log('syncTextContentFromCRDT: Current element children:', lexicalNode.getChildren().map(c => c.getTextContent()));
-    
-    // Check if this is a root node - root nodes cannot contain text directly
-    if (this._type === 'root') {
-      console.log('syncTextContentFromCRDT: Cannot add text to root node, skipping');
-      return;
-    }
-    
-    // Only proceed if we have actual text content to set
-    if (!textContent || !textContent.trim()) {
-      console.log('syncTextContentFromCRDT: Skipping empty text content - preserving existing content');
-      return;
-    }
-    
-    // Clear existing text children and set new text content
-    const children = lexicalNode.getChildren();
-    const textChildren = children.filter(child => $isTextNode(child));
-    
-    // Remove existing text nodes
-    textChildren.forEach(child => child.remove());
-    
-    // Add new text content
-    const newTextNode = $createTextNode(textContent);
-    lexicalNode.append(newTextNode);
-    console.log('syncTextContentFromCRDT: Added new text node with content:', textContent);
-  }
-
   applyChildrenCRDTDelta(
     binding: Binding,
     deltas: Array<{
