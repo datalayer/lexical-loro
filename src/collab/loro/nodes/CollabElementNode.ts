@@ -1,6 +1,6 @@
 import type {Binding} from '../State';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
-import type {XmlText} from '../types/XmlText';
+import {XmlText} from '../types/XmlText';
 import {$createChildrenArray} from '@lexical/offset';
 import {
   $createTextNode,
@@ -248,6 +248,77 @@ export class CollabElementNode {
     }
   }
 
+  private _syncChildrenFromXmlTextEmbeds(binding: Binding): void {
+    console.log('🔧 [_syncChildrenFromXmlTextEmbeds] ENTRY:', {
+      nodeKey: this._key,
+      currentChildrenCount: this._children.length
+    });
+
+    // Get all embed entries from the XmlText
+    const embedEntries = this._xmlText.getEmbedEntries();
+
+    console.log('📋 [_syncChildrenFromXmlTextEmbeds] Found embeds:', {
+      embedCount: embedEntries.length,
+      embedKeys: embedEntries.map(e => e.key)
+    });
+
+    // Process each embed to ensure corresponding CollabElementNode exists in _children
+    for (const embedEntry of embedEntries) {
+      const embedData = embedEntry.value as any;
+      
+      if (embedData.object && embedData.object.textId) {
+        const textId = embedData.object.textId;
+        console.log('🎯 [_syncChildrenFromXmlTextEmbeds] Processing embedded XmlText:', {
+          embedKey: embedEntry.key,
+          textId: textId,
+          offset: embedData.offset
+        });
+
+        // Check if we already have a CollabElementNode for this textId
+        const existingChild = this._children.find(child => 
+          child instanceof CollabElementNode && child._xmlText.getId() === textId
+        );
+
+        if (!existingChild) {
+          console.log('➕ [_syncChildrenFromXmlTextEmbeds] Creating new CollabElementNode for embedded XmlText');
+          
+          // Create new CollabElementNode for the embedded XmlText
+          try {
+            // Create XmlText instance using the textId
+            const embeddedXmlText = new XmlText(binding.doc, textId);
+            console.log('🎯 [_syncChildrenFromXmlTextEmbeds] Created XmlText with ID:', textId);
+            
+            const collabNode = $getOrInitCollabNodeFromSharedType(
+              binding,
+              embeddedXmlText,
+              this
+            );
+            
+            // Add to _children if not already present
+            if (collabNode && !this._children.includes(collabNode)) {
+              this._children.push(collabNode);
+              console.log('✅ [_syncChildrenFromXmlTextEmbeds] Added CollabElementNode to _children:', {
+                childKey: collabNode._key,
+                childType: collabNode._type,
+                newChildrenCount: this._children.length
+              });
+            }
+          } catch (error) {
+            console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Failed to create CollabElementNode for embed:', error);
+          }
+        } else {
+          console.log('✅ [_syncChildrenFromXmlTextEmbeds] CollabElementNode already exists for textId:', textId);
+        }
+      }
+    }
+
+    console.log('🏁 [_syncChildrenFromXmlTextEmbeds] COMPLETE:', {
+      finalChildrenCount: this._children.length,
+      childrenKeys: this._children.map(c => c._key),
+      childrenTypes: this._children.map(c => c._type)
+    });
+  }
+
   syncChildrenFromCRDT(binding: Binding): void {
     console.log('🔄 [CollabElementNode.syncChildrenFromCRDT] ENTRY:', {
       nodeKey: this._key,
@@ -255,6 +326,9 @@ export class CollabElementNode {
       collabChildrenCount: this._children.length,
       xmlTextLength: this._xmlText.length
     });
+    
+    // First, ensure _children reflects the current CRDT state by processing embeds
+    this._syncChildrenFromXmlTextEmbeds(binding);
     
     // Now diff the children of the collab node with that of our existing Lexical node.
     const lexicalNode = this.getNode();
@@ -294,19 +368,40 @@ export class CollabElementNode {
       hasXmlTextContent: this._xmlText.length > 0
     });
 
-    // Special case: if we have text content but no CollabNode children and no Lexical children,
-    // we need to create a text node in Lexical to display the content
-    if (collabChildrenLength === 0 && lexicalChildrenKeysLength === 0 && this._xmlText.length > 0) {
-      console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Creating Lexical text node from XmlText content');
-      const textContent = this._xmlText.toString();
-      console.log('📋 [CollabElementNode.syncChildrenFromCRDT] Text content:', textContent);
+    // Special case: if we have text content in XmlText but no CollabNode children,
+    // we need to sync the text content to Lexical text nodes
+    if (collabChildrenLength === 0 && this._xmlText.length > 0) {
+      console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Syncing XmlText content to Lexical (no CollabTextNode children)');
+      const textContent = this._xmlText.toPlainString();
+      console.log('📋 [CollabElementNode.syncChildrenFromCRDT] XmlText content:', textContent);
       
       if (textContent.length > 0) {
-        // Create a Lexical text node directly
         writableLexicalNode = lexicalNode.getWritable();
-        const textNode = $createTextNode(textContent);
-        writableLexicalNode.append(textNode);
-        console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Created Lexical text node with content:', textContent);
+        
+        if (lexicalChildrenKeysLength === 0) {
+          // No Lexical children - create a new text node
+          console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Creating new Lexical text node');
+          const textNode = $createTextNode(textContent);
+          writableLexicalNode.append(textNode);
+          console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Created Lexical text node with content:', textContent);
+        } else {
+          // Update existing Lexical children - assume first child is text node
+          const firstChild = lexicalNode.getFirstChild();
+          if ($isTextNode(firstChild)) {
+            console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Updating existing Lexical text node');
+            console.log('📋 [CollabElementNode.syncChildrenFromCRDT] Current text:', firstChild.getTextContent());
+            console.log('📋 [CollabElementNode.syncChildrenFromCRDT] New text:', textContent);
+            firstChild.setTextContent(textContent);
+            console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Updated text node content to:', textContent);
+          } else {
+            console.log('📝 [CollabElementNode.syncChildrenFromCRDT] First child is not text, replacing with text node');
+            // Replace non-text child with text node
+            firstChild?.remove();
+            const textNode = $createTextNode(textContent);
+            writableLexicalNode.append(textNode);
+            console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Replaced with text node:', textContent);
+          }
+        }
         return; // Early return since we handled the text content directly
       }
     }

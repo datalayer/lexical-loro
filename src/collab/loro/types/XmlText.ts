@@ -348,14 +348,59 @@ export class XmlText {
     // For LoroText, we'll create a simple delta with the text content
     const textContent = this._text.toString();
     
-    if (textContent.length > 0) {
+    // Process text content and embedded objects
+    let offset = 0;
+    const textLength = textContent.length;
+    
+    // Get all embed entries and sort by offset
+    const embedEntries = Array.from(this._attributes.entries())
+      .filter(([key]) => key.startsWith('embed_'))
+      .map(([key, value]) => ({ key, value, offset: (value as any).offset }))
+      .sort((a, b) => a.offset - b.offset);
+    
+    for (const embedEntry of embedEntries) {
+      const embedData = embedEntry.value as any;
+      const embedOffset = embedData.offset;
+      
+      // Add text content before this embed
+      if (embedOffset > offset) {
+        const textBefore = textContent.slice(offset, embedOffset);
+        if (textBefore.length > 0) {
+          deltas.push({
+            insert: textBefore
+          });
+        }
+      }
+      
+      // Add the embedded object
+      if (embedData.object && embedData.object.textId) {
+        // This is an embedded XmlText object (paragraph)
+        deltas.push({
+          insert: embedData.object,
+          attributes: embedData.attributes
+        });
+      }
+      
+      // Skip the placeholder character
+      offset = embedOffset + 1;
+    }
+    
+    // Add remaining text content after all embeds
+    if (offset < textLength) {
+      const remainingText = textContent.slice(offset);
+      if (remainingText.length > 0) {
+        deltas.push({
+          insert: remainingText
+        });
+      }
+    }
+    
+    // If no embeds, just add the text content
+    if (embedEntries.length === 0 && textContent.length > 0) {
       deltas.push({
         insert: textContent
       });
     }
-    
-    // TODO: Add support for embedded objects stored in _attributes map
-    // For now, this is a simplified implementation
     
     return deltas;
   }
@@ -390,6 +435,24 @@ export class XmlText {
       attrs[key] = this._attributes.get(key);
     }
     return attrs;
+  }
+
+  /**
+   * Get the ID/textId of this XmlText instance
+   */
+  getId(): string {
+    // Extract the ID from the text container ID
+    return this._text.id;
+  }
+
+  /**
+   * Get all embed entries (for internal use by CollabElementNode)
+   */
+  getEmbedEntries(): Array<{ key: string; value: any; offset: number }> {
+    return Array.from(this._attributes.entries())
+      .filter(([key]) => key.startsWith('embed_'))
+      .map(([key, value]) => ({ key, value, offset: (value as any).offset }))
+      .sort((a, b) => a.offset - b.offset);
   }
 
   /**

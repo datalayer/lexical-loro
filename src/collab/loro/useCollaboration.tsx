@@ -241,7 +241,8 @@ export function useCollaboration(
           dirtyLeavesKeys: Array.from(dirtyLeaves),
           dirtyLeavesSize: dirtyLeaves.size,
           tagsArray: Array.from(tags),
-          editorStateDiff: editorState !== prevEditorState
+          editorStateDiff: editorState !== prevEditorState,
+          timestamp: Date.now()
         });
         
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
@@ -250,6 +251,14 @@ export function useCollaboration(
             console.log('⏭️ useCollaboration: Skipping sync - no dirty elements, leaves, or normalized nodes');
             return;
           }
+          
+          console.log('🎯 useCollaboration: USER CHANGE DETECTED - proceeding with sync', {
+            dirtyElementsKeys: Array.from(dirtyElements.keys()),
+            dirtyLeavesKeys: Array.from(dirtyLeaves),
+            normalizedNodesKeys: Array.from(normalizedNodes),
+            hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
+            skipCollaborationUpdate: skipCollaborationUpdateRef.current
+          });
           
           // Set origin to indicate this is a local edit for undo manager
           const doc = docMap.get(id);

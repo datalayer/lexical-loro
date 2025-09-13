@@ -7,6 +7,7 @@ import {
   $getRoot,
   $getSelection,
   $getWritableNodeState,
+  $isElementNode,
   $isRangeSelection,
   $isTextNode,
   COLLABORATION_TAG,
@@ -153,7 +154,69 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
       return;
     }
     
-    // Skip creating new containers for repeated/invalid IDs to prevent infinite loops
+      // Y.js-aligned approach: Try to create missing CollabElementNode for element_X pattern
+      const elementMatch = target.match(/element_(\d+)/);
+      if (elementMatch) {
+        const elementKey = elementMatch[1];
+        console.log(`$syncEvent: Creating missing CollabElementNode for key: ${elementKey}`);
+        
+        try {
+          // Get the root CollabElementNode
+          const rootCollabNode = binding.collabNodeMap.get('root');
+          if (rootCollabNode instanceof CollabElementNode) {
+            // Check if there's a corresponding Lexical node
+            let lexicalNode = $getNodeByKey(elementKey);
+            
+            if (!lexicalNode || !$isElementNode(lexicalNode)) {
+              // Lexical node doesn't exist yet - create it first
+              console.log(`$syncEvent: Creating missing Lexical paragraph for key: ${elementKey}`);
+              
+              const rootLexicalNode = rootCollabNode.getNode();
+              if (rootLexicalNode) {
+                const writableRoot = rootLexicalNode.getWritable();
+                const newParagraph = $createParagraphNode();
+                writableRoot.append(newParagraph);
+                // After appending, set the key to match the CRDT element key
+                newParagraph.__key = elementKey;
+                lexicalNode = newParagraph;
+                
+                console.log(`✅ $syncEvent: Created Lexical paragraph with key: ${elementKey}`);
+              }
+            }
+            
+            if (lexicalNode && $isElementNode(lexicalNode)) {
+              const elementType = lexicalNode.getType();
+              const doc = rootCollabNode._xmlText.getDoc();
+              
+              // Create XmlText for this element - use the target container ID
+              const childXmlTextId = `element_${elementKey}`;
+              const childXmlText = new XmlText(doc, childXmlTextId);
+              
+              // Create the CollabElementNode
+              const collabElementNode = new CollabElementNode(
+                childXmlText,
+                rootCollabNode, // parent
+                elementType
+              );
+              
+              // Set the key
+              collabElementNode._key = elementKey;
+              
+              // Add to parent's children and register in the binding
+              rootCollabNode._children.push(collabElementNode);
+              binding.collabNodeMap.set(elementKey, collabElementNode);
+              
+              console.log(`✅ $syncEvent: Created CollabElementNode for key ${elementKey}, type: ${elementType}`);
+              
+              // Now process the event with the newly created node
+              processCollabNodeEvent(binding, collabElementNode, event);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error(`❌ $syncEvent: Error creating CollabElementNode for key ${elementKey}:`, error);
+        }
+      }    // Skip creating new containers for repeated/invalid IDs to prevent infinite loops
     console.warn('$syncEvent: Skipping container creation for potentially problematic ID:', target);
     return;
   }
