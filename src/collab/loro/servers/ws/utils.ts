@@ -49,7 +49,7 @@ const persistenceDir = process.env.YPERSISTENCE
  */
 let persistence = null
 if (typeof persistenceDir === 'string') {
-  console.info('Persisting documents to "' + persistenceDir + '"')
+  console.debug('Persisting documents to "' + persistenceDir + '"')
   // @ts-ignore
   // Note: Using simplified persistence for Loro - replace with actual Loro-compatible persistence
   persistence = {
@@ -323,16 +323,16 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
     
     switch (messageData.type) {
       case messageLoroUpdate:
-        console.log(`[Server] messageLoroUpdate - DOCUMENT UPDATE RECEIVED - update length: ${messageData.update?.length}, docName: ${doc.name}`)
+        console.debug(`[Server] messageLoroUpdate - DOCUMENT UPDATE RECEIVED - update length: ${messageData.update?.length}, docName: ${doc.name}`)
         
         // Apply the Loro update to the document
         const updateBytes = new Uint8Array(messageData.update)
-        console.log(`[Server] messageLoroUpdate - Applying update to LoroDoc`)
+        console.debug(`[Server] messageLoroUpdate - Applying update to LoroDoc`)
         doc.doc.import(updateBytes)
-        console.log(`[Server] messageLoroUpdate - Update applied successfully`)
+        console.debug(`[Server] messageLoroUpdate - Update applied successfully`)
         
         // Send the update to all other connections
-        console.log(`[Server] messageLoroUpdate - Broadcasting to ${doc.conns.size - 1} other connections`)
+        console.debug(`[Server] messageLoroUpdate - Broadcasting to ${doc.conns.size - 1} other connections`)
         let broadcastCount = 0
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
@@ -340,7 +340,7 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
             broadcastCount++
           }
         })
-        console.log(`[Server] messageLoroUpdate - Successfully broadcasted to ${broadcastCount} clients`)
+        console.debug(`[Server] messageLoroUpdate - Successfully broadcasted to ${broadcastCount} clients`)
         
         // Trigger callback if configured
         if (isCallbackSet) {

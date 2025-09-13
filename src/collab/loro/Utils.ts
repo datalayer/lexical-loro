@@ -157,7 +157,7 @@ export function $createCollabNodeFromLexicalNode(
 export function getNodeTypeFromSharedType(
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
 ): string | undefined {
-  console.log('getNodeTypeFromSharedType: Called with sharedType:', sharedType, 'type:', typeof sharedType, 'constructor:', sharedType?.constructor?.name);
+  console.debug('getNodeTypeFromSharedType: Called with sharedType:', sharedType, 'type:', typeof sharedType, 'constructor:', sharedType?.constructor?.name);
   const type = sharedTypeGet(sharedType, '__type');
   
   // If no type is found, return undefined instead of failing
@@ -199,8 +199,8 @@ export function $getOrInitCollabNodeFromSharedType(
     invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
     const sharedParent = typeof sharedType.parent === 'function' ? sharedType.parent() : sharedType.parent;
-    console.log('$getOrInitCollabNodeFromSharedType: sharedParent:', sharedParent, 'type:', typeof sharedParent, 'constructor:', sharedParent?.constructor?.name);
-    console.log('$getOrInitCollabNodeFromSharedType: parent arg:', parent, 'parent === undefined:', parent === undefined);
+    console.debug('$getOrInitCollabNodeFromSharedType: sharedParent:', sharedParent, 'type:', typeof sharedParent, 'constructor:', sharedParent?.constructor?.name);
+    console.debug('$getOrInitCollabNodeFromSharedType: parent arg:', parent, 'parent === undefined:', parent === undefined);
     
     const targetParent =
       parent === undefined && sharedParent !== null && sharedParent !== undefined
@@ -327,11 +327,11 @@ function sharedTypeGet(
   property: string,
 ): unknown {
   if (sharedType instanceof LoroMap) {
-    console.log('sharedTypeGet: Calling LoroMap.get for property:', property);
-    console.log('sharedTypeGet: LoroMap instance:', sharedType);
-    console.log('sharedTypeGet: LoroMap.get method:', sharedType.get);
+    console.debug('sharedTypeGet: Calling LoroMap.get for property:', property);
+    console.debug('sharedTypeGet: LoroMap instance:', sharedType);
+    console.debug('sharedTypeGet: LoroMap.get method:', sharedType.get);
     const result = sharedType.get(property);
-    console.log('sharedTypeGet: LoroMap.get result:', result, 'type:', typeof result);
+    console.debug('sharedTypeGet: LoroMap.get result:', result, 'type:', typeof result);
     return result;
   } else if (sharedType instanceof XmlText) {
     return sharedType.getAttribute(property);
@@ -583,13 +583,13 @@ export function doesSelectionNeedRecovering(
 }
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
-  console.log('[syncWithTransaction] Starting sync transaction');
+  console.debug('[syncWithTransaction] Starting sync transaction');
   
   // For now, just call the function directly
   // Loro should handle change batching automatically
   fn();
   
-  console.log('[syncWithTransaction] Sync transaction completed');
+  console.debug('[syncWithTransaction] Sync transaction completed');
 }
 
 export function $moveSelectionToPreviousNode(

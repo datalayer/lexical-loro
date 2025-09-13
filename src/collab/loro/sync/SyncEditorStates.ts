@@ -130,7 +130,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   
   // Check if this is a state-related event (targets ending with "_attrs:Map")
   if (typeof target === 'string' && target.includes('_attrs:Map')) {
-    console.log('$syncStateEvent: Processing state event:', target, event);
+    console.debug('$syncStateEvent: Processing state event:', target, event);
     
     // Extract the base container ID: cid:root-element_1_attrs:Map -> element_1
     const match = target.match(/^cid:root-(.+)_attrs:Map$/);
@@ -152,7 +152,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
       }
       
       if (isMatch) {
-        console.log('$syncStateEvent: Found existing collab node for state update:', baseContainerId, collabNode);
+        console.debug('$syncStateEvent: Found existing collab node for state update:', baseContainerId, collabNode);
         const node = collabNode.getNode();
         if (node && (event as any).diff) {
           const state = $getWritableNodeState(node.getWritable());
@@ -161,7 +161,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
           for (const key in diff) {
             state.updateFromUnknown(key, diff[key]);
           }
-          console.log('$syncStateEvent: Updated node state for', baseContainerId, diff);
+          console.debug('$syncStateEvent: Updated node state for', baseContainerId, diff);
           return true;
         }
       }
@@ -175,7 +175,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
 }
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
-  console.log('[$syncEvent] Processing event:', {
+  console.info('[$syncEvent] Processing event:', {
     target: event.target,
     diff: event.diff
   });
@@ -220,11 +220,11 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   
   // If we found a collaboration node, process the event using Y.js-like pattern
   if (collabNode) {
-    console.log('[$syncEvent] Found collab node, processing event...');
+    console.info('[$syncEvent] Found collab node, processing event...');
     processCollabNodeEventSimple(binding, collabNode, event);
   } else {
     // Fallback to the old complex parsing method
-    console.log('[$syncEvent] No collab node found, using fallback method...');
+    console.info('[$syncEvent] No collab node found, using fallback method...');
     const parsedID = parseContainerID(target as ContainerID);
     if (parsedID) {
       collabNode = findCollabNodeByContainerID(binding, parsedID);
@@ -306,21 +306,21 @@ function extractTextFromMapEvent(binding: Binding, containerId: string, event: L
 
 // Simplified event processing that matches Y.js pattern more closely
 function processCollabNodeEventSimple(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
-  console.log('[processCollabNodeEventSimple] Processing event for collab node:', collabNode._key, event);
+  console.debug('[processCollabNodeEventSimple] Processing event for collab node:', collabNode._key, event);
   
   if (collabNode instanceof CollabElementNode) {
     // Handle property changes first (similar to Y.js keysChanged)
     if (hasPropertyChanges(event)) {
       const changedKeys = getChangedKeys(event);
       if (changedKeys.size > 0) {
-        console.log('[processCollabNodeEventSimple] Syncing properties:', changedKeys);
+        console.debug('[processCollabNodeEventSimple] Syncing properties:', changedKeys);
         collabNode.syncPropertiesFromCRDT(binding, changedKeys);
       }
     }
     
     // Handle child list changes (similar to Y.js childListChanged with delta)
     if (event.diff?.type === 'text' && event.diff.diff && Array.isArray(event.diff.diff)) {
-      console.log('[processCollabNodeEventSimple] Applying children delta:', event.diff.diff);
+      console.info('[processCollabNodeEventSimple] Applying children delta:', event.diff.diff);
       collabNode.applyChildrenCRDTDelta(binding, event.diff.diff);
       collabNode.syncChildrenFromCRDT(binding);
     }
@@ -330,7 +330,7 @@ function processCollabNodeEventSimple(binding: Binding, collabNode: AnyCollabNod
     if (hasPropertyChanges(event)) {
       const changedKeys = getChangedKeys(event);
       if (changedKeys.size > 0) {
-        console.log('[processCollabNodeEventSimple] Syncing text properties:', changedKeys);
+        console.debug('[processCollabNodeEventSimple] Syncing text properties:', changedKeys);
         collabNode.syncPropertiesAndTextFromCRDT(binding, changedKeys);
       }
     }
@@ -340,7 +340,7 @@ function processCollabNodeEventSimple(binding: Binding, collabNode: AnyCollabNod
     if (hasPropertyChanges(event)) {
       const changedKeys = getChangedKeys(event);
       if (changedKeys.size > 0) {
-        console.log('[processCollabNodeEventSimple] Syncing decorator properties:', changedKeys);
+        console.debug('[processCollabNodeEventSimple] Syncing decorator properties:', changedKeys);
         collabNode.syncPropertiesFromCRDT(binding, changedKeys);
       }
     }
@@ -351,20 +351,20 @@ function processCollabNodeEventSimple(binding: Binding, collabNode: AnyCollabNod
 }
 
 function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
-  console.log('[processCollabNodeEvent] Processing event for collab node:', collabNode._key, event);
+  console.debug('[processCollabNodeEvent] Processing event for collab node:', collabNode._key, event);
   
   // Y.js-like event processing pattern
   if (collabNode instanceof CollabElementNode) {
     // Handle text changes (similar to Y.js delta processing)
     if (event.diff?.type === 'text' && event.diff.diff && Array.isArray(event.diff.diff)) {
-      console.log('[processCollabNodeEvent] Applying text delta to element node:', event.diff.diff);
+      console.debug('[processCollabNodeEvent] Applying text delta to element node:', event.diff.diff);
       // Apply delta changes rather than replacing all text content
       collabNode.applyChildrenCRDTDelta(binding, event.diff.diff);
     }
     
     // Handle map changes - use standard child synchronization instead
     if (event.diff?.type === 'map' && (event.diff as any).updated) {
-      console.log('[processCollabNodeEvent] Map changes detected, syncing children');
+      console.info('[processCollabNodeEvent] Map changes detected, syncing children');
       collabNode.syncChildrenFromCRDT(binding);
     }
     
@@ -411,7 +411,7 @@ export function syncCRDTChangesToLexical(
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {
-  console.log('[syncCRDTChangesToLexical] Processing', events.length, 'events');
+  console.info('[syncCRDTChangesToLexical] Processing', events.length, 'events');
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
@@ -422,7 +422,7 @@ export function syncCRDTChangesToLexical(
     () => {
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
-        console.log('[syncCRDTChangesToLexical] Processing event', i, ':', event);
+        console.debug('[syncCRDTChangesToLexical] Processing event', i, ':', event);
         $syncEvent(binding, event);
       }
 

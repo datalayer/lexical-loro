@@ -165,19 +165,19 @@ messageHandlers[messageLoroUpdate] = (
   message: LoroUpdateMessage,
   emitSynced: boolean
 ): string | null => {
-  console.log(`[Client] messageHandlers[messageLoroUpdate] - DOCUMENT UPDATE RECEIVED from server - update length: ${message.update?.length}`)
+  console.info(`[Client] messageHandlers[messageLoroUpdate] - DOCUMENT UPDATE RECEIVED from server - update length: ${message.update?.length}`)
   
   try {
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
-    console.log(`[Client] messageHandlers[messageLoroUpdate] - Applying update to local LoroDoc`)
+    console.info(`[Client] messageHandlers[messageLoroUpdate] - Applying update to local LoroDoc`)
     
     // Set flag to indicate we're applying a remote update
     provider._applyingRemoteUpdate = true
     provider.doc.import(updateBytes)
     provider._applyingRemoteUpdate = false
     
-    console.log(`[Client] messageHandlers[messageLoroUpdate] - Document update applied successfully`)
+    console.info(`[Client] messageHandlers[messageLoroUpdate] - Document update applied successfully`)
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
@@ -708,9 +708,9 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {any} origin
      */
     this._updateHandler = (update: Uint8Array, origin: any) => {
-      console.log(`[Client] _updateHandler - DOCUMENT UPDATE EVENT - length: ${update.length}, origin: ${origin}`)
+      console.debug(`[Client] _updateHandler - DOCUMENT UPDATE EVENT - length: ${update.length}, origin: ${origin}`)
       if (origin !== this) {
-        console.log(`[Client] _updateHandler - Sending document update to server`)
+        console.debug(`[Client] _updateHandler - Sending document update to server`)
         const updateMessage: LoroUpdateMessage = {
           type: 'loro-update',
           update: Array.from(update),
@@ -718,7 +718,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         }
         broadcastMessage(this, JSON.stringify(updateMessage))
       } else {
-        console.log(`[Client] _updateHandler - Skipping echo from self`)
+        console.debug(`[Client] _updateHandler - Skipping echo from self`)
       }
     }
     // Document update handler - called when Loro emits document change events
@@ -767,10 +767,10 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.ephemeralStore.subscribe(this._ephemeralUpdateHandler)
     
     // Use Loro's native event system to listen for document changes
-    console.log(`[Client] WebsocketProvider - Setting up Loro document event subscription`)
+    console.debug(`[Client] WebsocketProvider - Setting up Loro document event subscription`)
     try {
       this.doc.subscribe((event: LoroEventBatch) => {
-        console.log(`[Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
+        console.debug(`[Client] *** LORO DOCUMENT EVENT RECEIVED ***:`, {
           by: event.by,
           hasLocalChanges: event.by === 'local',
           origin: event.origin,
@@ -786,33 +786,33 @@ export class WebsocketProvider extends ObservableV2<any> {
         // Check if this is a remote update being applied (from WebSocket)
         // We should not send these back to the server to avoid loops
         if (this._applyingRemoteUpdate) {
-          console.log(`[Client] WebsocketProvider - Skipping export during remote update application`);
+          console.debug(`[Client] WebsocketProvider - Skipping export during remote update application`);
           return;
         }
         
         // Skip if this is a remote change (from import)
         // event.by === 'import' means this change came from importing remote updates
         if (event.by === 'import') {
-          console.log(`[Client] WebsocketProvider - Skipping export for remote change (by: ${event.by})`);
+          console.debug(`[Client] WebsocketProvider - Skipping export for remote change (by: ${event.by})`);
           return;
         }
         
         // For local changes, export and send updates to the server
-        console.log(`[Client] WebsocketProvider - Local document event, exporting update`);
+        console.debug(`[Client] WebsocketProvider - Local document event, exporting update`);
         
         try {
           const update = this.doc.export({ mode: 'update' });
           if (update.length > 0) {
-            console.log(`[Client] WebsocketProvider - Exported local update - size: ${update.length}`);
+            console.debug(`[Client] WebsocketProvider - Exported local update - size: ${update.length}`);
             this._updateHandler(update, null);
           } else {
-            console.log(`[Client] WebsocketProvider - No update to export (empty)`);
+            console.debug(`[Client] WebsocketProvider - No update to export (empty)`);
           }
         } catch (error) {
           console.error(`[Client] WebsocketProvider - Error exporting document update:`, error);
         }
       });
-      console.log(`[Client] WebsocketProvider - Successfully subscribed to Loro document events`);
+      console.debug(`[Client] WebsocketProvider - Successfully subscribed to Loro document events`);
     } catch (error) {
       console.error(`[Client] ERROR setting up Loro document subscription:`, error);
     }

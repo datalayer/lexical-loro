@@ -61,7 +61,7 @@ export class XmlText {
       // Try to access basic properties to ensure the text is valid
       const length = this._text.length;
       const id = this._text.id;
-      console.log(`XmlText initialized - ID: ${id}, Length: ${length}`);
+      console.debug(`XmlText initialized - ID: ${id}, Length: ${length}`);
     } catch (error) {
       console.error('Text validation failed:', error);
       throw new Error('XmlText is in invalid state: ' + error.message);
@@ -94,7 +94,7 @@ export class XmlText {
       return;
     }
     
-    console.log(`[XmlText] insert called with offset: ${offset}, text: "${text}", attributes:`, attributes);
+    console.debug(`[XmlText] insert called with offset: ${offset}, text: "${text}", attributes:`, attributes);
     
     try {
       // Get current length safely
@@ -107,9 +107,9 @@ export class XmlText {
       }
       
       // LoroText.insert(pos, content) - attributes handled separately
-      console.log(`[XmlText] About to call LoroText.insert(${offset}, "${text}")`)
+      console.debug(`[XmlText] About to call LoroText.insert(${offset}, "${text}")`)
       this._text.insert(offset, text);
-      console.log(`[XmlText] LoroText.insert completed successfully`)
+      console.debug(`[XmlText] LoroText.insert completed successfully`)
       
       // If we have attributes, store them in the attributes map
       if (attributes && Object.keys(attributes).length > 0) {
@@ -122,13 +122,13 @@ export class XmlText {
         });
       }
       
-      console.log(`[XmlText] Successfully inserted text at offset ${offset}`);
+      console.debug(`[XmlText] Successfully inserted text at offset ${offset}`);
       
       // Commit the transaction to trigger Loro's event system
-      console.log(`[XmlText] *** COMMITTING LORO TRANSACTION ***`);
+      console.debug(`[XmlText] *** COMMITTING LORO TRANSACTION ***`);
       try {
         this._doc.commit();
-        console.log(`[XmlText] *** COMMIT COMPLETED SUCCESSFULLY ***`);
+        console.debug(`[XmlText] *** COMMIT COMPLETED SUCCESSFULLY ***`);
       } catch (error) {
         console.error(`[XmlText] ERROR during commit:`, error);
       }
@@ -154,7 +154,7 @@ export class XmlText {
    * so we use a placeholder character approach combined with metadata storage
    */
   insertEmbed(offset: number, object: any, attributes?: TextAttributes): void {
-    console.log(`insertEmbed called - offset: ${offset}, object type: ${object?.constructor?.name}`);
+    console.debug(`insertEmbed called - offset: ${offset}, object type: ${object?.constructor?.name}`);
     
     try {
       // Validate offset
@@ -186,7 +186,7 @@ export class XmlText {
       
       this._attributes.set(embedKey, embedData);
       
-      console.log(`Successfully inserted embed placeholder at offset ${offset}, stored as ${embedKey}`);
+      console.debug(`Successfully inserted embed placeholder at offset ${offset}, stored as ${embedKey}`);
       
       // Notify observers
       this._notifyObservers({
@@ -264,7 +264,7 @@ export class XmlText {
       attributes: { ...attributes }
     });
     
-    console.log(`Applied formatting to range [${index}, ${index + length}):`, attributes);
+    console.debug(`Applied formatting to range [${index}, ${index + length}):`, attributes);
     
     this._notifyObservers({
       delta: [{ retain: index }, { retain: length, attributes }],
@@ -309,15 +309,15 @@ export class XmlText {
     const textLength = this._text.length;
     if (offset >= 0 && offset < textLength) {
       const actualLength = Math.min(length, textLength - offset);
-      console.log(`[XmlText] About to delete ${actualLength} characters at offset ${offset}`);
+      console.debug(`[XmlText] About to delete ${actualLength} characters at offset ${offset}`);
       this._text.delete(offset, actualLength);
-      console.log(`[XmlText] Delete completed successfully`);
+      console.debug(`[XmlText] Delete completed successfully`);
       
       // MANUAL FIX: Trigger document update after deletion
       try {
         const update = this._doc.export({ mode: 'update' });
         if (update.length > 0) {
-          console.log(`[XmlText] Manually triggering document update after delete - size: ${update.length}`);
+          console.debug(`[XmlText] Manually triggering document update after delete - size: ${update.length}`);
           ;(globalThis as any).__loroDocumentUpdateHandler?.(update, null);
         }
       } catch (error) {

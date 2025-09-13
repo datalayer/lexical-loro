@@ -117,7 +117,7 @@ export function useCollaboration(
       // Loro event batch containing multiple events
       event: LoroEventBatch,
     ) => {
-      console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
+      console.info(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
         event: event,
         eventBy: event.by,
         eventOrigin: event.origin,
@@ -134,13 +134,13 @@ export function useCollaboration(
       
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
-        console.log(`[UseCollaboration] Skipping collaboration update (skipCollaborationUpdateRef)`);
+        console.debug(`[UseCollaboration] Skipping collaboration update (skipCollaborationUpdateRef)`);
         skipCollaborationUpdateRef.current = false;
         return;
       }
       
       if (origin === 'remote') { // Only process remote changes
-        console.log(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
+        console.info(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
         
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
@@ -153,7 +153,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
+        console.debug(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
       }
     };
 
@@ -188,14 +188,14 @@ export function useCollaboration(
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
-    console.log(`[UseCollaboration] Setting up document subscription:`, {
+    console.debug(`[UseCollaboration] Setting up document subscription:`, {
       id,
       hasDoc: !!doc,
       docMapSize: docMap.size,
       docMapKeys: Array.from(docMap.keys())
     });
     const unsubscribe = doc?.subscribe(onLoroTreeChanges);
-    console.log(`[UseCollaboration] Document subscription result:`, {
+    console.debug(`[UseCollaboration] Document subscription result:`, {
       hasUnsubscribe: !!unsubscribe,
       subscribed: !!doc && !!unsubscribe
     });
@@ -291,11 +291,11 @@ export function useCollaboration(
 
         if (shouldConnect) {
           // eslint-disable-next-line no-console
-          console.log('Collaboration connected!');
+          console.info('Collaboration connected!');
           connect();
         } else {
           // eslint-disable-next-line no-console
-          console.log('Collaboration disconnected!');
+          console.info('Collaboration disconnected!');
           disconnect();
         }
 
