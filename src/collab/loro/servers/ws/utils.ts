@@ -40,8 +40,6 @@ const wsReadyStateOpen = 1
 const wsReadyStateClosing = 2 // eslint-disable-line
 const wsReadyStateClosed = 3 // eslint-disable-line
 
-// disable gc when using snapshots!
-const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
 const persistenceDir = process.env.YPERSISTENCE
 
 /**
@@ -49,7 +47,7 @@ const persistenceDir = process.env.YPERSISTENCE
  */
 let persistence = null
 if (typeof persistenceDir === 'string') {
-  console.debug('Persisting documents to "' + persistenceDir + '"')
+  console.info('Persisting documents to "' + persistenceDir + '"')
   // @ts-ignore
   // Note: Using simplified persistence for Loro - replace with actual Loro-compatible persistence
   persistence = {
@@ -57,11 +55,11 @@ if (typeof persistenceDir === 'string') {
     bindState: async (docName, doc: WSSharedDoc) => {
       // TODO: Implement Loro document persistence
       // For now, just log the operation
-      console.debug(`Binding state for document: ${docName}`)
+      console.log(`Binding state for document: ${docName}`)
     },
     writeState: async (docName, doc: WSSharedDoc) => {
       // TODO: Implement Loro document state writing
-      console.debug(`Writing state for document: ${docName}`)
+      console.log(`Writing state for document: ${docName}`)
     }
   }
 }
@@ -97,9 +95,10 @@ const messageQueryEphemeral = 'query-ephemeral'
  * @param {WSSharedDoc} doc
  */
 const updateHandler = (update: Uint8Array, _origin: any, doc: WSSharedDoc) => {
-  const message = {
+  const message: LoroUpdateMessage = {
     type: messageLoroUpdate,
-    update: Array.from(update)
+    update: Array.from(update),
+    docId: doc.name
   }
   const messageData = new TextEncoder().encode(JSON.stringify(message))
   doc.conns.forEach((_, conn) => send(doc, conn, messageData))
@@ -132,7 +131,6 @@ export class WSSharedDoc {
   ephemeralStore: EphemeralStore
   conns: Map<any, Set<any>>
   private _conns: Set<any>
-  lastEphemeralSender: any
 
   constructor (name) {
     this.name = name
@@ -147,18 +145,15 @@ export class WSSharedDoc {
     /**
      * @type {EphemeralStore}
      */
-    console.debug(`[Server] WSSharedDoc constructor - Creating EphemeralStore for doc:`, name)
+    console.log(`[Server] WSSharedDoc constructor - Creating EphemeralStore for doc:`, name)
     this.ephemeralStore = new EphemeralStore(30000) // 30 second timeout
-    console.debug(`[Server] WSSharedDoc constructor - EphemeralStore created successfully`)
-    
-    // Store the last sender to avoid echo loops
-    this.lastEphemeralSender = null
+    console.log(`[Server] WSSharedDoc constructor - EphemeralStore created successfully`)
     
     /**
      * @type {Array<function>}
      */
     const ephemeralChangeHandler = (event) => {
-      console.debug(`[Server] ephemeralChangeHandler - Change event:`, {
+      console.log(`[Server] ephemeralChangeHandler - Change event:`, {
         added: event.added.length,
         updated: event.updated.length,
         removed: event.removed.length,
@@ -168,35 +163,22 @@ export class WSSharedDoc {
       // Only broadcast if there are actual changes
       if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
         try {
-          console.debug(`[Server] ephemeralChangeHandler - Broadcasting ephemeral update`)
+          console.log(`[Server] ephemeralChangeHandler - Broadcasting ephemeral update`)
           
           const encodedData = this.ephemeralStore.encodeAll()
-          console.debug(`[Server] ephemeralChangeHandler - Encoded data length:`, encodedData.length)
+          console.log(`[Server] ephemeralChangeHandler - Encoded data length:`, encodedData.length)
           
-          // Skip broadcast if no actual data to send
-          if (encodedData.length === 0) {
-            console.debug(`[Server] ephemeralChangeHandler - Skipping broadcast of empty ephemeral data`)
-            return
-          }
-          
-          const message = {
+          const message: EphemeralMessage = {
             type: messageEphemeral,
-            ephemeral: Array.from(encodedData)
+            ephemeral: Array.from(encodedData),
+            docId: name
           }
           const messageData = new TextEncoder().encode(JSON.stringify(message))
-          console.debug(`[Server] ephemeralChangeHandler - Broadcasting to ${this.conns.size} connections`)
+          console.log(`[Server] ephemeralChangeHandler - Broadcasting to ${this.connections.size} connections`)
           
-          // Broadcast to all connections EXCEPT the one that sent the last ephemeral update
-          this.conns.forEach((_, c) => {
-            if (c !== this.lastEphemeralSender) {
-              send(this, c, messageData)
-            } else {
-              console.debug(`[Server] ephemeralChangeHandler - Skipping echo back to sender`)
-            }
+          this.connections.forEach((_, c) => {
+            send(this, c, messageData)
           })
-          
-          // Clear the sender reference after broadcast
-          this.lastEphemeralSender = null
         } catch (broadcastError) {
           console.error(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
             error: broadcastError.message,
@@ -215,10 +197,9 @@ export class WSSharedDoc {
  * Gets a Y.Doc by name, whether in memory or on disk
  *
  * @param {string} docname - the name of the Y.Doc to find or create
- * @param {boolean} gc - whether to allow gc on the doc (applies only when created)
  * @return {WSSharedDoc}
  */
-export const getDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, () => {
+export const getYDoc = (docname) => map.setIfUndefined(docs, docname, () => {
   const doc = new WSSharedDoc(docname)
   // Note: LoroDoc doesn't have gc property - garbage collection is handled differently
   if (persistence !== null) {
@@ -231,116 +212,51 @@ export const getDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, 
 /**
  * @param {any} conn
  * @param {WSSharedDoc} doc
- * @param {ArrayBuffer | string} message
+ * @param {Uint8Array} message
  */
 const messageListener = (conn, doc: WSSharedDoc, message) => {
   try {
-    console.debug(`[Server] messageListener - Received message type:`, typeof message, 'length:', message.length || 'undefined')
-    
-    let messageData: any = null
-    let messageStr: string = ''
-    
-    // Handle different message types
-    if (typeof message === 'string') {
-      // JSON string message
-      console.debug(`[Server] messageListener - Processing string message, length:`, message.length)
-      console.debug(`[Server] messageListener - Message sample:`, message.substring(0, 200))
-      messageStr = message
-    } else if (message instanceof ArrayBuffer) {
-      // Binary message (ArrayBuffer)
-      console.debug(`[Server] messageListener - Processing ArrayBuffer message, byteLength:`, message.byteLength)
-      
-      try {
-        // First try to decode as JSON string
-        const decoder = new TextDecoder()
-        messageStr = decoder.decode(message)
-        console.debug(`[Server] messageListener - Decoded ArrayBuffer as string, length:`, messageStr.length)
-        console.debug(`[Server] messageListener - Decoded message sample:`, messageStr.substring(0, 200))
-      } catch (decodeError) {
-        console.debug(`[Server] messageListener - Failed to decode ArrayBuffer as string, treating as binary Loro update`)
-        // If decoding fails, treat as raw binary Loro update
-        const updateBytes = new Uint8Array(message)
-        doc.doc.import(updateBytes)
-        
-        // Broadcast the update to other connections
-        doc.conns.forEach((_, c) => {
-          if (c !== conn) {
-            send(doc, c, new Uint8Array(message))
-          }
-        })
-        return
-      }
-    } else if (message instanceof Uint8Array) {
-      // Binary message (Uint8Array)
-      console.debug(`[Server] messageListener - Processing Uint8Array message, length:`, message.length)
-      
-      try {
-        // First try to decode as JSON string
-        const decoder = new TextDecoder()
-        messageStr = decoder.decode(message)
-        console.debug(`[Server] messageListener - Decoded Uint8Array as string, length:`, messageStr.length)
-        console.debug(`[Server] messageListener - Decoded message sample:`, messageStr.substring(0, 200))
-      } catch (decodeError) {
-        console.debug(`[Server] messageListener - Failed to decode Uint8Array as string, treating as binary Loro update`)
-        // If decoding fails, treat as raw binary Loro update
-        doc.doc.import(message)
-        
-        // Broadcast the update to other connections
-        doc.conns.forEach((_, c) => {
-          if (c !== conn) {
-            send(doc, c, message)
-          }
-        })
-        return
-      }
-    } else {
-      console.error(`[Server] messageListener - Unknown message type:`, typeof message)
-      return
-    }
+    console.log(`[Server] messageListener - Received message of length:`, message.length)
     
     // Handle empty messages
-    if (!messageStr || messageStr.length === 0) {
-      console.debug(`[Server] messageListener - Received empty message, ignoring`)
+    if (message.length === 0) {
+      console.log(`[Server] messageListener - Received empty message, ignoring`)
       return
     }
     
-    // Parse JSON message
-    try {
-      messageData = JSON.parse(messageStr)
-      console.debug(`[Server] messageListener - Parsed message data:`, {
-        type: messageData.type,
-        docId: messageData.docId,
-        hasUpdate: !!messageData.update,
-        hasSnapshot: !!messageData.snapshot,
-        hasEphemeral: !!messageData.ephemeral,
-        ephemeralLength: messageData.ephemeral?.length
-      })
-    } catch (parseError) {
-      console.error(`[Server] messageListener - JSON parse error:`, parseError.message)
-      console.error(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
+    const messageStr = new TextDecoder().decode(message)
+    console.log(`[Server] messageListener - Decoded message string length:`, messageStr.length)
+    console.log(`[Server] messageListener - Message string sample:`, messageStr.substring(0, 200))
+    
+    // Handle empty string after decoding
+    if (messageStr.length === 0) {
+      console.log(`[Server] messageListener - Decoded empty string, ignoring`)
       return
     }
+    
+    const messageData: LoroWebSocketMessage = JSON.parse(messageStr)
+    console.log(`[Server] messageListener - Parsed message data:`, {
+      type: messageData.type,
+      docId: messageData.docId,
+      hasUpdate: !!(messageData as any).update,
+      hasSnapshot: !!(messageData as any).snapshot,
+      hasEphemeral: !!(messageData as any).ephemeral,
+      ephemeralLength: (messageData as any).ephemeral?.length
+    })
     
     switch (messageData.type) {
       case messageLoroUpdate:
-        console.debug(`[Server] messageLoroUpdate - DOCUMENT UPDATE RECEIVED - update length: ${messageData.update?.length}, docName: ${doc.name}`)
-        
         // Apply the Loro update to the document
-        const updateBytes = new Uint8Array(messageData.update)
-        console.debug(`[Server] messageLoroUpdate - Applying update to LoroDoc`)
+        const updateData = messageData as LoroUpdateMessage;
+        const updateBytes = new Uint8Array(updateData.update)
         doc.doc.import(updateBytes)
-        console.debug(`[Server] messageLoroUpdate - Update applied successfully`)
         
         // Send the update to all other connections
-        console.debug(`[Server] messageLoroUpdate - Broadcasting to ${doc.conns.size - 1} other connections`)
-        let broadcastCount = 0
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
             send(doc, c, message)
-            broadcastCount++
           }
         })
-        console.debug(`[Server] messageLoroUpdate - Successfully broadcasted to ${broadcastCount} clients`)
         
         // Trigger callback if configured
         if (isCallbackSet) {
@@ -351,56 +267,53 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
       case messageSnapshot:
         // Send current document snapshot to requesting client
         const snapshot = doc.doc.export({ mode: 'snapshot' })
-        const response = {
+        const response: SnapshotMessage = {
           type: messageSnapshot,
-          snapshot: Array.from(snapshot)
+          snapshot: Array.from(snapshot),
+          docId: doc.name
         }
         send(doc, conn, new TextEncoder().encode(JSON.stringify(response)))
         break
         
       case messageEphemeral:
         // Apply ephemeral update
-        console.debug(`[Server] messageEphemeral - Processing ephemeral update:`, {
-          ephemeralLength: messageData.ephemeral?.length,
-          ephemeralSample: messageData.ephemeral?.slice(0, 10),
+        const ephemeralData = messageData as EphemeralMessage;
+        console.log(`[Server] messageEphemeral - Processing ephemeral update:`, {
+          ephemeralLength: ephemeralData.ephemeral?.length,
+          ephemeralSample: ephemeralData.ephemeral?.slice(0, 10),
           docName: doc.name
         })
         
         try {
-          const ephemeralBytes = new Uint8Array(messageData.ephemeral)
-          console.debug(`[Server] messageEphemeral - Created Uint8Array of length:`, ephemeralBytes.length)
-          
-          // Mark this connection as the sender to avoid echo
-          doc.lastEphemeralSender = conn
+          const ephemeralBytes = new Uint8Array(ephemeralData.ephemeral)
+          console.log(`[Server] messageEphemeral - Created Uint8Array of length:`, ephemeralBytes.length)
           
           doc.ephemeralStore.apply(ephemeralBytes)
-          console.debug(`[Server] messageEphemeral - Successfully applied ephemeral update`)
+          console.log(`[Server] messageEphemeral - Successfully applied ephemeral update`)
         } catch (ephemeralError) {
           console.error(`[Server] messageEphemeral - ERROR applying ephemeral update:`, {
             error: ephemeralError.message,
             stack: ephemeralError.stack,
-            ephemeralLength: messageData.ephemeral?.length,
-            ephemeralSample: messageData.ephemeral?.slice(0, 10)
+            ephemeralLength: ephemeralData.ephemeral?.length,
+            ephemeralSample: ephemeralData.ephemeral?.slice(0, 10)
           })
-          
-          // Clear sender reference on error
-          doc.lastEphemeralSender = null
         }
         break
         
       case messageQueryEphemeral:
         // Send current ephemeral state to requesting client
-        console.debug(`[Server] messageQueryEphemeral - Query for ephemeral state, docName:`, doc.name)
+        console.log(`[Server] messageQueryEphemeral - Query for ephemeral state, docName:`, doc.name)
         
         try {
           const ephemeralUpdate = doc.ephemeralStore.encodeAll()
-          console.debug(`[Server] messageQueryEphemeral - Encoded ephemeral update length:`, ephemeralUpdate.length)
+          console.log(`[Server] messageQueryEphemeral - Encoded ephemeral update length:`, ephemeralUpdate.length)
           
-          const ephemeralResponse = {
+          const ephemeralResponse: EphemeralMessage = {
             type: messageEphemeral,
-            ephemeral: Array.from(ephemeralUpdate)
+            ephemeral: Array.from(ephemeralUpdate),
+            docId: doc.name
           }
-          console.debug(`[Server] messageQueryEphemeral - Sending ephemeral response:`, {
+          console.log(`[Server] messageQueryEphemeral - Sending ephemeral response:`, {
             type: ephemeralResponse.type,
             ephemeralLength: ephemeralResponse.ephemeral.length,
             ephemeralSample: ephemeralResponse.ephemeral.slice(0, 10)
@@ -444,7 +357,7 @@ const closeConn = (doc, conn) => {
       // if persisted, we store state and cleanup document
       persistence.writeState(doc.name, doc).then(() => {
         // Cleanup WSSharedDoc resources (no destroy method needed for Loro)
-        console.debug(`[Server] Cleaning up document: ${doc.name}`)
+        console.log(`[Server] Cleaning up document: ${doc.name}`)
       })
       docs.delete(doc.name)
     }
@@ -458,8 +371,13 @@ const closeConn = (doc, conn) => {
  * @param {Uint8Array} m
  */
 const send = (doc: WSSharedDoc, conn, m) => {
+  if (conn.readyState === wsReadyStateClosing || conn.readyState === wsReadyStateClosed) {
+    closeConn(doc, conn)
+    return
+  }
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
     closeConn(doc, conn)
+    return
   }
   try {
     conn.send(m, {}, err => { err != null && closeConn(doc, conn) })
@@ -475,13 +393,13 @@ const pingTimeout = 30000
  * @param {import('http').IncomingMessage} req
  * @param {any} opts
  */
-export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0], gc = true } = {}) => {
+export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0] } = {}) => {
   conn.binaryType = 'arraybuffer'
   // get doc, initialize if it does not exist yet
-  const doc = getDoc(docName, gc)
+  const doc = getYDoc(docName)
   doc.conns.set(conn, new Set())
   // listen and reply to events
-  conn.on('message', /** @param {ArrayBuffer | string} message */ message => messageListener(conn, doc, message))
+  conn.on('message', /** @param {ArrayBuffer} message */ message => messageListener(conn, doc, new Uint8Array(message)))
 
   // Check if connection is still alive
   let pongReceived = true
@@ -508,23 +426,24 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   conn.on('pong', () => {
     pongReceived = true
   })
-  // put the following in a variables in a block so the interval handlers don't keep in in
-  // scope
+  // put the following in a variables in a block so the interval handlers don't keep in scope
   {
     // Send initial snapshot to new client
     const snapshot = doc.doc.export({ mode: 'snapshot' })
-    const snapshotMessage = {
+    const snapshotMessage: SnapshotMessage = {
       type: messageSnapshot,
-      snapshot: Array.from(snapshot)
+      snapshot: Array.from(snapshot),
+      docId: docName
     }
     send(doc, conn, new TextEncoder().encode(JSON.stringify(snapshotMessage)))
     
     // Send current ephemeral state if any
     const ephemeralUpdate = doc.ephemeralStore.encodeAll()
     if (ephemeralUpdate.length > 0) {
-      const ephemeralMessage = {
+      const ephemeralMessage: EphemeralMessage = {
         type: messageEphemeral,
-        ephemeral: Array.from(ephemeralUpdate)
+        ephemeral: Array.from(ephemeralUpdate),
+        docId: docName
       }
       send(doc, conn, new TextEncoder().encode(JSON.stringify(ephemeralMessage)))
     }

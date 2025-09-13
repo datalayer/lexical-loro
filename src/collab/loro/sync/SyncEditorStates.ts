@@ -187,12 +187,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   
   const target = event.target;
   
-  // In Loro, event.target is always a ContainerID string, never an object like in Y.js
-  if (typeof target !== 'string') {
-    console.warn('$syncEvent: Unexpected target type (expected string):', typeof target, target);
-    return;
-  }
-  
   // Try to get or create collaboration node directly from the shared type
   // This is more similar to the Y.js approach: $getOrInitCollabNodeFromSharedType(binding, target)
   let collabNode: AnyCollabNode | null = null;
@@ -282,28 +276,6 @@ function handleMissingCollabNode(binding: Binding, parsedID: ParsedContainerID, 
   console.warn('$syncEvent: Missing collaboration node for:', containerId, containerType);
 }
 
-function extractTextFromMapEvent(binding: Binding, containerId: string, event: LoroEvent): string {
-  // Try to get text from the corresponding Text container
-  try {
-    const textContainer = binding.doc.getText(containerId);
-    if (textContainer && typeof textContainer.toString === 'function') {
-      return textContainer.toString();
-    }
-  } catch (error) {
-    // If that fails, check for text content in map properties
-    if (event.diff?.type === 'map' && (event.diff as any).updated) {
-      const updated = (event.diff as any).updated;
-      for (const [key, value] of Object.entries(updated)) {
-        if (typeof value === 'string' && value.length > 0 && key !== '__type' && key !== '__style') {
-          return value as string;
-        }
-      }
-    }
-  }
-  
-  return '';
-}
-
 // Simplified event processing that matches Y.js pattern more closely
 function processCollabNodeEventSimple(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
   console.debug('[processCollabNodeEventSimple] Processing event for collab node:', collabNode._key, event);
@@ -347,60 +319,6 @@ function processCollabNodeEventSimple(binding: Binding, collabNode: AnyCollabNod
     
   } else {
     console.warn('[processCollabNodeEventSimple] Unknown collaboration node type:', collabNode);
-  }
-}
-
-function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
-  console.debug('[processCollabNodeEvent] Processing event for collab node:', collabNode._key, event);
-  
-  // Y.js-like event processing pattern
-  if (collabNode instanceof CollabElementNode) {
-    // Handle text changes (similar to Y.js delta processing)
-    if (event.diff?.type === 'text' && event.diff.diff && Array.isArray(event.diff.diff)) {
-      console.debug('[processCollabNodeEvent] Applying text delta to element node:', event.diff.diff);
-      // Apply delta changes rather than replacing all text content
-      collabNode.applyChildrenCRDTDelta(binding, event.diff.diff);
-    }
-    
-    // Handle map changes - use standard child synchronization instead
-    if (event.diff?.type === 'map' && (event.diff as any).updated) {
-      console.info('[processCollabNodeEvent] Map changes detected, syncing children');
-      collabNode.syncChildrenFromCRDT(binding);
-    }
-    
-    // Handle property changes
-    if (hasPropertyChanges(event)) {
-      const changedKeys = getChangedKeys(event);
-      if (changedKeys.size > 0) {
-        collabNode.syncPropertiesFromCRDT(binding, changedKeys);
-      }
-    }
-    
-    // Handle structural changes - always sync children if there's any diff
-    if (event.diff) {
-      collabNode.syncChildrenFromCRDT(binding);
-    }
-    
-  } else if (collabNode instanceof CollabTextNode) {
-    // Handle text node property changes
-    if (hasPropertyChanges(event)) {
-      const changedKeys = getChangedKeys(event);
-      if (changedKeys.size > 0) {
-        collabNode.syncPropertiesAndTextFromCRDT(binding, changedKeys);
-      }
-    }
-    
-  } else if (collabNode instanceof CollabDecoratorNode) {
-    // Handle decorator node attribute changes
-    if (hasPropertyChanges(event)) {
-      const changedKeys = getChangedKeys(event);
-      if (changedKeys.size > 0) {
-        collabNode.syncPropertiesFromCRDT(binding, changedKeys);
-      }
-    }
-    
-  } else {
-    console.warn('processCollabNodeEvent: Unexpected collaboration node type:', collabNode.constructor.name);
   }
 }
 
