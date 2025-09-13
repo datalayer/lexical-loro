@@ -24,6 +24,7 @@ export interface LoroUpdateMessage {
   type: 'loro-update'
   update: number[]
   docId: string
+  clientId?: string
 }
 
 export interface SnapshotMessage {
@@ -36,6 +37,7 @@ export interface EphemeralMessage {
   type: 'ephemeral'
   ephemeral: number[]
   docId: string
+  clientId?: string
 }
 
 export interface QueryEphemeralMessage {
@@ -53,9 +55,9 @@ class AwarenessAdapter implements ProviderAwareness {
   private localClientId: number
   private eventHandlers: Map<string, (() => void)[]> = new Map()
 
-  constructor(ephemeralStore: EphemeralStore) {
+  constructor(ephemeralStore: EphemeralStore, clientId: number) {
     this.ephemeralStore = ephemeralStore
-    this.localClientId = Math.floor(Math.random() * 2147483647) // Random client ID
+    this.localClientId = clientId // Use provided client ID
     
     // Subscribe to ephemeral store changes and emit awareness updates
     this.ephemeralStore.subscribe((event) => {
@@ -582,6 +584,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _exitHandler = null
   _bcSubscriber = null
   _applyingRemoteUpdate = false
+  _clientId = null // Will be set to doc.peerId when document is available
 
   /**
    * @param {string} serverUrl
@@ -624,6 +627,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.protocols = protocols
     this.roomname = roomname
     this.doc = doc
+    this._clientId = doc.peerId.toString() // Use Loro document's peer ID as client identifier
     this._WS = WebSocketPolyfill
     // Create or reuse persistent ephemeral store for the entire user session
     console.debug(`[Client] WebsocketProvider constructor - Setting up persistent EphemeralStore for room:`, roomname)
@@ -658,7 +662,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     
     // Create awareness adapter that wraps ephemeral store
     console.debug(`[Client] WebsocketProvider constructor - Creating AwarenessAdapter`)
-    this.awareness = new AwarenessAdapter(this.ephemeralStore)
+    this.awareness = new AwarenessAdapter(this.ephemeralStore, parseInt(this._clientId))
     console.debug(`[Client] WebsocketProvider constructor - AwarenessAdapter created successfully`)
     this.wsconnected = false
     this.wsconnecting = false
@@ -716,11 +720,12 @@ export class WebsocketProvider extends ObservableV2<any> {
      */
     this._updateHandler = (update: Uint8Array, origin: any) => {
       if (origin !== this) {
-        console.info(`[Client] _updateHandler - Sending update to server (${update.length} bytes)`)
+        console.info(`[Client] _updateHandler - Sending update to server (${update.length} bytes) from client ${this._clientId}`)
         const updateMessage: LoroUpdateMessage = {
           type: 'loro-update',
           update: Array.from(update),
-          docId: this.roomname
+          docId: this.roomname,
+          clientId: this._clientId
         }
         broadcastMessage(this, JSON.stringify(updateMessage))
       }
@@ -741,7 +746,8 @@ export class WebsocketProvider extends ObservableV2<any> {
           const ephemeralMessage: EphemeralMessage = {
             type: 'ephemeral',
             ephemeral: Array.from(encodedData),
-            docId: this.roomname
+            docId: this.roomname,
+            clientId: this._clientId
           }
           broadcastMessage(this, JSON.stringify(ephemeralMessage))
           

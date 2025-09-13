@@ -219,7 +219,10 @@ export function $getOrInitCollabNodeFromSharedType(
 
     // Handle XmlText like Y.js - XmlText creates CollabElementNode
     if (sharedType instanceof XmlText) {
-      return $createCollabElementNode(sharedType, targetParent, type);
+      // For XmlText, if no type is specified, default to 'paragraph' (most common case)
+      const elementType = type || 'paragraph';
+      console.debug('$getOrInitCollabNodeFromSharedType: Creating CollabElementNode for XmlText with type:', elementType);
+      return $createCollabElementNode(sharedType, targetParent, elementType);
     } else if (sharedType instanceof LoroMap) {
       // For LoroMap, we need the type to determine what to create
       if (typeof type !== 'string') {

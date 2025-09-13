@@ -169,9 +169,13 @@ function shouldUpdatePosition(
     return true;
   } else {
     try {
-      // Compare cursor positions using Loro's built-in comparison
-      const currentContainer = currentPos.containerId();
-      const newContainer = pos.containerId();
+      // Compare cursor positions - check if containerId is a property or method
+      const currentContainer = typeof currentPos.containerId === 'function' 
+        ? currentPos.containerId() 
+        : currentPos.containerId;
+      const newContainer = typeof pos.containerId === 'function' 
+        ? pos.containerId() 
+        : pos.containerId;
       
       if (currentContainer !== newContainer) {
         return true;

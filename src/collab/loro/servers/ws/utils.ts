@@ -8,6 +8,7 @@ interface LoroUpdateMessage {
   type: 'loro-update'
   update: number[]
   docId: string
+  clientId?: string
 }
 
 interface SnapshotMessage {
@@ -20,6 +21,7 @@ interface EphemeralMessage {
   type: 'ephemeral'
   ephemeral: number[]
   docId: string
+  clientId?: string
 }
 
 interface QueryEphemeralMessage {
@@ -94,12 +96,14 @@ const messageQueryEphemeral = 'query-ephemeral'
  * @param {any} senderConn - The connection that sent the update (to exclude from broadcast)
  * @param {WSSharedDoc} doc
  */
-const updateHandler = (update: Uint8Array, senderConn: any, doc: WSSharedDoc) => {
+const updateHandler = (update: Uint8Array, senderConn: any, doc: WSSharedDoc, senderClientId?: string) => {
   console.info(`[Server] updateHandler - Broadcasting document update:`, {
     docName: doc.name,
     updateSize: update.length,
     connectedClients: doc.conns.size,
     senderConn: !!senderConn,
+    senderConnId: senderConn?._debugId || 'unknown',
+    senderClientId: senderClientId || senderConn?._clientId || 'unknown',
     updatePreview: Array.from(update.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')
   })
   
@@ -110,16 +114,27 @@ const updateHandler = (update: Uint8Array, senderConn: any, doc: WSSharedDoc) =>
   }
   const messageData = new TextEncoder().encode(JSON.stringify(message))
   
-  // Broadcast to all connected clients except the sender
+  // Broadcast to all connected clients except those from the same client
+  const excludeClientId = senderClientId || senderConn?._clientId
   let broadcastCount = 0
+  let skippedConnections = 0
+  
   doc.conns.forEach((_, conn) => {
-    if (conn !== senderConn) {
+    const connId = conn._debugId || 'unknown'
+    const connClientId = conn._clientId
+    
+    // Skip if it's the same connection OR the same client (multiple tabs/connections)
+    if (conn === senderConn || (excludeClientId && connClientId === excludeClientId)) {
+      console.debug(`[Server] updateHandler - Skipping connection ${connId} (clientId: ${connClientId})`)
+      skippedConnections++
+    } else {
+      console.debug(`[Server] updateHandler - Sending to connection ${connId} (clientId: ${connClientId})`)
       send(doc, conn, messageData)
       broadcastCount++
     }
   })
   
-  console.info(`[Server] updateHandler - Update broadcasted to ${broadcastCount} other clients (excluding sender)`)
+  console.info(`[Server] updateHandler - Update broadcasted to ${broadcastCount} connections, skipped ${skippedConnections} from same client`)
   
   // Trigger callback if configured
   if (isCallbackSet) {
@@ -235,19 +250,28 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
     
     switch (messageData.type) {
       case messageLoroUpdate:
+        const updateData = messageData as LoroUpdateMessage;
+        
+        // Store clientId from message if provided
+        if (updateData.clientId && !conn._clientId) {
+          conn._clientId = updateData.clientId
+          console.info(`[Server] messageLoroUpdate - Set clientId ${updateData.clientId} for connection ${conn._debugId}`)
+        }
+        
         console.info(`[Server] messageLoroUpdate - Received update from client:`, {
           docName: doc.name,
-          updateSize: messageData.update.length,
+          senderConnId: conn._debugId || 'unknown',
+          senderClientId: conn._clientId || 'unknown',
+          updateSize: updateData.update.length,
           connectedClients: doc.conns.size
         })
         
         // Apply the Loro update to the document
-        const updateData = messageData as LoroUpdateMessage;
         const updateBytes = new Uint8Array(updateData.update)
         doc.doc.import(updateBytes)
         
-        // Use updateHandler to broadcast to all other clients (excluding sender)
-        updateHandler(updateBytes, conn, doc)
+        // Use updateHandler to broadcast to all other clients (excluding sender and same clientId)
+        updateHandler(updateBytes, conn, doc, updateData.clientId)
         break
         
       case messageSnapshot:
@@ -354,6 +378,11 @@ const pingTimeout = 30000
  */
 export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0] } = {}) => {
   conn.binaryType = 'arraybuffer'
+  // Add debug ID for connection tracking
+  conn._debugId = Math.random().toString(36).substr(2, 9)
+  conn._clientId = null // Will be set when first message is received
+  console.info(`[Server] setupWSConnection - New connection ${conn._debugId} for doc: ${docName}`)
+  
   // get doc, initialize if it does not exist yet
   const doc = getYDoc(docName)
   doc.conns.set(conn, new Set())
