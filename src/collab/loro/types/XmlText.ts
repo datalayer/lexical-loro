@@ -451,7 +451,9 @@ export class XmlText {
    */
   toPlainString(): string {
     // LoroText.toString() gives us the plain text content
-    return this._text.toString();
+    const content = this._text.toString();
+    console.log(`[XmlText.toPlainString] Returning content: "${content}" (length: ${content.length})`);
+    return content;
   }
 
   /**

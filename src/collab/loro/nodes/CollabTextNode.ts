@@ -159,17 +159,30 @@ export class CollabTextNode {
     const collabText = this._text;
     const lexicalText = lexicalNode.__text;
     
+    // Additional debugging - get parent XmlText content too
+    const parentXmlText = this._parent._xmlText;
+    const parentTextContent = parentXmlText ? parentXmlText.toPlainString() : '';
+    
     console.log(`📝 [CollabTextNode.syncPropertiesAndTextFromCRDT] Text comparison:`, {
       collabText,
       lexicalText,
-      needsUpdate: lexicalText !== collabText
+      parentTextContent,
+      collabTextLength: collabText.length,
+      lexicalTextLength: lexicalText.length,
+      needsUpdate: lexicalText !== collabText,
+      lexicalNodeKey: lexicalNode.__key,
+      lexicalNodeParent: lexicalNode.__parent
     });
 
     if (lexicalText !== collabText) {
       console.log(`✏️ [CollabTextNode.syncPropertiesAndTextFromCRDT] Setting text content from '${lexicalText}' to '${collabText}'`);
       lexicalNode.setTextContent(collabText);
+      console.log(`✅ [CollabTextNode.syncPropertiesAndTextFromCRDT] Text content updated successfully`);
     } else {
       console.log(`⏭️ [CollabTextNode.syncPropertiesAndTextFromCRDT] Text already matches, no update needed`);
+      // Even if text matches, let's force an update to ensure the editor reflects the content
+      console.log(`🔄 [CollabTextNode.syncPropertiesAndTextFromCRDT] Force updating text content to ensure editor sync`);
+      lexicalNode.setTextContent(collabText);
     }
   }
 

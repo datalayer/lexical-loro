@@ -3,6 +3,7 @@ import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import type {XmlText} from '../types/XmlText';
 import {$createChildrenArray} from '@lexical/offset';
 import {
+  $createTextNode,
   $getNodeByKey,
   $getNodeByKeyOrThrow,
   $isDecoratorNode,
@@ -289,8 +290,26 @@ export class CollabElementNode {
       prevLexicalChildrenKeys,
       collabChildrenTypes: collabChildren.map(c => c.constructor.name),
       collabChildrenKeys: collabChildren.map(c => c._key),
-      needsWritableNode: collabChildrenLength !== lexicalChildrenKeysLength
+      needsWritableNode: collabChildrenLength !== lexicalChildrenKeysLength,
+      hasXmlTextContent: this._xmlText.length > 0
     });
+
+    // Special case: if we have text content but no CollabNode children and no Lexical children,
+    // we need to create a text node in Lexical to display the content
+    if (collabChildrenLength === 0 && lexicalChildrenKeysLength === 0 && this._xmlText.length > 0) {
+      console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Creating Lexical text node from XmlText content');
+      const textContent = this._xmlText.toString();
+      console.log('📋 [CollabElementNode.syncChildrenFromCRDT] Text content:', textContent);
+      
+      if (textContent.length > 0) {
+        // Create a Lexical text node directly
+        writableLexicalNode = lexicalNode.getWritable();
+        const textNode = $createTextNode(textContent);
+        writableLexicalNode.append(textNode);
+        console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Created Lexical text node with content:', textContent);
+        return; // Early return since we handled the text content directly
+      }
+    }
 
     if (collabChildrenLength !== lexicalChildrenKeysLength) {
       writableLexicalNode = lexicalNode.getWritable();
