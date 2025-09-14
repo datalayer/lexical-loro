@@ -1,6 +1,8 @@
 import type {JSX} from 'react';
+import {useEffect, useRef, useState} from 'react';
+import {LexicalEditor} from 'lexical';
+import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import type {LoroDoc} from 'loro-crdt';
-
 import {
   type CollaborationContextType,
   useCollaborationContext,
@@ -11,18 +13,14 @@ import {
   createBinding,
   ExcludedProperties,
   Provider,
-  SyncCursorPositionsFn,
 } from './State';
-import {LexicalEditor} from 'lexical';
-import {useEffect, useRef, useState} from 'react';
-
-import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {
   CursorsContainerRef,
   useCollaboration,
   useFocusTracking,
   useHistory,
 } from './useCollaboration';
+import { SyncCursorPositionsFn } from './sync/SyncCursors';
 
 type Props = {
   id: string;

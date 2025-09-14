@@ -13,7 +13,6 @@ import {
   createBinding,
   ExcludedProperties,
   Provider,
-  SyncCursorPositionsFn,
 } from './State';
 import {
   CursorsContainerRef,
@@ -21,6 +20,7 @@ import {
   useFocusTracking,
   useHistory,
 } from './useCollaboration';
+import { SyncCursorPositionsFn } from './sync/SyncCursors';
 
 type Props = {
   id: string;

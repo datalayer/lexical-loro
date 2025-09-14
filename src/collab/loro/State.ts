@@ -141,14 +141,3 @@ export function setLocalStateFocus(
   localState.focusing = focusing;
   awareness.setLocalState(localState);
 }
-
-export {
-  getAnchorAndFocusCollabNodesForUserState,
-  syncCursorPositions,
-  type SyncCursorPositionsFn,
-} from './sync/SyncCursors';
-
-export {
-  syncLexicalUpdatesToCRDT,
-  syncCRDTUpdatesToLexical,
-} from './sync/SyncEditorStates';

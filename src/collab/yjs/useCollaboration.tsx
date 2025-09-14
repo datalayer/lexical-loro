@@ -20,17 +20,16 @@ import {
   UNDO_COMMAND,
 } from 'lexical';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider, SyncCursorPositionsFn} from './State';
+import type {Binding, Provider} from './State';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
   initLocalState,
   setLocalStateFocus,
-  syncCursorPositions,
-  syncLexicalUpdatesToCRDT,
-  syncCRDTUpdatesToLexical,
   TOGGLE_CONNECT_COMMAND,
 } from './State';
+import { syncCRDTUpdatesToLexical, syncLexicalUpdatesToCRDT } from './sync/SyncEditorStates';
+import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 
