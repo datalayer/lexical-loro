@@ -1,11 +1,3 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import * as React from 'react';
 import type {JSX} from 'react';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
@@ -99,24 +91,13 @@ export function useCollaboration(
     };
 
     const onSync = (isSynced: boolean) => {
-      console.log(`[UseCollaboration] onSync CALLED (YJS-style):`, {
-        isSynced,
-        shouldBootstrap,
-        rootIsEmpty: root.isEmpty(),
-        rootXmlTextLength: root._xmlText.length,
-        isReloadingDoc: isReloadingDoc.current,
-        willInitialize: shouldBootstrap && isSynced && root.isEmpty() && root._xmlText.length === 0 && isReloadingDoc.current === false
-      });
-      
       if (
         shouldBootstrap &&
         isSynced &&
         root.isEmpty() &&
         isReloadingDoc.current === false
       ) {
-        console.log(`[UseCollaboration] INITIALIZING EDITOR (YJS-style)`);
         initializeEditor(editor, initialEditorState);
-        console.log(`[UseCollaboration] INITIALIZATION COMPLETE`);
       }
 
       isReloadingDoc.current = false;
@@ -129,15 +110,6 @@ export function useCollaboration(
     const onLoroTreeChanges = (
       event: LoroEventBatch,
     ) => {
-      console.log(`[UseCollaboration] onLoroTreeChanges CALLED:`, {
-        event: event,
-        eventBy: event.by,
-        eventOrigin: event.origin,
-        hasEvents: !!event.events,
-        eventsCount: event.events?.length,
-        skipCollab: skipCollaborationUpdateRef.current
-      });
-      
       // In Loro, we need to determine if this event originated from local changes or remote updates
       // Check multiple indicators:
       // 1. event.origin === 'lexical-edit' means it's from our local editor changes
@@ -145,23 +117,14 @@ export function useCollaboration(
       const isLocalChange = event.origin === 'lexical-edit' || event.by === 'local';
       const origin = isLocalChange ? 'local' : 'remote';
       
-      console.log(`[UseCollaboration] Change classification:`, {
-        isLocalChange,
-        origin,
-        eventOrigin: event.origin,
-        eventBy: event.by
-      });
-      
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
-        console.log(`[UseCollaboration] Skipping collaboration update (skipCollaborationUpdateRef)`);
         skipCollaborationUpdateRef.current = false;
         return;
       }
       
       if (!isLocalChange) { // Only process remote changes
-        console.log(`[UseCollaboration] Processing remote change - calling syncCRDTChangesToLexical`);
-        
+
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
         
@@ -173,7 +136,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.log(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
+        console.warn(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
       }
     };
 
@@ -201,7 +164,7 @@ export function useCollaboration(
       // Create new undo manager for the reloaded document  
       const newUndoManager = createUndoManager(binding, binding.root.getSharedType());
       undoManagerRef.current = newUndoManager;
-    };    console.log(`[UseCollaboration] Setting up provider event listeners`);
+    };
 
     provider.on('reload', onProviderDocReload);
     provider.on('status', onStatus);
@@ -209,22 +172,10 @@ export function useCollaboration(
 
     awareness.on('update', onAwarenessUpdate);
 
-    console.log(`[UseCollaboration] Provider event listeners setup complete`);
-
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
-    console.log(`[UseCollaboration] Setting up document subscription:`, {
-      id,
-      hasDoc: !!doc,
-      docMapSize: docMap.size,
-      docMapKeys: Array.from(docMap.keys())
-    });
     const unsubscribe = doc?.subscribe(onLoroTreeChanges);
-    console.log(`[UseCollaboration] Document subscription result:`, {
-      hasUnsubscribe: !!unsubscribe,
-      subscribed: !!doc && !!unsubscribe
-    });
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,
@@ -234,17 +185,7 @@ export function useCollaboration(
         normalizedNodes,
         tags,
       }) => {
-        console.log('🔥 useCollaboration: registerUpdateListener TRIGGERED', {
-          hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
-          skipCollaborationUpdate: skipCollaborationUpdateRef.current,
-          dirtyElementsKeys: Array.from(dirtyElements.keys()),
-          dirtyLeavesKeys: Array.from(dirtyLeaves),
-          dirtyLeavesSize: dirtyLeaves.size,
-          tagsArray: Array.from(tags),
-          editorStateDiff: editorState !== prevEditorState,
-          timestamp: Date.now()
-        });
-        
+
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
           // Only sync if there are actual changes
           if (dirtyElements.size === 0 && dirtyLeaves.size === 0 && normalizedNodes.size === 0) {
@@ -252,24 +193,14 @@ export function useCollaboration(
             return;
           }
           
-          console.log('🎯 useCollaboration: USER CHANGE DETECTED - proceeding with sync', {
-            dirtyElementsKeys: Array.from(dirtyElements.keys()),
-            dirtyLeavesKeys: Array.from(dirtyLeaves),
-            normalizedNodesKeys: Array.from(normalizedNodes),
-            hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
-            skipCollaborationUpdate: skipCollaborationUpdateRef.current
-          });
-          
           // Set origin to indicate this is a local edit for undo manager
           const doc = docMap.get(id);
           if (doc) {
             doc.setNextCommitOrigin('lexical-edit');
-            console.log('useCollaboration: Set commit origin to lexical-edit');
           } else {
             console.warn('useCollaboration: Could not find doc in docMap for id:', id);
           }
           
-          console.log('🚀 useCollaboration: Calling syncLexicalUpdateToCRDT');
           syncLexicalUpdateToCRDT(
             binding,
             provider,
@@ -281,7 +212,7 @@ export function useCollaboration(
             tags,
           );
         } else {
-          console.log('⏭️ useCollaboration: Skipping syncLexicalUpdateToCRDT', {
+          log('⏭️ useCollaboration: Skipping syncLexicalUpdateToCRDT', {
             hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
             skipCollaborationUpdate: skipCollaborationUpdateRef.current
           });
@@ -289,9 +220,7 @@ export function useCollaboration(
       },
     );
 
-    console.log(`[UseCollaboration] About to call connect()`);
     const connectionPromise = connect();
-    console.log(`[UseCollaboration] connect() called, connectionPromise:`, !!connectionPromise);
 
     return () => {
       if (isReloadingDoc.current === false) {
@@ -352,12 +281,8 @@ export function useCollaboration(
         const shouldConnect = payload;
 
         if (shouldConnect) {
-          // eslint-disable-next-line no-console
-          console.log('Collaboration connected!');
           connect();
         } else {
-          // eslint-disable-next-line no-console
-          console.log('Collaboration disconnected!');
           disconnect();
         }
 
@@ -472,20 +397,9 @@ function initializeEditor(
   editor: LexicalEditor,
   initialEditorState?: InitialEditorStateType,
 ): void {
-  console.log(`[InitializeEditor] STARTING initialization:`, {
-    hasInitialEditorState: !!initialEditorState,
-    initialEditorStateType: typeof initialEditorState
-  });
-  
   editor.update(
     () => {
       const root = $getRoot();
-      console.log(`[InitializeEditor] Inside editor.update:`, {
-        rootIsEmpty: root.isEmpty(),
-        rootChildren: root.getChildren().length,
-        rootChildrenKeys: root.getChildren().map(c => c.getKey())
-      });
-
       if (root.isEmpty()) {
         if (initialEditorState) {
           switch (typeof initialEditorState) {
@@ -517,20 +431,8 @@ function initializeEditor(
             }
           }
         } else {
-          console.log(`[InitializeEditor] Creating default paragraph (no initialEditorState provided)`);
           const paragraph = $createParagraphNode();
-          console.log(`[InitializeEditor] Created paragraph:`, {
-            paragraphKey: paragraph.getKey(),
-            paragraphType: paragraph.getType()
-          });
-          
-          root.append(paragraph);
-          console.log(`[InitializeEditor] Appended paragraph to root:`, {
-            rootChildren: root.getChildren().length,
-            rootChildrenKeys: root.getChildren().map(c => c.getKey()),
-            rootChildrenTypes: root.getChildren().map(c => c.getType())
-          });
-          
+          root.append(paragraph);          
           const {activeElement} = document;
 
           if (
@@ -538,7 +440,6 @@ function initializeEditor(
             (activeElement !== null &&
               activeElement === editor.getRootElement())
           ) {
-            console.log(`[InitializeEditor] Selecting paragraph`);
             paragraph.select();
           }
         }
@@ -546,8 +447,6 @@ function initializeEditor(
     },
     {tag: HISTORY_MERGE_TAG},
   );
-  
-  console.log(`[InitializeEditor] COMPLETED initialization`);
 }
 
 function clearEditorSkipCollab(editor: LexicalEditor, binding: Binding) {

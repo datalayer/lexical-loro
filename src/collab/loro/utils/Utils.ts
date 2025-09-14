@@ -155,11 +155,8 @@ export function $createCollabNodeFromLexicalNode(
 export function getNodeTypeFromSharedType(
   sharedType: XmlText | LoroMap | any,
 ): string | undefined {
-  console.debug('getNodeTypeFromSharedType: Called with sharedType:', sharedType, 'type:', typeof sharedType, 'constructor:', sharedType?.constructor?.name);
-  
   // Handle XmlText - similar to Y.js, XmlText doesn't have __type, it's identified by instanceof
   if (sharedType instanceof XmlText) {
-    console.debug('getNodeTypeFromSharedType: Found XmlText, returning undefined (handled by instanceof in $getOrInitCollabNodeFromSharedType)');
     return undefined; // XmlText type is determined by instanceof check, not __type
   }
   
@@ -169,10 +166,8 @@ export function getNodeTypeFromSharedType(
   if (typeof type === 'undefined') {
     // Handle LoroText - assume it's a text node
     if (sharedType?.constructor?.name === 'LoroText') {
-      console.debug('getNodeTypeFromSharedType: Inferred text type from LoroText constructor');
       return 'text';
     }
-    console.debug('getNodeTypeFromSharedType: No __type found for', sharedType?.constructor?.name);
     return undefined;
   }
   
@@ -199,8 +194,6 @@ export function $getOrInitCollabNodeFromSharedType(
     const type = getNodeTypeFromSharedType(sharedType);
 
     const sharedParent = typeof sharedType.parent === 'function' ? sharedType.parent() : sharedType.parent;
-    console.debug('$getOrInitCollabNodeFromSharedType: sharedParent:', sharedParent, 'type:', typeof sharedParent, 'constructor:', sharedParent?.constructor?.name);
-    console.debug('$getOrInitCollabNodeFromSharedType: parent arg:', parent, 'parent === undefined:', parent === undefined);
     
     const targetParent =
       parent === undefined && sharedParent !== null && sharedParent !== undefined
@@ -219,12 +212,11 @@ export function $getOrInitCollabNodeFromSharedType(
     if (sharedType instanceof XmlText) {
       // For XmlText, if no type is specified, default to 'paragraph' (most common case)
       const elementType = type || 'paragraph';
-      console.debug('$getOrInitCollabNodeFromSharedType: Creating CollabElementNode for XmlText with type:', elementType);
       return $createCollabElementNode(sharedType, targetParent, elementType);
     } else if (sharedType instanceof LoroMap) {
       // For LoroMap, we need the type to determine what to create
       if (typeof type !== 'string') {
-        console.debug('$getOrInitCollabNodeFromSharedType: No __type found for LoroMap, cannot create node');
+        console.warn('$getOrInitCollabNodeFromSharedType: No __type found for LoroMap, cannot create node');
         return null as any;
       }
       
@@ -238,7 +230,7 @@ export function $getOrInitCollabNodeFromSharedType(
     } else {
       // For other types, we need the type string
       if (typeof type !== 'string') {
-        console.debug('$getOrInitCollabNodeFromSharedType: No __type found, attempting to infer from constructor for:', (sharedType as any)?.constructor?.name);
+        console.warn('$getOrInitCollabNodeFromSharedType: No __type found, attempting to infer from constructor for:', (sharedType as any)?.constructor?.name);
         return null as any;
       }
       
@@ -350,12 +342,7 @@ function sharedTypeGet(
   property: string,
 ): unknown {
   if (sharedType instanceof LoroMap) {
-    console.debug('sharedTypeGet: Calling LoroMap.get for property:', property);
-    console.debug('sharedTypeGet: LoroMap instance:', sharedType);
-    console.debug('sharedTypeGet: LoroMap.get method:', sharedType.get);
-    const result = sharedType.get(property);
-    console.debug('sharedTypeGet: LoroMap.get result:', result, 'type:', typeof result);
-    return result;
+    return sharedType.get(property);
   } else if (sharedType instanceof XmlText) {
     return sharedType.getAttribute(property);
   } else if (sharedType && typeof sharedType.getAttribute === 'function') {
@@ -606,13 +593,10 @@ export function doesSelectionNeedRecovering(
 }
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
-  console.log('🔄 [syncWithTransaction] Starting sync transaction');
-  
   // For now, just call the function directly
   // Loro should handle change batching automatically
   try {
     fn();
-    console.log('✅ [syncWithTransaction] Sync transaction completed successfully');
   } catch (error) {
     console.error('❌ [syncWithTransaction] Error in sync transaction:', error);
     throw error;

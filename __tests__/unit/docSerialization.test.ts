@@ -6,14 +6,6 @@
 // because jest-environment-jsdom does not have compression APIs
 
 /* eslint-disable header/header */
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import {serializedDocumentFromEditorState} from '@lexical/file';
 import {$generateHtmlFromNodes, $generateNodesFromDOM} from '@lexical/html';
 import {

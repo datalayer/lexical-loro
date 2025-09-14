@@ -1,11 +1,3 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import type {NodeKey, NodeMap, TextNode} from 'lexical';
 import {
   $getNodeByKey,
@@ -100,8 +92,6 @@ export class CollabTextNode {
   }
 
   spliceText(index: number, delCount: number, newText: string): void {
-    console.log(`[CollabTextNode] spliceText called - index: ${index}, delCount: ${delCount}, newText: "${newText}"`);
-    
     const collabElementNode = this._parent;
     const xmlText = collabElementNode._xmlText;
     const offset = this.getOffset() + index;
@@ -111,9 +101,7 @@ export class CollabTextNode {
     }
 
     if (newText !== '') {
-      console.log(`[CollabTextNode] About to call xmlText.insert(${offset}, "${newText}")`);
       xmlText.insert(offset, newText);
-      console.log(`[CollabTextNode] xmlText.insert completed - text inserted into XmlText but NO document update event generated`);
     }
   }
 
@@ -147,7 +135,6 @@ export class CollabTextNode {
     binding: Binding,
     keysChanged: null | Set<string>,
   ): void {
-    console.log(`🔧 [CollabTextNode.syncPropertiesAndTextFromCRDT] ENTRY: {key: '${this._key}'}`);
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
@@ -163,25 +150,10 @@ export class CollabTextNode {
     const parentXmlText = this._parent._xmlText;
     const parentTextContent = parentXmlText ? parentXmlText.toPlainString() : '';
     
-    console.log(`📝 [CollabTextNode.syncPropertiesAndTextFromCRDT] Text comparison:`, {
-      collabText,
-      lexicalText,
-      parentTextContent,
-      collabTextLength: collabText.length,
-      lexicalTextLength: lexicalText.length,
-      needsUpdate: lexicalText !== collabText,
-      lexicalNodeKey: lexicalNode.__key,
-      lexicalNodeParent: lexicalNode.__parent
-    });
-
     if (lexicalText !== collabText) {
-      console.log(`✏️ [CollabTextNode.syncPropertiesAndTextFromCRDT] Setting text content from '${lexicalText}' to '${collabText}'`);
       lexicalNode.setTextContent(collabText);
-      console.log(`✅ [CollabTextNode.syncPropertiesAndTextFromCRDT] Text content updated successfully`);
     } else {
-      console.log(`⏭️ [CollabTextNode.syncPropertiesAndTextFromCRDT] Text already matches, no update needed`);
       // Even if text matches, let's force an update to ensure the editor reflects the content
-      console.log(`🔄 [CollabTextNode.syncPropertiesAndTextFromCRDT] Force updating text content to ensure editor sync`);
       lexicalNode.setTextContent(collabText);
     }
   }

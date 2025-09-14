@@ -80,8 +80,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   
   // Handle container ID strings - these are the actual document containers we need to process
   if (typeof target === 'string') {
-    console.log('$syncEvent: Processing container ID event:', target, event);
-    
     // Check for infinite loop condition with repeated "root-" prefixes
     if (target.includes('root-root-root')) {
       console.warn('$syncEvent: Detected infinite loop pattern, using root container instead');
@@ -96,23 +94,14 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
     if (target.includes('root') && target.includes('_attrs:Map')) {
       const rootCollabNode = binding.root;
       if (rootCollabNode) {
-        console.log('$syncEvent: Using root collab node for root attributes event');
         processCollabNodeEvent(binding, rootCollabNode, event);
         return;
       }
     }
     
     // Try to find the corresponding collaboration node using prioritized matching
-    console.log('$syncEvent: Searching for collab node matching target:', target);
-    
     // Get all available collab nodes for debugging
-    const allCollabNodes = Array.from(binding.collabNodeMap.values());
-    console.log('$syncEvent: Available collab nodes:', allCollabNodes.map(node => ({
-      key: node._key,
-      type: node._type,
-      constructor: node.constructor.name
-    })));
-    
+    const allCollabNodes = Array.from(binding.collabNodeMap.values());    
     let foundCollabNode = null;
     
     // Prioritized matching: element-specific → root-specific → generic fallback
@@ -121,7 +110,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
     for (const collabNode of allCollabNodes) {
       if (target.includes(`element_${collabNode._key}:`)) {
         foundCollabNode = collabNode;
-        console.log(`$syncEvent: Found ELEMENT match for ${target} :`, collabNode);
         break;
       }
     }
@@ -131,7 +119,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
       for (const collabNode of allCollabNodes) {
         if (target.includes('root-root:') && collabNode._key === 'root') {
           foundCollabNode = collabNode;
-          console.log(`$syncEvent: Found ROOT match for ${target} :`, collabNode);
           break;
         }
       }
@@ -142,7 +129,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
       for (const collabNode of allCollabNodes) {
         if (target.includes(collabNode._key) && !target.includes('root-root:')) {
           foundCollabNode = collabNode;
-          console.log(`$syncEvent: Found GENERIC match for ${target} :`, collabNode);
           break;
         }
       }
@@ -157,9 +143,7 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
       // Y.js-aligned approach: Try to create missing CollabElementNode for element_X pattern
       const elementMatch = target.match(/element_(\d+)/);
       if (elementMatch) {
-        const elementKey = elementMatch[1];
-        console.log(`$syncEvent: Creating missing CollabElementNode for key: ${elementKey}`);
-        
+        const elementKey = elementMatch[1];        
         try {
           // Get the root CollabElementNode
           const rootCollabNode = binding.collabNodeMap.get('root');
@@ -169,8 +153,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
             
             if (!lexicalNode || !$isElementNode(lexicalNode)) {
               // Lexical node doesn't exist yet - create it first
-              console.log(`$syncEvent: Creating missing Lexical paragraph for key: ${elementKey}`);
-              
               const rootLexicalNode = rootCollabNode.getNode();
               if (rootLexicalNode) {
                 const writableRoot = rootLexicalNode.getWritable();
@@ -179,8 +161,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
                 // After appending, set the key to match the CRDT element key
                 newParagraph.__key = elementKey;
                 lexicalNode = newParagraph;
-                
-                console.log(`✅ $syncEvent: Created Lexical paragraph with key: ${elementKey}`);
               }
             }
             
@@ -205,8 +185,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
               // Add to parent's children and register in the binding
               rootCollabNode._children.push(collabElementNode);
               binding.collabNodeMap.set(elementKey, collabElementNode);
-              
-              console.log(`✅ $syncEvent: Created CollabElementNode for key ${elementKey}, type: ${elementType}`);
               
               // Now process the event with the newly created node
               processCollabNodeEvent(binding, collabElementNode, event);
@@ -233,27 +211,10 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
 }
 
 function processCollabNodeEvent(binding: Binding, collabNode: | CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode, event: LoroEvent): void {
-  console.log('🔧 [ProcessCollabNodeEvent] ENTRY:', {
-    collabNodeType: collabNode.constructor.name,
-    collabNodeKey: collabNode._key,
-    isCollabElementNode: collabNode instanceof CollabElementNode,
-    eventHasDiff: !!event.diff,
-    eventHasPath: !!event.path,
-    eventHasTarget: !!event.target,
-    eventDiffType: event.diff?.type
-  });
-
   // Handle Loro-style events based on actual LoroEvent structure
   if (collabNode instanceof CollabElementNode && event.diff) {
-    console.log('📝 [ProcessCollabNodeEvent] Processing CollabElementNode with diff:', {
-      diffType: event.diff.type,
-      hasDiff: !!event.diff,
-      diffString: JSON.stringify(event.diff)
-    });
-
     // Handle different diff types appropriately (align with Y.js approach)
     try {
-      console.log('📝 [ProcessCollabNodeEvent] Syncing CRDT state to Lexical (no delta application)');
       // Just sync the current CRDT state to Lexical without applying new deltas
       // This prevents infinite loops while ensuring the Lexical editor reflects CRDT state
       collabNode.syncChildrenFromCRDT(binding);
@@ -261,42 +222,30 @@ function processCollabNodeEvent(binding: Binding, collabNode: | CollabElementNod
       console.warn('Failed to sync children from CRDT:', error);
     }
   } else if (collabNode instanceof CollabTextNode && event.diff) {
-    console.log('📄 [ProcessCollabNodeEvent] Processing CollabTextNode with diff');
-    
     // For CollabTextNode, sync properties and text from CRDT
     try {
-      console.log('🔧 [ProcessCollabNodeEvent] Syncing CollabTextNode properties and text from CRDT');
       collabNode.syncPropertiesAndTextFromCRDT(binding, null);
     } catch (error) {
       console.warn('Failed to sync CollabTextNode:', error);
     }
   } else if (collabNode instanceof CollabDecoratorNode && event.diff) {
-    console.log('🎨 [ProcessCollabNodeEvent] Processing CollabDecoratorNode with diff');
     
     // For CollabDecoratorNode, sync properties from CRDT
     try {
-      console.log('🔧 [ProcessCollabNodeEvent] Syncing CollabDecoratorNode properties from CRDT');
       collabNode.syncPropertiesFromCRDT(binding, null);
     } catch (error) {
       console.warn('Failed to sync CollabDecoratorNode:', error);
     }
   } else {
     // Handle other Loro event types
-    console.log('🔧 [ProcessCollabNodeEvent] Handling other Loro event type');
-    
     if (event.diff) {
-      console.log('📝 [ProcessCollabNodeEvent] Event has diff, attempting generic sync');
-      
       // Generic fallback: try to sync from CRDT based on node type
       try {
         if (collabNode instanceof CollabElementNode) {
-          console.log('� [ProcessCollabNodeEvent] Syncing CollabElementNode children from CRDT');
           collabNode.syncChildrenFromCRDT(binding);
         } else if (collabNode instanceof CollabTextNode) {
-          console.log('🔄 [ProcessCollabNodeEvent] Syncing CollabTextNode from CRDT');
           collabNode.syncPropertiesAndTextFromCRDT(binding, null);
         } else {
-          console.log('🔄 [ProcessCollabNodeEvent] Syncing generic CollabNode properties from CRDT');
           (collabNode as any).syncPropertiesFromCRDT?.(binding, null);
         }
       } catch (error) {
@@ -313,7 +262,6 @@ function processCollabNodeEvent(binding: Binding, collabNode: | CollabElementNod
         hasPath: !!event.path,
         hasTarget: !!event.target
       });
-      console.log('📋 [ProcessCollabNodeEvent] Full event object:', event);
     }
   }
 }
@@ -460,28 +408,8 @@ export function syncLexicalUpdateToCRDT(
   normalizedNodes: Set<NodeKey>,
   tags: Set<string>,
 ): void {
-  console.log('🚀 [SyncLexicalUpdateToCRDT] STARTING SYNC:', {
-    dirtyElementsCount: dirtyElements.size,
-    dirtyElementsKeys: Array.from(dirtyElements.keys()),
-    dirtyLeavesCount: dirtyLeaves.size,
-    dirtyLeavesKeys: Array.from(dirtyLeaves),
-    normalizedNodesCount: normalizedNodes.size,
-    normalizedNodesKeys: Array.from(normalizedNodes),
-    tagsArray: Array.from(tags),
-    hasRootInDirtyElements: dirtyElements.has('root'),
-    bindingRootKey: binding?.root?._key,
-    collabNodeMapSize: binding?.collabNodeMap?.size,
-    bindingRootIsEmpty: binding?.root?.isEmpty(),
-    bindingRootHasSharedType: !!binding?.root?.getSharedType(),
-    // Detailed dirty elements inspection
-    dirtyElementsDetailed: Array.from(dirtyElements.entries()).map(([key, value]) => ({key, value}))
-  });
-  
   syncWithTransaction(binding, () => {
-    console.log('🔄 syncLexicalUpdateToCRDT: Inside syncWithTransaction');
     currEditorState.read(() => {
-      console.log('📖 syncLexicalUpdateToCRDT: Inside currEditorState.read()');
-      
       // We check if the update has come from a origin where the origin
       // was the collaboration binding previously. This can help us
       // prevent unnecessarily re-diffing and possible re-applying
@@ -498,7 +426,6 @@ export function syncLexicalUpdateToCRDT(
                                   lexicalRoot.getChildren().length > 0;
       
       if ((tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) && !isInitialSyncNeeded) {
-        console.log('⏭️ syncLexicalUpdateToCRDT: Skipping - has collab/historic tag');
         if (normalizedNodes.size > 0) {
           $handleNormalizationMergeConflicts(binding, normalizedNodes);
         }
@@ -514,33 +441,14 @@ export function syncLexicalUpdateToCRDT(
       }
 
       if (dirtyElements.has('root')) {
-        console.log('🌳 [SyncLexicalUpdateToCRDT] Processing root dirty element');
         const prevNodeMap = prevEditorState._nodeMap;
         const nextLexicalRoot = $getRoot();
         const collabRoot = binding.root;
-        
-        console.log('� [SyncLexicalUpdateToCRDT] Root analysis:', {
-          lexicalRootKey: nextLexicalRoot.getKey(),
-          lexicalRootType: nextLexicalRoot.getType(),
-          lexicalRootChildrenCount: nextLexicalRoot.getChildren().length,
-          lexicalRootChildrenKeys: nextLexicalRoot.getChildren().map(c => c.getKey()),
-          lexicalRootChildrenTypes: nextLexicalRoot.getChildren().map(c => c.getType()),
-          collabRootKey: collabRoot._key,
-          collabRootType: collabRoot.getType(),
-          collabRootIsEmpty: collabRoot.isEmpty(),
-          collabRootHasSharedType: !!collabRoot.getSharedType(),
-          isRootInCollabNodeMap: binding.collabNodeMap.has('root'),
-          collabNodeMapHasLexicalRoot: binding.collabNodeMap.has(nextLexicalRoot.getKey())
-        });
-        
-        console.log('�🔧 [SyncLexicalUpdateToCRDT] Calling syncPropertiesFromLexical');
         collabRoot.syncPropertiesFromLexical(
           binding,
           nextLexicalRoot,
           prevNodeMap,
         );
-        
-        console.log('👶 [SyncLexicalUpdateToCRDT] Calling syncChildrenFromLexical');
         collabRoot.syncChildrenFromLexical(
           binding,
           nextLexicalRoot,
@@ -548,22 +456,12 @@ export function syncLexicalUpdateToCRDT(
           dirtyElements,
           dirtyLeaves,
         );
-        
-        console.log('✅ [SyncLexicalUpdateToCRDT] Root processing complete');
       } else {
-        console.log('⚠️ [SyncLexicalUpdateToCRDT] No root in dirty elements - this might be the problem!');
-        console.log('🔍 [SyncLexicalUpdateToCRDT] Dirty elements analysis:', {
-          dirtyElementsKeys: Array.from(dirtyElements.keys()),
-          dirtyElementsSize: dirtyElements.size,
-          lexicalRootExists: !!$getRoot(),
-          lexicalRootKey: $getRoot().getKey(),
-          lexicalRootChildrenCount: $getRoot().getChildren().length
-        });
+        console.warn('⚠️ [SyncLexicalUpdateToCRDT] No root in dirty elements - this might be a problem!');
       }
 
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
-      console.log('👆 syncLexicalUpdateToCRDT: Calling syncLexicalSelectionToCRDT');
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
     });
   });

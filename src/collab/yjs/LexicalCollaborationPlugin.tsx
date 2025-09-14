@@ -1,11 +1,13 @@
 import type {JSX} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {Doc} from 'yjs';
-
+import {LexicalEditor} from 'lexical';
+import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
+import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {
   type CollaborationContextType,
   useCollaborationContext,
 } from './LexicalCollaborationContext';
-import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {
   Binding,
   createBinding,
@@ -13,10 +15,6 @@ import {
   Provider,
   SyncCursorPositionsFn,
 } from './State';
-import {LexicalEditor} from 'lexical';
-import {useEffect, useRef, useState} from 'react';
-
-import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {
   CursorsContainerRef,
   useCollaboration,

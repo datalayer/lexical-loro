@@ -118,9 +118,6 @@ export class CollabElementNode {
       };
     }>,
   ): void {
-    console.log(`🔧 [CollabElementNode.applyChildrenCRDTDelta] ENTRY: {nodeKey: '${this._key}', nodeType: '${this._type}', deltasLength: ${deltas.length}, childrenCount: ${this._children.length}}`);
-    console.log(`📋 [CollabElementNode.applyChildrenCRDTDelta] Deltas:`, deltas);
-    
     const children = this._children;
     let currIndex = 0;
     let pendingSplitText = null;
@@ -249,18 +246,8 @@ export class CollabElementNode {
   }
 
   private _syncChildrenFromXmlTextEmbeds(binding: Binding): void {
-    console.log('🔧 [_syncChildrenFromXmlTextEmbeds] ENTRY:', {
-      nodeKey: this._key,
-      currentChildrenCount: this._children.length
-    });
-
     // Get all embed entries from the XmlText
     const embedEntries = this._xmlText.getEmbedEntries();
-
-    console.log('📋 [_syncChildrenFromXmlTextEmbeds] Found embeds:', {
-      embedCount: embedEntries.length,
-      embedKeys: embedEntries.map(e => e.key)
-    });
 
     // Process each embed to ensure corresponding CollabElementNode exists in _children
     for (const embedEntry of embedEntries) {
@@ -268,26 +255,16 @@ export class CollabElementNode {
       
       if (embedData.object && embedData.object.textId) {
         const textId = embedData.object.textId;
-        console.log('🎯 [_syncChildrenFromXmlTextEmbeds] Processing embedded XmlText:', {
-          embedKey: embedEntry.key,
-          textId: textId,
-          offset: embedData.offset
-        });
-
         // Check if we already have a CollabElementNode for this textId
         const existingChild = this._children.find(child => 
           child instanceof CollabElementNode && child._xmlText.getId() === textId
         );
 
         if (!existingChild) {
-          console.log('➕ [_syncChildrenFromXmlTextEmbeds] Creating new CollabElementNode for embedded XmlText');
-          
           // Create new CollabElementNode for the embedded XmlText
           try {
             // Create XmlText instance using the textId
             const embeddedXmlText = new XmlText(binding.doc, textId);
-            console.log('🎯 [_syncChildrenFromXmlTextEmbeds] Created XmlText with ID:', textId);
-            
             const collabNode = $getOrInitCollabNodeFromSharedType(
               binding,
               embeddedXmlText,
@@ -297,11 +274,6 @@ export class CollabElementNode {
             // Add to _children if not already present
             if (collabNode && !this._children.includes(collabNode)) {
               this._children.push(collabNode);
-              console.log('✅ [_syncChildrenFromXmlTextEmbeds] Added CollabElementNode to _children:', {
-                childKey: collabNode._key,
-                childType: collabNode._type,
-                newChildrenCount: this._children.length
-              });
             }
           } catch (error) {
             console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Failed to create CollabElementNode for embed:', error);
@@ -311,22 +283,9 @@ export class CollabElementNode {
         }
       }
     }
-
-    console.log('🏁 [_syncChildrenFromXmlTextEmbeds] COMPLETE:', {
-      finalChildrenCount: this._children.length,
-      childrenKeys: this._children.map(c => c._key),
-      childrenTypes: this._children.map(c => c._type)
-    });
   }
 
   syncChildrenFromCRDT(binding: Binding): void {
-    console.log('🔄 [CollabElementNode.syncChildrenFromCRDT] ENTRY:', {
-      nodeKey: this._key,
-      nodeType: this._type,
-      collabChildrenCount: this._children.length,
-      xmlTextLength: this._xmlText.length
-    });
-    
     // First, ensure _children reflects the current CRDT state by processing embeds
     this._syncChildrenFromXmlTextEmbeds(binding);
     
@@ -337,14 +296,6 @@ export class CollabElementNode {
       'syncChildrenFromCRDT: could not find element node',
     );
     
-    console.log('📋 [CollabElementNode.syncChildrenFromCRDT] Lexical node found:', {
-      lexicalNodeKey: lexicalNode.__key,
-      lexicalNodeType: lexicalNode.getType(),
-      lexicalChildrenCount: lexicalNode.getChildren().length,
-      lexicalChildrenKeys: lexicalNode.getChildren().map(c => c.getKey()),
-      lexicalChildrenTypes: lexicalNode.getChildren().map(c => c.getType())
-    });
-
     const key = lexicalNode.__key;
     const prevLexicalChildrenKeys = $createChildrenArray(lexicalNode, null);
     const nextLexicalChildrenKeys: Array<NodeKey> = [];
@@ -358,48 +309,28 @@ export class CollabElementNode {
     let prevIndex = 0;
     let prevChildNode = null;
 
-    console.log('📊 [CollabElementNode.syncChildrenFromCRDT] Children comparison:', {
-      prevLexicalChildrenKeysLength: lexicalChildrenKeysLength,
-      collabChildrenLength: collabChildrenLength,
-      prevLexicalChildrenKeys,
-      collabChildrenTypes: collabChildren.map(c => c.constructor.name),
-      collabChildrenKeys: collabChildren.map(c => c._key),
-      needsWritableNode: collabChildrenLength !== lexicalChildrenKeysLength,
-      hasXmlTextContent: this._xmlText.length > 0
-    });
-
     // Special case: if we have text content in XmlText but no CollabNode children,
     // we need to sync the text content to Lexical text nodes
     if (collabChildrenLength === 0 && this._xmlText.length > 0) {
-      console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Syncing XmlText content to Lexical (no CollabTextNode children)');
       const textContent = this._xmlText.toPlainString();
-      console.log('📋 [CollabElementNode.syncChildrenFromCRDT] XmlText content:', textContent);
       
       if (textContent.length > 0) {
         writableLexicalNode = lexicalNode.getWritable();
         
         if (lexicalChildrenKeysLength === 0) {
           // No Lexical children - create a new text node
-          console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Creating new Lexical text node');
           const textNode = $createTextNode(textContent);
           writableLexicalNode.append(textNode);
-          console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Created Lexical text node with content:', textContent);
         } else {
           // Update existing Lexical children - assume first child is text node
           const firstChild = lexicalNode.getFirstChild();
           if ($isTextNode(firstChild)) {
-            console.log('📝 [CollabElementNode.syncChildrenFromCRDT] Updating existing Lexical text node');
-            console.log('📋 [CollabElementNode.syncChildrenFromCRDT] Current text:', firstChild.getTextContent());
-            console.log('📋 [CollabElementNode.syncChildrenFromCRDT] New text:', textContent);
             firstChild.setTextContent(textContent);
-            console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Updated text node content to:', textContent);
           } else {
-            console.log('📝 [CollabElementNode.syncChildrenFromCRDT] First child is not text, replacing with text node');
             // Replace non-text child with text node
             firstChild?.remove();
             const textNode = $createTextNode(textContent);
             writableLexicalNode.append(textNode);
-            console.log('✅ [CollabElementNode.syncChildrenFromCRDT] Replaced with text node:', textContent);
           }
         }
         return; // Early return since we handled the text content directly
@@ -408,7 +339,6 @@ export class CollabElementNode {
 
     if (collabChildrenLength !== lexicalChildrenKeysLength) {
       writableLexicalNode = lexicalNode.getWritable();
-      console.log('✏️ [CollabElementNode.syncChildrenFromCRDT] Created writable lexical node');
     }
 
     for (let i = 0; i < collabChildrenLength; i++) {
@@ -417,40 +347,21 @@ export class CollabElementNode {
       const collabLexicalChildNode = childCollabNode.getNode();
       const collabKey = childCollabNode._key;
       
-      console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Processing child ${i}/${collabChildrenLength}:`, {
-        i,
-        prevIndex,
-        lexicalChildKey,
-        collabKey,
-        childType: childCollabNode.constructor.name,
-        hasLexicalNode: collabLexicalChildNode !== null,
-        lexicalNodeType: collabLexicalChildNode?.getType()
-      });
-
       if (collabLexicalChildNode !== null && lexicalChildKey === collabKey) {
         // Keep Y.js alignment: only TextNodes need updating in syncChildrenFromCRDT
         const childNeedsUpdating = $isTextNode(collabLexicalChildNode);
-        console.log(`✅ [CollabElementNode.syncChildrenFromCRDT] Update path - matching child found:`, {
-          childNeedsUpdating,
-          lexicalNodeType: collabLexicalChildNode.getType(),
-          isTextNode: childNeedsUpdating
-        });
         // Update
         visitedKeys.add(lexicalChildKey);
 
         if (childNeedsUpdating) {
-          console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Child needs updating - processing sync`);
           childCollabNode._key = lexicalChildKey;
 
           if (childCollabNode instanceof CollabElementNode) {
-            console.log(`🔄 [CollabElementNode.syncChildrenFromCRDT] Syncing CollabElementNode child (YJS-style)`);
             const xmlText = childCollabNode._xmlText;
-            console.log(`📋 [CollabElementNode.syncChildrenFromCRDT] XmlText delta:`, xmlText.toDelta());
             childCollabNode.syncPropertiesFromCRDT(binding, null);
             childCollabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
             childCollabNode.syncChildrenFromCRDT(binding);
           } else if (childCollabNode instanceof CollabTextNode) {
-            console.log(`📝 [CollabElementNode.syncChildrenFromCRDT] Calling syncPropertiesAndTextFromCRDT for CollabTextNode`);
             childCollabNode.syncPropertiesAndTextFromCRDT(binding, null);
           } else if (childCollabNode instanceof CollabDecoratorNode) {
             childCollabNode.syncPropertiesFromCRDT(binding, null);
@@ -468,7 +379,6 @@ export class CollabElementNode {
         prevChildNode = collabLexicalChildNode;
         prevIndex++;
       } else {
-        console.log(`🆕 [CollabElementNode.syncChildrenFromCRDT] Create/Replace path - no matching child found`);
         if (collabKeys === undefined) {
           collabKeys = new Set();
 
@@ -496,21 +406,12 @@ export class CollabElementNode {
 
         writableLexicalNode = lexicalNode.getWritable();
         // Create/Replace
-        console.log(`🔨 [CollabElementNode.syncChildrenFromCRDT] Creating lexical node from collab node:`, {
-          collabNodeType: childCollabNode.constructor.name,
-          collabKey: childCollabNode._key
-        });
         const lexicalChildNode = createLexicalNodeFromCollabNode(
           binding,
           childCollabNode,
           key,
         );
         const childKey = lexicalChildNode.__key;
-        console.log(`✨ [CollabElementNode.syncChildrenFromCRDT] Created lexical node:`, {
-          lexicalNodeType: lexicalChildNode.getType(),
-          lexicalNodeKey: childKey,
-          text: lexicalChildNode.getTextContent ? lexicalChildNode.getTextContent() : 'N/A'
-        });
         collabNodeMap.set(childKey, childCollabNode);
         nextLexicalChildrenKeys[i] = childKey;
         if (prevChildNode === null) {
@@ -577,28 +478,10 @@ export class CollabElementNode {
     dirtyElements: null | Map<NodeKey, IntentionallyMarkedAsDirtyElement>,
     dirtyLeaves: null | Set<NodeKey>,
   ): void {
-    console.log('🔧 _syncChildFromLexical ENTRY:', {
-      index,
-      key,
-      childrenLength: this._children.length,
-      hasDirtyElements: !!dirtyElements,
-      hasDirtyLeaves: !!dirtyLeaves
-    });
-    
     const childCollabNode = this._children[index];
     // Update
     const nextChildNode = $getNodeByKeyOrThrow(key);
     
-    console.log('🎯 _syncChildFromLexical - Node types:', {
-      childCollabNodeType: childCollabNode?.constructor?.name,
-      nextChildNodeType: nextChildNode?.getType(),
-      isCollabElement: childCollabNode instanceof CollabElementNode,
-      isLexicalElement: $isElementNode(nextChildNode),
-      isCollabText: childCollabNode instanceof CollabTextNode,
-      isLexicalText: $isTextNode(nextChildNode),
-      childCollabNodeExists: !!childCollabNode
-    });
-
     if (!childCollabNode) {
       console.error('❌ _syncChildFromLexical: childCollabNode is undefined at index', index);
       console.error('❌ Children array length:', this._children.length);
@@ -650,15 +533,6 @@ export class CollabElementNode {
     dirtyElements: null | Map<NodeKey, IntentionallyMarkedAsDirtyElement>,
     dirtyLeaves: null | Set<NodeKey>,
   ): void {
-    console.log('📝 CollabElementNode.syncChildrenFromLexical ENTRY', {
-      nodeKey: this._key,
-      nodeType: nextLexicalNode.getType(),
-      hasDirtyElements: !!dirtyElements,
-      hasDirtyLeaves: !!dirtyLeaves,
-      dirtyElementsKeys: dirtyElements ? Array.from(dirtyElements.keys()) : [],
-      dirtyLeavesKeys: dirtyLeaves ? Array.from(dirtyLeaves) : []
-    });
-    
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const prevChildren =
       prevLexicalNode === null
@@ -669,15 +543,6 @@ export class CollabElementNode {
     const nextEndIndex = nextChildren.length - 1;
     const collabNodeMap = binding.collabNodeMap;
     
-    console.log('📋 CollabElementNode.syncChildrenFromLexical - Children comparison:', {
-      prevChildrenCount: prevChildren.length,
-      nextChildrenCount: nextChildren.length,
-      prevChildren: prevChildren,
-      nextChildren: nextChildren,
-      prevEndIndex,
-      nextEndIndex
-    });
-    
     let prevChildrenSet: Set<NodeKey> | undefined;
     let nextChildrenSet: Set<NodeKey> | undefined;
     let prevIndex = 0;
@@ -687,17 +552,8 @@ export class CollabElementNode {
       const prevKey = prevChildren[prevIndex];
       const nextKey = nextChildren[nextIndex];
 
-      console.log('🔄 CollabElementNode sync loop iteration:', {
-        prevIndex,
-        nextIndex,
-        prevKey,
-        nextKey,
-        keysMatch: prevKey === nextKey
-      });
-
       if (prevKey === nextKey) {
         // No move, create or remove - sync existing child
-        console.log('⚡ Calling _syncChildFromLexical for existing child:', nextKey);
         this._syncChildFromLexical(
           binding,
           nextIndex,
@@ -727,7 +583,6 @@ export class CollabElementNode {
           prevIndex++;
         } else {
           // Create or replace
-          console.log('🆕 Creating new CollabNode for key:', nextKey);
           const nextChildNode = $getNodeByKeyOrThrow(nextKey);
           const collabNode = $createCollabNodeFromLexicalNode(
             binding,
@@ -735,19 +590,11 @@ export class CollabElementNode {
             this,
           );
           collabNodeMap.set(nextKey, collabNode);
-          console.log('🔗 Created CollabNode:', {
-            key: nextKey,
-            nodeType: nextChildNode.getType(),
-            collabNodeType: collabNode.constructor.name
-          });
-
           if (prevHasNextKey) {
-            console.log('🔄 Replacing existing child at index:', nextIndex);
             this.splice(binding, nextIndex, 1, collabNode);
             prevIndex++;
             nextIndex++;
           } else {
-            console.log('➕ Inserting new child at index:', nextIndex);  
             this.splice(binding, nextIndex, 0, collabNode);
             nextIndex++;
           }
@@ -759,12 +606,6 @@ export class CollabElementNode {
     const removeOldChildren = nextIndex > nextEndIndex;
 
     if (appendNewChildren && !removeOldChildren) {
-      console.log('📝 Appending new children:', {
-        nextIndex,
-        nextEndIndex,
-        keysToAppend: nextChildren.slice(nextIndex, nextEndIndex + 1)
-      });
-      
       for (; nextIndex <= nextEndIndex; ++nextIndex) {
         const key = nextChildren[nextIndex];
         const nextChildNode = $getNodeByKeyOrThrow(key);
@@ -773,11 +614,6 @@ export class CollabElementNode {
           nextChildNode,
           this,
         );
-        console.log('➕ Appending CollabNode:', {
-          key,
-          nodeType: nextChildNode.getType(),
-          collabNodeType: collabNode.constructor.name
-        });
         this.append(collabNode);
         collabNodeMap.set(key, collabNode);
       }
