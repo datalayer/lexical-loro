@@ -40,8 +40,6 @@ const wsReadyStateOpen = 1
 const wsReadyStateClosing = 2 // eslint-disable-line
 const wsReadyStateClosed = 3 // eslint-disable-line
 
-// disable gc when using snapshots!
-const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
 const persistenceDir = process.env.YPERSISTENCE
 
 /**
@@ -200,12 +198,10 @@ export class WSSharedDoc {
  * Gets a Y.Doc by name, whether in memory or on disk
  *
  * @param {string} docname - the name of the Y.Doc to find or create
- * @param {boolean} gc - whether to allow gc on the doc (applies only when created)
  * @return {WSSharedDoc}
  */
-export const getDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, () => {
+export const getDoc = (docname) => map.setIfUndefined(docs, docname, () => {
   const doc = new WSSharedDoc(docname)
-  // Note: LoroDoc doesn't have gc property - garbage collection is handled differently
   if (persistence !== null) {
     persistence.bindState(docname, doc)
   }
@@ -443,12 +439,12 @@ const pingTimeout = 30000
  * @param {import('http').IncomingMessage} req
  * @param {any} opts
  */
-export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0], gc = true } = {}) => {
+export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0] } = {}) => {
   conn.binaryType = 'arraybuffer'
   
   // get doc, initialize if it does not exist yet
-  const doc = getDoc(docName, gc)
-  
+  const doc = getDoc(docName)
+
   // Assign a unique ID to the connection for logging
   conn.id = `conn-${conn._socket?.remoteAddress || 'unknown'}:${conn._socket?.remotePort || Math.random()}`
   console.log(`[server:loro] New connection established: ${conn.id} for document: ${docName} (LoroDoc peerId: ${doc.doc.peerId})`)
