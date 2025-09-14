@@ -29,7 +29,7 @@ export type ProviderAwareness = {
   setLocalStateField: (field: string, value: unknown) => void;
 };
 
-declare interface Provider {
+export type Provider = {
   awareness: ProviderAwareness;
   connect(): void | Promise<void>;
   disconnect(): void;
@@ -42,7 +42,6 @@ declare interface Provider {
   on(type: 'update', cb: (arg0: unknown) => void): void;
   on(type: 'reload', cb: (doc: Doc) => void): void;
 }
-export type {Provider};
 
 export type Operation = {
   attributes: {

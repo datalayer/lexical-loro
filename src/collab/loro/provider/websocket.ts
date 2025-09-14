@@ -159,6 +159,8 @@ messageHandlers[messageLoroUpdate] = (
   emitSynced: boolean
 ): string | null => {
   try {
+    console.log(`[Client] Received loro-update message with ${message.update.length} bytes`)
+    
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
     
@@ -166,6 +168,8 @@ messageHandlers[messageLoroUpdate] = (
     provider._applyingRemoteUpdate = true
     provider.doc.import(updateBytes)
     provider._applyingRemoteUpdate = false
+    
+    console.log(`[Client] Successfully applied loro-update to document`)
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
@@ -304,6 +308,8 @@ const permissionDeniedHandler = (provider, reason) =>
  * Process incoming message (JSON or binary) and return optional response
  */
 const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {
+  console.log(`[Client] Received WebSocket message:`, typeof data, data instanceof ArrayBuffer ? `ArrayBuffer(${data.byteLength} bytes)` : `String(${data.length} chars)`)
+  
   // Handle binary data - first try to decode as JSON string, then as raw binary
   if (data instanceof ArrayBuffer) {
     try {
@@ -311,6 +317,7 @@ const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, em
       const decoder = new TextDecoder()
       const jsonString = decoder.decode(data)
       const message = JSON.parse(jsonString) as LoroWebSocketMessage
+      console.log(`[Client] Parsed JSON message type: ${message.type}`)
       const messageHandler = messageHandlers[message.type]
       
       if (messageHandler) {

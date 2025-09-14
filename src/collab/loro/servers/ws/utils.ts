@@ -291,14 +291,27 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
         const updateBytes = new Uint8Array(messageData.update)
         doc.doc.import(updateBytes)
         
+        // Create properly formatted message for broadcasting
+        const broadcastMessage = {
+          type: messageLoroUpdate,
+          update: messageData.update
+        }
+        const broadcastData = new TextEncoder().encode(JSON.stringify(broadcastMessage))
+        
         // Send the update to all other connections
         let broadcastCount = 0
+        console.log(`[server:loro] Total connections for document ${doc.name}: ${doc.conns.size}`)
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
-            send(doc, c, message)
+            console.log(`[server:loro] Broadcasting to connection: ${c.id}`)
+            send(doc, c, broadcastData)
             broadcastCount++
+          } else {
+            console.log(`[server:loro] Skipping sender connection: ${c.id}`)
           }
         })
+        console.log(`[server:loro] Broadcasted update to ${broadcastCount} clients (total connections: ${doc.conns.size})`)
+        
         // Trigger callback if configured
         if (isCallbackSet) {
           debouncer(() => callbackHandler(doc))
@@ -368,6 +381,7 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
  */
 const closeConn = (doc, conn) => {
   if (doc.conns.has(conn)) {
+    console.log(`[server:loro] Closing connection: ${conn.id || 'unknown'} for document: ${doc.name}`)
     /**
      * @type {Set<string>}
      */
@@ -380,6 +394,7 @@ const closeConn = (doc, conn) => {
         doc.ephemeralStore.delete(key)
       })
     }
+    console.log(`[server:loro] Remaining connections for document ${doc.name}: ${doc.conns.size}`)
     if (doc.conns.size === 0 && persistence !== null) {
       // if persisted, we store state and cleanup document
       persistence.writeState(doc.name, doc).then(() => {
@@ -402,7 +417,18 @@ const send = (doc: WSSharedDoc, conn, message) => {
     closeConn(doc, conn)
   }
   try {
-    console.debug(`[server:loro] Sending message to ${conn._socket?.remoteAddress || 'client'}: ${JSON.stringify(message).slice(0,100)}`)
+    // Better logging for message types
+    let messageType = 'binary'
+    if (message instanceof Uint8Array) {
+      try {
+        const decoded = new TextDecoder().decode(message)
+        const parsed = JSON.parse(decoded)
+        messageType = parsed.type || 'json'
+      } catch (e) {
+        messageType = 'binary-loro'
+      }
+    }
+    console.log(`[server:loro] Sending ${messageType} message to ${conn.id || 'unknown'}`)
     conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
     console.error(e);
@@ -419,8 +445,14 @@ const pingTimeout = 30000
  */
 export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1).split('?')[0], gc = true } = {}) => {
   conn.binaryType = 'arraybuffer'
+  
   // get doc, initialize if it does not exist yet
   const doc = getDoc(docName, gc)
+  
+  // Assign a unique ID to the connection for logging
+  conn.id = `conn-${conn._socket?.remoteAddress || 'unknown'}:${conn._socket?.remotePort || Math.random()}`
+  console.log(`[server:loro] New connection established: ${conn.id} for document: ${docName} (LoroDoc peerId: ${doc.doc.peerId})`)
+  
   doc.conns.set(conn, new Set())
   // listen and reply to events
   conn.on('message', /** @param {ArrayBuffer | string} message */ message => messageListener(conn, doc, message))
