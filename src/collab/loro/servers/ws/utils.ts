@@ -176,7 +176,7 @@ export class WSSharedDoc {
             if (c !== this.lastEphemeralSender) {
               send(this, c, messageData)
             } else {
-              console.warn(`[Server] ephemeralChangeHandler - Skipping echo back to sender`)
+              // console.warn(`[Server] ephemeralChangeHandler - Skipping echo back to sender`)
             }
           })
           
@@ -395,16 +395,18 @@ const closeConn = (doc, conn) => {
 /**
  * @param {WSSharedDoc} doc
  * @param {import('ws').WebSocket} conn
- * @param {Uint8Array} m
+ * @param {Uint8Array} message
  */
-const send = (doc: WSSharedDoc, conn, m) => {
+const send = (doc: WSSharedDoc, conn, message) => {
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
     closeConn(doc, conn)
   }
   try {
-    conn.send(m, {}, err => { err != null && closeConn(doc, conn) })
+    console.debug(`Sending message to ${conn.id}: ${JSON.stringify(message).slice(0,100)  }`)
+    conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
-    closeConn(doc, conn)
+    console.error(e);
+    closeConn(doc, conn);
   }
 }
 
