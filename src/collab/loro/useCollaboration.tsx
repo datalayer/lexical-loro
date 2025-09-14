@@ -110,21 +110,20 @@ export function useCollaboration(
     const onLoroTreeChanges = (
       event: LoroEventBatch,
     ) => {
-      // In Loro, we need to determine if this event originated from local changes or remote updates
-      // Check multiple indicators:
-      // 1. event.origin === 'lexical-edit' means it's from our local editor changes
-      // 2. event.by === 'local' can also indicate local
-      const isLocalChange = event.origin === 'lexical-edit' || event.by === 'local';
-      const origin = isLocalChange ? 'local' : 'remote';
-      
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
         skipCollaborationUpdateRef.current = false;
         return;
       }
       
-      if (!isLocalChange) { // Only process remote changes
-
+      // Similar to Y.js logic: only skip if the origin is from this specific editor's changes
+      // We set 'lexical-edit' as origin when making changes from this editor
+      // So we should skip only if the origin is 'lexical-edit' (our own changes)
+      const isFromThisEditor = event.origin === 'lexical-edit';
+      
+      if (!isFromThisEditor) {
+        console.log(`[UseCollaboration] Processing CRDT change (origin: ${event.origin}, by: ${event.by})`);
+        
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
         
@@ -136,7 +135,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.warn(`[UseCollaboration] Skipping local change (origin: ${origin}, by: ${event.by})`);
+        console.log(`[UseCollaboration] Skipping own editor change (origin: ${event.origin}, by: ${event.by})`);
       }
     };
 
@@ -187,11 +186,11 @@ export function useCollaboration(
       }) => {
 
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
-          // Only sync if there are actual changes
-          if (dirtyElements.size === 0 && dirtyLeaves.size === 0 && normalizedNodes.size === 0) {
-            console.log('⏭️ useCollaboration: Skipping sync - no dirty elements, leaves, or normalized nodes');
-            return;
-          }
+          console.log('⏭️ useCollaboration: Syncing to CRDT', {
+            dirtyElements: dirtyElements.size,
+            dirtyLeaves: dirtyLeaves.size,
+            normalizedNodes: normalizedNodes.size
+          });
           
           // Set origin to indicate this is a local edit for undo manager
           const doc = docMap.get(id);

@@ -286,7 +286,7 @@ export function syncCRDTUpdatesToLexical(
         });
       },
       skipTransforms: true,
-      tag: isFromUndoManger ? HISTORIC_TAG : SKIP_COLLAB_TAG,
+      tag: isFromUndoManger ? HISTORIC_TAG : COLLABORATION_TAG,
     },
   );
 }

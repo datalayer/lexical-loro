@@ -402,7 +402,7 @@ const send = (doc: WSSharedDoc, conn, message) => {
     closeConn(doc, conn)
   }
   try {
-    console.debug(`Sending message to ${conn.id}: ${JSON.stringify(message).slice(0,100)  }`)
+    console.debug(`[server:loro] Sending message to ${conn._socket?.remoteAddress || 'client'}: ${JSON.stringify(message).slice(0,100)}`)
     conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
     console.error(e);

@@ -486,7 +486,26 @@ export class CollabElementNode {
       console.error('❌ _syncChildFromLexical: childCollabNode is undefined at index', index);
       console.error('❌ Children array length:', this._children.length);
       console.error('❌ Children array contents:', this._children.map(c => c?.constructor?.name));
-      return;
+      console.error('❌ Attempting to create missing CollabNode for key:', key);
+      
+      // Instead of failing, try to create the missing CollabNode
+      try {
+        const collabNode = $createCollabNodeFromLexicalNode(
+          binding,
+          nextChildNode,
+          this,
+        );
+        binding.collabNodeMap.set(key, collabNode);
+        
+        // Insert the collabNode at the correct index
+        this.splice(binding, index, 0, collabNode);
+        
+        console.log('✅ Successfully created missing CollabNode at index', index);
+        return;
+      } catch (error) {
+        console.error('❌ Failed to create missing CollabNode:', error);
+        return;
+      }
     }
 
     if (
@@ -543,6 +562,13 @@ export class CollabElementNode {
     const nextEndIndex = nextChildren.length - 1;
     const collabNodeMap = binding.collabNodeMap;
     
+    console.log('🔍 syncChildrenFromLexical START');
+    console.log('  - CollabNode children length:', this._children.length);
+    console.log('  - prevChildren length:', prevChildren.length);
+    console.log('  - nextChildren length:', nextChildren.length);
+    console.log('  - CollabNode type:', this.constructor.name);
+    console.log('  - Lexical node type:', nextLexicalNode.constructor.name);
+    
     let prevChildrenSet: Set<NodeKey> | undefined;
     let nextChildrenSet: Set<NodeKey> | undefined;
     let prevIndex = 0;
@@ -554,6 +580,8 @@ export class CollabElementNode {
 
       if (prevKey === nextKey) {
         // No move, create or remove - sync existing child
+        console.log('📝 About to sync existing child at index', nextIndex, 'with key', nextKey);
+        console.log('   CollabNode children length:', this._children.length);
         this._syncChildFromLexical(
           binding,
           nextIndex,
@@ -606,6 +634,7 @@ export class CollabElementNode {
     const removeOldChildren = nextIndex > nextEndIndex;
 
     if (appendNewChildren && !removeOldChildren) {
+      console.log('➕ Appending new children from index', nextIndex, 'to', nextEndIndex);
       for (; nextIndex <= nextEndIndex; ++nextIndex) {
         const key = nextChildren[nextIndex];
         const nextChildNode = $getNodeByKeyOrThrow(key);
@@ -614,6 +643,7 @@ export class CollabElementNode {
           nextChildNode,
           this,
         );
+        console.log('   Creating new CollabNode for key', key, 'type:', collabNode.constructor.name);
         this.append(collabNode);
         collabNodeMap.set(key, collabNode);
       }
