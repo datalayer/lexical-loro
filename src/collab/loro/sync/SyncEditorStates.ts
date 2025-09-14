@@ -10,7 +10,6 @@ import {
   $isTextNode,
   COLLABORATION_TAG,
   HISTORIC_TAG,
-  SKIP_COLLAB_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import { LoroEvent } from 'loro-crdt';
@@ -18,6 +17,7 @@ import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
+import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {
   $syncLocalCursorPosition,
   syncCursorPositions,
@@ -29,7 +29,6 @@ import {
   doesSelectionNeedRecovering,
   syncWithTransaction,
 } from '../Utils';
-import { CollabLineBreakNode } from '../nodes/CollabLineBreakNode';
 import { Binding } from '../Bindings';
 
 function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
@@ -77,12 +76,20 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
 }
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
+  console.log(`🔄 [SYNC-EVENT-1] $syncEvent called with:`, {
+    target: event.target,
+    path: event.path,
+    diff: event.diff ? 'present' : 'missing'
+  })
+  
   // First check if this is a __state event
   if ($syncStateEvent(binding, event)) {
+    console.log(`🔄 [SYNC-EVENT-2] Handled as __state event`)
     return;
   }
   
   const {target, diff, path} = event;
+  console.log(`🔄 [SYNC-EVENT-3] Processing non-state event, looking for CollabNode...`)
   
   // Find the CollabNode by matching container IDs
   // Unlike Y.js where event.target is the actual shared type object,
@@ -116,55 +123,76 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   }
   
   if (!collabNode) {
-    console.warn('$syncEvent: No CollabNode found for container ID:', target);
+    console.warn(`❌ [SYNC-EVENT-ERROR] No CollabNode found for container ID: ${target}`)
+    console.log(`🔍 [SYNC-EVENT-DEBUG] Available CollabNodes:`, Array.from(binding.collabNodeMap.keys()))
     return;
   }
+  
+  console.log(`✅ [SYNC-EVENT-4] Found CollabNode for target ${target}:`, collabNode.constructor.name)
   
   // Process the event with the found CollabNode
   processCollabNodeEvent(binding, collabNode, event);
 }
 
 function processCollabNodeEvent(binding: Binding, collabNode: CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode, event: LoroEvent): void {
+  console.log(`🔄 [SYNC-NODE-1] processCollabNodeEvent called for ${collabNode.constructor.name}`)
+  
   const {diff} = event;
   
   if (!diff) {
+    console.log(`⚠️ [SYNC-NODE-2] No diff in event, skipping`)
     // No diff means no changes to process
     return;
   }
   
+  console.log(`🔄 [SYNC-NODE-3] Processing diff type: ${diff.type}`)
+  
   // Handle different CollabNode types with Loro-style diff processing
   if (collabNode instanceof CollabElementNode) {
+    console.log(`🔄 [SYNC-NODE-4] Handling CollabElementNode diff`)
     // For element nodes, handle different diff types
     if (diff.type === 'text') {
+      console.log(`🔄 [SYNC-NODE-5] Processing text diff`)
       // Text diff: handle children changes using delta
       const textDiff = diff as any; // Cast to text diff type
       const delta = textDiff.diff;
       if (delta && Array.isArray(delta) && delta.length > 0) {
+        console.log(`🔄 [SYNC-NODE-6] Applying text delta with ${delta.length} operations`)
         try {
           collabNode.applyChildrenCRDTDelta(binding, delta);
           collabNode.syncChildrenFromCRDT(binding);
+          console.log(`✅ [SYNC-NODE-7] Successfully applied text delta and synced children`)
         } catch (error) {
-          console.warn('Failed to apply children CRDT delta:', error);
+          console.warn('❌ [SYNC-NODE-ERROR] Failed to apply children CRDT delta:', error);
         }
+      } else {
+        console.log(`⚠️ [SYNC-NODE-8] No valid delta in text diff`)
       }
     } else if (diff.type === 'map') {
+      console.log(`🔄 [SYNC-NODE-9] Processing map diff`)
       // Map diff: handle property changes
       const mapDiff = diff as any; // Cast to map diff type
       const updated = mapDiff.updated;
       if (updated && Object.keys(updated).length > 0) {
+        console.log(`🔄 [SYNC-NODE-10] Syncing properties: ${Object.keys(updated).join(', ')}`)
         try {
           const keysChanged = new Set(Object.keys(updated));
           collabNode.syncPropertiesFromCRDT(binding, keysChanged);
+          console.log(`✅ [SYNC-NODE-11] Successfully synced properties`)
         } catch (error) {
-          console.warn('Failed to sync properties from CRDT:', error);
+          console.warn('❌ [SYNC-NODE-ERROR] Failed to sync properties from CRDT:', error);
         }
+      } else {
+        console.log(`⚠️ [SYNC-NODE-12] No updated properties in map diff`)
       }
     } else {
+      console.log(`🔄 [SYNC-NODE-13] Fallback: syncing children from CRDT for diff type: ${diff.type}`)
       // Fallback: sync children from CRDT
       try {
         collabNode.syncChildrenFromCRDT(binding);
+        console.log(`✅ [SYNC-NODE-14] Successfully synced children from CRDT`)
       } catch (error) {
-        console.warn('Failed to sync children from CRDT:', error);
+        console.warn('❌ [SYNC-NODE-ERROR] Failed to sync children from CRDT:', error);
       }
     }
   } else if (collabNode instanceof CollabTextNode) {
@@ -228,17 +256,27 @@ export function syncCRDTUpdatesToLexical(
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {
+  console.log(`🔄 [SYNC-1] syncCRDTUpdatesToLexical called with ${events.length} events, isFromUndoManger: ${isFromUndoManger}`)
+  
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
   // For Loro events, we don't need to precompute deltas like in Y.js
   // The diff is already computed and available in the event structure
 
+  console.log(`🔄 [SYNC-2] Starting editor.update() with ${events.length} events`)
   editor.update(
     () => {
+      console.log(`🔄 [SYNC-3] Inside editor.update(), processing events...`)
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
+        console.log(`🔄 [SYNC-4] Processing event ${i + 1}/${events.length}:`, {
+          target: event.target,
+          path: event.path,
+          diff: event.diff ? 'present' : 'missing'
+        })
         $syncEvent(binding, event);
+        console.log(`🔄 [SYNC-5] Completed processing event ${i + 1}/${events.length}`)
       }
 
       const selection = $getSelection();

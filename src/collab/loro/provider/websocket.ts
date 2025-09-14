@@ -159,27 +159,32 @@ messageHandlers[messageLoroUpdate] = (
   emitSynced: boolean
 ): string | null => {
   try {
-    console.log(`[Client] Received loro-update message with ${message.update.length} bytes`)
+    console.log(`🔄 [LORO-UPDATE-1] Received loro-update with ${message.update.length} bytes`)
     
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
+    console.log(`🔄 [LORO-UPDATE-2] Converting to Uint8Array, applying to LoroDoc (peerId: ${provider.doc.peerId})`)
     
     // Set flag to indicate we're applying a remote update
     provider._applyingRemoteUpdate = true
-    provider.doc.import(updateBytes)
-    provider._applyingRemoteUpdate = false
+    console.log(`🔄 [LORO-UPDATE-3] Set _applyingRemoteUpdate=true, calling doc.import()`)
     
-    console.log(`[Client] Successfully applied loro-update to document`)
+    provider.doc.import(updateBytes)
+    console.log(`🔄 [LORO-UPDATE-4] doc.import() completed successfully`)
+    
+    provider._applyingRemoteUpdate = false
+    console.log(`🔄 [LORO-UPDATE-5] Set _applyingRemoteUpdate=false, update applied to LoroDoc`)
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
+      console.log(`🔄 [LORO-UPDATE-6] Set provider.synced=true`)
     }
     
     return null // No response needed
   } catch (error) {
     // Make sure to reset the flag even if there's an error
     provider._applyingRemoteUpdate = false
-    console.error(`[Client] messageHandlers[messageLoroUpdate] - Failed to apply Loro update:`, error)
+    console.error(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
     return null
   }
 }
@@ -307,9 +312,7 @@ const permissionDeniedHandler = (provider, reason) =>
 /**
  * Process incoming message (JSON or binary) and return optional response
  */
-const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {
-  console.log(`[Client] Received WebSocket message:`, typeof data, data instanceof ArrayBuffer ? `ArrayBuffer(${data.byteLength} bytes)` : `String(${data.length} chars)`)
-  
+const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {  
   // Handle binary data - first try to decode as JSON string, then as raw binary
   if (data instanceof ArrayBuffer) {
     try {
@@ -317,7 +320,6 @@ const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, em
       const decoder = new TextDecoder()
       const jsonString = decoder.decode(data)
       const message = JSON.parse(jsonString) as LoroWebSocketMessage
-      console.log(`[Client] Parsed JSON message type: ${message.type}`)
       const messageHandler = messageHandlers[message.type]
       
       if (messageHandler) {
@@ -728,7 +730,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         // Check if this is a remote update being applied (from WebSocket)
         // We should not send these back to the server to avoid loops
         if (this._applyingRemoteUpdate) {
-          console.log(`[Client] WebsocketProvider - Skipping export during remote update application`);
+          console.warn(`[Client] WebsocketProvider - Skipping export during remote update application`);
           return;
         }
         
@@ -745,7 +747,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           if (update.length > 0) {
             this._updateHandler(update, null);
           } else {
-            console.log(`[Client] WebsocketProvider - No update to export (empty)`);
+            console.warn(`[Client] WebsocketProvider - No update to export (empty)`);
           }
         } catch (error) {
           console.error(`[Client] WebsocketProvider - Error exporting document update:`, error);

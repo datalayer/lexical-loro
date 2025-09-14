@@ -279,15 +279,18 @@ export class CollabElementNode {
             console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Failed to create CollabElementNode for embed:', error);
           }
         } else {
-          console.log('✅ [_syncChildrenFromXmlTextEmbeds] CollabElementNode already exists for textId:', textId);
+          console.warn('✅ [_syncChildrenFromXmlTextEmbeds] CollabElementNode already exists for textId:', textId);
         }
       }
     }
   }
 
   syncChildrenFromCRDT(binding: Binding): void {
+    console.log(`🔄 [COLLAB-ELEMENT-1] syncChildrenFromCRDT called for ${this._type} node`)
+    
     // First, ensure _children reflects the current CRDT state by processing embeds
     this._syncChildrenFromXmlTextEmbeds(binding);
+    console.log(`🔄 [COLLAB-ELEMENT-2] Synced children from XmlText embeds, children count: ${this._children.length}`)
     
     // Now diff the children of the collab node with that of our existing Lexical node.
     const lexicalNode = this.getNode();
@@ -295,6 +298,7 @@ export class CollabElementNode {
       lexicalNode !== null,
       'syncChildrenFromCRDT: could not find element node',
     );
+    console.log(`🔄 [COLLAB-ELEMENT-3] Found lexical node: ${lexicalNode.__type}, key: ${lexicalNode.__key}`);
     
     const key = lexicalNode.__key;
     const prevLexicalChildrenKeys = $createChildrenArray(lexicalNode, null);
