@@ -119,10 +119,21 @@ export function $createCollabNodeFromLexicalNode(
   const nodeType = lexicalNode.__type;
   let collabNode;
 
+  console.log(`🏭 [NODE-CREATION] Creating CollabNode for Lexical node:`, {
+    nodeKey: lexicalNode.__key,
+    nodeType: nodeType,
+    isElement: $isElementNode(lexicalNode),
+    isText: $isTextNode(lexicalNode),
+    isLineBreak: $isLineBreakNode(lexicalNode),
+    isDecorator: $isDecoratorNode(lexicalNode),
+    textContent: $isTextNode(lexicalNode) ? (lexicalNode as any).__text : 'N/A'
+  });
+
   if ($isElementNode(lexicalNode)) {
     const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
     xmlText.setAttribute('__type', nodeType);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
+    console.log(`🏭 [NODE-CREATION] Created CollabElementNode for ${nodeType}, key: ${lexicalNode.__key}`);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
   } else if ($isTextNode(lexicalNode)) {
@@ -135,6 +146,7 @@ export function $createCollabNodeFromLexicalNode(
       parent,
       nodeType,
     );
+    console.log(`🏭 [NODE-CREATION] Created CollabTextNode for ${nodeType}, key: ${lexicalNode.__key}, text: "${(lexicalNode as any).__text}"`);
     collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
   } else if ($isLineBreakNode(lexicalNode)) {
     const map = binding.doc.getMap(`linebreak_${lexicalNode.__key}`);

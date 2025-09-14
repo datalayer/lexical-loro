@@ -122,8 +122,6 @@ export function useCollaboration(
       const isFromThisEditor = event.origin === 'lexical-edit';
       
       if (!isFromThisEditor) {
-        console.log(`[UseCollaboration] Processing CRDT change (origin: ${event.origin}, by: ${event.by})`);
-        
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
         
@@ -135,7 +133,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.log(`[UseCollaboration] Skipping own editor change (origin: ${event.origin}, by: ${event.by})`);
+        console.warn(`[UseCollaboration] Skipping own editor change (origin: ${event.origin}, by: ${event.by})`);
       }
     };
 
@@ -211,7 +209,7 @@ export function useCollaboration(
             tags,
           );
         } else {
-          console.log('⏭️ useCollaboration: Skipping syncLexicalUpdatesToCRDT', {
+          console.warn('⏭️ useCollaboration: Skipping syncLexicalUpdatesToCRDT', {
             hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
             skipCollaborationUpdate: skipCollaborationUpdateRef.current
           });

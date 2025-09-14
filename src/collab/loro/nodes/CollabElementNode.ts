@@ -23,6 +23,7 @@ import {
   spliceString,
   syncPropertiesFromLexical,
 } from '../Utils';
+import {$createCollabTextNode} from './CollabTextNode';
 import { Binding } from '../Bindings';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
@@ -118,6 +119,42 @@ export class CollabElementNode {
       };
     }>,
   ): void {
+    console.log('🔧 [DEBUG-DELTA] applyChildrenCRDTDelta called with deltas:', JSON.stringify(deltas, null, 2));
+    console.log('🔧 [DEBUG-DELTA] Current XmlText state before applying delta:', this._xmlText.toString());
+    console.log('🔧 [DEBUG-DELTA] XmlText length:', this._xmlText.length);
+    console.log('🔧 [DEBUG-DELTA] Expected behavior: delta should transform current content to desired content');
+    console.log('🔧 [DEBUG-DELTA] CollabNode children count:', this._children.length);
+    console.log('🔧 [DEBUG-DELTA] CollabNode children:', this._children.map((child, idx) => `${idx}: ${child.constructor.name} (size=${child.getSize()}, ${child instanceof CollabTextNode ? 'text="' + child._text + '"' : 'N/A'})`));
+    
+    // Let's calculate what the total CollabNode text content should be
+    let totalCollabText = '';
+    for (const child of this._children) {
+      if (child instanceof CollabTextNode) {
+        totalCollabText += child._text;
+      }
+    }
+    console.log('🔧 [DEBUG-DELTA] Total text from CollabNodes:', totalCollabText);
+    
+    // Analyze the delta to understand what it's trying to do
+    let retainCount = 0;
+    let insertText = '';
+    let deleteCount = 0;
+    for (const delta of deltas) {
+      if (delta.retain) retainCount += delta.retain;
+      if (delta.insert && typeof delta.insert === 'string') insertText += delta.insert;
+      if (delta.delete) deleteCount += delta.delete;
+    }
+    console.log('🔧 [DEBUG-DELTA] Delta analysis: retain=' + retainCount + ', insert="' + insertText + '", delete=' + deleteCount);
+    
+    // Check if this delta makes sense
+    if (totalCollabText === '123' && insertText === '1234' && retainCount === 1) {
+      console.log('🚨 [DEBUG-DELTA] SUSPICIOUS: Delta wants to retain 1 char and insert "1234" on text "123" - this would create "1" + "1234" + "23" = "112343", not "1234"');
+      console.log('🚨 [DEBUG-DELTA] Expected for "123" → "1234": should be [{retain: 3}, {insert: "4"}] or [{delete: 3}, {insert: "1234"}]');
+    }
+    
+    // Mark that we're in the middle of applying deltas to prevent syncChildrenFromCRDT from interfering
+    (this as any)._applyingDeltas = true;
+    
     const children = this._children;
     let currIndex = 0;
     let pendingSplitText = null;
@@ -126,8 +163,11 @@ export class CollabElementNode {
       const delta = deltas[i];
       const insertDelta = delta.insert;
       const deleteDelta = delta.delete;
+      
+      console.log(`🔧 [DEBUG-DELTA] Processing delta ${i+1}/${deltas.length}:`, JSON.stringify(delta), `currIndex: ${currIndex}`);
 
       if (delta.retain != null) {
+        console.log(`🔧 [DEBUG-DELTA] Retaining ${delta.retain} positions, currIndex ${currIndex} → ${currIndex + delta.retain}`);
         currIndex += delta.retain;
       } else if (typeof deleteDelta === 'number') {
         let deletionSize = deleteDelta;
@@ -180,20 +220,53 @@ export class CollabElementNode {
         }
       } else if (insertDelta != null) {
         if (typeof insertDelta === 'string') {
-          const {node, offset} = getPositionFromElementAndOffset(
+          console.log(`🔧 [DEBUG-DELTA] Processing text insertion: "${insertDelta}" at currIndex: ${currIndex}`);
+          const positionResult = getPositionFromElementAndOffset(
             this,
             currIndex,
             true,
           );
+          const {node, offset} = positionResult;
+          console.log(`🔧 [DEBUG-DELTA] getPositionFromElementAndOffset result:`, {
+            node: node?.constructor.name,
+            offset: offset,
+            nodeIndex: positionResult.nodeIndex,
+            length: positionResult.length,
+            nodeText: node instanceof CollabTextNode ? node._text : 'N/A'
+          });
 
           if (node instanceof CollabTextNode) {
+            console.log(`🔧 [DEBUG-DELTA] Current node._text: "${node._text}", splicing at offset ${offset} with "${insertDelta}"`);
             node._text = spliceString(node._text, offset, 0, insertDelta);
+            console.log(`🔧 [DEBUG-DELTA] After splice, node._text: "${node._text}"`);
           } else {
-            // No CollabTextNode found at this position during remote update
-            // This can happen when receiving remote updates for empty paragraphs
-            // Skip the insertion - the CRDT already has the correct state
-            console.warn(`🔧 [COLLAB-ELEMENT-FIX] No CollabTextNode found for text insertion: "${insertDelta}" - skipping to avoid infinite loop`);
-            // Do not insert into CRDT here as it would trigger another update event
+            // When no CollabTextNode exists for text insertion, we need to create one
+            // This happens when text is inserted but no corresponding Lexical TextNode was created
+            console.log(`🔧 [DEBUG-DELTA] No CollabTextNode found for text insertion: "${insertDelta}" at currIndex: ${currIndex}`);
+            console.log(`🔧 [DEBUG-DELTA] Creating new CollabTextNode and Lexical TextNode for: "${insertDelta}"`);
+            
+            // Get the correct position information
+            const {node, nodeIndex: insertIndex} = getPositionFromElementAndOffset(
+              this,
+              currIndex,
+              false,
+            );
+            
+            // Create a CRDT map for the text node with a unique key
+            const textNodeKey = `text_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const map = binding.doc.getMap(textNodeKey);
+            map.set('__type', 'text');
+            
+            // Create the CollabTextNode
+            const collabTextNode = $createCollabTextNode(map, insertDelta, this, 'text');
+            
+            // Add it to our children at the correct position
+            this._children.splice(insertIndex, 0, collabTextNode);
+            
+            // Register it in the binding
+            binding.collabNodeMap.set(textNodeKey, collabTextNode);
+            
+            console.log(`🔧 [DEBUG-DELTA] Created CollabTextNode with key: ${textNodeKey}, text: "${insertDelta}" at index: ${insertIndex}`);
           }
 
           currIndex += insertDelta.length;
@@ -239,6 +312,10 @@ export class CollabElementNode {
         throw new Error('Unexpected delta format');
       }
     }
+    
+    // Clear the flag to indicate we're done applying deltas
+    (this as any)._applyingDeltas = false;
+    console.log('🔧 [DEBUG-DELTA] Finished applying deltas');
   }
 
   private _syncChildrenFromXmlTextEmbeds(binding: Binding): void {
@@ -323,33 +400,9 @@ export class CollabElementNode {
     let prevIndex = 0;
     let prevChildNode = null;
 
-    // Special case: if we have text content in XmlText but no CollabNode children,
-    // we need to sync the text content to Lexical text nodes
-    if (collabChildrenLength === 0 && this._xmlText.length > 0) {
-      const textContent = this._xmlText.toPlainString();
-      
-      if (textContent.length > 0) {
-        writableLexicalNode = lexicalNode.getWritable();
-        
-        if (lexicalChildrenKeysLength === 0) {
-          // No Lexical children - create a new text node
-          const textNode = $createTextNode(textContent);
-          writableLexicalNode.append(textNode);
-        } else {
-          // Update existing Lexical children - assume first child is text node
-          const firstChild = lexicalNode.getFirstChild();
-          if ($isTextNode(firstChild)) {
-            firstChild.setTextContent(textContent);
-          } else {
-            // Replace non-text child with text node
-            firstChild?.remove();
-            const textNode = $createTextNode(textContent);
-            writableLexicalNode.append(textNode);
-          }
-        }
-        return; // Early return since we handled the text content directly
-      }
-    }
+    // YJS-aligned approach: No special case handling for raw XmlText content
+    // The proper CollabNode structure should always exist through normal CRDT operations
+    // If there's a mismatch, it gets resolved through delta processing and proper node creation
 
     if (collabChildrenLength !== lexicalChildrenKeysLength) {
       writableLexicalNode = lexicalNode.getWritable();
@@ -582,6 +635,14 @@ export class CollabElementNode {
     console.log('  - nextChildren length:', nextChildren.length);
     console.log('  - CollabNode type:', this.constructor.name);
     console.log('  - Lexical node type:', nextLexicalNode.constructor.name);
+
+    // Debug: Check what's actually in the Lexical node
+    console.log('🔍 [LEXICAL-DEBUG] Lexical node children:', nextLexicalNode.getChildren().map(child => ({
+      key: child.__key,
+      type: child.__type,
+      text: (child as any).__text || 'N/A'
+    })));
+    console.log('🔍 [LEXICAL-DEBUG] nextChildren keys:', nextChildren);
     
     let prevChildrenSet: Set<NodeKey> | undefined;
     let nextChildrenSet: Set<NodeKey> | undefined;
@@ -685,12 +746,19 @@ export class CollabElementNode {
       xmlText.insertEmbed(offset, collabNode._xmlText);
     } else if (collabNode instanceof CollabTextNode) {
       const map = collabNode._map;
+      
+      console.log(`[CollabElementNode.append] CollabTextNode - offset: ${offset}, map.parent: ${map.parent}, xmlText.length: ${xmlText.length}, text: "${collabNode._text}"`);
 
       if (map.parent === null) {
+        console.log(`[CollabElementNode.append] Inserting embed at offset ${offset}`);
         xmlText.insertEmbed(offset, map);
+      } else {
+        console.log(`[CollabElementNode.append] Skipping embed insertion - map.parent is not null`);
       }
 
-      xmlText.insert(offset + 1, collabNode._text);
+      const textInsertOffset = map.parent === null ? offset + 1 : offset;
+      console.log(`[CollabElementNode.append] Inserting text at offset ${textInsertOffset}`);
+      xmlText.insert(textInsertOffset, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
@@ -737,12 +805,19 @@ export class CollabElementNode {
       xmlText.insertEmbed(offset, collabNode._xmlText);
     } else if (collabNode instanceof CollabTextNode) {
       const map = collabNode._map;
+      
+      console.log(`[CollabElementNode.splice] CollabTextNode - offset: ${offset}, map.parent: ${map.parent}, xmlText.length: ${xmlText.length}, text: "${collabNode._text}"`);
 
       if (map.parent === null) {
+        console.log(`[CollabElementNode.splice] Inserting embed at offset ${offset}`);
         xmlText.insertEmbed(offset, map);
+      } else {
+        console.log(`[CollabElementNode.splice] Skipping embed insertion - map.parent is not null`);
       }
 
-      xmlText.insert(offset + 1, collabNode._text);
+      const textInsertOffset = map.parent === null ? offset + 1 : offset;
+      console.log(`[CollabElementNode.splice] Inserting text at offset ${textInsertOffset}`);
+      xmlText.insert(textInsertOffset, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {

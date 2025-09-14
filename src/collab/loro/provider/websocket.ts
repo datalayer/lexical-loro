@@ -153,30 +153,21 @@ messageHandlers[messageLoroUpdate] = (
   emitSynced: boolean
 ): string | null => {
   try {
-    console.log(`🔄 [LORO-UPDATE-1] Received loro-update with ${message.update.length} bytes`)
-    
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
-    console.log(`🔄 [LORO-UPDATE-2] Converting to Uint8Array, applying to LoroDoc (peerId: ${provider.doc.peerId})`)
-    
     // Set flag to indicate we're applying a remote update
     provider._applyingRemoteUpdate = true
-    console.log(`🔄 [LORO-UPDATE-3] Set _applyingRemoteUpdate=true, calling doc.import()`)
-    
     try {
       provider.doc.import(updateBytes)
-      console.log(`🔄 [LORO-UPDATE-4] doc.import() completed successfully`)
     } finally {
       // Use setTimeout to ensure the flag stays set until all event handlers complete
       setTimeout(() => {
         provider._applyingRemoteUpdate = false
-        console.log(`🔄 [LORO-UPDATE-5] Set _applyingRemoteUpdate=false after timeout`)
       }, 0)
     }
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
-      console.log(`🔄 [LORO-UPDATE-6] Set provider.synced=true`)
     }
     
     return null // No response needed
@@ -726,13 +717,6 @@ export class WebsocketProvider extends ObservableV2<any> {
         // The useCollaboration hook handles Loro→Lexical sync via its own doc.subscribe()
         // This WebSocket provider should ONLY handle document export for server communication
         
-        console.log(`[Client] WebsocketProvider - Document event:`, {
-          by_local: event.by_local,
-          _applyingRemoteUpdate: this._applyingRemoteUpdate,
-          origin: event.origin,
-          by: event.by
-        });
-
         // Check if this is a remote update being applied (from WebSocket)
         // We should not send these back to the server to avoid loops
         if (this._applyingRemoteUpdate) {

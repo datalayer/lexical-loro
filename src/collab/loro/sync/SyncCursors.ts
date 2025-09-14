@@ -101,7 +101,7 @@ function createAbsolutePosition(
   if (!cursor) return null;
   
   // Validate that cursor is a proper Cursor instance
-  if (typeof cursor !== 'object' || !cursor.containerId || typeof cursor.containerId !== 'function') {
+  if (typeof cursor !== 'object' || !cursor || typeof cursor.containerId !== 'function') {
     // Cursor objects may be serialized/deserialized through awareness, losing their methods
     // Silently return null instead of warning to avoid console spam
     return null;
@@ -162,6 +162,13 @@ function shouldUpdatePosition(
     return true;
   } else {
     try {
+      // Validate cursor objects before using their methods
+      if (typeof currentPos?.containerId !== 'function' || typeof pos?.containerId !== 'function') {
+        // Cursors may be missing methods due to serialization/deserialization
+        // This is a known issue with Loro cursor objects losing methods
+        return true; // When cursors are invalid, update to be safe
+      }
+      
       // Compare cursor positions using Loro's built-in comparison
       const currentContainer = currentPos.containerId();
       const newContainer = pos.containerId();

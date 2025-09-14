@@ -32,6 +32,7 @@ export type Binding = {
   root: CollabElementNode;
   excludedProperties: ExcludedProperties;
 };
+
 export type ExcludedProperties = Map<Klass<LexicalNode>, Set<string>>;
 
 export function createBinding(
@@ -42,17 +43,21 @@ export function createBinding(
   docMap: Map<string, Doc>,
   excludedProperties?: ExcludedProperties,
 ): Binding {
+
   invariant(
     doc !== undefined && doc !== null,
     'createBinding: doc is null or undefined',
   );
+
   const rootXmlText = doc.get('root', XmlText) as XmlText;
+
   const root: CollabElementNode = $createCollabElementNode(
     rootXmlText,
     null,
     'root',
   );
   root._key = 'root';
+
   return {
     clientID: doc.clientID,
     collabNodeMap: new Map(),

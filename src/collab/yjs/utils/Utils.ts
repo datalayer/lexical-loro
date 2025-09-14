@@ -18,7 +18,8 @@ import {
 } from 'lexical';
 import {Doc, Map as YMap, XmlElement, XmlText} from 'yjs';
 import invariant from '../../utils/invariant';
-import type {Binding, CRDTNode} from './../State';
+import type {CRDTNode} from './../State';
+import type {Binding} from './../Bindings';
 import {
   $createCollabDecoratorNode,
   CollabDecoratorNode,

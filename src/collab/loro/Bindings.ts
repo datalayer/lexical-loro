@@ -32,6 +32,7 @@ export type Binding = {
   root: CollabElementNode;
   excludedProperties: ExcludedProperties;
 };
+
 export type ExcludedProperties = Map<Klass<LexicalNode>, Set<string>>;
 
 export function createBinding(
