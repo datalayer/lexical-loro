@@ -13,11 +13,13 @@ export type UserState = {
   awarenessData: object;
   [key: string]: unknown;
 };
+
 export const CONNECTED_COMMAND: LexicalCommand<boolean> =
   createCommand('CONNECTED_COMMAND');
 export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> = createCommand(
   'TOGGLE_CONNECT_COMMAND',
 );
+
 export type ProviderAwareness = {
   getLocalState: () => UserState | null;
   getStates: () => Map<number, UserState>;
@@ -26,6 +28,7 @@ export type ProviderAwareness = {
   setLocalState: (arg0: UserState) => void;
   setLocalStateField: (field: string, value: unknown) => void;
 };
+
 declare interface Provider {
   awareness: ProviderAwareness;
   connect(): void | Promise<void>;
@@ -39,15 +42,19 @@ declare interface Provider {
   on(type: 'update', cb: (arg0: unknown) => void): void;
   on(type: 'reload', cb: (doc: Doc) => void): void;
 }
+
 export type Operation = {
   attributes: {
     __type: string;
   };
   insert: string | Record<string, unknown>;
 };
+
 export type Delta = Array<Operation>;
+
 export type CRDTNode = Record<string, unknown>;
 export type CRDTEvent = Record<string, unknown>;
+
 export type {Provider};
 export type {Binding, ClientID, ExcludedProperties} from './Bindings';
 export {createBinding} from './Bindings';
@@ -110,6 +117,6 @@ export {
 } from './sync/SyncCursors';
 
 export {
-  syncLexicalUpdateToCRDT,
-  syncCRDTChangesToLexical,
+  syncLexicalUpdatesToCRDT,
+  syncCRDTUpdatesToLexical,
 } from './sync/SyncEditorStates';

@@ -117,7 +117,7 @@ function $syncEvent(binding: Binding, event: any): void {
   }
 }
 
-export function syncCRDTChangesToLexical(
+export function syncCRDTUpdatesToLexical(
   binding: Binding,
   provider: Provider,
   events: Array<YEvent<YText>>,
@@ -244,7 +244,7 @@ function $handleNormalizationMergeConflicts(
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
-export function syncLexicalUpdateToCRDT(
+export function syncLexicalUpdatesToCRDT(
   binding: Binding,
   provider: Provider,
   prevEditorState: EditorState,

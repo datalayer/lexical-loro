@@ -177,7 +177,7 @@ function CRDTCollaborationCursors({
   collabContext: CollaborationContextType;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
 }) {
-  const cursors = useCollaboration(
+  const cursorsElement = useCollaboration(
     editor,
     id,
     provider,
@@ -198,5 +198,5 @@ function CRDTCollaborationCursors({
   useHistory(editor, binding);
   useFocusTracking(editor, provider, name, color, awarenessData);
 
-  return cursors;
+  return cursorsElement;
 }

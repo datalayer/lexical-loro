@@ -27,8 +27,8 @@ import {
   initLocalState,
   setLocalStateFocus,
   syncCursorPositions,
-  syncLexicalUpdateToCRDT,
-  syncCRDTChangesToLexical,
+  syncLexicalUpdatesToCRDT,
+  syncCRDTUpdatesToLexical,
   TOGGLE_CONNECT_COMMAND,
 } from './State';
 
@@ -96,7 +96,7 @@ export function useCollaboration(
       const origin = transaction.origin;
       if (origin !== binding) {
         const isFromUndoManger = origin instanceof UndoManager;
-        syncCRDTChangesToLexical(
+        syncCRDTUpdatesToLexical(
           binding,
           provider,
           events,
@@ -137,7 +137,7 @@ export function useCollaboration(
         tags,
       }) => {
         if (tags.has(SKIP_COLLAB_TAG) === false) {
-          syncLexicalUpdateToCRDT(
+          syncLexicalUpdatesToCRDT(
             binding,
             provider,
             prevEditorState,

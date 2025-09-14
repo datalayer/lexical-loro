@@ -27,8 +27,8 @@ import {
   initLocalState,
   setLocalStateFocus,
   syncCursorPositions,
-  syncLexicalUpdateToCRDT,
-  syncCRDTChangesToLexical,
+  syncLexicalUpdatesToCRDT,
+  syncCRDTUpdatesToLexical,
   TOGGLE_CONNECT_COMMAND,
 } from './State';
 
@@ -128,7 +128,7 @@ export function useCollaboration(
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
         
-        syncCRDTChangesToLexical(
+        syncCRDTUpdatesToLexical(
           binding,
           provider,
           event.events, // Array of LoroEvent
@@ -201,7 +201,7 @@ export function useCollaboration(
             console.warn('useCollaboration: Could not find doc in docMap for id:', id);
           }
           
-          syncLexicalUpdateToCRDT(
+          syncLexicalUpdatesToCRDT(
             binding,
             provider,
             prevEditorState,
@@ -212,7 +212,7 @@ export function useCollaboration(
             tags,
           );
         } else {
-          console.log('⏭️ useCollaboration: Skipping syncLexicalUpdateToCRDT', {
+          console.log('⏭️ useCollaboration: Skipping syncLexicalUpdatesToCRDT', {
             hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
             skipCollaborationUpdate: skipCollaborationUpdateRef.current
           });
