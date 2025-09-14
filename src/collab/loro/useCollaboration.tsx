@@ -212,7 +212,7 @@ export function useCollaboration(
             tags,
           );
         } else {
-          log('⏭️ useCollaboration: Skipping syncLexicalUpdateToCRDT', {
+          console.log('⏭️ useCollaboration: Skipping syncLexicalUpdateToCRDT', {
             hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
             skipCollaborationUpdate: skipCollaborationUpdateRef.current
           });
