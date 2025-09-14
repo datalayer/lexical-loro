@@ -4,6 +4,7 @@ export const isDevPlayground: boolean =
   hostName !== 'lexical-playground.vercel.app';
 
 export const DEFAULT_SETTINGS = {
+  useYjs: false,
   disableBeforeInput: false,
   emptyEditor: isDevPlayground,
   hasLinkAttributes: false,

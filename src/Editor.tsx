@@ -1,6 +1,3 @@
-import {CollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
-import {createWebsocketProvider} from './collab/loro/wsProvider';
-
 import {type JSX, useEffect, useState} from 'react';
 import {AutoFocusPlugin} from '@lexical/react/LexicalAutoFocusPlugin';
 import {CharacterLimitPlugin} from '@lexical/react/LexicalCharacterLimitPlugin';
@@ -67,8 +64,11 @@ import TreeViewPlugin from './plugins/TreeViewPlugin';
 import TwitterPlugin from './plugins/TwitterPlugin';
 import YouTubePlugin from './plugins/YouTubePlugin';
 import ContentEditable from './ui/ContentEditable';
-
 import DatalayerPlugin from './plugins/DatalayerPlugin';
+import {CollaborationPlugin as LoroCollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
+import {createWebsocketProvider as createLoroWebsocketProvider} from './collab/loro/wsProvider';
+import {CollaborationPlugin as YjsCollaborationPlugin} from './collab/yjs/LexicalCollaborationPlugin';
+import {createWebsocketProvider as createYjsWebsocketProvider} from './collab/yjs/wsProvider';
 
 const skipCollaborationInit =
   // @ts-expect-error
@@ -78,6 +78,7 @@ export default function Editor(): JSX.Element {
   const {historyState} = useSharedHistoryContext();
   const {
     settings: {
+      useYjs,
       isCodeHighlighted,
       isCodeShiki,
       isCollab,
@@ -172,19 +173,27 @@ export default function Editor(): JSX.Element {
         <SpeechToTextPlugin />
         <AutoLinkPlugin />
         <DateTimePlugin />
-        {/*
-        <CommentPlugin
-          providerFactory={isCollab ? createWebsocketProvider : undefined}
-        />
-        */}
+        {useYjs &&
+          <CommentPlugin
+            providerFactory={isCollab ? createYjsWebsocketProvider : undefined}
+          />
+        }
         {isRichText ? (
           <>
             {isCollab ? (
-              <CollaborationPlugin
-                id="main"
-                providerFactory={createWebsocketProvider}
-                shouldBootstrap={!skipCollaborationInit}
-              />
+              useYjs ? (
+                <YjsCollaborationPlugin
+                  id="main" 
+                  providerFactory={createYjsWebsocketProvider}
+                  shouldBootstrap={!skipCollaborationInit}
+                />
+              ) : (
+                <LoroCollaborationPlugin
+                  id="main"
+                  providerFactory={createLoroWebsocketProvider}
+                  shouldBootstrap={!skipCollaborationInit}
+                />
+              )
             ) : (
               <HistoryPlugin externalHistoryState={historyState} />
             )}
