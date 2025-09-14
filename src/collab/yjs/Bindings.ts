@@ -12,8 +12,9 @@ import type {Cursor} from './sync/SyncCursors';
 import {Provider} from './State';
 
 export type ClientID = number;
+
 export type Binding = {
-  clientID: number;
+  clientID: ClientID;
   collabNodeMap: Map<
     NodeKey,
     | CollabElementNode

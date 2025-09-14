@@ -22,7 +22,7 @@ import {
 } from 'loro-crdt';
 
 import {XmlText} from '../types/XmlText';
-import {Binding, Provider} from '../State';
+import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
@@ -41,10 +41,9 @@ import {
 } from '../Utils';
 import { AnyCollabNode } from '../../yjs/sync/SyncCursors';
 import { CollabLineBreakNode } from '../nodes/CollabLineBreakNode';
+import { Binding } from '../Bindings';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function $syncStateEvent(binding: Binding, event: any): boolean {
+function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   const {target} = event;
   if (
     !(

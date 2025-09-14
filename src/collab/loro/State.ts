@@ -43,6 +43,7 @@ declare interface Provider {
   on(type: 'update', cb: (arg0: unknown) => void): void;
   on(type: 'reload', cb: (doc: LoroDoc) => void): void;
 }
+export type {Provider};
 
 export type Operation = {
   attributes: {
@@ -55,10 +56,6 @@ export type Delta = Array<Operation>;
 
 export type CRDTNode = Record<string, unknown>;
 export type CRDTEvent = Record<string, unknown>;
-
-export type {Provider};
-export type {Binding, ClientID, ExcludedProperties} from './Bindings';
-export {createBinding} from './Bindings';
 
 export function createUndoManager(
   binding: Binding,

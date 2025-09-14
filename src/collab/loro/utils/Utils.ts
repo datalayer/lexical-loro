@@ -19,7 +19,7 @@ import {
 import {LoroMap, LoroDoc} from 'loro-crdt';
 import invariant from '../../utils/invariant';
 import {XmlText} from './../types/XmlText';
-import type {Binding, CRDTNode} from './../State';
+import type {CRDTNode} from './../State';
 import {
   $createCollabDecoratorNode,
   CollabDecoratorNode,
@@ -30,6 +30,7 @@ import {
   CollabLineBreakNode,
 } from './../nodes/CollabLineBreakNode';
 import {$createCollabTextNode, CollabTextNode} from './../nodes/CollabTextNode';
+import { Binding } from '../Bindings';
 
 const baseExcludedProperties = new Set<string>([
   '__key',

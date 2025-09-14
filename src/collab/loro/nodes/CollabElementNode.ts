@@ -1,6 +1,4 @@
-import type {Binding} from '../State';
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
-import {XmlText} from '../types/XmlText';
 import {$createChildrenArray} from '@lexical/offset';
 import {
   $createTextNode,
@@ -11,6 +9,7 @@ import {
   $isTextNode,
   removeFromParent,
 } from 'lexical';
+import {XmlText} from '../types/XmlText';
 import invariant from '../../utils/invariant';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
@@ -24,6 +23,7 @@ import {
   spliceString,
   syncPropertiesFromLexical,
 } from '../Utils';
+import { Binding } from '../Bindings';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 

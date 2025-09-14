@@ -8,12 +8,7 @@ import {
   useCollaborationContext,
 } from './LexicalCollaborationContext';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {
-  Binding,
-  createBinding,
-  ExcludedProperties,
-  Provider,
-} from './State';
+import { Provider } from './State';
 import {
   CursorsContainerRef,
   useCollaboration,
@@ -21,6 +16,7 @@ import {
   useHistory,
 } from './useCollaboration';
 import { SyncCursorPositionsFn } from './sync/SyncCursors';
+import { Binding, createBinding, ExcludedProperties } from './Bindings';
 
 type Props = {
   id: string;

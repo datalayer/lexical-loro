@@ -3,7 +3,6 @@ import type {JSX} from 'react';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {createPortal} from 'react-dom';
 import {Doc, Transaction, UndoManager, YEvent} from 'yjs';
-import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import type {LexicalEditor} from 'lexical';
 import {
   $createParagraphNode,
@@ -19,8 +18,9 @@ import {
   SKIP_COLLAB_TAG,
   UNDO_COMMAND,
 } from 'lexical';
+import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {mergeRegister} from '@lexical/utils';
-import type {Binding, Provider} from './State';
+import type {Provider} from './State';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
@@ -28,6 +28,7 @@ import {
   setLocalStateFocus,
   TOGGLE_CONNECT_COMMAND,
 } from './State';
+import { Binding } from './Bindings';
 import { syncCRDTUpdatesToLexical, syncLexicalUpdatesToCRDT } from './sync/SyncEditorStates';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
 

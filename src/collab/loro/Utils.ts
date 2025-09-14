@@ -1,5 +1,3 @@
-import type {Binding, CRDTNode} from './State';
-
 import {
   $getNodeByKey,
   $getRoot,
@@ -18,10 +16,10 @@ import {
   RangeSelection,
   TextNode,
 } from 'lexical';
-import invariant from '../utils/invariant';
 import {LoroMap, LoroDoc} from 'loro-crdt';
 import {XmlText} from './types/XmlText';
-
+import invariant from '../utils/invariant';
+import type {CRDTNode} from './State';
 import {
   $createCollabDecoratorNode,
   CollabDecoratorNode,
@@ -32,6 +30,7 @@ import {
   CollabLineBreakNode,
 } from './nodes/CollabLineBreakNode';
 import {$createCollabTextNode, CollabTextNode} from './nodes/CollabTextNode';
+import { Binding } from './Bindings';
 
 const baseExcludedProperties = new Set<string>([
   '__key',

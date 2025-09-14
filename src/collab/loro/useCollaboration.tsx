@@ -20,7 +20,7 @@ import {
 } from 'lexical';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import {LoroDoc, LoroEventBatch, UndoManager} from 'loro-crdt';
-import type {Binding, Provider} from './State';
+import type {Provider} from './State';
 import {
   CONNECTED_COMMAND,
   createUndoManager,
@@ -28,6 +28,7 @@ import {
   setLocalStateFocus,
   TOGGLE_CONNECT_COMMAND,
 } from './State';
+import { Binding } from './Bindings';
 import { syncCRDTUpdatesToLexical, syncLexicalUpdatesToCRDT } from './sync/SyncEditorStates';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
 
