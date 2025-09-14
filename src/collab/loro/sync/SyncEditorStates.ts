@@ -36,17 +36,21 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   
   // Check if this is a __state related event
   if (typeof target === 'string' && target.includes('__state')) {
+    console.log(`🔄 [STATE-EVENT] Processing __state event: ${target}`)
+    
     // Find the container in the document
     const doc = binding.doc;
     const container = doc.getContainerById(target);
     
     if (!container) {
+      console.log(`⚠️ [STATE-EVENT] Container not found for: ${target}`)
       return false;
     }
     
     // Get the parent container to find the associated collabNode
     const parentPath = event.path;
     if (!parentPath || parentPath.length === 0) {
+      console.log(`⚠️ [STATE-EVENT] No path for state event: ${target}`)
       return false;
     }
     
@@ -55,6 +59,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
     const collabNode = binding.collabNodeMap.get(String(parentContainerId));
     
     if (!collabNode) {
+      console.log(`⚠️ [STATE-EVENT] No CollabNode found for parent: ${parentContainerId}`)
       return false;
     }
     
@@ -71,8 +76,14 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
         }
       }
     }
+    
+    console.log(`✅ [STATE-EVENT] Successfully processed __state event: ${target}`)
+    return true;
   }
-  return true;
+  
+  // This is NOT a __state event, so we didn't handle it
+  console.log(`🔄 [STATE-EVENT] Not a __state event: ${target}, passing to regular event handling`)
+  return false;
 }
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {

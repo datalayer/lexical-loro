@@ -157,16 +157,8 @@ export function getNodeTypeFromSharedType(
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
 ): string | undefined {
   const type = sharedTypeGet(sharedType, '__type');
-  
-  // If no type is found, return undefined instead of failing
-  // This handles cases where Loro containers don't have the __type metadata
-  if (typeof type === 'undefined') {
-    console.warn('getNodeTypeFromSharedType: No __type found for', sharedType?.constructor?.name);
-    return undefined;
-  }
-  
   invariant(
-    typeof type === 'string',
+    typeof type === 'string' || typeof type === 'undefined',
     'Expected shared type to include type attribute',
   );
   return type;
@@ -186,13 +178,10 @@ export function $getOrInitCollabNodeFromSharedType(
   if (collabNode === undefined) {
     const registeredNodes = binding.editor._nodes;
     const type = getNodeTypeFromSharedType(sharedType);
-    
-    // If no type found, this might be a raw Loro container - skip processing
-    if (typeof type !== 'string') {
-      console.warn('$getOrInitCollabNodeFromSharedType: Skipping raw Loro container without __type:', sharedType?.constructor?.name);
-      return null as any; // Return null to indicate this should be skipped
-    }
-    
+    invariant(
+      typeof type === 'string',
+      'Expected shared type to include type attribute',
+    );
     const nodeInfo = registeredNodes.get(type);
     invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
@@ -218,8 +207,8 @@ export function $getOrInitCollabNodeFromSharedType(
       }
       return $createCollabTextNode(sharedType, '', targetParent, type);
     } else {
-      // For decorator nodes, we use LoroMap as well
-      return $createCollabDecoratorNode(sharedType as LoroMap<Record<string, unknown>>, targetParent, type);
+      // This case shouldn't normally happen with our current types
+      invariant(false, 'Unexpected shared type: %s', (sharedType as any)?.constructor?.name);
     }
   }
 

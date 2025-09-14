@@ -3,11 +3,11 @@ import {useEffect, useRef, useState} from 'react';
 import {LexicalEditor} from 'lexical';
 import {InitialEditorStateType} from '@lexical/react/LexicalComposer';
 import type {LoroDoc} from 'loro-crdt';
+import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {
   type CollaborationContextType,
   useCollaborationContext,
 } from './LexicalCollaborationContext';
-import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import { Provider } from './State';
 import {
   CursorsContainerRef,

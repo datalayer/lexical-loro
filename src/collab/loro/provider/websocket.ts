@@ -169,11 +169,16 @@ messageHandlers[messageLoroUpdate] = (
     provider._applyingRemoteUpdate = true
     console.log(`🔄 [LORO-UPDATE-3] Set _applyingRemoteUpdate=true, calling doc.import()`)
     
-    provider.doc.import(updateBytes)
-    console.log(`🔄 [LORO-UPDATE-4] doc.import() completed successfully`)
-    
-    provider._applyingRemoteUpdate = false
-    console.log(`🔄 [LORO-UPDATE-5] Set _applyingRemoteUpdate=false, update applied to LoroDoc`)
+    try {
+      provider.doc.import(updateBytes)
+      console.log(`🔄 [LORO-UPDATE-4] doc.import() completed successfully`)
+    } finally {
+      // Use setTimeout to ensure the flag stays set until all event handlers complete
+      setTimeout(() => {
+        provider._applyingRemoteUpdate = false
+        console.log(`🔄 [LORO-UPDATE-5] Set _applyingRemoteUpdate=false after timeout`)
+      }, 0)
+    }
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
@@ -727,6 +732,13 @@ export class WebsocketProvider extends ObservableV2<any> {
         // The useCollaboration hook handles Loro→Lexical sync via its own doc.subscribe()
         // This WebSocket provider should ONLY handle document export for server communication
         
+        console.log(`[Client] WebsocketProvider - Document event:`, {
+          by_local: event.by_local,
+          _applyingRemoteUpdate: this._applyingRemoteUpdate,
+          origin: event.origin,
+          by: event.by
+        });
+
         // Check if this is a remote update being applied (from WebSocket)
         // We should not send these back to the server to avoid loops
         if (this._applyingRemoteUpdate) {

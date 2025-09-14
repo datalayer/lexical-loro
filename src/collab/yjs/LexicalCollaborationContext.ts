@@ -1,6 +1,5 @@
-import type {Doc} from 'yjs';
-
 import {createContext, useContext} from 'react';
+import type {Doc} from 'yjs';
 
 export type CollaborationContextType = {
   clientID: number;
@@ -10,7 +9,7 @@ export type CollaborationContextType = {
   docMap: Map<string, Doc>;
 };
 
-const entries = [
+const ENTRIES = [
   ['Cat', 'rgb(125, 50, 0)'],
   ['Dog', 'rgb(100, 0, 0)'],
   ['Rabbit', 'rgb(150, 0, 0)'],
@@ -29,7 +28,8 @@ const entries = [
   ['Squid', 'rgb(150, 0, 150)'],
 ];
 
-const randomEntry = entries[Math.floor(Math.random() * entries.length)];
+const randomEntry = ENTRIES[Math.floor(Math.random() * ENTRIES.length)];
+
 export const CollaborationContext = createContext<CollaborationContextType>({
   clientID: 0,
   color: randomEntry[1],

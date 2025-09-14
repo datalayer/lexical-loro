@@ -246,42 +246,56 @@ export class CollabElementNode {
   }
 
   private _syncChildrenFromXmlTextEmbeds(binding: Binding): void {
-    // Get all embed entries from the XmlText
-    const embedEntries = this._xmlText.getEmbedEntries();
+    try {
+      // Get all embed entries from the XmlText
+      const embedEntries = this._xmlText.getEmbedEntries();
 
-    // Process each embed to ensure corresponding CollabElementNode exists in _children
-    for (const embedEntry of embedEntries) {
-      const embedData = embedEntry.value as any;
-      
-      if (embedData.object && embedData.object.textId) {
-        const textId = embedData.object.textId;
-        // Check if we already have a CollabElementNode for this textId
-        const existingChild = this._children.find(child => 
-          child instanceof CollabElementNode && child._xmlText.getId() === textId
-        );
+      // Process each embed to ensure corresponding CollabElementNode exists in _children
+      for (const embedEntry of embedEntries) {
+        const embedData = embedEntry.value as any;
+        
+        if (embedData.object && embedData.object.textId) {
+          const textId = embedData.object.textId;
+          // Check if we already have a CollabElementNode for this textId
+          const existingChild = this._children.find(child => 
+            child instanceof CollabElementNode && child._xmlText.getId() === textId
+          );
 
-        if (!existingChild) {
-          // Create new CollabElementNode for the embedded XmlText
-          try {
-            // Create XmlText instance using the textId
-            const embeddedXmlText = new XmlText(binding.doc, textId);
-            const collabNode = $getOrInitCollabNodeFromSharedType(
-              binding,
-              embeddedXmlText,
-              this
-            );
-            
-            // Add to _children if not already present
-            if (collabNode && !this._children.includes(collabNode)) {
-              this._children.push(collabNode);
+          if (!existingChild) {
+            // Create new CollabElementNode for the embedded XmlText
+            try {
+              // Get the existing XmlText instance from the binding's document
+              const embeddedXmlText = binding.doc.getContainerById(textId);
+              
+              // Only process if container exists, is XmlText, and has required __type
+              if (embeddedXmlText && 
+                  embeddedXmlText instanceof XmlText && 
+                  embeddedXmlText.getAttribute('__type')) {
+                
+                const collabNode = $getOrInitCollabNodeFromSharedType(
+                  binding,
+                  embeddedXmlText,
+                  this
+                );
+                
+                // Add to _children if not already present
+                if (collabNode && !this._children.includes(collabNode)) {
+                  this._children.push(collabNode);
+                }
+              }
+              // Skip silently if container doesn't exist, isn't XmlText, or lacks __type
+              // This prevents infinite loop spam when containers are being created/deleted
+            } catch (error) {
+              // Only log unexpected errors, not invariant failures from missing __type
+              if (error.message && !error.message.includes('Expected shared type to include type attribute')) {
+                console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error processing embed:', textId, error);
+              }
             }
-          } catch (error) {
-            console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Failed to create CollabElementNode for embed:', error);
           }
-        } else {
-          console.warn('✅ [_syncChildrenFromXmlTextEmbeds] CollabElementNode already exists for textId:', textId);
         }
       }
+    } catch (error) {
+      console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error accessing embed entries:', error);
     }
   }
 
