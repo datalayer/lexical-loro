@@ -189,15 +189,11 @@ export class CollabElementNode {
           if (node instanceof CollabTextNode) {
             node._text = spliceString(node._text, offset, 0, insertDelta);
           } else {
-            // TODO: maybe we can improve this by keeping around a redundant
-            // text node map, rather than removing all the text nodes, so there
-            // never can be dangling text.
-
-            // We have a conflict where there was likely a CollabTextNode and
-            // an Lexical TextNode too, but they were removed in a merge. So
-            // let's just ignore the text and trigger a removal for it from our
-            // shared type.
-            this._xmlText.delete(offset, insertDelta.length);
+            // No CollabTextNode found at this position during remote update
+            // This can happen when receiving remote updates for empty paragraphs
+            // Skip the insertion - the CRDT already has the correct state
+            console.warn(`🔧 [COLLAB-ELEMENT-FIX] No CollabTextNode found for text insertion: "${insertDelta}" - skipping to avoid infinite loop`);
+            // Do not insert into CRDT here as it would trigger another update event
           }
 
           currIndex += insertDelta.length;
