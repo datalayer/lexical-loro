@@ -1,9 +1,8 @@
 import type {LineBreakNode, NodeKey} from 'lexical';
+import {$getNodeByKey, $isLineBreakNode} from 'lexical';
 import type {LoroMap} from 'loro-crdt';
 import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
-
-import {$getNodeByKey, $isLineBreakNode} from 'lexical';
 
 export class CollabLineBreakNode {
   _map: LoroMap<Record<string, unknown>>;

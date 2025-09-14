@@ -29,7 +29,6 @@ interface QueryEphemeralMessage {
 
 type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage
 
-
 const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT || '2000')
 const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT || '10000')
 
@@ -37,8 +36,8 @@ const debouncer = eventloop.createDebouncer(CALLBACK_DEBOUNCE_WAIT, CALLBACK_DEB
 
 const wsReadyStateConnecting = 0
 const wsReadyStateOpen = 1
-const wsReadyStateClosing = 2 // eslint-disable-line
-const wsReadyStateClosed = 3 // eslint-disable-line
+const wsReadyStateClosing = 2
+const wsReadyStateClosed = 3
 
 const persistenceDir = process.env.YPERSISTENCE
 
@@ -164,9 +163,10 @@ export class WSSharedDoc {
             return
           }
           
-          const message = {
-            type: messageEphemeral,
-            ephemeral: Array.from(encodedData)
+          const message: EphemeralMessage = {
+            type: 'ephemeral',
+            ephemeral: Array.from(encodedData),
+            docId: this.name
           }
           const messageData = new TextEncoder().encode(JSON.stringify(message));          
           // Broadcast to all connections EXCEPT the one that sent the last ephemeral update
@@ -214,9 +214,9 @@ export const getDoc = (docname) => map.setIfUndefined(docs, docname, () => {
  * @param {WSSharedDoc} doc
  * @param {ArrayBuffer | string} message
  */
-const messageListener = (conn, doc: WSSharedDoc, message) => {
+const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string | Uint8Array) => {
   try {    
-    let messageData: any = null
+    let messageData: LoroWebSocketMessage | null = null
     let messageStr: string = ''
     
     // Handle different message types
@@ -274,7 +274,7 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
     
     // Parse JSON message
     try {
-      messageData = JSON.parse(messageStr)
+      messageData = JSON.parse(messageStr) as LoroWebSocketMessage
     } catch (parseError) {
       console.error(`[Server] messageListener - JSON parse error:`, parseError.message)
       console.error(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
@@ -288,9 +288,10 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
         doc.doc.import(updateBytes)
         
         // Create properly formatted message for broadcasting
-        const broadcastMessage = {
-          type: messageLoroUpdate,
-          update: messageData.update
+        const broadcastMessage: LoroUpdateMessage = {
+          type: 'loro-update',
+          update: messageData.update,
+          docId: doc.name
         }
         const broadcastData = new TextEncoder().encode(JSON.stringify(broadcastMessage))
         
@@ -317,9 +318,10 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
       case messageSnapshot:
         // Send current document snapshot to requesting client
         const snapshot = doc.doc.export({ mode: 'snapshot' })
-        const response = {
-          type: messageSnapshot,
-          snapshot: Array.from(snapshot)
+        const response: SnapshotMessage = {
+          type: 'snapshot',
+          snapshot: Array.from(snapshot),
+          docId: doc.name
         }
         send(doc, conn, new TextEncoder().encode(JSON.stringify(response)))
         break
@@ -351,9 +353,10 @@ const messageListener = (conn, doc: WSSharedDoc, message) => {
         try {
           const ephemeralUpdate = doc.ephemeralStore.encodeAll()
           
-          const ephemeralResponse = {
-            type: messageEphemeral,
-            ephemeral: Array.from(ephemeralUpdate)
+          const ephemeralResponse: EphemeralMessage = {
+            type: 'ephemeral',
+            ephemeral: Array.from(ephemeralUpdate),
+            docId: doc.name
           }
           send(doc, conn, new TextEncoder().encode(JSON.stringify(ephemeralResponse)))
         } catch (queryError) {
@@ -409,7 +412,7 @@ const closeConn = (doc, conn) => {
  * @param {Uint8Array} message
  */
 const send = (doc: WSSharedDoc, conn, message) => {
-  if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
+  if (conn.readyState === wsReadyStateClosing || conn.readyState === wsReadyStateClosed) {
     closeConn(doc, conn)
   }
   try {
@@ -483,18 +486,20 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   {
     // Send initial snapshot to new client
     const snapshot = doc.doc.export({ mode: 'snapshot' })
-    const snapshotMessage = {
-      type: messageSnapshot,
-      snapshot: Array.from(snapshot)
+    const snapshotMessage: SnapshotMessage = {
+      type: 'snapshot',
+      snapshot: Array.from(snapshot),
+      docId: doc.name
     }
     send(doc, conn, new TextEncoder().encode(JSON.stringify(snapshotMessage)))
     
     // Send current ephemeral state if any
     const ephemeralUpdate = doc.ephemeralStore.encodeAll()
     if (ephemeralUpdate.length > 0) {
-      const ephemeralMessage = {
-        type: messageEphemeral,
-        ephemeral: Array.from(ephemeralUpdate)
+      const ephemeralMessage: EphemeralMessage = {
+        type: 'ephemeral',
+        ephemeral: Array.from(ephemeralUpdate),
+        docId: doc.name
       }
       send(doc, conn, new TextEncoder().encode(JSON.stringify(ephemeralMessage)))
     }

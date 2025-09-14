@@ -1,9 +1,3 @@
-/**
- * @module provider/websocket
- */
-
-/* eslint-env browser */
-
 import { LoroDoc, EphemeralStore, EphemeralStoreEvent } from 'loro-crdt'
 import { ObservableV2 } from 'lib0/observable'
 import * as bc from 'lib0/broadcastchannel'
