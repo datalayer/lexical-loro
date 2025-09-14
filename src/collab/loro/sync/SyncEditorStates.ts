@@ -1,5 +1,4 @@
 import type {EditorState, NodeKey} from 'lexical';
-
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -7,7 +6,6 @@ import {
   $getRoot,
   $getSelection,
   $getWritableNodeState,
-  $isElementNode,
   $isRangeSelection,
   $isTextNode,
   COLLABORATION_TAG,
@@ -15,13 +13,7 @@ import {
   SKIP_COLLAB_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
-import invariant from '../../utils/invariant';
-import {
-  LoroMap,
-  LoroEvent,
-} from 'loro-crdt';
-
-import {XmlText} from '../types/XmlText';
+import { LoroEvent } from 'loro-crdt';
 import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
@@ -33,234 +25,198 @@ import {
   syncLexicalSelectionToCRDT,
 } from './SyncCursors';
 import {
-  $getOrInitCollabNodeFromSharedType,
   $moveSelectionToPreviousNode,
   doesSelectionNeedRecovering,
-  getNodeTypeFromSharedType,
   syncWithTransaction,
 } from '../Utils';
-import { AnyCollabNode } from '../../yjs/sync/SyncCursors';
 import { CollabLineBreakNode } from '../nodes/CollabLineBreakNode';
 import { Binding } from '../Bindings';
 
 function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
-  const {target} = event;
-  if (
-    !(
-      target &&
-      (target as any)._container &&
-      (target as any)._container.parentSub === '__state' &&
-      getNodeTypeFromSharedType(target) === undefined &&
-      (target.parent instanceof XmlText ||
-        target.parent instanceof LoroMap)
-    )
-  ) {
-    // TODO there might be a case to handle in here when a LoroMap
-    // is used as a value of __state? It would probably be desirable
-    // to mark the node as dirty when that happens.
-    return false;
-  }
-  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target.parent);
-  const node = collabNode.getNode();
-  if (node) {
-    const state = $getWritableNodeState(node.getWritable());
-    for (const k of (event as any).keysChanged || []) {
-      state.updateFromUnknown(k, target.get(k));
+  const {target, diff} = event;
+  
+  // Check if this is a __state related event
+  if (typeof target === 'string' && target.includes('__state')) {
+    // Find the container in the document
+    const doc = binding.doc;
+    const container = doc.getContainerById(target);
+    
+    if (!container) {
+      return false;
+    }
+    
+    // Get the parent container to find the associated collabNode
+    const parentPath = event.path;
+    if (!parentPath || parentPath.length === 0) {
+      return false;
+    }
+    
+    // Try to find the parent container and its associated collabNode
+    const parentContainerId = parentPath[parentPath.length - 1];
+    const collabNode = binding.collabNodeMap.get(String(parentContainerId));
+    
+    if (!collabNode) {
+      return false;
+    }
+    
+    const node = collabNode.getNode();
+    if (node && diff && diff.type === 'map') {
+      const state = $getWritableNodeState(node.getWritable());
+      const mapDiff = diff as any; // Cast to map diff type
+      // Handle map diff updates
+      if (mapDiff.updated) {
+        for (const [key, value] of Object.entries(mapDiff.updated)) {
+          if (value !== undefined) {
+            state.updateFromUnknown(key, value);
+          }
+        }
+      }
     }
   }
   return true;
 }
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
-  if ((event as any).isMapEvent && $syncStateEvent(binding, event)) {
-    return;
-  }
-  const {target} = event;
-  
-  // Handle container ID strings - these are the actual document containers we need to process
-  if (typeof target === 'string') {
-    // Check for infinite loop condition with repeated "root-" prefixes
-    if (target.includes('root-root-root')) {
-      console.warn('$syncEvent: Detected infinite loop pattern, using root container instead');
-      const rootCollabNode = binding.root;
-      if (rootCollabNode) {
-        processCollabNodeEvent(binding, rootCollabNode, event);
-        return;
-      }
-    }
-    
-    // For root-related events, always use the existing root collaboration node
-    if (target.includes('root') && target.includes('_attrs:Map')) {
-      const rootCollabNode = binding.root;
-      if (rootCollabNode) {
-        processCollabNodeEvent(binding, rootCollabNode, event);
-        return;
-      }
-    }
-    
-    // Try to find the corresponding collaboration node using prioritized matching
-    // Get all available collab nodes for debugging
-    const allCollabNodes = Array.from(binding.collabNodeMap.values());    
-    let foundCollabNode = null;
-    
-    // Prioritized matching: element-specific → root-specific → generic fallback
-    
-    // First: Look for element-specific matches (element_X pattern)
-    for (const collabNode of allCollabNodes) {
-      if (target.includes(`element_${collabNode._key}:`)) {
-        foundCollabNode = collabNode;
-        break;
-      }
-    }
-    
-    // Second: Look for root-specific matches if no element match found
-    if (!foundCollabNode) {
-      for (const collabNode of allCollabNodes) {
-        if (target.includes('root-root:') && collabNode._key === 'root') {
-          foundCollabNode = collabNode;
-          break;
-        }
-      }
-    }
-    
-    // Third: Generic fallback matching
-    if (!foundCollabNode) {
-      for (const collabNode of allCollabNodes) {
-        if (target.includes(collabNode._key) && !target.includes('root-root:')) {
-          foundCollabNode = collabNode;
-          break;
-        }
-      }
-    }
-    
-    if (foundCollabNode) {
-      // Process the event with the found collaboration node
-      processCollabNodeEvent(binding, foundCollabNode, event);
-      return;
-    }
-    
-      // Y.js-aligned approach: Try to create missing CollabElementNode for element_X pattern
-      const elementMatch = target.match(/element_(\d+)/);
-      if (elementMatch) {
-        const elementKey = elementMatch[1];        
-        try {
-          // Get the root CollabElementNode
-          const rootCollabNode = binding.collabNodeMap.get('root');
-          if (rootCollabNode instanceof CollabElementNode) {
-            // Check if there's a corresponding Lexical node
-            let lexicalNode = $getNodeByKey(elementKey);
-            
-            if (!lexicalNode || !$isElementNode(lexicalNode)) {
-              // Lexical node doesn't exist yet - create it first
-              const rootLexicalNode = rootCollabNode.getNode();
-              if (rootLexicalNode) {
-                const writableRoot = rootLexicalNode.getWritable();
-                const newParagraph = $createParagraphNode();
-                writableRoot.append(newParagraph);
-                // After appending, set the key to match the CRDT element key
-                newParagraph.__key = elementKey;
-                lexicalNode = newParagraph;
-              }
-            }
-            
-            if (lexicalNode && $isElementNode(lexicalNode)) {
-              const elementType = lexicalNode.getType();
-              const doc = rootCollabNode._xmlText.getDoc();
-              
-              // Create XmlText for this element - use the target container ID
-              const childXmlTextId = `element_${elementKey}`;
-              const childXmlText = new XmlText(doc, childXmlTextId);
-              
-              // Create the CollabElementNode
-              const collabElementNode = new CollabElementNode(
-                childXmlText,
-                rootCollabNode, // parent
-                elementType
-              );
-              
-              // Set the key
-              collabElementNode._key = elementKey;
-              
-              // Add to parent's children and register in the binding
-              rootCollabNode._children.push(collabElementNode);
-              binding.collabNodeMap.set(elementKey, collabElementNode);
-              
-              // Now process the event with the newly created node
-              processCollabNodeEvent(binding, collabElementNode, event);
-              return;
-            }
-          }
-        } catch (error) {
-          console.error(`❌ $syncEvent: Error creating CollabElementNode for key ${elementKey}:`, error);
-        }
-      }    // Skip creating new containers for repeated/invalid IDs to prevent infinite loops
-    console.warn('$syncEvent: Skipping container creation for potentially problematic ID:', target);
+  // First check if this is a __state event
+  if ($syncStateEvent(binding, event)) {
     return;
   }
   
-  const collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
-
-  // Skip processing if collabNode is null (raw Loro container without __type)
+  const {target, diff, path} = event;
+  
+  // Find the CollabNode by matching container IDs
+  // Unlike Y.js where event.target is the actual shared type object,
+  // in Loro, event.target is a ContainerID string, so we need to find
+  // the corresponding CollabNode by examining our existing CollabNode mapping
+  
+  let collabNode: CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode | null = null;
+  
+  // First, try exact match with existing CollabNodes that have matching container IDs
+  for (const [key, node] of binding.collabNodeMap.entries()) {
+    // Check if the node's underlying container matches the event target
+    const nodeContainer = (node as any)._xmlText || (node as any)._sharedType;
+    if (nodeContainer && nodeContainer.id === target) {
+      collabNode = node;
+      break;
+    }
+  }
+  
+  // If no exact match, try pattern matching for element nodes
+  if (!collabNode && typeof target === 'string') {
+    const elementMatch = target.match(/element_(\d+)/);
+    if (elementMatch) {
+      const elementKey = elementMatch[1];
+      collabNode = binding.collabNodeMap.get(elementKey) as any;
+    }
+  }
+  
+  // If still no match, try root node for root-related events
+  if (!collabNode && typeof target === 'string' && target.includes('root')) {
+    collabNode = binding.root;
+  }
+  
   if (!collabNode) {
-    console.warn('$syncEvent: Skipping event for raw Loro container:', (target as any).constructor?.name, 'Event:', event);
+    console.warn('$syncEvent: No CollabNode found for container ID:', target);
     return;
   }
   
+  // Process the event with the found CollabNode
   processCollabNodeEvent(binding, collabNode, event);
 }
 
-function processCollabNodeEvent(binding: Binding, collabNode: | CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode, event: LoroEvent): void {
-  // Handle Loro-style events based on actual LoroEvent structure
-  if (collabNode instanceof CollabElementNode && event.diff) {
-    // Handle different diff types appropriately (align with Y.js approach)
-    try {
-      // Just sync the current CRDT state to Lexical without applying new deltas
-      // This prevents infinite loops while ensuring the Lexical editor reflects CRDT state
-      collabNode.syncChildrenFromCRDT(binding);
-    } catch (error) {
-      console.warn('Failed to sync children from CRDT:', error);
-    }
-  } else if (collabNode instanceof CollabTextNode && event.diff) {
-    // For CollabTextNode, sync properties and text from CRDT
-    try {
-      collabNode.syncPropertiesAndTextFromCRDT(binding, null);
-    } catch (error) {
-      console.warn('Failed to sync CollabTextNode:', error);
-    }
-  } else if (collabNode instanceof CollabDecoratorNode && event.diff) {
-    
-    // For CollabDecoratorNode, sync properties from CRDT
-    try {
-      collabNode.syncPropertiesFromCRDT(binding, null);
-    } catch (error) {
-      console.warn('Failed to sync CollabDecoratorNode:', error);
-    }
-  } else {
-    // Handle other Loro event types
-    if (event.diff) {
-      // Generic fallback: try to sync from CRDT based on node type
-      try {
-        if (collabNode instanceof CollabElementNode) {
+function processCollabNodeEvent(binding: Binding, collabNode: CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode, event: LoroEvent): void {
+  const {diff} = event;
+  
+  if (!diff) {
+    // No diff means no changes to process
+    return;
+  }
+  
+  // Handle different CollabNode types with Loro-style diff processing
+  if (collabNode instanceof CollabElementNode) {
+    // For element nodes, handle different diff types
+    if (diff.type === 'text') {
+      // Text diff: handle children changes using delta
+      const textDiff = diff as any; // Cast to text diff type
+      const delta = textDiff.diff;
+      if (delta && Array.isArray(delta) && delta.length > 0) {
+        try {
+          collabNode.applyChildrenCRDTDelta(binding, delta);
           collabNode.syncChildrenFromCRDT(binding);
-        } else if (collabNode instanceof CollabTextNode) {
-          collabNode.syncPropertiesAndTextFromCRDT(binding, null);
-        } else {
-          (collabNode as any).syncPropertiesFromCRDT?.(binding, null);
+        } catch (error) {
+          console.warn('Failed to apply children CRDT delta:', error);
         }
-      } catch (error) {
-        console.warn('Failed to sync from CRDT:', error);
+      }
+    } else if (diff.type === 'map') {
+      // Map diff: handle property changes
+      const mapDiff = diff as any; // Cast to map diff type
+      const updated = mapDiff.updated;
+      if (updated && Object.keys(updated).length > 0) {
+        try {
+          const keysChanged = new Set(Object.keys(updated));
+          collabNode.syncPropertiesFromCRDT(binding, keysChanged);
+        } catch (error) {
+          console.warn('Failed to sync properties from CRDT:', error);
+        }
       }
     } else {
-      // Log unhandled event for debugging
-      console.warn('⚠️ [ProcessCollabNodeEvent] UNHANDLED EVENT TYPE:', {
-        collabNodeType: collabNode.constructor.name,
-        collabNodeKey: collabNode._key,
-        eventKeys: Object.keys(event),
-        eventConstructor: event.constructor?.name,
-        hasDiff: !!event.diff,
-        hasPath: !!event.path,
-        hasTarget: !!event.target
-      });
+      // Fallback: sync children from CRDT
+      try {
+        collabNode.syncChildrenFromCRDT(binding);
+      } catch (error) {
+        console.warn('Failed to sync children from CRDT:', error);
+      }
+    }
+  } else if (collabNode instanceof CollabTextNode) {
+    // For text nodes, handle map diff (properties and text)
+    if (diff.type === 'map') {
+      const mapDiff = diff as any; // Cast to map diff type
+      const updated = mapDiff.updated;
+      if (updated && Object.keys(updated).length > 0) {
+        try {
+          const keysChanged = new Set(Object.keys(updated));
+          collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
+        } catch (error) {
+          console.warn('Failed to sync CollabTextNode properties:', error);
+        }
+      }
+    } else {
+      // Fallback: sync properties and text
+      try {
+        collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+      } catch (error) {
+        console.warn('Failed to sync CollabTextNode:', error);
+      }
+    }
+  } else if (collabNode instanceof CollabDecoratorNode) {
+    // For decorator nodes, typically handle map diff (attributes)
+    if (diff.type === 'map') {
+      const mapDiff = diff as any; // Cast to map diff type
+      const updated = mapDiff.updated;
+      if (updated && Object.keys(updated).length > 0) {
+        try {
+          const attributesChanged = new Set(Object.keys(updated));
+          collabNode.syncPropertiesFromCRDT(binding, attributesChanged);
+        } catch (error) {
+          console.warn('Failed to sync CollabDecoratorNode properties:', error);
+        }
+      }
+    } else {
+      // Fallback: sync properties
+      try {
+        collabNode.syncPropertiesFromCRDT(binding, null);
+      } catch (error) {
+        console.warn('Failed to sync CollabDecoratorNode:', error);
+      }
+    }
+  } else {
+    // Handle other node types generically
+    try {
+      if ('syncPropertiesFromCRDT' in collabNode) {
+        (collabNode as any).syncPropertiesFromCRDT(binding, null);
+      }
+    } catch (error) {
+      console.warn('Failed to sync unknown CollabNode type:', error);
     }
   }
 }
@@ -275,17 +231,8 @@ export function syncCRDTUpdatesToLexical(
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
-  // This line precompute the delta before editor update. The reason is
-  // delta is computed when it is accessed. Note that this can only be
-  // safely computed during the event call. If it is accessed after event
-  // call it might result in unexpected behavior.
-  // For Loro, we need to ensure deltas are computed during event processing
-  events.forEach((event) => {
-    if ((event as any).delta) {
-      // Access delta to trigger computation if needed
-      (event as any).delta;
-    }
-  });
+  // For Loro events, we don't need to precompute deltas like in Y.js
+  // The diff is already computed and available in the event structure
 
   editor.update(
     () => {
