@@ -22,6 +22,7 @@ import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
+import { AnyCollabNode } from '../nodes/AnyCollabNode';
 
 export type CursorSelection = {
   anchor: {
@@ -43,12 +44,6 @@ export type Cursor = {
   name: string;
   selection: null | CursorSelection;
 };
-
-export type AnyCollabNode =
-  | CollabDecoratorNode
-  | CollabElementNode
-  | CollabTextNode
-  | CollabLineBreakNode;
 
 function createRelativePosition(
   point: Point,

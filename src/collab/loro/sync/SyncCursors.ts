@@ -17,6 +17,7 @@ import {CollabTextNode} from '../nodes/CollabTextNode';
 import type {Binding} from '../Bindings';
 import {Provider, UserState} from '../State';
 import {getPositionFromElementAndOffset} from '../Utils';
+import { AnyCollabNode } from '../nodes/AnyCollabNode';
 
 export type CursorSelection = {
   anchor: {
@@ -360,12 +361,6 @@ function updateCursor(
     selections.pop();
   }
 }
-
-type AnyCollabNode =
-  | CollabDecoratorNode
-  | CollabElementNode
-  | CollabTextNode
-  | CollabLineBreakNode;
 
 export function getAnchorAndFocusCollabNodesForUserState(
   binding: Binding,
