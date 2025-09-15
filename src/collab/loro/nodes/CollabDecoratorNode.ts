@@ -98,6 +98,10 @@ export function $createCollabDecoratorNode(
   type: string,
 ): CollabDecoratorNode {
   const collabNode = new CollabDecoratorNode(map, parent, type);
+  
+  // Set the __type property in the LoroMap so getNodeTypeFromSharedType can find it
+  map.set('__type', type);
+  
   (map as any)._collabNode = collabNode;
   return collabNode;
 }

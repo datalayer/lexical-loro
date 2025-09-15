@@ -110,17 +110,8 @@ export function useCollaboration(
     const onLoroTreeChanges = (
       event: LoroEventBatch,
     ) => {
-      console.log(`[UseCollaboration] Received LoroTreeEvent:`, {
-        origin: event.origin,
-        by: event.by,
-        eventCount: event.events.length,
-        skipCollab: skipCollaborationUpdateRef.current,
-        undoManagerPeer: undoManagerRef.current?.peer()
-      });
-      
       // Skip processing if we should skip collaboration updates
       if (skipCollaborationUpdateRef.current) {
-        console.log(`[UseCollaboration] Skipping due to skipCollaborationUpdateRef`);
         skipCollaborationUpdateRef.current = false;
         return;
       }
@@ -130,13 +121,9 @@ export function useCollaboration(
       // So we should skip only if the origin is 'lexical-edit' (our own changes)
       const isFromThisEditor = event.origin === 'lexical-edit';
       
-      console.log(`[UseCollaboration] isFromThisEditor: ${isFromThisEditor}`);
-      
       if (!isFromThisEditor) {
         // Check if this change is from the undo manager
         const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
-        
-        console.log(`[UseCollaboration] Processing remote changes, isFromUndoManager: ${isFromUndoManager}`);
         
         syncCRDTUpdatesToLexical(
           binding,
@@ -145,11 +132,8 @@ export function useCollaboration(
           isFromUndoManager,
           syncCursorPositionsFn,
         );
-      } else {
-        console.log(`[UseCollaboration] Skipping own editor change (origin: ${event.origin}, by: ${event.by})`);
       }
       
-      console.log(`[UseCollaboration] Finished processing LoroTreeEvent`);
     };
 
     // Initialize the undo manager
@@ -187,9 +171,7 @@ export function useCollaboration(
     // This updates the local editor state when we receive updates from other clients
     // Subscribe to Loro document changes
     const doc = docMap.get(id);
-    console.log(`[UseCollaboration] Setting up Loro subscription for doc ID: ${id}, doc exists: ${!!doc}`);
     const unsubscribe = doc?.subscribe(onLoroTreeChanges);
-    console.log(`[UseCollaboration] Loro subscription setup complete, unsubscribe function: ${!!unsubscribe}`);
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,
@@ -200,13 +182,7 @@ export function useCollaboration(
         tags,
       }) => {
 
-        if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {
-          console.log('⏭️ useCollaboration: Syncing to CRDT', {
-            dirtyElements: dirtyElements.size,
-            dirtyLeaves: dirtyLeaves.size,
-            normalizedNodes: normalizedNodes.size
-          });
-          
+        if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {          
           // Set origin to indicate this is a local edit for undo manager
           const doc = docMap.get(id);
           if (doc) {

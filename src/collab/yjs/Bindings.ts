@@ -3,23 +3,17 @@ import {XmlText} from 'yjs';
 import type {LexicalEditor, NodeKey} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
 import invariant from '../utils/invariant';
-import type {CollabDecoratorNode} from './nodes/CollabDecoratorNode';
 import type {CollabElementNode} from './nodes/CollabElementNode';
-import type {CollabLineBreakNode} from './nodes/CollabLineBreakNode';
-import type {CollabTextNode} from './nodes/CollabTextNode';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
+import { AnyCollabNode } from './nodes/AnyCollabNode';
 import type {Cursor} from './sync/SyncCursors';
 import {Provider} from './State';
-import { AnyCollabNode } from './nodes/AnyCollabNode';
 
 export type ClientID = number;
 
 export type Binding = {
   clientID: ClientID;
-  collabNodeMap: Map<
-    NodeKey,
-    | AnyCollabNode
-  >;
+  collabNodeMap: Map<NodeKey, AnyCollabNode>;
   cursors: Map<ClientID, Cursor>;
   cursorsContainer: null | HTMLElement;
   doc: Doc;

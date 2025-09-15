@@ -56,6 +56,10 @@ export function $createCollabLineBreakNode(
   parent: CollabElementNode,
 ): CollabLineBreakNode {
   const collabNode = new CollabLineBreakNode(map, parent);
+  
+  // Set the __type property in the LoroMap so getNodeTypeFromSharedType can find it
+  map.set('__type', 'linebreak');
+  
   (map as any)._collabNode = collabNode;
   return collabNode;
 }

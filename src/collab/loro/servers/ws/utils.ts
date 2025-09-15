@@ -297,17 +297,17 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         
         // Send the update to all other connections
         let broadcastCount = 0
-        console.log(`[server:loro] Total connections for document ${doc.name}: ${doc.conns.size}`)
+        console.log(`Total connections for document ${doc.name}: ${doc.conns.size}`)
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
-            console.log(`[server:loro] Broadcasting to connection: ${c.id}`)
+            console.log(`Broadcasting to connection: ${c.id}`)
             send(doc, c, broadcastData)
             broadcastCount++
           } else {
-            console.log(`[server:loro] Skipping sender connection: ${c.id}`)
+            console.log(`Skipping sender connection: ${c.id}`)
           }
         })
-        console.log(`[server:loro] Broadcasted update to ${broadcastCount} clients (total connections: ${doc.conns.size})`)
+        console.log(`Broadcasted update to ${broadcastCount} clients (total connections: ${doc.conns.size})`)
         
         // Trigger callback if configured
         if (isCallbackSet) {
@@ -380,7 +380,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
  */
 const closeConn = (doc, conn) => {
   if (doc.conns.has(conn)) {
-    console.log(`[server:loro] Closing connection: ${conn.id || 'unknown'} for document: ${doc.name}`)
+    console.log(`Closing connection: ${conn.id || 'unknown'} for document: ${doc.name}`)
     /**
      * @type {Set<string>}
      */
@@ -393,7 +393,7 @@ const closeConn = (doc, conn) => {
         doc.ephemeralStore.delete(key)
       })
     }
-    console.log(`[server:loro] Remaining connections for document ${doc.name}: ${doc.conns.size}`)
+    console.log(`Remaining connections for document ${doc.name}: ${doc.conns.size}`)
     if (doc.conns.size === 0 && persistence !== null) {
       // if persisted, we store state and cleanup document
       persistence.writeState(doc.name, doc).then(() => {
@@ -427,7 +427,7 @@ const send = (doc: WSSharedDoc, conn, message) => {
         messageType = 'binary-loro'
       }
     }
-    console.log(`[server:loro] Sending ${messageType} message to ${conn.id || 'unknown'}`)
+    console.log(`Sending ${messageType} message to ${conn.id || 'unknown'}`)
     conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
     console.error(e);
@@ -450,7 +450,7 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
 
   // Assign a unique ID to the connection for logging
   conn.id = `conn-${conn._socket?.remoteAddress || 'unknown'}:${conn._socket?.remotePort || Math.random()}`
-  console.log(`[server:loro] New connection established: ${conn.id} for document: ${docName} (LoroDoc peerId: ${doc.doc.peerId})`)
+  console.log(`New connection established: ${conn.id} for document: ${docName} (LoroDoc peerId: ${doc.doc.peerId})`)
   
   doc.conns.set(conn, new Set())
   // listen and reply to events

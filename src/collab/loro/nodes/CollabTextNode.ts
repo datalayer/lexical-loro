@@ -173,6 +173,10 @@ export function $createCollabTextNode(
   type: string,
 ): CollabTextNode {
   const collabNode = new CollabTextNode(map, text, parent, type);
+  
+  // Set the __type property in the LoroMap so getNodeTypeFromSharedType can find it
+  map.set('__type', type);
+  
   (map as any)._collabNode = collabNode;
   return collabNode;
 }

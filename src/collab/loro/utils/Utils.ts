@@ -116,16 +116,6 @@ export function $createCollabNodeFromLexicalNode(
   const nodeType = lexicalNode.__type;
   let collabNode;
 
-  console.log(`🏭 [NODE-CREATION] Creating CollabNode for Lexical node:`, {
-    nodeKey: lexicalNode.__key,
-    nodeType: nodeType,
-    isElement: $isElementNode(lexicalNode),
-    isText: $isTextNode(lexicalNode),
-    isLineBreak: $isLineBreakNode(lexicalNode),
-    isDecorator: $isDecoratorNode(lexicalNode),
-    textContent: $isTextNode(lexicalNode) ? (lexicalNode as any).__text : 'N/A'
-  });
-
   if ($isElementNode(lexicalNode)) {
     const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
     xmlText.setAttribute('__type', nodeType);
@@ -136,7 +126,6 @@ export function $createCollabNodeFromLexicalNode(
   } else if ($isTextNode(lexicalNode)) {
     // TODO create a token text node for token, segmented nodes.
     const map = binding.doc.getMap(`text_${lexicalNode.__key}`);
-    map.set('__type', nodeType);
     collabNode = $createCollabTextNode(
       map,
       lexicalNode.__text,
@@ -147,11 +136,9 @@ export function $createCollabNodeFromLexicalNode(
     collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
   } else if ($isLineBreakNode(lexicalNode)) {
     const map = binding.doc.getMap(`linebreak_${lexicalNode.__key}`);
-    map.set('__type', 'linebreak');
     collabNode = $createCollabLineBreakNode(map, parent);
   } else if ($isDecoratorNode(lexicalNode)) {
     const map = binding.doc.getMap(`decorator_${lexicalNode.__key}`);
-    map.set('__type', nodeType);
     collabNode = $createCollabDecoratorNode(map, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
   } else {
@@ -247,10 +234,8 @@ export function createLexicalNodeFromCollabNode(
     collabNode.syncPropertiesAndTextFromCRDT(binding, null);
     // Also register CollabTextNode by its Map ID so events can find it
     const mapId = (collabNode._map as any).id;
-    console.log(`🔧 [NODE-CREATION] CollabTextNode Map ID extracted:`, mapId);
     if (mapId) {
       binding.collabNodeMap.set(mapId, collabNode);
-      console.log(`🔧 [NODE-CREATION] ✅ Registered CollabTextNode with Map ID: ${mapId}`);
     } else {
       console.warn(`⚠️ [NODE-CREATION] CollabTextNode has no Map ID!`);
     }
@@ -268,7 +253,6 @@ export function $syncPropertiesFromCRDT(
   lexicalNode: LexicalNode,
   keysChanged: null | Set<string>,
 ): void {
-  console.log(`🔧 [SYNC-PROPS-ENTRY] $syncPropertiesFromCRDT called with keysChanged:`, keysChanged ? Array.from(keysChanged) : 'null');
   
   const properties =
     keysChanged === null
@@ -277,7 +261,6 @@ export function $syncPropertiesFromCRDT(
         : Object.keys(sharedType.getAttributes())
       : Array.from(keysChanged);
       
-  console.log(`🔧 [SYNC-PROPS-PROPERTIES] Properties to process:`, properties);
   let writableNode: LexicalNode | undefined;
 
   for (let i = 0; i < properties.length; i++) {
@@ -317,8 +300,6 @@ export function $syncPropertiesFromCRDT(
         // Case 1: nextValue is an embed object with object.id
         if (anyValue.object && anyValue.object.id) {
           objectId = anyValue.object.id;
-          console.log(`🔧 [SYNC-PROPS] Found embed object ID: ${objectId}`);
-          console.log(`🔧 [SYNC-PROPS] Embed object full structure:`, anyValue);
           
           if (objectId.endsWith(':Map')) {
             try {
@@ -346,15 +327,12 @@ export function $syncPropertiesFromCRDT(
       
       // Process the map if we found one
       if (map && objectId) {
-        console.log(`🔧 [SYNC-PROPS] Processing map with ID: ${objectId}`);
         
         try {
           // Check if this map represents a text node
           const mapType = map.get('__type');
-          console.log(`🔧 [SYNC-PROPS] Map __type: ${mapType}`);
           
           if (mapType === 'text' || objectId.includes(':text_')) {
-            console.log(`🔧 [SYNC-PROPS] This is a text node embed, creating CollabTextNode`);
             
             // Get the CollabElementNode from the lexical node
             const collabElementNode = binding.collabNodeMap.get(lexicalNode.getKey());
@@ -364,7 +342,7 @@ export function $syncPropertiesFromCRDT(
               // Check if CollabTextNode already exists
               const existingNode = binding.collabNodeMap.get(objectId);
               if (existingNode) {
-                console.log(`🔧 [SYNC-PROPS] CollabTextNode already exists for ${objectId}`);
+                (`🔧 [SYNC-PROPS] CollabTextNode already exists for ${objectId}`);
                 return;
               }
               
@@ -379,13 +357,13 @@ export function $syncPropertiesFromCRDT(
               // CRITICAL: Register the CollabTextNode in the binding so it can be found by future events
               binding.collabNodeMap.set(objectId, collabTextNode);
               binding.collabNodeMap.set(textNodeKey, collabTextNode);
-              console.log(`🔧 [SYNC-PROPS] ✅ Registered CollabTextNode in binding for ${objectId} with key ${textNodeKey}`);
+              (`🔧 [SYNC-PROPS] ✅ Registered CollabTextNode in binding for ${objectId} with key ${textNodeKey}`);
               
               // Add to CollabElementNode children if not already present
               const children = (collabElementNode as any)._children;
               if (children && !children.includes(collabTextNode)) {
                 children.push(collabTextNode);
-                console.log(`🔧 [SYNC-PROPS] ✅ Added CollabTextNode to CollabElementNode children`);
+                (`🔧 [SYNC-PROPS] ✅ Added CollabTextNode to CollabElementNode children`);
               }
             }
           }

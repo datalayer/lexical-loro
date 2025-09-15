@@ -37,7 +37,6 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   
   // Check if this is a __state related event
   if (typeof target === 'string' && target.includes('__state')) {
-    console.log(`🔄 [STATE-EVENT] Processing __state event: ${target}`)
     
     // Find the container in the document
     const doc = binding.doc;
@@ -83,25 +82,16 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   }
   
   // This is NOT a __state event, so we didn't handle it
-  console.log(`🔄 [STATE-EVENT] Not a __state event: ${target}, passing to regular event handling`)
   return false;
 }
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
-  console.log(`🔄 [SYNC-EVENT-1] $syncEvent called with:`, {
-    target: event.target,
-    path: event.path,
-    diff: event.diff ? 'present' : 'missing'
-  })
-  
   // First check if this is a __state event
   if ($syncStateEvent(binding, event)) {
-    console.log(`🔄 [SYNC-EVENT-2] Handled as __state event`)
     return;
   }
   
   const {target, diff, path} = event;
-  console.log(`🔄 [SYNC-EVENT-3] Processing non-state event, looking for CollabNode...`)
   
   // Find the CollabNode by matching container IDs
   // Unlike Y.js where event.target is the actual shared type object,
@@ -131,28 +121,60 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   
   // If still no match, check if this is a text node Map that needs to be created
   if (!collabNode && typeof target === 'string' && target.includes(':text_') && target.endsWith(':Map')) {
-    console.log(`🔧 [SYNC-TEXT-NODE] Attempting to create missing CollabTextNode for: ${target}`);
-    
     try {
       // Extract text node key from target (e.g., "cid:root-text_3:Map" -> "text_3")
       const textNodeMatch = target.match(/text_(\d+):Map/);
       if (textNodeMatch) {
         const textNodeKey = `text_${textNodeMatch[1]}`;
-        console.log(`🔧 [SYNC-TEXT-NODE] Extracted text node key: ${textNodeKey}`);
         
         // Get the LoroMap for this text node
         const map = binding.doc.getMap(target);
         if (map && map.get('__type') === 'text') {
-          console.log(`🔧 [SYNC-TEXT-NODE] Found text map with content:`, {
-            type: map.get('__type'),
-            text: map.get('__text'),
-            keys: Array.from(map.keys())
-          });
+          console.log(`🔧 [SYNC-TEXT-NODE] Found new text node Map: ${target}, key: ${textNodeKey}`);
           
-          // We need to find the parent CollabElementNode to attach this text node to
-          // For now, let's log that we found the map and would create the CollabTextNode
-          console.log(`🔧 [SYNC-TEXT-NODE] TODO: Create CollabTextNode for ${target}`);
-          // TODO: Implement CollabTextNode creation logic
+          // Find the parent CollabElementNode by looking for the root or other element nodes
+          // that might contain this text node through embeds
+          let parentCollabNode: CollabElementNode | null = null;
+          
+          // First try the root node
+          const rootCollabNode = binding.root;
+          if (rootCollabNode instanceof CollabElementNode) {
+            parentCollabNode = rootCollabNode;
+            console.log(`🔧 [SYNC-TEXT-NODE] Using root as parent for ${textNodeKey}`);
+          }
+          
+          if (parentCollabNode) {
+            // Check if this text node already exists in the parent's children
+            const existingChild = parentCollabNode._children.find(child => 
+              child instanceof CollabTextNode && 
+              (child._map as any).id === target
+            );
+            
+            if (!existingChild) {
+              console.log(`🔧 [SYNC-TEXT-NODE] Creating CollabTextNode for ${textNodeKey}`);
+              
+              // Create the CollabTextNode
+              const nodeType = map.get('__type') as string;
+              const collabTextNode = new CollabTextNode(map, '', parentCollabNode, nodeType);
+              
+              // Add to parent's children
+              parentCollabNode._children.push(collabTextNode);
+              
+              // Register in the collabNodeMap
+              binding.collabNodeMap.set(textNodeKey, collabTextNode);
+              
+              console.log(`🔧 [SYNC-TEXT-NODE] Successfully created and registered CollabTextNode: ${textNodeKey}`);
+              console.log(`🔧 [SYNC-TEXT-NODE] Parent children count now: ${parentCollabNode._children.length}`);
+              
+              // Set this as the found collabNode so the event gets processed
+              collabNode = collabTextNode;
+            } else {
+              console.log(`🔧 [SYNC-TEXT-NODE] CollabTextNode already exists for ${textNodeKey}`);
+              collabNode = existingChild;
+            }
+          } else {
+            console.warn(`⚠️ [SYNC-TEXT-NODE] Could not find parent CollabElementNode for ${textNodeKey}`);
+          }
         }
       }
     } catch (error) {
@@ -167,44 +189,32 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   
   if (!collabNode) {
     console.warn(`❌ [SYNC-EVENT-ERROR] No CollabNode found for container ID: ${target}`)
-    console.log(`🔍 [SYNC-EVENT-DEBUG] Available CollabNodes:`, Array.from(binding.collabNodeMap.keys()))
     return;
   }
-  
-  console.log(`✅ [SYNC-EVENT-4] Found CollabNode for target ${target}:`, collabNode.constructor.name)
   
   // Process the event with the found CollabNode
   processCollabNodeEvent(binding, collabNode, event);
 }
 
 function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
-  console.log(`🔄 [SYNC-NODE-1] processCollabNodeEvent called for ${collabNode.constructor.name}`)
-  
   const {diff} = event;
   
   if (!diff) {
-    console.log(`⚠️ [SYNC-NODE-2] No diff in event, skipping`)
     // No diff means no changes to process
     return;
   }
   
-  console.log(`🔄 [SYNC-NODE-3] Processing diff type: ${diff.type}`)
-  
   // Handle different CollabNode types with Loro-style diff processing
   if (collabNode instanceof CollabElementNode) {
-    console.log(`🔄 [SYNC-NODE-4] Handling CollabElementNode diff`)
     // For element nodes, handle different diff types
     if (diff.type === 'text') {
-      console.log(`🔄 [SYNC-NODE-5] Processing text diff`)
       // Text diff: handle children changes using delta
       const textDiff = diff as any; // Cast to text diff type
       const delta = textDiff.diff;
       if (delta && Array.isArray(delta) && delta.length > 0) {
-        console.log(`🔄 [SYNC-NODE-6] Applying text delta with ${delta.length} operations`)
         try {
           collabNode.applyChildrenCRDTDelta(binding, delta);
           collabNode.syncChildrenFromCRDT(binding);
-          console.log(`✅ [SYNC-NODE-7] Successfully applied text delta and synced children`)
         } catch (error) {
           console.warn('❌ [SYNC-NODE-ERROR] Failed to apply children CRDT delta:', error);
         }
@@ -212,16 +222,13 @@ function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, eve
         console.log(`⚠️ [SYNC-NODE-8] No valid delta in text diff`)
       }
     } else if (diff.type === 'map') {
-      console.log(`🔄 [SYNC-NODE-9] Processing map diff`)
       // Map diff: handle property changes
       const mapDiff = diff as any; // Cast to map diff type
       const updated = mapDiff.updated;
       if (updated && Object.keys(updated).length > 0) {
-        console.log(`🔄 [SYNC-NODE-10] Syncing properties: ${Object.keys(updated).join(', ')}`)
         try {
           const keysChanged = new Set(Object.keys(updated));
           collabNode.syncPropertiesFromCRDT(binding, keysChanged);
-          console.log(`✅ [SYNC-NODE-11] Successfully synced properties`)
         } catch (error) {
           console.warn('❌ [SYNC-NODE-ERROR] Failed to sync properties from CRDT:', error);
         }
@@ -229,11 +236,9 @@ function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, eve
         console.log(`⚠️ [SYNC-NODE-12] No updated properties in map diff`)
       }
     } else {
-      console.log(`🔄 [SYNC-NODE-13] Fallback: syncing children from CRDT for diff type: ${diff.type}`)
       // Fallback: sync children from CRDT
       try {
         collabNode.syncChildrenFromCRDT(binding);
-        console.log(`✅ [SYNC-NODE-14] Successfully synced children from CRDT`)
       } catch (error) {
         console.warn('❌ [SYNC-NODE-ERROR] Failed to sync children from CRDT:', error);
       }
@@ -310,16 +315,9 @@ export function syncCRDTUpdatesToLexical(
   console.log(`🔄 [SYNC-2] Starting editor.update() with ${events.length} events`)
   editor.update(
     () => {
-      console.log(`🔄 [SYNC-3] Inside editor.update(), processing events...`)
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
-        console.log(`🔄 [SYNC-4] Processing event ${i + 1}/${events.length}:`, {
-          target: event.target,
-          path: event.path,
-          diff: event.diff ? 'present' : 'missing'
-        })
         $syncEvent(binding, event);
-        console.log(`🔄 [SYNC-5] Completed processing event ${i + 1}/${events.length}`)
       }
 
       const selection = $getSelection();

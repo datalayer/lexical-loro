@@ -171,6 +171,7 @@ export class CollabElementNode {
               }
             } else {
               node._text = spliceString(node._text, offset, delCount, '');
+              console.log(`✅ [DELTA-SUCCESS] Applied text delete: ${delCount} chars at offset ${offset}, new text: "${node._text}"`);
             }
 
             deletionSize -= delCount;
@@ -181,19 +182,16 @@ export class CollabElementNode {
         }
       } else if (insertDelta != null) {
         if (typeof insertDelta === 'string') {
-          console.log(`🔧 [DELTA] Processing text insertion: "${insertDelta}" at currIndex: ${currIndex}`);
           const {node, offset} = getPositionFromElementAndOffset(
             this,
             currIndex,
             true,
           );
-          console.log(`🔧 [DELTA] getPositionFromElementAndOffset result: node=${node?.constructor.name}, offset=${offset}`);
 
           if (node instanceof CollabTextNode) {
-            console.log(`🔧 [DELTA] Found CollabTextNode, inserting text`);
             node._text = spliceString(node._text, offset, 0, insertDelta);
+            console.log(`✅ [DELTA-SUCCESS] Applied text insert: "${insertDelta}" at offset ${offset}, new text: "${node._text}"`);
           } else {
-            console.log(`🔧 [DELTA] No CollabTextNode found - applying conflict resolution (delete from CRDT)`);
             // TODO: maybe we can improve this by keeping around a redundant
             // text node map, rather than removing all the text nodes, so there
             // never can be dangling text.
@@ -213,6 +211,7 @@ export class CollabElementNode {
           currIndex += insertDelta.length;
         } else {
           const sharedType = insertDelta;
+          console.log(`🔧 [DELTA] Before getPositionFromElementAndOffset - children count: ${this._children.length}, types:`, this._children.map(c => c.constructor.name));
           const {node, nodeIndex, length} = getPositionFromElementAndOffset(
             this,
             currIndex,
@@ -325,11 +324,45 @@ export class CollabElementNode {
                     const loroMap = mapContainer as LoroMap<Record<string, unknown>>;
                     
                     // Get the type from the map
-                    const nodeType = loroMap.get('__type') as string;
+                    let nodeType = loroMap.get('__type') as string;
+                    console.log(`🔧 [EMBED-SYNC] Retrieved nodeType from LoroMap: "${nodeType}"`);
+                    
+                    // Fallback for existing LoroMaps that don't have __type set
+                    if (!nodeType && embedData.object.type === 'xmltext_ref') {
+                      nodeType = 'text';
+                      console.log(`🔧 [EMBED-SYNC] No __type found, setting fallback nodeType to: "${nodeType}" for xmltext_ref`);
+                      // Set the __type for future use
+                      loroMap.set('__type', nodeType);
+                    }
+                    
                     if (nodeType) {
-                      const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
-                      this._children.push(collabTextNode);
-                      console.log(`🔧 [EMBED-SYNC] Successfully created CollabTextNode for ${mapId}`);
+                      try {
+                        console.log(`🔧 [EMBED-SYNC] About to create CollabTextNode with nodeType: ${nodeType}`);
+                        const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
+                        
+                        // Extract the key from the mapId (e.g., "cid:root-element_1:Map" -> "1")
+                        const keyMatch = mapId.match(/element_(\w+):Map$/);
+                        if (keyMatch) {
+                          collabTextNode._key = keyMatch[1];
+                          console.log(`🔧 [EMBED-SYNC] Set CollabTextNode key to: ${collabTextNode._key}`);
+                        } else {
+                          console.warn(`🔧 [EMBED-SYNC] Could not extract key from mapId: ${mapId}`);
+                        }
+                        
+                        console.log(`🔧 [EMBED-SYNC] CollabTextNode created successfully:`, collabTextNode.constructor.name, collabTextNode._key);
+                        
+                        this._children.push(collabTextNode);
+                        console.log(`🔧 [EMBED-SYNC] Pushed to _children array, count now: ${this._children.length}`);
+                        console.log(`🔧 [EMBED-SYNC] Children array contents:`, this._children.map(c => `${c.constructor.name}(${c._key})`));
+                        
+                        // Verify the child is actually in the array
+                        const foundChild = this._children.find(c => c === collabTextNode);
+                        console.log(`🔧 [EMBED-SYNC] Child verification - found in array: ${!!foundChild}`);
+                      } catch (error) {
+                        console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${mapId}:`, error);
+                      }
+                    } else {
+                      console.log(`⚠️ [EMBED-SYNC] No nodeType found in LoroMap for ${mapId}`);
                     }
                   }
                 }
@@ -381,8 +414,9 @@ export class CollabElementNode {
             try {
               // Get the LoroMap from the document
               const container = binding.doc.getContainerById(mapId);
+              console.log(`🔧 [EMBED-SYNC] LoroMap container for ${mapId}:`, container?.constructor?.name, container?.toString());
               
-              if (container && container.toString().includes('LoroMap')) {
+              if (container && (container.constructor.name === 'LoroMap' || container.toString().includes('LoroMap'))) {
                 console.log(`🔧 [EMBED-SYNC] Creating CollabTextNode from LoroMap: ${mapId}`);
                 const loroMap = container as LoroMap<Record<string, unknown>>;
                 const collabNode = $getOrInitCollabNodeFromSharedType(
@@ -396,24 +430,33 @@ export class CollabElementNode {
                   this._children.push(collabNode);
                   console.log(`🔧 [EMBED-SYNC] Added CollabTextNode to _children, new count: ${this._children.length}`);
                 }
+              } else {
+                console.log(`⚠️ [EMBED-SYNC] Container not found or not LoroMap type for ${mapId}`);
               }
             } catch (error) {
               console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error processing LoroMap embed:', mapId, error);
             }
+          } else {
+            console.log(`🔧 [EMBED-SYNC] LoroMap CollabTextNode already exists for ${mapId}`);
           }
         }
       }
     } catch (error) {
       console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error accessing embed entries:', error);
     }
+    
+    console.log(`🔄 [EMBED-SYNC-END] _syncChildrenFromXmlTextEmbeds completed, final children count: ${this._children.length}`);
+    console.log(`🔄 [EMBED-SYNC-END] Final children details:`, this._children.map(c => `${c.constructor.name}(${c._key})`));
   }
 
   syncChildrenFromCRDT(binding: Binding): void {
     console.log(`🔄 [COLLAB-ELEMENT-1] syncChildrenFromCRDT called for ${this._type} node`)
     
     // First, ensure _children reflects the current CRDT state by processing embeds
+    console.log(`🔄 [COLLAB-ELEMENT-1.5] Before embed sync, children count: ${this._children.length}`);
     this._syncChildrenFromXmlTextEmbeds(binding);
-    console.log(`🔄 [COLLAB-ELEMENT-2] Synced children from XmlText embeds, children count: ${this._children.length}`)
+    console.log(`🔄 [COLLAB-ELEMENT-2] After embed sync, children count: ${this._children.length}`);
+    console.log(`🔄 [COLLAB-ELEMENT-2] Children details:`, this._children.map(c => `${c.constructor.name}(${c._key})`));
     
     // Now diff the children of the collab node with that of our existing Lexical node.
     const lexicalNode = this.getNode();
