@@ -295,21 +295,15 @@ export class CollabElementNode {
                 
                 // Get the type from the map
                 const nodeType = loroMap.get('__type') as string;
+                console.log(`🔧 [EMBED-SYNC-MAP] LoroMap processing - nodeType: ${nodeType}, parent: ${this._key}`);
                 if (nodeType) {
-                  // 🚨 HIERARCHY FIX: Only add text nodes to non-root parents
-                  if (this._key !== 'root') {
-                    const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
-                    console.log(`🔧 [EMBED-SYNC-ADD] Adding CollabTextNode(${collabTextNode._key}) to parent ${this.constructor.name}(${this._key})`);
-                    this._children.push(collabTextNode);
-                  } else {
-                    // 🚨 CRITICAL FIX: Don't create text nodes at root level at all!
-                    // Text nodes should only be created as children of existing CollabElementNodes
-                    console.warn(`🚨 [HIERARCHY-FIX] Skipping text node creation at root level for textId: ${textId}`);
-                    console.warn(`🚨 [HIERARCHY-FIX] This text should be handled by its parent CollabElementNode, not created separately`);
-                    
-                    // Don't create the CollabTextNode here - it should be created by the parent CollabElementNode
-                    // when that CollabElementNode processes its own content
-                  }
+                  // 🚨 CRITICAL FIX: Don't create text nodes at root level at all!
+                  // Text nodes should only be created as children of existing CollabElementNodes
+                  console.warn(`🚨 [HIERARCHY-FIX] BLOCKING text node creation for textId: ${textId}, parent: ${this._key}`);
+                  console.warn(`🚨 [HIERARCHY-FIX] This text should be handled by its parent CollabElementNode, not created separately`);
+                  
+                  // COMPLETELY BLOCK text node creation here - it causes sibling issues
+                  // Text nodes should only be created by their parent CollabElementNode through proper hierarchy
                 }
               }
             }
@@ -391,6 +385,7 @@ export class CollabElementNode {
               console.log(`🔧 [EMBED-SYNC] LoroText/XmlText check - existingChild: ${existingChild ? 'found' : 'not found'}, hasType: ${hasType}`);
 
               if (!existingChild && hasType) {
+                console.log(`🔧 [EMBED-SYNC] CREATING CollabElementNode for textId: ${textId}`);
                 // Extract original key from container ID
                 const containerIdStr = (container as any).id || '';
                 const keyMatch = containerIdStr.match(/element_(\d+):/);
