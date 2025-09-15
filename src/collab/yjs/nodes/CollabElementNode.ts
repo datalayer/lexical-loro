@@ -23,17 +23,13 @@ import {
   spliceString,
   syncPropertiesFromLexical,
 } from '../utils/Utils';
+import { AnyCollabNode } from './AnyCollabNode';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
 export class CollabElementNode {
   _key: NodeKey;
-  _children: Array<
-    | CollabElementNode
-    | CollabTextNode
-    | CollabDecoratorNode
-    | CollabLineBreakNode
-  >;
+  _children: Array<AnyCollabNode>;
   _xmlText: XmlText;
   _type: string;
   _parent: null | CollabElementNode;
@@ -543,11 +539,7 @@ export class CollabElementNode {
   }
 
   append(
-    collabNode:
-      | CollabElementNode
-      | CollabDecoratorNode
-      | CollabTextNode
-      | CollabLineBreakNode,
+    collabNode: AnyCollabNode,
   ): void {
     const xmlText = this._xmlText;
     const children = this._children;
@@ -578,11 +570,7 @@ export class CollabElementNode {
     binding: Binding,
     index: number,
     delCount: number,
-    collabNode?:
-      | CollabElementNode
-      | CollabDecoratorNode
-      | CollabTextNode
-      | CollabLineBreakNode,
+    collabNode?: AnyCollabNode,
   ): void {
     const children = this._children;
     const child = children[index];
@@ -639,11 +627,7 @@ export class CollabElementNode {
   }
 
   getChildOffset(
-    collabNode:
-      | CollabElementNode
-      | CollabTextNode
-      | CollabDecoratorNode
-      | CollabLineBreakNode,
+    collabNode: AnyCollabNode,
   ): number {
     let offset = 0;
     const children = this._children;

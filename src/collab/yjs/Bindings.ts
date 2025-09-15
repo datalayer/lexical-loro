@@ -10,6 +10,7 @@ import type {CollabTextNode} from './nodes/CollabTextNode';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
 import type {Cursor} from './sync/SyncCursors';
 import {Provider} from './State';
+import { AnyCollabNode } from './nodes/AnyCollabNode';
 
 export type ClientID = number;
 
@@ -17,10 +18,7 @@ export type Binding = {
   clientID: ClientID;
   collabNodeMap: Map<
     NodeKey,
-    | CollabElementNode
-    | CollabTextNode
-    | CollabDecoratorNode
-    | CollabLineBreakNode
+    | AnyCollabNode
   >;
   cursors: Map<ClientID, Cursor>;
   cursorsContainer: null | HTMLElement;

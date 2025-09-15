@@ -31,6 +31,7 @@ import {
 } from './nodes/CollabLineBreakNode';
 import {$createCollabTextNode, CollabTextNode} from './nodes/CollabTextNode';
 import { Binding } from './Bindings';
+import { AnyCollabNode } from './nodes/AnyCollabNode';
 
 const baseExcludedProperties = new Set<string>([
   '__key',
@@ -111,11 +112,7 @@ export function $createCollabNodeFromLexicalNode(
   binding: Binding,
   lexicalNode: LexicalNode,
   parent: CollabElementNode,
-):
-  | CollabElementNode
-  | CollabTextNode
-  | CollabLineBreakNode
-  | CollabDecoratorNode {
+): AnyCollabNode {
   const nodeType = lexicalNode.__type;
   let collabNode;
 
@@ -168,11 +165,7 @@ export function $getOrInitCollabNodeFromSharedType(
   binding: Binding,
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
   parent?: CollabElementNode,
-):
-  | CollabElementNode
-  | CollabTextNode
-  | CollabLineBreakNode
-  | CollabDecoratorNode {
+): AnyCollabNode {
   const collabNode = (sharedType as any)._collabNode;
 
   if (collabNode === undefined) {
@@ -217,11 +210,7 @@ export function $getOrInitCollabNodeFromSharedType(
 
 export function createLexicalNodeFromCollabNode(
   binding: Binding,
-  collabNode:
-    | CollabElementNode
-    | CollabTextNode
-    | CollabDecoratorNode
-    | CollabLineBreakNode,
+  collabNode: AnyCollabNode,
   parentKey: NodeKey,
 ): LexicalNode {
   const type = collabNode.getType();
@@ -509,12 +498,7 @@ export function getPositionFromElementAndOffset(
   boundaryIsEdge: boolean,
 ): {
   length: number;
-  node:
-    | CollabElementNode
-    | CollabTextNode
-    | CollabDecoratorNode
-    | CollabLineBreakNode
-    | null;
+  node: AnyCollabNode | null;
   nodeIndex: number;
   offset: number;
 } {

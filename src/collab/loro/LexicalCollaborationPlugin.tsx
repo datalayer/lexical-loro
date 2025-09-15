@@ -21,7 +21,6 @@ import { Binding, createBinding, ExcludedProperties } from './Bindings';
 type Props = {
   id: string;
   providerFactory: (
-    // eslint-disable-next-line no-shadow
     id: string,
     docMap: Map<string, LoroDoc>,
   ) => Provider;
@@ -101,7 +100,7 @@ export function CollaborationPlugin({
 
     isBindingInitialized.current = true;
 
-    const newBinding = createBinding(
+    const binding = createBinding(
       editor,
       provider,
       id,
@@ -109,10 +108,10 @@ export function CollaborationPlugin({
       docMap,
       excludedProperties,
     );
-    setBinding(newBinding);
+    setBinding(binding);
 
     return () => {
-      newBinding.root.destroy(newBinding);
+      binding.root.destroy(binding);
     };
   }, [editor, provider, id, docMap, doc, excludedProperties]);
 

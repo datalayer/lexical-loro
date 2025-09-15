@@ -30,6 +30,7 @@ import {
   syncWithTransaction,
 } from '../Utils';
 import { Binding } from '../Bindings';
+import { AnyCollabNode } from '../nodes/AnyCollabNode';
 
 function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   const {target, diff} = event;
@@ -107,7 +108,7 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   // in Loro, event.target is a ContainerID string, so we need to find
   // the corresponding CollabNode by examining our existing CollabNode mapping
   
-  let collabNode: CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode | null = null;
+  let collabNode: AnyCollabNode| null = null;
   
   // First, try exact match with existing CollabNodes that have matching container IDs
   for (const [key, node] of binding.collabNodeMap.entries()) {
@@ -176,7 +177,7 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   processCollabNodeEvent(binding, collabNode, event);
 }
 
-function processCollabNodeEvent(binding: Binding, collabNode: CollabElementNode | CollabTextNode | CollabLineBreakNode | CollabDecoratorNode, event: LoroEvent): void {
+function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
   console.log(`🔄 [SYNC-NODE-1] processCollabNodeEvent called for ${collabNode.constructor.name}`)
   
   const {diff} = event;
