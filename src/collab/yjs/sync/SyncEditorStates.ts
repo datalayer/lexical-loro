@@ -23,6 +23,13 @@ import {
   YXmlEvent,
 } from 'yjs';
 import invariant from '../../utils/invariant';
+import {
+  $getOrInitCollabNodeFromSharedType,
+  $moveSelectionToPreviousNode,
+  doesSelectionNeedRecovering,
+  getNodeTypeFromSharedType,
+  syncWithTransaction,
+} from '../utils/Utils';
 import {Binding} from '../Bindings';
 import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
@@ -34,13 +41,6 @@ import {
   SyncCursorPositionsFn,
   syncLexicalSelectionToCRDT,
 } from './SyncCursors';
-import {
-  $getOrInitCollabNodeFromSharedType,
-  $moveSelectionToPreviousNode,
-  doesSelectionNeedRecovering,
-  getNodeTypeFromSharedType,
-  syncWithTransaction,
-} from '../utils/Utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {

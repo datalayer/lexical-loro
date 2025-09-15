@@ -112,7 +112,7 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   // First, try exact match with existing CollabNodes that have matching container IDs
   for (const [key, node] of binding.collabNodeMap.entries()) {
     // Check if the node's underlying container matches the event target
-    const nodeContainer = (node as any)._xmlText || (node as any)._sharedType;
+    const nodeContainer = (node as any)._xmlText || (node as any)._sharedType || (node as any)._map;
     if (nodeContainer && nodeContainer.id === target) {
       collabNode = node;
       break;
@@ -125,6 +125,37 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
     if (elementMatch) {
       const elementKey = elementMatch[1];
       collabNode = binding.collabNodeMap.get(elementKey) as any;
+    }
+  }
+  
+  // If still no match, check if this is a text node Map that needs to be created
+  if (!collabNode && typeof target === 'string' && target.includes(':text_') && target.endsWith(':Map')) {
+    console.log(`🔧 [SYNC-TEXT-NODE] Attempting to create missing CollabTextNode for: ${target}`);
+    
+    try {
+      // Extract text node key from target (e.g., "cid:root-text_3:Map" -> "text_3")
+      const textNodeMatch = target.match(/text_(\d+):Map/);
+      if (textNodeMatch) {
+        const textNodeKey = `text_${textNodeMatch[1]}`;
+        console.log(`🔧 [SYNC-TEXT-NODE] Extracted text node key: ${textNodeKey}`);
+        
+        // Get the LoroMap for this text node
+        const map = binding.doc.getMap(target);
+        if (map && map.get('__type') === 'text') {
+          console.log(`🔧 [SYNC-TEXT-NODE] Found text map with content:`, {
+            type: map.get('__type'),
+            text: map.get('__text'),
+            keys: Array.from(map.keys())
+          });
+          
+          // We need to find the parent CollabElementNode to attach this text node to
+          // For now, let's log that we found the map and would create the CollabTextNode
+          console.log(`🔧 [SYNC-TEXT-NODE] TODO: Create CollabTextNode for ${target}`);
+          // TODO: Implement CollabTextNode creation logic
+        }
+      }
+    } catch (error) {
+      console.warn(`⚠️ [SYNC-TEXT-NODE] Error trying to create CollabTextNode for ${target}:`, error);
     }
   }
   

@@ -254,7 +254,17 @@ export function createLexicalNodeFromCollabNode(
     collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
     collabNode.syncChildrenFromCRDT(binding);
   } else if (collabNode instanceof CollabTextNode) {
+    console.log(`🔧 [NODE-CREATION] Processing CollabTextNode, _map:`, collabNode._map);
     collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+    // Also register CollabTextNode by its Map ID so events can find it
+    const mapId = (collabNode._map as any).id;
+    console.log(`🔧 [NODE-CREATION] CollabTextNode Map ID extracted:`, mapId);
+    if (mapId) {
+      binding.collabNodeMap.set(mapId, collabNode);
+      console.log(`🔧 [NODE-CREATION] ✅ Registered CollabTextNode with Map ID: ${mapId}`);
+    } else {
+      console.warn(`⚠️ [NODE-CREATION] CollabTextNode has no Map ID!`);
+    }
   } else if (collabNode instanceof CollabDecoratorNode) {
     collabNode.syncPropertiesFromCRDT(binding, null);
   }
@@ -269,12 +279,16 @@ export function $syncPropertiesFromCRDT(
   lexicalNode: LexicalNode,
   keysChanged: null | Set<string>,
 ): void {
+  console.log(`🔧 [SYNC-PROPS-ENTRY] $syncPropertiesFromCRDT called with keysChanged:`, keysChanged ? Array.from(keysChanged) : 'null');
+  
   const properties =
     keysChanged === null
       ? sharedType instanceof LoroMap
         ? Array.from(sharedType.keys())
         : Object.keys(sharedType.getAttributes())
       : Array.from(keysChanged);
+      
+  console.log(`🔧 [SYNC-PROPS-PROPERTIES] Properties to process:`, properties);
   let writableNode: LexicalNode | undefined;
 
   for (let i = 0; i < properties.length; i++) {
@@ -291,6 +305,110 @@ export function $syncPropertiesFromCRDT(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prevValue = (lexicalNode as any)[property];
     let nextValue = sharedTypeGet(sharedType, property);
+
+    // Debug logging for ALL properties to understand what's happening
+    console.log(`🔧 [SYNC-PROPS-ALL] Property: ${property}, nextValue:`, nextValue, typeof nextValue);
+    
+    // Debug logging for embed properties
+    if (property.startsWith('embed_')) {
+      console.log(`🔧 [SYNC-PROPS-DEBUG] Found embed property: ${property}, nextValue:`, nextValue, typeof nextValue);
+    }
+
+    // Special handling for embed properties - these reference CollabTextNodes
+    if (property.startsWith('embed_') && nextValue) {
+      console.log(`🔧 [SYNC-PROPS] Processing embed property: ${property}`, nextValue);
+      
+      // The embed property value might be the LoroMap directly, or a reference
+      let map: any = null;
+      let objectId: string | null = null;
+      
+      if (typeof nextValue === 'object') {
+        const anyValue = nextValue as any;
+        
+        // Case 1: nextValue is an embed object with object.id
+        if (anyValue.object && anyValue.object.id) {
+          objectId = anyValue.object.id;
+          console.log(`🔧 [SYNC-PROPS] Found embed object ID: ${objectId}`);
+          console.log(`🔧 [SYNC-PROPS] Embed object full structure:`, anyValue);
+          
+          if (objectId.endsWith(':Map')) {
+            try {
+              map = binding.doc.getMap(objectId);
+            } catch (error) {
+              console.warn(`⚠️ [SYNC-PROPS] Could not get map for ${objectId}:`, error);
+            }
+          } else {
+            console.log(`🔧 [SYNC-PROPS] ObjectId does not end with :Map, checking if it's an element reference`);
+          }
+        }
+        // Case 2: nextValue is the LoroMap directly
+        else if (anyValue.constructor && anyValue.constructor.name === 'LoroMap') {
+          map = nextValue;
+          objectId = anyValue.id || 'unknown-map-id';
+          console.log(`🔧 [SYNC-PROPS] nextValue is LoroMap directly, id: ${objectId}`);
+        }
+        // Case 3: Check for other map-like structures
+        else if (anyValue.get && typeof anyValue.get === 'function') {
+          map = nextValue;
+          objectId = anyValue.id || 'map-like-object';
+          console.log(`🔧 [SYNC-PROPS] nextValue has get method (map-like), treating as LoroMap`);
+        }
+      }
+      
+      // Process the map if we found one
+      if (map && objectId) {
+        console.log(`🔧 [SYNC-PROPS] Processing map with ID: ${objectId}`);
+        
+        try {
+          // Check if this map represents a text node
+          const mapType = map.get('__type');
+          console.log(`🔧 [SYNC-PROPS] Map __type: ${mapType}`);
+          
+          if (mapType === 'text' || objectId.includes(':text_')) {
+            console.log(`🔧 [SYNC-PROPS] This is a text node embed, creating CollabTextNode`);
+            
+            // Get the CollabElementNode from the lexical node
+            const collabElementNode = binding.collabNodeMap.get(lexicalNode.getKey());
+            if (collabElementNode && 'append' in collabElementNode) {
+              console.log(`🔧 [SYNC-PROPS] Found CollabElementNode, creating CollabTextNode`);
+              
+              // Check if CollabTextNode already exists
+              const existingNode = binding.collabNodeMap.get(objectId);
+              if (existingNode) {
+                console.log(`🔧 [SYNC-PROPS] CollabTextNode already exists for ${objectId}`);
+                return;
+              }
+              
+              // Create CollabTextNode
+              const textContent = map.get('__text') || '';
+              const collabTextNode = $createCollabTextNode(map, textContent, collabElementNode as any, 'text');
+              
+              // Set a proper key for the CollabTextNode (extract from objectId)
+              const textNodeKey = objectId.replace('cid:root-', '').replace(':Map', '');
+              collabTextNode._key = textNodeKey;
+              
+              // CRITICAL: Register the CollabTextNode in the binding so it can be found by future events
+              binding.collabNodeMap.set(objectId, collabTextNode);
+              binding.collabNodeMap.set(textNodeKey, collabTextNode);
+              console.log(`🔧 [SYNC-PROPS] ✅ Registered CollabTextNode in binding for ${objectId} with key ${textNodeKey}`);
+              
+              // Add to CollabElementNode children if not already present
+              const children = (collabElementNode as any)._children;
+              if (children && !children.includes(collabTextNode)) {
+                children.push(collabTextNode);
+                console.log(`🔧 [SYNC-PROPS] ✅ Added CollabTextNode to CollabElementNode children`);
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ [SYNC-PROPS] Error processing embed map:', error);
+        }
+      } else {
+        console.log(`🔧 [SYNC-PROPS] No map found or objectId missing - map: ${!!map}, objectId: ${objectId}`);
+      }
+      
+      // Continue with normal property processing
+    }
 
     if (prevValue !== nextValue) {
       if (nextValue instanceof LoroDoc) {

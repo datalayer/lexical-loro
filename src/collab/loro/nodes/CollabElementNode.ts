@@ -10,6 +10,7 @@ import {
   removeFromParent,
 } from 'lexical';
 import {XmlText} from '../types/XmlText';
+import {LoroMap} from 'loro-crdt';
 import invariant from '../../utils/invariant';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
@@ -269,6 +270,7 @@ export class CollabElementNode {
         const embedData = embedEntry.value as any;
         console.log(`🔧 [EMBED-SYNC] Processing embed:`, JSON.stringify(embedData, null, 2));
         
+        // Handle XmlText references (element nodes)
         if (embedData.object && embedData.object.textId) {
           const textId = embedData.object.textId;
           // Check if we already have a CollabElementNode for this textId
@@ -305,6 +307,41 @@ export class CollabElementNode {
               if (error.message && !error.message.includes('Expected shared type to include type attribute')) {
                 console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error processing embed:', textId, error);
               }
+            }
+          }
+        }
+        // Handle LoroMap references (text nodes)
+        else if (embedData.object && embedData.object.type === 'loro_ref' && embedData.object.refType === 'LoroMap') {
+          const mapId = embedData.object.id;
+          console.log(`🔧 [EMBED-SYNC] Processing LoroMap embed: ${mapId}`);
+          
+          // Check if we already have a CollabTextNode for this mapId
+          const existingChild = this._children.find(child => 
+            child instanceof CollabTextNode && child._map.id === mapId
+          );
+
+          if (!existingChild) {
+            try {
+              // Get the LoroMap from the document
+              const container = binding.doc.getContainerById(mapId);
+              
+              if (container && container.toString().includes('LoroMap')) {
+                console.log(`🔧 [EMBED-SYNC] Creating CollabTextNode from LoroMap: ${mapId}`);
+                const loroMap = container as LoroMap<Record<string, unknown>>;
+                const collabNode = $getOrInitCollabNodeFromSharedType(
+                  binding,
+                  loroMap,
+                  this
+                );
+                
+                // Add to _children if not already present
+                if (collabNode && !this._children.includes(collabNode)) {
+                  this._children.push(collabNode);
+                  console.log(`🔧 [EMBED-SYNC] Added CollabTextNode to _children, new count: ${this._children.length}`);
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error processing LoroMap embed:', mapId, error);
             }
           }
         }
@@ -691,14 +728,13 @@ export class CollabElementNode {
       
       console.log(`[CollabElementNode.append] CollabTextNode - offset: ${offset}, map.parent: ${map.parent}, xmlText.length: ${xmlText.length}, text: "${collabNode._text}"`);
 
-      if (map.parent === null) {
-        console.log(`[CollabElementNode.append] Inserting embed at offset ${offset}`);
-        xmlText.insertEmbed(offset, map);
-      } else {
-        console.log(`[CollabElementNode.append] Skipping embed insertion - map.parent is not null`);
-      }
+      // For CollabTextNodes, we need to insert the embed even if map.parent is not null
+      // because they need to be embedded in the XmlText to be discoverable by other editors
+      console.log(`[CollabElementNode.append] Always inserting embed for CollabTextNode at offset ${offset}`);
+      xmlText.insertEmbed(offset, map);
 
-      const textInsertOffset = map.parent === null ? offset + 1 : offset;
+      // Since we always insert the embed now, text goes at offset + 1
+      const textInsertOffset = offset + 1;
       console.log(`[CollabElementNode.append] Inserting text at offset ${textInsertOffset}`);
       xmlText.insert(textInsertOffset, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {

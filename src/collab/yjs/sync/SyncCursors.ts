@@ -14,14 +14,14 @@ import {
   createAbsolutePositionFromRelativePosition,
   createRelativePositionFromTypeIndex,
 } from 'yjs';
+import type {Binding} from '../Bindings';
+import {UserState, Provider} from '../State';
 import invariant from '../../utils/invariant';
+import {getPositionFromElementAndOffset} from '../utils/Utils';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
-import type {Binding} from '../Bindings';
-import {UserState, Provider} from '../State';
-import {getPositionFromElementAndOffset} from '../utils/Utils';
 
 export type CursorSelection = {
   anchor: {

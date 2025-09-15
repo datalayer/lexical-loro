@@ -116,7 +116,7 @@ export function useCollaboration(
         return;
       }
       
-      // Similar to Y.js logic: only skip if the origin is from this specific editor's changes
+      // Only skip if the origin is from this specific editor's changes
       // We set 'lexical-edit' as origin when making changes from this editor
       // So we should skip only if the origin is 'lexical-edit' (our own changes)
       const isFromThisEditor = event.origin === 'lexical-edit';
