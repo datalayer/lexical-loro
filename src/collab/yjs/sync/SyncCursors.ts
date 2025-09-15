@@ -20,7 +20,7 @@ import type {Binding} from '../Bindings';
 import {UserState, Provider} from '../State';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
-import { AnyCollabNode } from '../nodes/AnyCollabNode';
+import {AnyCollabNode} from '../nodes/AnyCollabNode';
 
 /*****************************************************************************/
 
@@ -45,18 +45,37 @@ export type Cursor = {
   selection: null | CursorSelection;
 };
 
-export type SyncCursorPositionsFn = (
-  binding: Binding,
-  provider: Provider,
-  options?: SyncCursorPositionsOptions,
-) => void;
-
 export type SyncCursorPositionsOptions = {
   getAwarenessStates?: (
     binding: Binding,
     provider: Provider,
   ) => Map<number, UserState>;
 };
+
+export type SyncCursorPositionsFn = (
+  binding: Binding,
+  provider: Provider,
+  options?: SyncCursorPositionsOptions,
+) => void;
+
+/*****************************************************************************/
+
+function $setPoint(point: Point, key: NodeKey, offset: number): void {
+  if (point.key !== key || point.offset !== offset) {
+    let anchorNode = $getNodeByKey(key);
+    if (
+      anchorNode !== null &&
+      !$isElementNode(anchorNode) &&
+      !$isTextNode(anchorNode)
+    ) {
+      const parent = anchorNode.getParentOrThrow();
+      key = parent.getKey();
+      offset = anchorNode.getIndexWithinParent();
+      anchorNode = parent;
+    }
+    point.set(key, offset, $isElementNode(anchorNode) ? 'element' : 'text');
+  }
+}
 
 /*****************************************************************************/
 
@@ -366,25 +385,6 @@ function getAwarenessStatesDefault(
   provider: Provider,
 ): Map<number, UserState> {
   return provider.awareness.getStates();
-}
-
-/*****************************************************************************/
-
-function $setPoint(point: Point, key: NodeKey, offset: number): void {
-  if (point.key !== key || point.offset !== offset) {
-    let anchorNode = $getNodeByKey(key);
-    if (
-      anchorNode !== null &&
-      !$isElementNode(anchorNode) &&
-      !$isTextNode(anchorNode)
-    ) {
-      const parent = anchorNode.getParentOrThrow();
-      key = parent.getKey();
-      offset = anchorNode.getIndexWithinParent();
-      anchorNode = parent;
-    }
-    point.set(key, offset, $isElementNode(anchorNode) ? 'element' : 'text');
-  }
 }
 
 /*****************************************************************************/

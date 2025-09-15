@@ -98,6 +98,34 @@ export function useCollaboration(
         isReloadingDoc.current === false
       ) {
         initializeEditor(editor, initialEditorState);
+        
+        // 🔧 HIERARCHY FIX: After initializing editor, ensure Lexical structure is synced to CRDT
+        setTimeout(() => {
+          editor.update(() => {
+            const lexicalRoot = $getRoot();
+            const crdtRoot = binding.root;
+            
+            console.log(`🔧 [INITIAL-SYNC] Lexical children: ${lexicalRoot.getChildren().length}, CRDT children: ${crdtRoot._children.length}`);
+            
+            // Force sync if Lexical has structure but CRDT doesn't
+            if (lexicalRoot.getChildren().length > 0 && crdtRoot._children.length === 0) {
+              console.log(`🔧 [INITIAL-SYNC] Forcing sync from Lexical to CRDT`);
+              crdtRoot.syncChildrenFromLexical(
+                binding,
+                lexicalRoot,
+                null, // prevNodeMap
+                new Map([['root', true]]), // mark root as dirty
+                new Set() // dirtyLeaves
+              );
+              
+              // Log final structure
+              console.log(`🔧 [INITIAL-SYNC] After sync - CRDT children: ${crdtRoot._children.length}`);
+              if ((crdtRoot as any).logHierarchy) {
+                (crdtRoot as any).logHierarchy("🏗️ [FINAL-STRUCTURE] ");
+              }
+            }
+          });
+        }, 100); // Small delay to ensure initialization is complete
       }
 
       isReloadingDoc.current = false;

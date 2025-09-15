@@ -31,6 +31,7 @@ export default function Settings(): JSX.Element {
       selectionAlwaysOnDisplay,
       isCodeHighlighted,
       isCodeShiki,
+      useYjs,
     },
   } = useSettings();
   useEffect(() => {
@@ -66,6 +67,16 @@ export default function Settings(): JSX.Element {
               }}
               checked={isCollab}
               text="Collaboration"
+            />
+          )}
+          {isRichText && isDevPlayground && isCollab && (
+            <Switch
+              onClick={() => {
+                setOption('useYjs', !useYjs);
+                window.location.reload();
+              }}
+              checked={useYjs}
+              text="Use Y.js (vs Loro)"
             />
           )}
           {isDevPlayground && (

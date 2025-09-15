@@ -15,7 +15,7 @@ import {CollabTextNode} from '../nodes/CollabTextNode';
 import type {Binding} from '../Bindings';
 import {Provider, UserState} from '../State';
 import {getPositionFromElementAndOffset} from '../Utils';
-import { AnyCollabNode } from '../nodes/AnyCollabNode';
+import {AnyCollabNode} from '../nodes/AnyCollabNode';
 
 /*****************************************************************************/
 
@@ -40,18 +40,18 @@ export type Cursor = {
   selection: null | CursorSelection;
 };
 
-export type SyncCursorPositionsFn = (
-  binding: Binding,
-  provider: Provider,
-  options?: SyncCursorPositionsOptions,
-) => void;
-
 export type SyncCursorPositionsOptions = {
   getAwarenessStates?: (
     binding: Binding,
     provider: Provider,
   ) => Map<number, UserState>;
 };
+
+export type SyncCursorPositionsFn = (
+  binding: Binding,
+  provider: Provider,
+  options?: SyncCursorPositionsOptions,
+) => void;
 
 /*****************************************************************************/
 
@@ -71,7 +71,6 @@ function $setPoint(point: Point, key: NodeKey, offset: number): void {
     point.set(key, offset, $isElementNode(anchorNode) ? 'element' : 'text');
   }
 }
-
 
 /*****************************************************************************/
 

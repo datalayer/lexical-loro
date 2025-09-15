@@ -100,6 +100,8 @@ export function CollaborationPlugin({
 
     isBindingInitialized.current = true;
 
+    console.log('🚀 [YJS-PLUGIN] Creating binding with id:', id);
+    
     const binding = createBinding(
       editor,
       provider,
@@ -109,6 +111,24 @@ export function CollaborationPlugin({
       excludedProperties,
     );
     setBinding(binding);
+    
+    console.log('✅ [YJS-PLUGIN] Binding created, root children length:', binding.root._children.length);
+    console.log('🔍 [YJS-PLUGIN] Root structure:', binding.root);
+    
+    // Add immediate debug info to page title for visibility
+    document.title = `YJS: ${binding.root._children.length} children`;
+    
+    // Debug after initial sync
+    setTimeout(() => {
+      console.log('⏰ [YJS-PLUGIN] After initial sync - root children length:', binding.root._children.length);
+      console.log('⏰ [YJS-PLUGIN] After initial sync - root structure:', binding.root);
+      // Update title with final count
+      document.title = `YJS: ${binding.root._children.length} children (synced)`;
+      // Add visual debug to page
+      if ((window as any).debugYjs?.addDebugToPage) {
+        (window as any).debugYjs.addDebugToPage();
+      }
+    }, 1000);
 
     return () => {
       binding.root.destroy(binding);

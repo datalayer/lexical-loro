@@ -23,7 +23,7 @@ import type {Binding} from '../Bindings';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
 import {CollabTextNode} from './CollabTextNode';
-import { AnyCollabNode } from './AnyCollabNode';
+import {AnyCollabNode} from './AnyCollabNode';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
@@ -456,6 +456,7 @@ export class CollabElementNode {
     const prevEndIndex = prevChildren.length - 1;
     const nextEndIndex = nextChildren.length - 1;
     const collabNodeMap = binding.collabNodeMap;
+
     let prevChildrenSet: Set<NodeKey> | undefined;
     let nextChildrenSet: Set<NodeKey> | undefined;
     let prevIndex = 0;

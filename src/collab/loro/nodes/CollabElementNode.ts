@@ -11,9 +11,6 @@ import {
 import {XmlText} from '../types/XmlText';
 import {LoroMap} from 'loro-crdt';
 import invariant from '../../utils/invariant';
-import {CollabDecoratorNode} from './CollabDecoratorNode';
-import {CollabLineBreakNode} from './CollabLineBreakNode';
-import {CollabTextNode} from './CollabTextNode';
 import {
   $createCollabNodeFromLexicalNode,
   $getOrInitCollabNodeFromSharedType,
@@ -23,9 +20,11 @@ import {
   spliceString,
   syncPropertiesFromLexical,
 } from '../Utils';
-import {$createCollabTextNode} from './CollabTextNode';
-import { Binding } from '../Bindings';
-import { AnyCollabNode } from './AnyCollabNode';
+import type {Binding} from '../Bindings';
+import {CollabDecoratorNode} from './CollabDecoratorNode';
+import {CollabLineBreakNode} from './CollabLineBreakNode';
+import {CollabTextNode} from './CollabTextNode';
+import {AnyCollabNode} from './AnyCollabNode';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
@@ -102,6 +101,18 @@ export class CollabElementNode {
       'syncPropertiesFromCRDT: could not find element node',
     );
     $syncPropertiesFromCRDT(binding, this._xmlText, lexicalNode, keysChanged);
+  }
+
+  // Debug method to log the hierarchy structure
+  logHierarchy(prefix = ""): void {
+    console.log(`${prefix}${this.constructor.name}(${this._key}) [${this.getType()}] - ${this._children.length} children`);
+    this._children.forEach((child, index) => {
+      if (child && typeof (child as any).logHierarchy === 'function') {
+        (child as any).logHierarchy(`${prefix}  ${index}: `);
+      } else {
+        console.log(`${prefix}  ${index}: ${child ? child.constructor.name : 'null'}(${child ? (child as any)._key : 'no-key'})`);
+      }
+    });
   }
 
   applyChildrenCRDTDelta(
@@ -297,13 +308,31 @@ export class CollabElementNode {
                 const nodeType = loroMap.get('__type') as string;
                 console.log(`🔧 [EMBED-SYNC-MAP] LoroMap processing - nodeType: ${nodeType}, parent: ${this._key}`);
                 if (nodeType) {
-                  // 🚨 CRITICAL FIX: Don't create text nodes at root level at all!
-                  // Text nodes should only be created as children of existing CollabElementNodes
-                  console.warn(`🚨 [HIERARCHY-FIX] BLOCKING text node creation for textId: ${textId}, parent: ${this._key}`);
-                  console.warn(`🚨 [HIERARCHY-FIX] This text should be handled by its parent CollabElementNode, not created separately`);
-                  
-                  // COMPLETELY BLOCK text node creation here - it causes sibling issues
-                  // Text nodes should only be created by their parent CollabElementNode through proper hierarchy
+                  // 🚨 HIERARCHY FIX: Only create text nodes as children of proper element nodes
+                  // Don't create text nodes at root level - they should be children of paragraph/element nodes
+                  if (this._key === 'root') {
+                    console.warn(`🚨 [HIERARCHY-FIX] BLOCKING text node creation at root level for textId: ${textId}`);
+                    console.warn(`🚨 [HIERARCHY-FIX] Text nodes should be children of paragraph/element nodes, not root siblings`);
+                  } else {
+                    // This is a proper element node (paragraph, etc.) - allow text node creation
+                    console.log(`🔧 [HIERARCHY-GOOD] Creating text node as child of ${this.constructor.name}(${this._key})`);
+                    try {
+                      const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
+                      
+                      // Extract the key from the textId
+                      const keyMatch = textId.match(/text_(\w+):Map$/);
+                      if (keyMatch) {
+                        collabTextNode._key = `text_${keyMatch[1]}`;
+                      } else {
+                        console.warn(`🔧 [EMBED-SYNC] Could not extract key from textId: ${textId}`);
+                      }
+                      
+                      this._children.push(collabTextNode);
+                      console.log(`🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
+                    } catch (error) {
+                      console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${textId}:`, error);
+                    }
+                  }
                 }
               }
             }
@@ -340,24 +369,29 @@ export class CollabElementNode {
                     }
                     
                     if (nodeType) {
-                      try {
-                        const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
-                        
-                        // Extract the key from the mapId (e.g., "cid:root-element_1:Map" -> "1")
-                        const keyMatch = mapId.match(/element_(\w+):Map$/);
-                        if (keyMatch) {
-                          collabTextNode._key = keyMatch[1];
-                        } else {
-                          console.warn(`🔧 [EMBED-SYNC] Could not extract key from mapId: ${mapId}`);
+                      // 🚨 HIERARCHY FIX: Only create text nodes as children of proper element nodes
+                      if (this._key === 'root') {
+                        console.warn(`🚨 [HIERARCHY-FIX] BLOCKING text node creation at root level for mapId: ${mapId}`);
+                        console.warn(`🚨 [HIERARCHY-FIX] Text nodes should be children of paragraph/element nodes, not root siblings`);
+                      } else {
+                        // This is a proper element node (paragraph, etc.) - allow text node creation
+                        console.log(`🔧 [HIERARCHY-GOOD] Creating text node as child of ${this.constructor.name}(${this._key})`);
+                        try {
+                          const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
+                          
+                          // Extract the key from the mapId (e.g., "cid:root-element_1:Map" -> "1")
+                          const keyMatch = mapId.match(/element_(\w+):Map$/);
+                          if (keyMatch) {
+                            collabTextNode._key = keyMatch[1];
+                          } else {
+                            console.warn(`🔧 [EMBED-SYNC] Could not extract key from mapId: ${mapId}`);
+                          }
+                          
+                          this._children.push(collabTextNode);
+                          console.log(`🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
+                        } catch (error) {
+                          console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${mapId}:`, error);
                         }
-                        
-                        this._children.push(collabTextNode);
-                        console.log(`🔧 [EMBED-SYNC-PUSH] After: ${this._children.length} children:`, this._children.map(c => `${c.constructor.name}(${c._key})`));
-                        
-                        // Verify the child is actually in the array
-                        const foundChild = this._children.find(c => c === collabTextNode);
-                      } catch (error) {
-                        console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${mapId}:`, error);
                       }
                     } else {
                       console.warn(`⚠️ [EMBED-SYNC] No nodeType found in LoroMap for ${mapId}`);
@@ -442,8 +476,7 @@ export class CollabElementNode {
                 
                 // Add to _children if not already present
                 if (collabNode && !this._children.includes(collabNode)) {
-                  // Hierarchy fix: If this is root and we're adding a text node, 
-                  // check if we can add it to an existing paragraph instead
+                  // 🚨 HIERARCHY FIX: Never add text nodes as root siblings
                   if (this._key === 'root' && collabNode instanceof CollabTextNode) {
                     // Find existing paragraph elements to add the text node to
                     const paragraphElement = this._children.find(child => 
@@ -456,10 +489,18 @@ export class CollabElementNode {
                       paragraphElement._children.push(collabNode);
                       collabNode._parent = paragraphElement;
                     } else {
-                      console.log(`🔧 [HIERARCHY-FIX] No paragraph found, adding text node to root (this may cause hierarchy issues)`);
-                      this._children.push(collabNode);
+                      // Create a paragraph to wrap the orphaned text node
+                      console.log(`🔧 [HIERARCHY-FIX] Creating paragraph wrapper for orphaned text node`);
+                      const xmlText = new XmlText(binding.doc, `paragraph_wrapper_${Date.now()}`);
+                      xmlText.setAttribute('__type', 'paragraph');
+                      const paragraphWrapper = $createCollabElementNode(xmlText, this, 'paragraph');
+                      paragraphWrapper._children.push(collabNode);
+                      collabNode._parent = paragraphWrapper;
+                      this._children.push(paragraphWrapper);
+                      console.log(`🔧 [HIERARCHY-FIX] Created paragraph wrapper for text node to prevent root sibling`);
                     }
                   } else {
+                    // This is a proper element node - allow direct child addition
                     this._children.push(collabNode);
                   }
                 }
@@ -669,30 +710,6 @@ export class CollabElementNode {
     const childCollabNode = this._children[index];
     // Update
     const nextChildNode = $getNodeByKeyOrThrow(key);
-    
-    if (!childCollabNode) {
-      console.error('❌ _syncChildFromLexical: childCollabNode is undefined at index', index);
-      console.error('❌ Children array length:', this._children.length);
-      console.error('❌ Children array contents:', this._children.map(c => c?.constructor?.name));
-      console.error('❌ Attempting to create missing CollabNode for key:', key);
-      
-      // Instead of failing, try to create the missing CollabNode
-      try {
-        const collabNode = $createCollabNodeFromLexicalNode(
-          binding,
-          nextChildNode,
-          this,
-        );
-        binding.collabNodeMap.set(key, collabNode);
-        
-        // Insert the collabNode at the correct index
-        this.splice(binding, index, 0, collabNode);        
-        return;
-      } catch (error) {
-        console.error('❌ Failed to create missing CollabNode:', error);
-        return;
-      }
-    }
 
     if (
       childCollabNode instanceof CollabElementNode &&
@@ -731,6 +748,7 @@ export class CollabElementNode {
     }
   }
 
+
   syncChildrenFromLexical(
     binding: Binding,
     nextLexicalNode: ElementNode,
@@ -738,16 +756,24 @@ export class CollabElementNode {
     dirtyElements: null | Map<NodeKey, IntentionallyMarkedAsDirtyElement>,
     dirtyLeaves: null | Set<NodeKey>,
   ): void {
+    console.log(`🔄 [SYNC-L2C] ${this._key} (${this._type}) syncChildrenFromLexical - current children: ${this._children.length}`);
+    
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const prevChildren =
       prevLexicalNode === null
         ? []
         : $createChildrenArray(prevLexicalNode, prevNodeMap);
     const nextChildren = $createChildrenArray(nextLexicalNode, null);
+    
+    console.log(`🔄 [SYNC-L2C] ${this._key} prev: ${prevChildren.length}, next: ${nextChildren.length} Lexical children`);
+    if (nextChildren.length > 0) {
+      console.log(`🔄 [SYNC-L2C] ${this._key} nextChildren keys:`, nextChildren);
+    }
+    
     const prevEndIndex = prevChildren.length - 1;
     const nextEndIndex = nextChildren.length - 1;
     const collabNodeMap = binding.collabNodeMap;
-    
+
     let prevChildrenSet: Set<NodeKey> | undefined;
     let nextChildrenSet: Set<NodeKey> | undefined;
     let prevIndex = 0;
@@ -758,7 +784,7 @@ export class CollabElementNode {
       const nextKey = nextChildren[nextIndex];
 
       if (prevKey === nextKey) {
-        // No move, create or remove - sync existing child
+        // Nove move, create or remove
         this._syncChildFromLexical(
           binding,
           nextIndex,
@@ -795,6 +821,7 @@ export class CollabElementNode {
             this,
           );
           collabNodeMap.set(nextKey, collabNode);
+
           if (prevHasNextKey) {
             this.splice(binding, nextIndex, 1, collabNode);
             prevIndex++;
@@ -829,6 +856,7 @@ export class CollabElementNode {
     }
   }
 
+
   append(
     collabNode: AnyCollabNode,
   ): void {
@@ -838,25 +866,30 @@ export class CollabElementNode {
     const offset =
       lastChild !== undefined ? lastChild.getOffset() + lastChild.getSize() : 0;
 
+    console.log(`📝 [APPEND] ${this._key} (${this._type}) appending ${collabNode.constructor.name}(${(collabNode as any)._key}) at offset ${offset}`);
+    console.log(`📝 [APPEND] Before: ${this._key} has ${children.length} children`);
+
     if (collabNode instanceof CollabElementNode) {
       xmlText.insertEmbed(offset, collabNode._xmlText);
     } else if (collabNode instanceof CollabTextNode) {
       const map = collabNode._map;
-      
-      // For CollabTextNodes, we need to insert the embed even if map.parent is not null
-      // because they need to be embedded in the XmlText to be discoverable by other editors
-      xmlText.insertEmbed(offset, map);
 
-      // Since we always insert the embed now, text goes at offset + 1
-      const textInsertOffset = offset + 1;
-      xmlText.insert(textInsertOffset, collabNode._text);
+      if (map.parent === null) {
+        xmlText.insertEmbed(offset, map);
+      }
+
+      xmlText.insert(offset + 1, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
-      xmlText.insertEmbed(offset, collabNode._map);
+      xmlText.insertEmbed(offset, collabNode._xmlElem);
     }
 
     this._children.push(collabNode);
+    console.log(`📝 [APPEND] After: ${this._key} now has ${children.length} children`);
+    if (this._key === 'root') {
+      console.log(`🏗️ [ROOT-STRUCTURE] Root children:`, children.map(c => `${c.constructor.name}(${(c as any)._key})`));
+    }
   }
 
   splice(
@@ -895,16 +928,13 @@ export class CollabElementNode {
 
       if (map.parent === null) {
         xmlText.insertEmbed(offset, map);
-      } else {
-        console.warn(`[CollabElementNode.splice] Skipping embed insertion - map.parent is not null`);
       }
 
-      const textInsertOffset = map.parent === null ? offset + 1 : offset;
-      xmlText.insert(textInsertOffset, collabNode._text);
+      xmlText.insert(offset + 1, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
-      xmlText.insertEmbed(offset, collabNode._map);
+      xmlText.insertEmbed(offset, collabNode._xmlElem);
     }
 
     if (delCount !== 0) {

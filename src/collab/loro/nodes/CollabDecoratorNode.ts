@@ -1,21 +1,20 @@
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
 import type {LoroMap} from 'loro-crdt';
+import invariant from '../../utils/invariant';
+import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
 import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
-import invariant from '../../utils/invariant';
-
-import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
 
 export class CollabDecoratorNode {
-  _map: LoroMap<Record<string, unknown>>;
+  _xmlElem: LoroMap<Record<string, unknown>>;
   _key: NodeKey;
   _parent: CollabElementNode;
   _type: string;
 
-  constructor(map: LoroMap<Record<string, unknown>>, parent: CollabElementNode, type: string) {
+  constructor(xmlElem: LoroMap<Record<string, unknown>>, parent: CollabElementNode, type: string) {
     this._key = '';
-    this._map = map;
+    this._xmlElem = xmlElem;
     this._parent = parent;
     this._type = type;
   }
@@ -35,7 +34,7 @@ export class CollabDecoratorNode {
   }
 
   getSharedType(): LoroMap<Record<string, unknown>> {
-    return this._map;
+    return this._xmlElem;
   }
 
   getType(): string {
@@ -61,11 +60,11 @@ export class CollabDecoratorNode {
     prevNodeMap: null | NodeMap,
   ): void {
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
-    const map = this._map;
+    const xmlElem = this._xmlElem;
 
     syncPropertiesFromLexical(
       binding,
-      map,
+      xmlElem,
       prevLexicalNode,
       nextLexicalNode,
     );
@@ -80,7 +79,7 @@ export class CollabDecoratorNode {
       lexicalNode !== null,
       'syncPropertiesFromCRDT: could not find decorator node',
     );
-    const map = this._map;
+    const map = this._xmlElem;
     $syncPropertiesFromCRDT(binding, map, lexicalNode, keysChanged);
   }
 

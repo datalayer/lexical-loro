@@ -31,6 +31,10 @@ import {
 import { Binding } from '../Bindings';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';
 
+/*****************************************************************************/
+
+type IntentionallyMarkedAsDirtyElement = boolean;
+
 /******************************************************************************
  * CRDT -> Lexical
  *****************************************************************************/
@@ -67,6 +71,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
     }
     
     const node = collabNode.getNode();
+
     if (node && diff && diff.type === 'map') {
       const state = $getWritableNodeState(node.getWritable());
       const mapDiff = diff as any; // Cast to map diff type
@@ -90,15 +95,11 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
 
-  console.log('---DLA', binding)
-  console.log('---DLA', event)
-
-  // First check if this is a __state event
   if ($syncStateEvent(binding, event)) {
     return;
   }
   
-  const {target, diff, path} = event;
+  const {target} = event;
   
   // Find the CollabNode by matching container IDs
   // Unlike Y.js where event.target is the actual shared type object,
@@ -422,8 +423,6 @@ function $handleNormalizationMergeConflicts(
   }
 }
 
-type IntentionallyMarkedAsDirtyElement = boolean;
-
 export function syncLexicalUpdatesToCRDT(
   binding: Binding,
   provider: Provider,
@@ -487,6 +486,8 @@ export function syncLexicalUpdatesToCRDT(
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
+
+      console.log('----DLA', binding.root)
     });
   });
 }

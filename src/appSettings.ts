@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS = {
   isCharLimitUtf8: false,
   isCodeHighlighted: true,
   isCodeShiki: false,
-  isCollab: false,
+  isCollab: true,  // Enable collaboration by default for testing
   isMaxLength: false,
   isRichText: true,
   listStrictIndent: false,

@@ -42,6 +42,10 @@ import {
   syncLexicalSelectionToCRDT,
 } from './SyncCursors';
 
+/*****************************************************************************/
+
+type IntentionallyMarkedAsDirtyElement = boolean;
+
 /******************************************************************************
  * CRDT -> Lexical
  *****************************************************************************/
@@ -77,9 +81,6 @@ function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncEvent(binding: Binding, event: any): void {
-
-  console.log('----------DLA', binding);
-  console.log('----------DLA', event);
 
   if (event instanceof YMapEvent && $syncStateEvent(binding, event)) {
     return;
@@ -254,8 +255,6 @@ function $handleNormalizationMergeConflicts(
   }
 }
 
-type IntentionallyMarkedAsDirtyElement = boolean;
-
 export function syncLexicalUpdatesToCRDT(
   binding: Binding,
   provider: Provider,
@@ -304,6 +303,8 @@ export function syncLexicalUpdatesToCRDT(
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
+
+      console.log('----DLA', binding.root)
     });
   });
 }
