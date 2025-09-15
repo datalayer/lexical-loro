@@ -117,7 +117,6 @@ export function $createCollabNodeFromLexicalNode(
     const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
     xmlText.setAttribute('__type', nodeType);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
-    console.log(`🏭 [NODE-CREATION] Created CollabElementNode for ${nodeType}, key: ${lexicalNode.__key}`);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
   } else if ($isTextNode(lexicalNode)) {
@@ -129,7 +128,6 @@ export function $createCollabNodeFromLexicalNode(
       parent,
       nodeType,
     );
-    console.log(`🏭 [NODE-CREATION] Created CollabTextNode for ${nodeType}, key: ${lexicalNode.__key}, text: "${(lexicalNode as any).__text}"`);
     collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
   } else if ($isLineBreakNode(lexicalNode)) {
     const map = binding.doc.getMap(`linebreak_${lexicalNode.__key}`);
@@ -227,7 +225,6 @@ export function createLexicalNodeFromCollabNode(
     collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
     collabNode.syncChildrenFromCRDT(binding);
   } else if (collabNode instanceof CollabTextNode) {
-    console.log(`🔧 [NODE-CREATION] Processing CollabTextNode, _map:`, collabNode._map);
     collabNode.syncPropertiesAndTextFromCRDT(binding, null);
     // Also register CollabTextNode by its Map ID so events can find it
     const mapId = (collabNode._map as any).id;
@@ -275,18 +272,8 @@ export function $syncPropertiesFromCRDT(
     const prevValue = (lexicalNode as any)[property];
     let nextValue = sharedTypeGet(sharedType, property);
 
-    // Debug logging for ALL properties to understand what's happening
-    console.log(`🔧 [SYNC-PROPS-ALL] Property: ${property}, nextValue:`, nextValue, typeof nextValue);
-    
-    // Debug logging for embed properties
-    if (property.startsWith('embed_')) {
-      console.log(`🔧 [SYNC-PROPS-DEBUG] Found embed property: ${property}, nextValue:`, nextValue, typeof nextValue);
-    }
-
     // Special handling for embed properties - these reference CollabTextNodes
-    if (property.startsWith('embed_') && nextValue) {
-      console.log(`🔧 [SYNC-PROPS] Processing embed property: ${property}`, nextValue);
-      
+    if (property.startsWith('embed_') && nextValue) {      
       // The embed property value might be the LoroMap directly, or a reference
       let map: any = null;
       let objectId: string | null = null;
@@ -305,20 +292,18 @@ export function $syncPropertiesFromCRDT(
               console.warn(`⚠️ [SYNC-PROPS] Could not get map for ${objectId}:`, error);
             }
           } else {
-            console.log(`🔧 [SYNC-PROPS] ObjectId does not end with :Map, checking if it's an element reference`);
+            console.warn(`🔧 [SYNC-PROPS] ObjectId does not end with :Map, checking if it's an element reference`);
           }
         }
         // Case 2: nextValue is the LoroMap directly
         else if (anyValue.constructor && anyValue.constructor.name === 'LoroMap') {
           map = nextValue;
           objectId = anyValue.id || 'unknown-map-id';
-          console.log(`🔧 [SYNC-PROPS] nextValue is LoroMap directly, id: ${objectId}`);
         }
         // Case 3: Check for other map-like structures
         else if (anyValue.get && typeof anyValue.get === 'function') {
           map = nextValue;
           objectId = anyValue.id || 'map-like-object';
-          console.log(`🔧 [SYNC-PROPS] nextValue has get method (map-like), treating as LoroMap`);
         }
       }
       
@@ -334,8 +319,6 @@ export function $syncPropertiesFromCRDT(
             // Get the CollabElementNode from the lexical node
             const collabElementNode = binding.collabNodeMap.get(lexicalNode.getKey());
             if (collabElementNode && 'append' in collabElementNode) {
-              console.log(`🔧 [SYNC-PROPS] Found CollabElementNode, creating CollabTextNode`);
-              
               // Check if CollabTextNode already exists
               const existingNode = binding.collabNodeMap.get(objectId);
               if (existingNode) {
@@ -368,7 +351,7 @@ export function $syncPropertiesFromCRDT(
           console.warn('⚠️ [SYNC-PROPS] Error processing embed map:', error);
         }
       } else {
-        console.log(`🔧 [SYNC-PROPS] No map found or objectId missing - map: ${!!map}, objectId: ${objectId}`);
+        console.warn(`🔧 [SYNC-PROPS] No map found or objectId missing - map: ${!!map}, objectId: ${objectId}`);
       }
       
       // Continue with normal property processing

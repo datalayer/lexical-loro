@@ -46,14 +46,14 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
     const container = doc.getContainerById(target);
     
     if (!container) {
-      console.log(`⚠️ [STATE-EVENT] Container not found for: ${target}`)
+      console.warn(`⚠️ [STATE-EVENT] Container not found for: ${target}`)
       return false;
     }
     
     // Get the parent container to find the associated collabNode
     const parentPath = event.path;
     if (!parentPath || parentPath.length === 0) {
-      console.log(`⚠️ [STATE-EVENT] No path for state event: ${target}`)
+      console.warn(`⚠️ [STATE-EVENT] No path for state event: ${target}`)
       return false;
     }
     
@@ -62,7 +62,7 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
     const collabNode = binding.collabNodeMap.get(String(parentContainerId));
     
     if (!collabNode) {
-      console.log(`⚠️ [STATE-EVENT] No CollabNode found for parent: ${parentContainerId}`)
+      console.warn(`⚠️ [STATE-EVENT] No CollabNode found for parent: ${parentContainerId}`)
       return false;
     }
     
@@ -137,7 +137,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
         // Get the LoroMap for this text node
         const map = binding.doc.getMap(target);
         if (map && map.get('__type') === 'text') {
-          console.log(`🔧 [SYNC-TEXT-NODE] Found new text node Map: ${target}, key: ${textNodeKey}`);
           
           // Find the parent CollabElementNode by looking for the root or other element nodes
           // that might contain this text node through embeds
@@ -147,7 +146,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
           const rootCollabNode = binding.root;
           if (rootCollabNode instanceof CollabElementNode) {
             parentCollabNode = rootCollabNode;
-            console.log(`🔧 [SYNC-TEXT-NODE] Using root as parent for ${textNodeKey}`);
           }
           
           if (parentCollabNode) {
@@ -158,7 +156,6 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
             );
             
             if (!existingChild) {
-              console.log(`🔧 [SYNC-TEXT-NODE] Creating CollabTextNode for ${textNodeKey}`);
               
               // Create the CollabTextNode
               const nodeType = map.get('__type') as string;
@@ -170,13 +167,9 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
               // Register in the collabNodeMap
               binding.collabNodeMap.set(textNodeKey, collabTextNode);
               
-              console.log(`🔧 [SYNC-TEXT-NODE] Successfully created and registered CollabTextNode: ${textNodeKey}`);
-              console.log(`🔧 [SYNC-TEXT-NODE] Parent children count now: ${parentCollabNode._children.length}`);
-              
               // Set this as the found collabNode so the event gets processed
               collabNode = collabTextNode;
             } else {
-              console.log(`🔧 [SYNC-TEXT-NODE] CollabTextNode already exists for ${textNodeKey}`);
               collabNode = existingChild;
             }
           } else {
@@ -226,7 +219,7 @@ function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, eve
           console.warn('❌ [SYNC-NODE-ERROR] Failed to apply children CRDT delta:', error);
         }
       } else {
-        console.log(`⚠️ [SYNC-NODE-8] No valid delta in text diff`)
+        console.warn(`⚠️ [SYNC-NODE-8] No valid delta in text diff`)
       }
     } else if (diff.type === 'map') {
       // Map diff: handle property changes
@@ -240,7 +233,7 @@ function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, eve
           console.warn('❌ [SYNC-NODE-ERROR] Failed to sync properties from CRDT:', error);
         }
       } else {
-        console.log(`⚠️ [SYNC-NODE-12] No updated properties in map diff`)
+        console.warn(`⚠️ [SYNC-NODE-12] No updated properties in map diff`)
       }
     } else {
       // Fallback: sync children from CRDT
@@ -310,16 +303,13 @@ export function syncCRDTUpdatesToLexical(
   events: Array<LoroEvent>,
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
-): void {
-  console.log(`🔄 [SYNC-1] syncCRDTUpdatesToLexical called with ${events.length} events, isFromUndoManger: ${isFromUndoManger}`)
-  
+): void {  
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
 
   // For Loro events, we don't need to precompute deltas like in Y.js
   // The diff is already computed and available in the event structure
 
-  console.log(`🔄 [SYNC-2] Starting editor.update() with ${events.length} events`)
   editor.update(
     () => {
       for (let i = 0; i < events.length; i++) {
