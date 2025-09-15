@@ -43,14 +43,14 @@ export function createBinding(
 
   const rootXmlText = doc.get('root', XmlText) as XmlText;
 
-  const root: CollabElementNode = $createCollabElementNode(
+  const collabRoot: CollabElementNode = $createCollabElementNode(
     rootXmlText,
     null,
     'root',
   );
-  root._key = 'root';
+  collabRoot._key = 'root';
 
-  return {
+  const binding = {
     clientID: doc.clientID,
     collabNodeMap: new Map(),
     cursors: new Map(),
@@ -61,6 +61,8 @@ export function createBinding(
     excludedProperties: excludedProperties || new Map(),
     id,
     nodeProperties: new Map(),
-    root,
+    root: collabRoot,
   };
+
+  return binding
 }

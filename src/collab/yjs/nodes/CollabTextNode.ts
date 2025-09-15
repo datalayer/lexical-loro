@@ -6,12 +6,11 @@ import {
   $isTextNode,
 } from 'lexical';
 import type {Map as YMap} from 'yjs';
-import type {Binding} from '../Bindings';
-import type {CollabElementNode} from './CollabElementNode';
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
-
 import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
+import type {Binding} from '../Bindings';
+import type {CollabElementNode} from './CollabElementNode';
 
 function $diffTextContentAndApplyDelta(
   collabNode: CollabTextNode,

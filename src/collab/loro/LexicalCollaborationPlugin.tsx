@@ -78,12 +78,12 @@ export function CollaborationPlugin({
 
     isProviderInitialized.current = true;
 
-    const newProvider = providerFactory(id, docMap);
-    setProvider(newProvider);
+    const provider = providerFactory(id, docMap);
+    setProvider(provider);
     setDoc(docMap.get(id));
 
     return () => {
-      newProvider.disconnect();
+      provider.disconnect();
     };
   }, [id, providerFactory, docMap]);
 

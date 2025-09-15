@@ -25,12 +25,11 @@ import {
   CollabDecoratorNode,
 } from './../nodes/CollabDecoratorNode';
 import {$createCollabElementNode, CollabElementNode} from './../nodes/CollabElementNode';
-import {
-  $createCollabLineBreakNode,
-  CollabLineBreakNode,
-} from './../nodes/CollabLineBreakNode';
+import { $createCollabLineBreakNode } from './../nodes/CollabLineBreakNode';
 import {$createCollabTextNode, CollabTextNode} from './../nodes/CollabTextNode';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';
+
+/*****************************************************************************/
 
 const baseExcludedProperties = new Set<string>([
   '__key',
@@ -47,6 +46,8 @@ const elementExcludedProperties = new Set<string>([
 ]);
 const rootExcludedProperties = new Set<string>(['__cachedText']);
 const textExcludedProperties = new Set<string>(['__text']);
+
+/*****************************************************************************/
 
 function isExcludedProperty(
   name: string,
@@ -78,218 +79,6 @@ function isExcludedProperty(
   return excludedProperties != null && excludedProperties.has(name);
 }
 
-export function getIndexOfCRDTNode(
-  yjsParentNode: CRDTNode,
-  yjsNode: CRDTNode,
-): number {
-  let node = yjsParentNode.firstChild;
-  let i = -1;
-
-  if (node === null) {
-    return -1;
-  }
-
-  do {
-    i++;
-
-    if (node === yjsNode) {
-      return i;
-    }
-
-    // @ts-expect-error Sibling exists but type is not available from YJS.
-    node = node.nextSibling;
-
-    if (node === null) {
-      return -1;
-    }
-  } while (node !== null);
-
-  return i;
-}
-
-export function $createCollabNodeFromLexicalNode(
-  binding: Binding,
-  lexicalNode: LexicalNode,
-  parent: CollabElementNode,
-): AnyCollabNode {
-  const nodeType = lexicalNode.__type;
-  let collabNode;
-
-  if ($isElementNode(lexicalNode)) {
-    const xmlText = new XmlText();
-    collabNode = $createCollabElementNode(xmlText, parent, nodeType);
-    collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
-    collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
-  } else if ($isTextNode(lexicalNode)) {
-    // TODO create a token text node for token, segmented nodes.
-    const map = new YMap();
-    collabNode = $createCollabTextNode(
-      map,
-      lexicalNode.__text,
-      parent,
-      nodeType,
-    );
-    collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
-  } else if ($isLineBreakNode(lexicalNode)) {
-    const map = new YMap();
-    map.set('__type', 'linebreak');
-    collabNode = $createCollabLineBreakNode(map, parent);
-  } else if ($isDecoratorNode(lexicalNode)) {
-    const xmlElem = new XmlElement();
-    collabNode = $createCollabDecoratorNode(xmlElem, parent, nodeType);
-    collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
-  } else {
-    invariant(false, 'Expected text, element, decorator, or linebreak node');
-  }
-
-  collabNode._key = lexicalNode.__key;
-  return collabNode;
-}
-
-export function getNodeTypeFromSharedType(
-  sharedType: XmlText | YMap<unknown> | XmlElement,
-): string | undefined {
-  const type = sharedTypeGet(sharedType, '__type');
-  invariant(
-    typeof type === 'string' || typeof type === 'undefined',
-    'Expected shared type to include type attribute',
-  );
-  return type;
-}
-
-export function $getOrInitCollabNodeFromSharedType(
-  binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
-  parent?: CollabElementNode,
-): AnyCollabNode {
-  const collabNode = (sharedType as any)._collabNode;
-
-  if (collabNode === undefined) {
-    const registeredNodes = binding.editor._nodes;
-    const type = getNodeTypeFromSharedType(sharedType);
-    invariant(
-      typeof type === 'string',
-      'Expected shared type to include type attribute',
-    );
-    const nodeInfo = registeredNodes.get(type);
-    invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
-
-    const sharedParent = sharedType.parent;
-    const targetParent =
-      parent === undefined && sharedParent !== null
-        ? $getOrInitCollabNodeFromSharedType(
-            binding,
-            sharedParent as XmlText | YMap<unknown> | XmlElement,
-          )
-        : parent || null;
-
-    invariant(
-      targetParent instanceof CollabElementNode,
-      'Expected parent to be a collab element node',
-    );
-
-    if (sharedType instanceof XmlText) {
-      return $createCollabElementNode(sharedType, targetParent, type);
-    } else if (sharedType instanceof YMap) {
-      if (type === 'linebreak') {
-        return $createCollabLineBreakNode(sharedType, targetParent);
-      }
-      return $createCollabTextNode(sharedType, '', targetParent, type);
-    } else if (sharedType instanceof XmlElement) {
-      return $createCollabDecoratorNode(sharedType, targetParent, type);
-    }
-  }
-
-  return collabNode;
-}
-
-export function createLexicalNodeFromCollabNode(
-  binding: Binding,
-  collabNode: AnyCollabNode,
-  parentKey: NodeKey,
-): LexicalNode {
-  const type = collabNode.getType();
-  const registeredNodes = binding.editor._nodes;
-  const nodeInfo = registeredNodes.get(type);
-  invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
-  const lexicalNode:
-    | DecoratorNode<unknown>
-    | TextNode
-    | ElementNode
-    | LexicalNode = new nodeInfo.klass();
-  lexicalNode.__parent = parentKey;
-  collabNode._key = lexicalNode.__key;
-
-  if (collabNode instanceof CollabElementNode) {
-    const xmlText = collabNode._xmlText;
-    collabNode.syncPropertiesFromCRDT(binding, null);
-    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-    collabNode.syncChildrenFromCRDT(binding);
-  } else if (collabNode instanceof CollabTextNode) {
-    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
-  } else if (collabNode instanceof CollabDecoratorNode) {
-    collabNode.syncPropertiesFromCRDT(binding, null);
-  }
-
-  binding.collabNodeMap.set(lexicalNode.__key, collabNode);
-  return lexicalNode;
-}
-
-export function $syncPropertiesFromCRDT(
-  binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
-  lexicalNode: LexicalNode,
-  keysChanged: null | Set<string>,
-): void {
-  const properties =
-    keysChanged === null
-      ? sharedType instanceof YMap
-        ? Array.from(sharedType.keys())
-        : Object.keys(sharedType.getAttributes())
-      : Array.from(keysChanged);
-  let writableNode: LexicalNode | undefined;
-
-  for (let i = 0; i < properties.length; i++) {
-    const property = properties[i];
-    if (isExcludedProperty(property, lexicalNode, binding)) {
-      if (property === '__state') {
-        if (!writableNode) {
-          writableNode = lexicalNode.getWritable();
-        }
-        $syncNodeStateToLexical(binding, sharedType, writableNode);
-      }
-      continue;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const prevValue = (lexicalNode as any)[property];
-    let nextValue = sharedTypeGet(sharedType, property);
-
-    if (prevValue !== nextValue) {
-      if (nextValue instanceof Doc) {
-        const docMap = binding.docMap;
-
-        if (prevValue instanceof Doc) {
-          docMap.delete(prevValue.guid);
-        }
-
-        const nestedEditor = createEditor();
-        const key = nextValue.guid;
-        nestedEditor._key = key;
-        docMap.set(key, nextValue);
-
-        nextValue = nestedEditor;
-      }
-
-      if (writableNode === undefined) {
-        writableNode = lexicalNode.getWritable();
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      writableNode[property as keyof typeof writableNode] = nextValue as any;
-    }
-  }
-}
-
 function sharedTypeGet(
   sharedType: XmlText | YMap<unknown> | XmlElement,
   property: string,
@@ -311,21 +100,6 @@ function sharedTypeSet(
   } else {
     sharedType.setAttribute(property, nextValue as string);
   }
-}
-
-function $syncNodeStateToLexical(
-  binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
-  lexicalNode: LexicalNode,
-): void {
-  const existingState = sharedTypeGet(sharedType, '__state');
-  if (!(existingState instanceof YMap)) {
-    return;
-  }
-  // This should only called when creating the node initially,
-  // incremental updates to state come in through YMapEvent
-  // with the __state as the target.
-  $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 function syncNodeStateFromLexical(
@@ -365,6 +139,65 @@ function syncNodeStateFromLexical(
   if (!existingState) {
     sharedTypeSet(sharedType, '__state', stateMap);
   }
+}
+
+/*****************************************************************************/
+
+function $syncNodeStateToLexical(
+  binding: Binding,
+  sharedType: XmlText | YMap<unknown> | XmlElement,
+  lexicalNode: LexicalNode,
+): void {
+  const existingState = sharedTypeGet(sharedType, '__state');
+  if (!(existingState instanceof YMap)) {
+    return;
+  }
+  // This should only called when creating the node initially,
+  // incremental updates to state come in through YMapEvent
+  // with the __state as the target.
+  $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
+}
+
+/*****************************************************************************/
+
+export function getIndexOfCRDTNode(
+  yjsParentNode: CRDTNode,
+  yjsNode: CRDTNode,
+): number {
+  let node = yjsParentNode.firstChild;
+  let i = -1;
+
+  if (node === null) {
+    return -1;
+  }
+
+  do {
+    i++;
+
+    if (node === yjsNode) {
+      return i;
+    }
+
+    // @ts-expect-error Sibling exists but type is not available from YJS.
+    node = node.nextSibling;
+
+    if (node === null) {
+      return -1;
+    }
+  } while (node !== null);
+
+  return i;
+}
+
+export function getNodeTypeFromSharedType(
+  sharedType: XmlText | YMap<unknown> | XmlElement,
+): string | undefined {
+  const type = sharedTypeGet(sharedType, '__type');
+  invariant(
+    typeof type === 'string' || typeof type === 'undefined',
+    'Expected shared type to include type attribute',
+  );
+  return type;
 }
 
 export function syncPropertiesFromLexical(
@@ -532,6 +365,180 @@ export function doesSelectionNeedRecovering(
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
   binding.doc.transact(fn, binding);
+}
+
+export function createLexicalNodeFromCollabNode(
+  binding: Binding,
+  collabNode: AnyCollabNode,
+  parentKey: NodeKey,
+): LexicalNode {
+  const type = collabNode.getType();
+  const registeredNodes = binding.editor._nodes;
+  const nodeInfo = registeredNodes.get(type);
+  invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+  const lexicalNode:
+    | DecoratorNode<unknown>
+    | TextNode
+    | ElementNode
+    | LexicalNode = new nodeInfo.klass();
+  lexicalNode.__parent = parentKey;
+  collabNode._key = lexicalNode.__key;
+
+  if (collabNode instanceof CollabElementNode) {
+    const xmlText = collabNode._xmlText;
+    collabNode.syncPropertiesFromCRDT(binding, null);
+    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+    collabNode.syncChildrenFromCRDT(binding);
+  } else if (collabNode instanceof CollabTextNode) {
+    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+  } else if (collabNode instanceof CollabDecoratorNode) {
+    collabNode.syncPropertiesFromCRDT(binding, null);
+  }
+
+  binding.collabNodeMap.set(lexicalNode.__key, collabNode);
+  return lexicalNode;
+}
+
+/*****************************************************************************/
+
+export function $createCollabNodeFromLexicalNode(
+  binding: Binding,
+  lexicalNode: LexicalNode,
+  parent: CollabElementNode,
+): AnyCollabNode {
+  const nodeType = lexicalNode.__type;
+  let collabNode;
+
+  if ($isElementNode(lexicalNode)) {
+    const xmlText = new XmlText();
+    collabNode = $createCollabElementNode(xmlText, parent, nodeType);
+    collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
+    collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
+  } else if ($isTextNode(lexicalNode)) {
+    // TODO create a token text node for token, segmented nodes.
+    const map = new YMap();
+    collabNode = $createCollabTextNode(
+      map,
+      lexicalNode.__text,
+      parent,
+      nodeType,
+    );
+    collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
+  } else if ($isLineBreakNode(lexicalNode)) {
+    const map = new YMap();
+    map.set('__type', 'linebreak');
+    collabNode = $createCollabLineBreakNode(map, parent);
+  } else if ($isDecoratorNode(lexicalNode)) {
+    const xmlElem = new XmlElement();
+    collabNode = $createCollabDecoratorNode(xmlElem, parent, nodeType);
+    collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
+  } else {
+    invariant(false, 'Expected text, element, decorator, or linebreak node');
+  }
+
+  collabNode._key = lexicalNode.__key;
+  return collabNode;
+}
+
+export function $getOrInitCollabNodeFromSharedType(
+  binding: Binding,
+  sharedType: XmlText | YMap<unknown> | XmlElement,
+  parent?: CollabElementNode,
+): AnyCollabNode {
+  const collabNode = (sharedType as any)._collabNode;
+
+  if (collabNode === undefined) {
+    const registeredNodes = binding.editor._nodes;
+    const type = getNodeTypeFromSharedType(sharedType);
+    invariant(
+      typeof type === 'string',
+      'Expected shared type to include type attribute',
+    );
+    const nodeInfo = registeredNodes.get(type);
+    invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+
+    const sharedParent = sharedType.parent;
+    const targetParent =
+      parent === undefined && sharedParent !== null
+        ? $getOrInitCollabNodeFromSharedType(
+            binding,
+            sharedParent as XmlText | YMap<unknown> | XmlElement,
+          )
+        : parent || null;
+
+    invariant(
+      targetParent instanceof CollabElementNode,
+      'Expected parent to be a collab element node',
+    );
+
+    if (sharedType instanceof XmlText) {
+      return $createCollabElementNode(sharedType, targetParent, type);
+    } else if (sharedType instanceof YMap) {
+      if (type === 'linebreak') {
+        return $createCollabLineBreakNode(sharedType, targetParent);
+      }
+      return $createCollabTextNode(sharedType, '', targetParent, type);
+    } else if (sharedType instanceof XmlElement) {
+      return $createCollabDecoratorNode(sharedType, targetParent, type);
+    }
+  }
+
+  return collabNode;
+}
+
+export function $syncPropertiesFromCRDT(
+  binding: Binding,
+  sharedType: XmlText | YMap<unknown> | XmlElement,
+  lexicalNode: LexicalNode,
+  keysChanged: null | Set<string>,
+): void {
+  const properties =
+    keysChanged === null
+      ? sharedType instanceof YMap
+        ? Array.from(sharedType.keys())
+        : Object.keys(sharedType.getAttributes())
+      : Array.from(keysChanged);
+  let writableNode: LexicalNode | undefined;
+
+  for (let i = 0; i < properties.length; i++) {
+    const property = properties[i];
+    if (isExcludedProperty(property, lexicalNode, binding)) {
+      if (property === '__state') {
+        if (!writableNode) {
+          writableNode = lexicalNode.getWritable();
+        }
+        $syncNodeStateToLexical(binding, sharedType, writableNode);
+      }
+      continue;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prevValue = (lexicalNode as any)[property];
+    let nextValue = sharedTypeGet(sharedType, property);
+
+    if (prevValue !== nextValue) {
+      if (nextValue instanceof Doc) {
+        const docMap = binding.docMap;
+
+        if (prevValue instanceof Doc) {
+          docMap.delete(prevValue.guid);
+        }
+
+        const nestedEditor = createEditor();
+        const key = nextValue.guid;
+        nestedEditor._key = key;
+        docMap.set(key, nextValue);
+
+        nextValue = nestedEditor;
+      }
+
+      if (writableNode === undefined) {
+        writableNode = lexicalNode.getWritable();
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      writableNode[property as keyof typeof writableNode] = nextValue as any;
+    }
+  }
 }
 
 export function $moveSelectionToPreviousNode(

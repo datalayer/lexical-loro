@@ -42,6 +42,10 @@ import {
   syncLexicalSelectionToCRDT,
 } from './SyncCursors';
 
+/******************************************************************************
+ * CRDT -> Lexical
+ *****************************************************************************/
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {
   const {target} = event;
@@ -73,6 +77,10 @@ function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function $syncEvent(binding: Binding, event: any): void {
+
+  console.log('----------DLA', binding);
+  console.log('----------DLA', event);
+
   if (event instanceof YMapEvent && $syncStateEvent(binding, event)) {
     return;
   }
@@ -190,6 +198,10 @@ export function syncCRDTUpdatesToLexical(
     },
   );
 }
+
+/******************************************************************************
+ * Lexical -> CRDT
+ *****************************************************************************/
 
 function $handleNormalizationMergeConflicts(
   binding: Binding,

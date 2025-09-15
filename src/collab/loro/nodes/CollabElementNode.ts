@@ -1,7 +1,6 @@
 import type {ElementNode, NodeKey, NodeMap} from 'lexical';
 import {$createChildrenArray} from '@lexical/offset';
 import {
-  $createTextNode,
   $getNodeByKey,
   $getNodeByKeyOrThrow,
   $isDecoratorNode,

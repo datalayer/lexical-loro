@@ -17,7 +17,6 @@ import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
-import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {
   $syncLocalCursorPosition,
   syncCursorPositions,
@@ -31,6 +30,10 @@ import {
 } from '../Utils';
 import { Binding } from '../Bindings';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';
+
+/******************************************************************************
+ * CRDT -> Lexical
+ *****************************************************************************/
 
 function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   const {target, diff} = event;
@@ -86,6 +89,10 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
 }
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
+
+  console.log('---DLA', binding)
+  console.log('---DLA', event)
+
   // First check if this is a __state event
   if ($syncStateEvent(binding, event)) {
     return;
@@ -98,7 +105,7 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   // in Loro, event.target is a ContainerID string, so we need to find
   // the corresponding CollabNode by examining our existing CollabNode mapping
   
-  let collabNode: AnyCollabNode| null = null;
+  let collabNode: AnyCollabNode | null = null;
   
   // First, try exact match with existing CollabNodes that have matching container IDs
   for (const [key, node] of binding.collabNodeMap.entries()) {
@@ -369,6 +376,10 @@ export function syncCRDTUpdatesToLexical(
     },
   );
 }
+
+/******************************************************************************
+ * Lexical -> CRDT
+ *****************************************************************************/
 
 function $handleNormalizationMergeConflicts(
   binding: Binding,

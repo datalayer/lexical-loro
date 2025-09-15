@@ -25,10 +25,7 @@ import {
   CollabDecoratorNode,
 } from './../nodes/CollabDecoratorNode';
 import {$createCollabElementNode, CollabElementNode} from './../nodes/CollabElementNode';
-import {
-  $createCollabLineBreakNode,
-  CollabLineBreakNode,
-} from './../nodes/CollabLineBreakNode';
+import { $createCollabLineBreakNode } from './../nodes/CollabLineBreakNode';
 import {$createCollabTextNode, CollabTextNode} from './../nodes/CollabTextNode';
 import { Binding } from '../Bindings';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';

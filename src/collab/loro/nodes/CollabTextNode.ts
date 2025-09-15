@@ -6,12 +6,11 @@ import {
   $isTextNode,
 } from 'lexical';
 import type {LoroMap} from 'loro-crdt';
-import type {Binding} from '../Bindings';
-import type {CollabElementNode} from './CollabElementNode';
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
-
 import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../Utils';
+import type {Binding} from '../Bindings';
+import type {CollabElementNode} from './CollabElementNode';
 
 function $diffTextContentAndApplyDelta(
   collabNode: CollabTextNode,

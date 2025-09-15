@@ -44,14 +44,15 @@ export function createBinding(
   const rootXmlText = new XmlText(doc, 'root');
   rootXmlText.setAttribute('__type', 'root');
   
-  const root: CollabElementNode = $createCollabElementNode(
+  const collabRoot: CollabElementNode = $createCollabElementNode(
     rootXmlText,
     null,
     'root',
   );
-  root._key = 'root';
+  collabRoot._key = 'root';
   
   const binding = {
+//    clientID: doc.peerId,
     clientID: Number(doc.peerId.toString().slice(0, 8)), // Convert Loro peer ID to number
     collabNodeMap: new Map(),
     cursors: new Map(),
@@ -62,17 +63,8 @@ export function createBinding(
     excludedProperties: excludedProperties || new Map(),
     id,
     nodeProperties: new Map(),
-    root,
-  };
-  
-  // CRITICAL: We need to register the root CollabElementNode in the collabNodeMap
-  // This is essential for the sync system to work
-  binding.collabNodeMap.set('root', root);
-  
-  // ADDITIONAL CRITICAL FIX: Also register the root with the shared type mapping
-  // This ensures that when CRDT events come in for the root container, they find the right CollabElementNode
-  binding.collabNodeMap.set(root.getSharedType(), root);
-  binding.collabNodeMap.set(rootXmlText, root);
-  
+    root: collabRoot,
+  };  
+
   return binding;
 }
