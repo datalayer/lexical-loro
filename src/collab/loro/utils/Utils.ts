@@ -217,7 +217,14 @@ export function createLexicalNodeFromCollabNode(
     | ElementNode
     | LexicalNode = new nodeInfo.klass();
   lexicalNode.__parent = parentKey;
-  collabNode._key = lexicalNode.__key;
+  
+  // If CollabElementNode already has an explicit key, use it instead of the generated one
+  if (collabNode._key && collabNode._key !== '') {
+    lexicalNode.__key = collabNode._key;
+    console.log(`🔑 [LEXICAL-CREATION] Using preserved key "${collabNode._key}" for lexical node`);
+  } else {
+    collabNode._key = lexicalNode.__key;
+  }
 
   if (collabNode instanceof CollabElementNode) {
     const xmlText = collabNode._xmlText;

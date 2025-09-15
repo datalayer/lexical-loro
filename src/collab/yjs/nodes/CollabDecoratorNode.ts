@@ -2,10 +2,9 @@ import type {XmlElement} from 'yjs';
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
 import invariant from '../../utils/invariant';
+import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
 import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
-
-import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
 
 export class CollabDecoratorNode {
   _xmlElem: XmlElement;

@@ -14,15 +14,15 @@ import {
   createAbsolutePositionFromRelativePosition,
   createRelativePositionFromTypeIndex,
 } from 'yjs';
-import type {Binding} from '../Bindings';
-import {UserState, Provider} from '../State';
 import invariant from '../../utils/invariant';
 import {getPositionFromElementAndOffset} from '../utils/Utils';
-import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
+import type {Binding} from '../Bindings';
+import {UserState, Provider} from '../State';
 import {CollabElementNode} from '../nodes/CollabElementNode';
-import {CollabLineBreakNode} from '../nodes/CollabLineBreakNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';
+
+/*****************************************************************************/
 
 export type CursorSelection = {
   anchor: {
@@ -44,6 +44,52 @@ export type Cursor = {
   name: string;
   selection: null | CursorSelection;
 };
+
+export type SyncCursorPositionsFn = (
+  binding: Binding,
+  provider: Provider,
+  options?: SyncCursorPositionsOptions,
+) => void;
+
+export type SyncCursorPositionsOptions = {
+  getAwarenessStates?: (
+    binding: Binding,
+    provider: Provider,
+  ) => Map<number, UserState>;
+};
+
+/*****************************************************************************/
+
+export function $syncLocalCursorPosition(
+  binding: Binding,
+  provider: Provider,
+): void {
+  const awareness = provider.awareness;
+  const localState = awareness.getLocalState();
+
+  if (localState === null) {
+    return;
+  }
+
+  const {anchorCollabNode, anchorOffset, focusCollabNode, focusOffset} =
+    getAnchorAndFocusCollabNodesForUserState(binding, localState);
+
+  if (anchorCollabNode !== null && focusCollabNode !== null) {
+    const anchorKey = anchorCollabNode.getKey();
+    const focusKey = focusCollabNode.getKey();
+
+    const selection = $getSelection();
+
+    if (!$isRangeSelection(selection)) {
+      return;
+    }
+
+    $setPoint(selection.anchor, anchorKey, anchorOffset);
+    $setPoint(selection.focus, focusKey, focusOffset);
+  }
+}
+
+/*****************************************************************************/
 
 function createRelativePosition(
   point: Point,
@@ -287,6 +333,62 @@ function updateCursor(
   }
 }
 
+function getCollabNodeAndOffset(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sharedType: any,
+  offset: number,
+): [null | AnyCollabNode, number] {
+  const collabNode = sharedType._collabNode;
+
+  if (collabNode === undefined) {
+    return [null, 0];
+  }
+
+  if (collabNode instanceof CollabElementNode) {
+    const {node, offset: collabNodeOffset} = getPositionFromElementAndOffset(
+      collabNode,
+      offset,
+      true,
+    );
+
+    if (node === null) {
+      return [collabNode, 0];
+    } else {
+      return [node, collabNodeOffset];
+    }
+  }
+
+  return [null, 0];
+}
+
+function getAwarenessStatesDefault(
+  _binding: Binding,
+  provider: Provider,
+): Map<number, UserState> {
+  return provider.awareness.getStates();
+}
+
+/*****************************************************************************/
+
+function $setPoint(point: Point, key: NodeKey, offset: number): void {
+  if (point.key !== key || point.offset !== offset) {
+    let anchorNode = $getNodeByKey(key);
+    if (
+      anchorNode !== null &&
+      !$isElementNode(anchorNode) &&
+      !$isTextNode(anchorNode)
+    ) {
+      const parent = anchorNode.getParentOrThrow();
+      key = parent.getKey();
+      offset = anchorNode.getIndexWithinParent();
+      anchorNode = parent;
+    }
+    point.set(key, offset, $isElementNode(anchorNode) ? 'element' : 'text');
+  }
+}
+
+/*****************************************************************************/
+
 export function getAnchorAndFocusCollabNodesForUserState(
   binding: Binding,
   userState: UserState,
@@ -320,100 +422,6 @@ export function getAnchorAndFocusCollabNodesForUserState(
     focusCollabNode,
     focusOffset,
   };
-}
-
-export function $syncLocalCursorPosition(
-  binding: Binding,
-  provider: Provider,
-): void {
-  const awareness = provider.awareness;
-  const localState = awareness.getLocalState();
-
-  if (localState === null) {
-    return;
-  }
-
-  const {anchorCollabNode, anchorOffset, focusCollabNode, focusOffset} =
-    getAnchorAndFocusCollabNodesForUserState(binding, localState);
-
-  if (anchorCollabNode !== null && focusCollabNode !== null) {
-    const anchorKey = anchorCollabNode.getKey();
-    const focusKey = focusCollabNode.getKey();
-
-    const selection = $getSelection();
-
-    if (!$isRangeSelection(selection)) {
-      return;
-    }
-
-    $setPoint(selection.anchor, anchorKey, anchorOffset);
-    $setPoint(selection.focus, focusKey, focusOffset);
-  }
-}
-
-function $setPoint(point: Point, key: NodeKey, offset: number): void {
-  if (point.key !== key || point.offset !== offset) {
-    let anchorNode = $getNodeByKey(key);
-    if (
-      anchorNode !== null &&
-      !$isElementNode(anchorNode) &&
-      !$isTextNode(anchorNode)
-    ) {
-      const parent = anchorNode.getParentOrThrow();
-      key = parent.getKey();
-      offset = anchorNode.getIndexWithinParent();
-      anchorNode = parent;
-    }
-    point.set(key, offset, $isElementNode(anchorNode) ? 'element' : 'text');
-  }
-}
-
-function getCollabNodeAndOffset(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sharedType: any,
-  offset: number,
-): [null | AnyCollabNode, number] {
-  const collabNode = sharedType._collabNode;
-
-  if (collabNode === undefined) {
-    return [null, 0];
-  }
-
-  if (collabNode instanceof CollabElementNode) {
-    const {node, offset: collabNodeOffset} = getPositionFromElementAndOffset(
-      collabNode,
-      offset,
-      true,
-    );
-
-    if (node === null) {
-      return [collabNode, 0];
-    } else {
-      return [node, collabNodeOffset];
-    }
-  }
-
-  return [null, 0];
-}
-
-export type SyncCursorPositionsFn = (
-  binding: Binding,
-  provider: Provider,
-  options?: SyncCursorPositionsOptions,
-) => void;
-
-export type SyncCursorPositionsOptions = {
-  getAwarenessStates?: (
-    binding: Binding,
-    provider: Provider,
-  ) => Map<number, UserState>;
-};
-
-function getAwarenessStatesDefault(
-  _binding: Binding,
-  provider: Provider,
-): Map<number, UserState> {
-  return provider.awareness.getStates();
 }
 
 export function syncCursorPositions(

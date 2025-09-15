@@ -720,14 +720,14 @@ export class WebsocketProvider extends ObservableV2<any> {
         // Check if this is a remote update being applied (from WebSocket)
         // We should not send these back to the server to avoid loops
         if (this._applyingRemoteUpdate) {
-          console.warn(`[Client] WebsocketProvider - Skipping export during remote update application`);
+          console.debug(`[Client] WebsocketProvider - Skipping export during remote update application`);
           return;
         }
         
         // Only skip if by_local is explicitly false (indicating remote change)
         // by_local === undefined typically means local change that should be sent
         if (event.by_local === false) {
-          console.warn(`[Client] WebsocketProvider - Skipping export for remote change (by_local: ${event.by_local})`);
+          console.debug(`[Client] WebsocketProvider - Skipping export for remote change (by_local: ${event.by_local})`);
           return;
         }
         

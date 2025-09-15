@@ -176,6 +176,8 @@ export function $createCollabTextNode(
   // Set the __type property in the LoroMap so getNodeTypeFromSharedType can find it
   map.set('__type', type);
   
+  console.log(`🏗️ [CREATE] Created ${collabNode.constructor.name}(${collabNode._key}) with parent: ${parent ? parent.constructor.name + '(' + parent._key + ')' : 'null'}`);
+  
   (map as any)._collabNode = collabNode;
   return collabNode;
 }

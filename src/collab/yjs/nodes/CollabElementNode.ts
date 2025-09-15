@@ -10,10 +10,6 @@ import {
   removeFromParent,
 } from 'lexical';
 import invariant from '../../utils/invariant';
-import type {Binding} from '../Bindings';
-import {CollabDecoratorNode} from './CollabDecoratorNode';
-import {CollabLineBreakNode} from './CollabLineBreakNode';
-import {CollabTextNode} from './CollabTextNode';
 import {
   $createCollabNodeFromLexicalNode,
   $getOrInitCollabNodeFromSharedType,
@@ -23,6 +19,10 @@ import {
   spliceString,
   syncPropertiesFromLexical,
 } from '../utils/Utils';
+import type {Binding} from '../Bindings';
+import {CollabDecoratorNode} from './CollabDecoratorNode';
+import {CollabLineBreakNode} from './CollabLineBreakNode';
+import {CollabTextNode} from './CollabTextNode';
 import { AnyCollabNode } from './AnyCollabNode';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
