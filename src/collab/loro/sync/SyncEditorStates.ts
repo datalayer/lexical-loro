@@ -451,8 +451,6 @@ export function syncLexicalUpdatesToCRDT(
           dirtyElements,
           dirtyLeaves,
         );
-      } else {
-        console.warn('⚠️ [SyncLexicalUpdateToCRDT] No root in dirty elements - this might be a problem!');
       }
 
       const selection = $getSelection();

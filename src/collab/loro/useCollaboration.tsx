@@ -133,7 +133,7 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       } else {
-        console.warn(`[UseCollaboration] Skipping own editor change (origin: ${event.origin}, by: ${event.by})`);
+        console.log(`[UseCollaboration] Skipping own editor change (origin: ${event.origin}, by: ${event.by})`);
       }
     };
 
