@@ -486,8 +486,6 @@ export function syncLexicalUpdatesToCRDT(
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
-
-      console.log('----DLA', binding.root)
     });
   });
 }
