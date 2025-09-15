@@ -1,7 +1,7 @@
-import type {Doc} from 'yjs';
-import {XmlText} from 'yjs';
 import type {LexicalEditor, NodeKey} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
+import type {Doc} from 'yjs';
+import {XmlText} from 'yjs';
 import invariant from '../utils/invariant';
 import type {CollabElementNode} from './nodes/CollabElementNode';
 import {$createCollabElementNode} from './nodes/CollabElementNode';

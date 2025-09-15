@@ -1,10 +1,10 @@
 import type {LexicalEditor, NodeKey} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
 import type {LoroDoc} from 'loro-crdt';
+import invariant from '../utils/invariant';
 import type {CollabElementNode} from './nodes/CollabElementNode';
 import {$createCollabElementNode} from './nodes/CollabElementNode';
 import { AnyCollabNode } from './nodes/AnyCollabNode';
-import invariant from '../utils/invariant';
 import type {Cursor} from './sync/SyncCursors';
 import {XmlText} from './types/XmlText';
 import {Provider} from './State';
