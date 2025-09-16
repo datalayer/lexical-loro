@@ -101,7 +101,7 @@ export function createBinding(
       // Check for any orphaned text nodes at root level
       const textNodesAtRoot = binding.root._children.filter(child => child.constructor.name === 'CollabTextNode');
       if (textNodesAtRoot.length > 0) {
-        console.log('⚠️  WARNING: Found text nodes directly under root:');
+        console.warn('⚠️  WARNING: Found text nodes directly under root:');
         textNodesAtRoot.forEach(node => console.log('   -', node._key));
       }
     },
@@ -211,7 +211,7 @@ export function createBinding(
   
   const binding = {
 //    clientID: doc.peerId,
-    clientID: Number(doc.peerId.toString().slice(0, 8)), // Convert Loro peer ID to number
+    clientID: Number(doc.peerIdStr.slice(0, 8)), // Convert Loro peer ID to number
     collabNodeMap: new Map(),
     cursors: new Map(),
     cursorsContainer: null,

@@ -458,7 +458,7 @@ export class CollabElementNode {
                 if (collabNode && !this._children.includes(collabNode)) {
                   // 🚨 HIERARCHY FIX: Block text nodes at root level 
                   if (this._key === 'root' && collabNode instanceof CollabTextNode) {
-                    console.warn(`� [HIERARCHY-FIX] BLOCKING text node addition at root level`);
+                    console.warn(`⚠️ [HIERARCHY-FIX] BLOCKING text node addition at root level`);
                   } else {
                     // This is a proper element node - allow direct child addition
                     this._children.push(collabNode);
@@ -471,7 +471,7 @@ export class CollabElementNode {
               console.warn('⚠️ [_syncChildrenFromXmlTextEmbeds] Error processing LoroMap embed:', mapId, error);
             }
           } else {
-            console.warn(`🔧 [EMBED-SYNC] LoroMap CollabTextNode already exists for ${mapId}`);
+            console.log(`🔧 [EMBED-SYNC] LoroMap CollabTextNode already exists for ${mapId}`);
           }
         }
       }

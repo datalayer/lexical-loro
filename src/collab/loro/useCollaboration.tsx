@@ -143,7 +143,7 @@ export function useCollaboration(
       // Only skip if the origin is from this specific editor's changes
       // We set 'lexical-edit' as origin when making changes from this editor
       // So we should skip only if the origin is 'lexical-edit' (our own changes)
-      const isFromThisEditor = event.origin === 'lexical-edit';
+      const isFromThisEditor = event.origin === binding.doc.peerIdStr;
       
       if (!isFromThisEditor) {
         // Check if this change is from the undo manager
@@ -217,11 +217,6 @@ export function useCollaboration(
             normalizedNodes,
             tags,
           );
-        } else {
-          console.warn('⏭️ useCollaboration: Skipping syncLexicalUpdatesToCRDT', {
-            hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
-            skipCollaborationUpdate: skipCollaborationUpdateRef.current
-          });
         }
       },
     );

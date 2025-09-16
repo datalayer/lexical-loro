@@ -9,7 +9,6 @@ const WEBSOCKET_ENDPOINT =
 const WEBSOCKET_SLUG = 'playground';
 const WEBSOCKET_ID = params.get('collabId') || '0';
 
-// parent dom -> child doc
 export function createWebsocketProvider(
   id: string,
   docMap: Map<string, LoroDoc>,

@@ -46,7 +46,7 @@ const persistenceDir = process.env.YPERSISTENCE
  */
 let persistence = null
 if (typeof persistenceDir === 'string') {
-  console.info('Persisting documents to "' + persistenceDir + '"')
+  console.log('Persisting documents to "' + persistenceDir + '"')
   // @ts-ignore
   // Note: Using simplified persistence for Loro - replace with actual Loro-compatible persistence
   persistence = {
@@ -54,11 +54,11 @@ if (typeof persistenceDir === 'string') {
     bindState: async (docName, doc: WSSharedDoc) => {
       // TODO: Implement Loro document persistence
       // For now, just log the operation
-      console.debug(`TODO Binding state for document: ${docName}`)
+      console.warn(`TODO Binding state for document: ${docName}`)
     },
     writeState: async (docName, doc: WSSharedDoc) => {
       // TODO: Implement Loro document state writing
-      console.debug(`TODO Writing state for document: ${docName}`)
+      console.warn(`TODO Writing state for document: ${docName}`)
     }
   }
 }
@@ -86,26 +86,6 @@ const messageLoroUpdate = 'loro-update'
 const messageSnapshot = 'snapshot'
 const messageEphemeral = 'ephemeral'
 const messageQueryEphemeral = 'query-ephemeral'
-
-/**
- * Handle Loro document updates and broadcast to connected clients
- * @param {Uint8Array} update
- * @param {any} _origin
- * @param {WSSharedDoc} doc
- */
-const updateHandler = (update: Uint8Array, _origin: any, doc: WSSharedDoc) => {
-  const message = {
-    type: messageLoroUpdate,
-    update: Array.from(update)
-  }
-  const messageData = new TextEncoder().encode(JSON.stringify(message))
-  doc.conns.forEach((_, conn) => send(doc, conn, messageData))
-  
-  // Trigger callback if configured
-  if (isCallbackSet) {
-    debouncer(() => callbackHandler(doc))
-  }
-}
 
 /**
  * @type {(ydoc: Y.Doc) => Promise<void>}
@@ -215,17 +195,7 @@ export const getDoc = (docname) => map.setIfUndefined(docs, docname, () => {
  * @param {ArrayBuffer | string} message
  */
 const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string | Uint8Array) => {
-  console.log('📨 [SERVER] messageListener received message:', {
-    timestamp: new Date().toISOString(),
-    connId: conn.id || 'unknown',
-    docName: doc.name,
-    messageType: typeof message,
-    messageLength: message instanceof ArrayBuffer ? message.byteLength : 
-                  message instanceof Uint8Array ? message.length : 
-                  typeof message === 'string' ? message.length : 'unknown'
-  })
-  
-  try {    
+  try {
     let messageData: LoroWebSocketMessage | null = null
     let messageStr: string = ''
     
@@ -407,7 +377,7 @@ const closeConn = (doc, conn) => {
       // if persisted, we store state and cleanup document
       persistence.writeState(doc.name, doc).then(() => {
         // Cleanup WSSharedDoc resources (no destroy method needed for Loro)
-        console.info(`[Server] Cleaning up document: ${doc.name}`)
+        console.log(`[Server] Cleaning up document: ${doc.name}`)
       })
       docs.delete(doc.name)
     }

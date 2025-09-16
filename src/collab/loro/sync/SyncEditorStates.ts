@@ -93,112 +93,8 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
   return false;
 }
 
-function $syncEvent(binding: Binding, event: LoroEvent): void {
-
-  if ($syncStateEvent(binding, event)) {
-    return;
-  }
-  
-  const {target, diff, path} = event;
-  
-  // Find the CollabNode by matching container IDs
-  // Unlike Y.js where event.target is the actual shared type object,
-  // in Loro, event.target is a ContainerID string, so we need to find
-  // the corresponding CollabNode by examining our existing CollabNode mapping
-  
-  let collabNode: AnyCollabNode | null = null;
-  
-  // First, try exact match with existing CollabNodes that have matching container IDs
-  for (const [key, node] of binding.collabNodeMap.entries()) {
-    // Check if the node's underlying container matches the event target
-    const nodeContainer = (node as any)._xmlText || (node as any)._sharedType || (node as any)._map;
-    if (nodeContainer && nodeContainer.id === target) {
-      collabNode = node;
-      break;
-    }
-  }
-  
-  // If no exact match, try pattern matching for element nodes
-  if (!collabNode && typeof target === 'string') {
-    const elementMatch = target.match(/element_(\d+)/);
-    if (elementMatch) {
-      const elementKey = elementMatch[1];
-      collabNode = binding.collabNodeMap.get(elementKey) as any;
-    }
-  }
-  
-  // If still no match, check if this is a text node Map that needs to be created
-  if (!collabNode && typeof target === 'string' && target.includes(':text_') && target.endsWith(':Map')) {
-    try {
-      // Extract text node key from target (e.g., "cid:root-text_3:Map" -> "text_3")
-      const textNodeMatch = target.match(/text_(\d+):Map/);
-      if (textNodeMatch) {
-        const textNodeKey = `text_${textNodeMatch[1]}`;
-        
-        // Get the LoroMap for this text node
-        const map = binding.doc.getMap(target);
-        if (map && map.get('__type') === 'text') {
-          
-          // Find the parent CollabElementNode by looking for the root or other element nodes
-          // that might contain this text node through embeds
-          let parentCollabNode: CollabElementNode | null = null;
-          
-          // First try the root node
-          const rootCollabNode = binding.root;
-          if (rootCollabNode instanceof CollabElementNode) {
-            parentCollabNode = rootCollabNode;
-          }
-          
-          if (parentCollabNode) {
-            // Check if this text node already exists in the parent's children
-            const existingChild = parentCollabNode._children.find(child => 
-              child instanceof CollabTextNode && 
-              (child._map as any).id === target
-            );
-            
-            if (!existingChild) {
-              // Create the CollabTextNode
-              const nodeType = map.get('__type') as string;
-              const collabTextNode = new CollabTextNode(map, '', parentCollabNode, nodeType);
-              
-              // Add to parent's children
-              parentCollabNode._children.push(collabTextNode);
-              
-              // Register in the collabNodeMap
-              binding.collabNodeMap.set(textNodeKey, collabTextNode);
-              
-              // Set this as the found collabNode so the event gets processed
-              collabNode = collabTextNode;
-            } else {
-              collabNode = existingChild;
-            }
-          } else {
-            console.warn(`⚠️ [SYNC-TEXT-NODE] Could not find parent CollabElementNode for ${textNodeKey}`);
-          }
-        }
-      }
-    } catch (error) {
-      console.warn(`⚠️ [SYNC-TEXT-NODE] Error trying to create CollabTextNode for ${target}:`, error);
-    }
-  }
-  
-  // If still no match, try root node for root-related events
-  if (!collabNode && typeof target === 'string' && target.includes('root')) {
-    collabNode = binding.root;
-  }
-  
-  if (!collabNode) {
-    console.warn(`❌ [SYNC-EVENT-ERROR] No CollabNode found for container ID: ${target}`)
-    return;
-  }
-  
-  // Process the event with the found CollabNode
-  processCollabNodeEvent(binding, collabNode, event);
-  
-}
-
 function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, event: LoroEvent): void {
-  const {diff, target} = event;
+  const {diff} = event;
   
   if (!diff) {
     // No diff means no changes to process
@@ -302,6 +198,110 @@ function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, eve
       console.warn('Failed to sync unknown CollabNode type:', error);
     }
   }
+}
+
+function $syncEvent(binding: Binding, event: LoroEvent): void {
+
+  if ($syncStateEvent(binding, event)) {
+    return;
+  }
+  
+  const {target, diff, path} = event;
+  
+  // Find the CollabNode by matching container IDs
+  // Unlike Y.js where event.target is the actual shared type object,
+  // in Loro, event.target is a ContainerID string, so we need to find
+  // the corresponding CollabNode by examining our existing CollabNode mapping
+  
+  let collabNode: AnyCollabNode | null = null;
+  
+  // First, try exact match with existing CollabNodes that have matching container IDs
+  for (const [key, node] of binding.collabNodeMap.entries()) {
+    // Check if the node's underlying container matches the event target
+    const nodeContainer = (node as any)._xmlText || (node as any)._sharedType || (node as any)._map;
+    if (nodeContainer && nodeContainer.id === target) {
+      collabNode = node;
+      break;
+    }
+  }
+  
+  // If no exact match, try pattern matching for element nodes
+  if (!collabNode && typeof target === 'string') {
+    const elementMatch = target.match(/element_(\d+)/);
+    if (elementMatch) {
+      const elementKey = elementMatch[1];
+      collabNode = binding.collabNodeMap.get(elementKey) as any;
+    }
+  }
+  
+  // If still no match, check if this is a text node Map that needs to be created
+  if (!collabNode && typeof target === 'string' && target.includes(':text_') && target.endsWith(':Map')) {
+    try {
+      // Extract text node key from target (e.g., "cid:root-text_3:Map" -> "text_3")
+      const textNodeMatch = target.match(/text_(\d+):Map/);
+      if (textNodeMatch) {
+        const textNodeKey = `text_${textNodeMatch[1]}`;
+        
+        // Get the LoroMap for this text node
+        const map = binding.doc.getMap(target);
+        if (map && map.get('__type') === 'text') {
+          
+          // Find the parent CollabElementNode by looking for the root or other element nodes
+          // that might contain this text node through embeds
+          let parentCollabNode: CollabElementNode | null = null;
+          
+          // First try the root node
+          const rootCollabNode = binding.root;
+          if (rootCollabNode instanceof CollabElementNode) {
+            parentCollabNode = rootCollabNode;
+          }
+          
+          if (parentCollabNode) {
+            // Check if this text node already exists in the parent's children
+            const existingChild = parentCollabNode._children.find(child => 
+              child instanceof CollabTextNode && 
+              (child._map as any).id === target
+            );
+            
+            if (!existingChild) {
+              // Create the CollabTextNode
+              const nodeType = map.get('__type') as string;
+              const collabTextNode = new CollabTextNode(map, '', parentCollabNode, nodeType);
+              
+              // Add to parent's children
+              parentCollabNode._children.push(collabTextNode);
+              
+              // Register in the collabNodeMap
+              binding.collabNodeMap.set(textNodeKey, collabTextNode);
+              
+              // Set this as the found collabNode so the event gets processed
+              collabNode = collabTextNode;
+            } else {
+              collabNode = existingChild;
+            }
+          } else {
+            console.warn(`⚠️ [SYNC-TEXT-NODE] Could not find parent CollabElementNode for ${textNodeKey}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`⚠️ [SYNC-TEXT-NODE] Error trying to create CollabTextNode for ${target}:`, error);
+    }
+  }
+  
+  // If still no match, try root node for root-related events
+  if (!collabNode && typeof target === 'string' && target.includes('root')) {
+    collabNode = binding.root;
+  }
+  
+  if (!collabNode) {
+    console.warn(`❌ [SYNC-EVENT-ERROR] No CollabNode found for container ID: ${target}`)
+    return;
+  }
+  
+  // Process the event with the found CollabNode
+  processCollabNodeEvent(binding, collabNode, event);
+  
 }
 
 export function syncCRDTUpdatesToLexical(
@@ -452,6 +452,7 @@ export function syncLexicalUpdatesToCRDT(
       // CRITICAL FIX: Check for initial sync scenario
       const lexicalRoot = $getRoot();
       const collabRoot = binding.root;
+      console.log('--------------DLA', collabRoot)
       const isInitialSyncNeeded = collabRoot.isEmpty() && 
                                   collabRoot.getSharedType()?.length === 0 && 
                                   lexicalRoot.getChildren().length > 0;
@@ -485,9 +486,7 @@ export function syncLexicalUpdatesToCRDT(
       const prevSelection = prevEditorState._selection;
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
 
-      binding.doc.commit({ origin: binding.doc.peerId.toString() });
-
-      console.log('------------DLA', binding.doc.version().toJSON());
+      binding.doc.commit({ origin: binding.doc.peerIdStr });
 
     });
   });

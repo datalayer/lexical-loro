@@ -157,17 +157,15 @@ messageHandlers[messageLoroUpdate] = (
     const updateBytes = new Uint8Array(message.update)
     
     // Get document state before applying update for comparison
-    const beforeVersion = provider.doc.version()
-    const beforeContent = provider.doc.getText('content').toString()
+    // const beforeVersion = provider.doc.version()
     
     // Import with sender's peerId as origin to mark as remote update
     // We don't know the actual sender's peerId, so use a generic remote identifier
     // The key point is that it's NOT our local peerId
     provider.doc.import(updateBytes)
-    
+
     // Get document state after applying update
     const afterVersion = provider.doc.version()
-    const afterContent = provider.doc.getText('content').toString()
     
     // Update our last exported version to include the remote changes
     // This ensures we don't re-export remote changes
@@ -520,7 +518,7 @@ const broadcastMessage = (provider: WebsocketProvider, message: string) => {
 export class WebsocketProvider extends ObservableV2<any> {
   static globalEphemeralStore: EphemeralStore | null = null
   
-  serverUrl = ''
+  wsServerUrl = ''
   docId = ''
   doc: LoroDoc | null = null
   _WS = null
@@ -549,7 +547,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _lastExportedVersion: VersionVector = null  // Track last exported version for incremental updates
 
   /**
-   * @param {string} serverUrl
+   * @param {string} wsServerUrl
    * @param {string} docId
    * @param {LoroDoc} doc
    * @param {object} opts
@@ -562,7 +560,7 @@ export class WebsocketProvider extends ObservableV2<any> {
    * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
    * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
    */
-  constructor (serverUrl: string, docId: string, doc: LoroDoc, {
+  public constructor(wsServerUrl: string, docId: string, doc: LoroDoc, {
     connect = true,
     ephemeralStore = undefined,
     params = {},
@@ -574,11 +572,11 @@ export class WebsocketProvider extends ObservableV2<any> {
   } = {}) {
     super()
     // ensure that serverUrl does not end with /
-    while (serverUrl[serverUrl.length - 1] === '/') {
-      serverUrl = serverUrl.slice(0, serverUrl.length - 1)
+    while (wsServerUrl[wsServerUrl.length - 1] === '/') {
+      wsServerUrl = wsServerUrl.slice(0, wsServerUrl.length - 1)
     }
-    this.serverUrl = serverUrl
-    this.bcChannel = serverUrl + '/' + docId
+    this.wsServerUrl = wsServerUrl
+    this.bcChannel = wsServerUrl + '/' + docId
     this.maxBackoffTime = maxBackoffTime
     /**
      * The specified url parameters. This can be safely updated. The changed parameters will be used
@@ -600,7 +598,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         if (!WebsocketProvider.globalEphemeralStore) {
           WebsocketProvider.globalEphemeralStore = new EphemeralStore(300000) // 5 minute timeout
         } else {
-          console.debug(`[Client] WebsocketProvider constructor - Reusing existing global EphemeralStore`)
+          console.info(`[Client] WebsocketProvider constructor - Reusing existing global EphemeralStore`)
         }
         this.ephemeralStore = WebsocketProvider.globalEphemeralStore
       }
@@ -670,7 +668,7 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {Uint8Array} update
      * @param {any} origin
      */
-    this._updateHandler = (update: Uint8Array, origin: any) => {
+    this._updateHandler = (update: Uint8Array) => {
       // This handler is only called for local changes that need to be broadcast
       const updateMessage: LoroUpdateMessage = {
         type: 'loro-update',
@@ -727,51 +725,15 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Use Loro's native event system to listen for document changes
     try {
       this.doc.subscribe((event: LoroEventBatch) => {
-        // IMPORTANT: WebSocket provider should NOT interfere with useCollaboration's sync
-        // The useCollaboration hook handles Loro→Lexical sync via its own doc.subscribe()
-        // This WebSocket provider should ONLY handle document export for server communication
-        
-        // Determine if this is a local or remote change based on origin vs our peerId
-        const localPeerId = this.doc.peerId.toString()
-        const isLocalChange = !event.origin || event.origin === localPeerId
-        const changeSource = isLocalChange ? 'LOCAL' : 'REMOTE'
-        
-        console.log(`📡 [WEBSOCKET-PROVIDER] Loro document update event (${changeSource}):`, {
-          timestamp: new Date().toISOString(),
-          origin: event.origin,
-          localPeerId: localPeerId,
-          isLocalChange: isLocalChange,
-          eventType: 'loro-document-update',
-          events: event.events?.length || 0,
-          eventDetails: event.events?.map(e => ({ target: e.target, diff: e.diff })) || []
-        })
-
-        // Skip sending remote updates back to the server to avoid loops
-        if (!isLocalChange) {
-          console.debug(`[WEBSOCKET-PROVIDER] ⏭️  Skipping export for REMOTE update (origin: ${event.origin})`)
-          return
-        }
-
-        console.log('📤 [WEBSOCKET-PROVIDER] Processing local change, preparing to send incremental update')
-        
-        // Use incremental updates with 'from' parameter to get only changes since last export
         try {
-          // Get current version before commit
-          const currentVersion = this.doc.version()
-
-          // Force a commit first to ensure all changes are in the document
-          this.doc.commit()
           const afterCommitVersion = this.doc.version()
-          
-          // Export incremental update from last exported version
           const update = this.doc.export({ 
-            mode: 'update', 
-            from: this._lastExportedVersion 
+            mode: 'update',
+//            from: this._lastExportedVersion 
           });
-          
+
           if (update.length > 0) {
-            this._updateHandler(update, null);
-            
+            this._updateHandler(update);
             // Update the last exported version to current version
             this._lastExportedVersion = afterCommitVersion
           } else {
@@ -803,7 +765,7 @@ export class WebsocketProvider extends ObservableV2<any> {
 
   get url () {
     const encodedParams = url.encodeQueryParams(this.params)
-    return this.serverUrl + '/' + this.docId +
+    return this.wsServerUrl + '/' + this.docId +
       (encodedParams.length === 0 ? '' : '?' + encodedParams)
   }
 

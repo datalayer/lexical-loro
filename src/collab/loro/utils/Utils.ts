@@ -291,7 +291,7 @@ export function syncPropertiesFromLexical(
 
         // If we already have a document, use it, otherwise create new LoroDoc
         const doc = prevDoc || new LoroDoc();
-        const key = doc.peerId.toString();
+        const key = doc.peerIdStr;
         nextValue._key = key;
         docMap.set(key, doc);
         nextValue = doc;
@@ -580,7 +580,7 @@ export function $syncPropertiesFromCRDT(
         }
 
         const nestedEditor = createEditor();
-        const key = nextValue.peerId.toString();
+        const key = nextValue.peerIdStr;
         nestedEditor._key = key;
         docMap.set(key, nextValue);
 
