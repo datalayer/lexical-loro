@@ -85,7 +85,6 @@ function $syncStateEvent(binding: Binding, event: LoroEvent): boolean {
       }
     }
     
-    console.log(`✅ [STATE-EVENT] Successfully processed __state event: ${target}`)
     return true;
   }
   

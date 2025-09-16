@@ -36,9 +36,7 @@ export class XmlText extends LoroText {
       // Use a placeholder character for embeds
       const placeholderChar = '\uE000';
       
-      console.log(`[XmlText] insertEmbed: Before insert - length=${this.length}, offset=${offset}`);
       super.insert(offset, placeholderChar);
-      console.log(`[XmlText] insertEmbed: After insert - length=${this.length}`);
       
       // Store embed metadata
       const embedKey = `embed_${offset}_${Date.now()}`;

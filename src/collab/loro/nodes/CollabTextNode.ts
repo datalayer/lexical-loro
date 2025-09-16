@@ -18,8 +18,6 @@ function $diffTextContentAndApplyDelta(
   prevText: string,
   nextText: string,
 ): void {
-  console.log(`🔧 [TEXT-DIFF] Node ${key}: "${prevText}" -> "${nextText}"`);
-  
   const selection = $getSelection();
   let cursorOffset = nextText.length;
 
@@ -32,8 +30,6 @@ function $diffTextContentAndApplyDelta(
   }
 
   const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
-  console.log(`🔧 [TEXT-DIFF] Diff for ${key}:`, diff, `splicing at collabNode._text="${collabNode._text}"`);
-  
   collabNode.spliceText(diff.index, diff.remove, diff.insert);
 }
 
@@ -116,9 +112,6 @@ export class CollabTextNode {
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const nextText = nextLexicalNode.__text;
 
-    console.log(`🔤 [TEXT-SYNC] Node ${nextLexicalNode.__key}: prevText="${prevLexicalNode?.__text}" -> nextText="${nextText}"`);
-    console.log(`🔤 [TEXT-SYNC] CollabNode._text="${this._text}"`);
-
     syncPropertiesFromLexical(
       binding,
       this._map,
@@ -131,10 +124,8 @@ export class CollabTextNode {
 
       if (prevText !== nextText) {
         const key = nextLexicalNode.__key;
-        console.log(`🔤 [TEXT-SYNC] Text changed for ${key}: "${prevText}" -> "${nextText}"`);
         $diffTextContentAndApplyDelta(this, key, prevText, nextText);
         this._text = nextText;
-        console.log(`🔤 [TEXT-SYNC] Updated _text for ${key}: "${this._text}", new size: ${this.getSize()}`);
       }
     }
   }

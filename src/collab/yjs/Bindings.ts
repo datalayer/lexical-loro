@@ -122,7 +122,7 @@ export function createBinding(
           parent: node._parent ? node._parent._key : 'No parent'
         });
       } else {
-        console.log(`Node with key "${nodeKey}" not found`);
+        console.warn(`Node with key "${nodeKey}" not found`);
       }
     },
     generateTreeHTML: (node: any, prefix = '', isLast = true) => {
