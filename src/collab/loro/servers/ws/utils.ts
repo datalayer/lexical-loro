@@ -215,6 +215,16 @@ export const getDoc = (docname) => map.setIfUndefined(docs, docname, () => {
  * @param {ArrayBuffer | string} message
  */
 const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string | Uint8Array) => {
+  console.log('📨 [SERVER] messageListener received message:', {
+    timestamp: new Date().toISOString(),
+    connId: conn.id || 'unknown',
+    docName: doc.name,
+    messageType: typeof message,
+    messageLength: message instanceof ArrayBuffer ? message.byteLength : 
+                  message instanceof Uint8Array ? message.length : 
+                  typeof message === 'string' ? message.length : 'unknown'
+  })
+  
   try {    
     let messageData: LoroWebSocketMessage | null = null
     let messageStr: string = ''
@@ -275,16 +285,29 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
     // Parse JSON message
     try {
       messageData = JSON.parse(messageStr) as LoroWebSocketMessage
+      console.log('✅ [SERVER] Successfully parsed message:', {
+        type: messageData.type,
+        docId: messageData.docId || 'no-docId',
+        hasUpdate: 'update' in messageData ? messageData.update?.length : 'N/A'
+      })
     } catch (parseError) {
       console.error(`[Server] messageListener - JSON parse error:`, parseError.message)
       console.error(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
       return
     }
     
+    console.log(`🔀 [SERVER] Processing message type: ${messageData.type}`)
     switch (messageData.type) {
       case messageLoroUpdate:
+        console.log('📥 [SERVER] Processing loro-update:', {
+          updateLength: messageData.update.length,
+          docId: messageData.docId,
+          connId: conn.id || 'unknown'
+        })
+        
         // Apply the Loro update to the document
         const updateBytes = new Uint8Array(messageData.update)
+        console.log('📝 [SERVER] Importing update to document')
         doc.doc.import(updateBytes)
         
         // Create properly formatted message for broadcasting

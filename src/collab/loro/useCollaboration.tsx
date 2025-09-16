@@ -206,14 +206,20 @@ export function useCollaboration(
         tags,
       }) => {
 
+        console.log('🎯 [UPDATE-LISTENER] Editor update triggered:', {
+          timestamp: new Date().toISOString(),
+          dirtyElementsCount: dirtyElements.size,
+          dirtyLeavesCount: dirtyLeaves.size,
+          normalizedNodesCount: normalizedNodes.size,
+          tagsArray: Array.from(tags),
+          hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
+          skipCollaborationUpdateRef: skipCollaborationUpdateRef.current,
+          dirtyElementKeys: Array.from(dirtyElements.keys()),
+          dirtyLeafKeys: Array.from(dirtyLeaves)
+        })
+
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {          
-          // Set origin to indicate this is a local edit for undo manager
-          const doc = docMap.get(id);
-          if (doc) {
-            doc.setNextCommitOrigin('lexical-edit');
-          } else {
-            console.warn('useCollaboration: Could not find doc in docMap for id:', id);
-          }
+          console.log('✅ [UPDATE-LISTENER] Proceeding with CRDT sync')
           
           syncLexicalUpdatesToCRDT(
             binding,
