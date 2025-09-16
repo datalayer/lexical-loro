@@ -14,7 +14,7 @@ import {CollabElementNode} from '../nodes/CollabElementNode';
 import {CollabTextNode} from '../nodes/CollabTextNode';
 import type {Binding} from '../Bindings';
 import {Provider, UserState} from '../State';
-import {getPositionFromElementAndOffset} from '../Utils';
+import {getPositionFromElementAndOffset} from '../utils/Utils';
 import {AnyCollabNode} from '../nodes/AnyCollabNode';
 
 /*****************************************************************************/

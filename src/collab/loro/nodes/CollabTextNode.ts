@@ -8,7 +8,7 @@ import {
 import type {LoroMap} from 'loro-crdt';
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
-import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../Utils';
+import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
 import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
 

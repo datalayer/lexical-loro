@@ -27,7 +27,7 @@ import {
   $moveSelectionToPreviousNode,
   doesSelectionNeedRecovering,
   syncWithTransaction,
-} from '../Utils';
+} from '../utils/Utils';
 import { Binding } from '../Bindings';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';
 

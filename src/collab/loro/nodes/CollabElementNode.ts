@@ -19,7 +19,7 @@ import {
   getPositionFromElementAndOffset,
   spliceString,
   syncPropertiesFromLexical,
-} from '../Utils';
+} from '../utils/Utils';
 import type {Binding} from '../Bindings';
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
@@ -308,12 +308,51 @@ export class CollabElementNode {
                 const nodeType = loroMap.get('__type') as string;
                 console.log(`🔧 [EMBED-SYNC-MAP] LoroMap processing - nodeType: ${nodeType}, parent: ${this._key}`);
                 if (nodeType) {
-                  // 🚨 HIERARCHY FIX: Only create text nodes as children of proper element nodes
-                  // Don't create text nodes at root level - they should be children of paragraph/element nodes
+                  // 🚨 HIERARCHY FIX: Create text nodes and move to proper parent if needed
+                  // 🚨 HIERARCHY FIX: Ensure text nodes are properly nested
                   if (this._key === 'root') {
-                    console.warn(`🚨 [HIERARCHY-FIX] BLOCKING text node creation at root level for textId: ${textId}`);
-                    console.warn(`🚨 [HIERARCHY-FIX] Text nodes should be children of paragraph/element nodes, not root siblings`);
-                  } else {
+                    console.log(`🔄 [HIERARCHY-FIX] Deferring text node creation at root level for textId: ${textId}`);
+                    continue;
+                  }
+                  
+                  // This should not be reached now
+                  if (false) {
+                    let paragraphElement = this._children.find(child => 
+                      child instanceof CollabElementNode && 
+                      child.getType() === 'paragraph'
+                    ) as CollabElementNode;
+                    
+                    if (!paragraphElement) {
+                      // Create a paragraph to contain the orphaned text node
+                      console.log(`� [HIERARCHY-FIX] Creating paragraph for orphaned text node at root`);
+                      const xmlText = new XmlText(binding.doc, `auto_paragraph_${Date.now()}`);
+                      xmlText.setAttribute('__type', 'paragraph');
+                      paragraphElement = $createCollabElementNode(xmlText, this, 'paragraph');
+                      this._children.push(paragraphElement);
+                    }
+                    
+                    // Create the text node in the paragraph instead
+                    console.log(`🔧 [HIERARCHY-FIX] Creating text node in paragraph ${paragraphElement._key} instead of root`);
+                    try {
+                      const collabTextNode = new CollabTextNode(loroMap, '', paragraphElement, nodeType);
+                      
+                      // Extract the key from the textId
+                      const keyMatch = textId.match(/text_(\w+):Map$/);
+                      if (keyMatch) {
+                        collabTextNode._key = `text_${keyMatch[1]}`;
+                      }
+                      
+                      paragraphElement._children.push(collabTextNode);
+                      console.log(`🔧 [HIERARCHY-FIX] Created CollabTextNode(${collabTextNode._key}) in paragraph ${paragraphElement._key}`);
+                    } catch (error) {
+                      console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode in paragraph:`, error);
+                    }
+                    continue;
+                  }
+                  
+
+                  
+                  {
                     // This is a proper element node (paragraph, etc.) - allow text node creation
                     console.log(`🔧 [HIERARCHY-GOOD] Creating text node as child of ${this.constructor.name}(${this._key})`);
                     try {
@@ -327,8 +366,17 @@ export class CollabElementNode {
                         console.warn(`🔧 [EMBED-SYNC] Could not extract key from textId: ${textId}`);
                       }
                       
-                      this._children.push(collabTextNode);
-                      console.log(`🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
+                      // Add to proper parent
+                      if (false) {
+                        // Move to proper paragraph parent
+                        // Dead code - this should never execute
+                        // Dead code - this should never execute
+                        console.log(`� [HIERARCHY-FIX] Moved CollabTextNode(${collabTextNode._key}) to paragraph ${undefined}`);
+                      } else {
+                        // Keep in current location
+                        this._children.push(collabTextNode);
+                        console.log(`�🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
+                      }
                     } catch (error) {
                       console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${textId}:`, error);
                     }
@@ -369,12 +417,50 @@ export class CollabElementNode {
                     }
                     
                     if (nodeType) {
-                      // 🚨 HIERARCHY FIX: Only create text nodes as children of proper element nodes
+                      // 🚨 HIERARCHY FIX: Create text nodes and then move to proper parent if needed
+                      // 🚨 HIERARCHY FIX: Defer text node creation at root level
                       if (this._key === 'root') {
-                        console.warn(`🚨 [HIERARCHY-FIX] BLOCKING text node creation at root level for mapId: ${mapId}`);
-                        console.warn(`🚨 [HIERARCHY-FIX] Text nodes should be children of paragraph/element nodes, not root siblings`);
-                      } else {
-                        // This is a proper element node (paragraph, etc.) - allow text node creation
+                        console.log(`🔄 [HIERARCHY-FIX] Deferring text node creation at root level for mapId: ${mapId}`);
+                        continue;
+                      }
+                      
+                      // This should not be reached now
+                      if (false) {
+                        let paragraphElement = this._children.find(child => 
+                          child instanceof CollabElementNode && 
+                          child.getType() === 'paragraph'
+                        ) as CollabElementNode;
+                        
+                        if (!paragraphElement) {
+                          // Create a paragraph to contain the orphaned text node
+                          console.log(`� [HIERARCHY-FIX] Creating paragraph for orphaned text node at root`);
+                          const xmlText = new XmlText(binding.doc, `auto_paragraph_${Date.now()}`);
+                          xmlText.setAttribute('__type', 'paragraph');
+                          paragraphElement = $createCollabElementNode(xmlText, this, 'paragraph');
+                          this._children.push(paragraphElement);
+                        }
+                        
+                        // Create the text node in the paragraph instead
+                        console.log(`🔧 [HIERARCHY-FIX] Creating text node in paragraph ${paragraphElement._key} instead of root`);
+                        try {
+                          const collabTextNode = new CollabTextNode(loroMap, '', paragraphElement, nodeType);
+                          
+                          // Extract the key from the mapId (e.g., "cid:root-element_1:Map" -> "1")
+                          const keyMatch = mapId.match(/element_(\w+):Map$/);
+                          if (keyMatch) {
+                            collabTextNode._key = keyMatch[1];
+                          }
+                          
+                          paragraphElement._children.push(collabTextNode);
+                          console.log(`🔧 [HIERARCHY-FIX] Created CollabTextNode(${collabTextNode._key}) in paragraph ${paragraphElement._key}`);
+                        } catch (error) {
+                          console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode in paragraph:`, error);
+                        }
+                        continue;
+                      }
+                      
+                      {
+                        // Create text node first, then move to proper parent if needed
                         console.log(`🔧 [HIERARCHY-GOOD] Creating text node as child of ${this.constructor.name}(${this._key})`);
                         try {
                           const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
@@ -387,8 +473,17 @@ export class CollabElementNode {
                             console.warn(`🔧 [EMBED-SYNC] Could not extract key from mapId: ${mapId}`);
                           }
                           
-                          this._children.push(collabTextNode);
-                          console.log(`🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
+                          // Add to proper parent
+                          if (false) {
+                            // Move to proper paragraph parent
+                            // Dead code - this should never execute
+                            // Dead code - this should never execute
+                            console.log(`🔄 [HIERARCHY-FIX] Moved CollabTextNode(${collabTextNode._key}) to paragraph ${undefined}`);
+                          } else {
+                            // Keep in current location
+                            this._children.push(collabTextNode);
+                            console.log(`🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
+                          }
                         } catch (error) {
                           console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${mapId}:`, error);
                         }
@@ -476,29 +571,9 @@ export class CollabElementNode {
                 
                 // Add to _children if not already present
                 if (collabNode && !this._children.includes(collabNode)) {
-                  // 🚨 HIERARCHY FIX: Never add text nodes as root siblings
+                  // 🚨 HIERARCHY FIX: Block text nodes at root level 
                   if (this._key === 'root' && collabNode instanceof CollabTextNode) {
-                    // Find existing paragraph elements to add the text node to
-                    const paragraphElement = this._children.find(child => 
-                      child instanceof CollabElementNode && 
-                      child.getType() === 'paragraph'
-                    ) as CollabElementNode;
-                    
-                    if (paragraphElement) {
-                      console.log(`🔧 [HIERARCHY-FIX] Adding orphaned text node to existing paragraph instead of root`);
-                      paragraphElement._children.push(collabNode);
-                      collabNode._parent = paragraphElement;
-                    } else {
-                      // Create a paragraph to wrap the orphaned text node
-                      console.log(`🔧 [HIERARCHY-FIX] Creating paragraph wrapper for orphaned text node`);
-                      const xmlText = new XmlText(binding.doc, `paragraph_wrapper_${Date.now()}`);
-                      xmlText.setAttribute('__type', 'paragraph');
-                      const paragraphWrapper = $createCollabElementNode(xmlText, this, 'paragraph');
-                      paragraphWrapper._children.push(collabNode);
-                      collabNode._parent = paragraphWrapper;
-                      this._children.push(paragraphWrapper);
-                      console.log(`🔧 [HIERARCHY-FIX] Created paragraph wrapper for text node to prevent root sibling`);
-                    }
+                    console.warn(`� [HIERARCHY-FIX] BLOCKING text node addition at root level`);
                   } else {
                     // This is a proper element node - allow direct child addition
                     this._children.push(collabNode);

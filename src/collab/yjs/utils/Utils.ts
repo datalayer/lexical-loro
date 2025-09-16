@@ -25,27 +25,30 @@ import {
   CollabDecoratorNode,
 } from './../nodes/CollabDecoratorNode';
 import {$createCollabElementNode, CollabElementNode} from './../nodes/CollabElementNode';
-import { $createCollabLineBreakNode } from './../nodes/CollabLineBreakNode';
+import {$createCollabLineBreakNode} from './../nodes/CollabLineBreakNode';
 import {$createCollabTextNode, CollabTextNode} from './../nodes/CollabTextNode';
-import { AnyCollabNode } from '../nodes/AnyCollabNode';
+import {AnyCollabNode} from '../nodes/AnyCollabNode';
 
 /*****************************************************************************/
 
-const baseExcludedProperties = new Set<string>([
+const BASE_EXCLUDED_PROPERTIES = new Set<string>([
   '__key',
   '__parent',
   '__next',
   '__prev',
   '__state',
 ]);
-const elementExcludedProperties = new Set<string>([
+
+const ELEMENT_EXCLUDED_PROPERTIES = new Set<string>([
   '__first',
   '__last',
   '__size',
   '__dir',
 ]);
-const rootExcludedProperties = new Set<string>(['__cachedText']);
-const textExcludedProperties = new Set<string>(['__text']);
+
+const ROOT_EXCLUDED_PROPERTIES = new Set<string>(['__cachedText']);
+
+const TEXT_EXCLUDED_PROPERTIES = new Set<string>(['__text']);
 
 /*****************************************************************************/
 
@@ -55,20 +58,20 @@ function isExcludedProperty(
   binding: Binding,
 ): boolean {
   if (
-    baseExcludedProperties.has(name) ||
+    BASE_EXCLUDED_PROPERTIES.has(name) ||
     typeof (node as unknown as Record<string, unknown>)[name] === 'function'
   ) {
     return true;
   }
 
   if ($isTextNode(node)) {
-    if (textExcludedProperties.has(name)) {
+    if (TEXT_EXCLUDED_PROPERTIES.has(name)) {
       return true;
     }
   } else if ($isElementNode(node)) {
     if (
-      elementExcludedProperties.has(name) ||
-      ($isRootNode(node) && rootExcludedProperties.has(name))
+      ELEMENT_EXCLUDED_PROPERTIES.has(name) ||
+      ($isRootNode(node) && ROOT_EXCLUDED_PROPERTIES.has(name))
     ) {
       return true;
     }
@@ -198,6 +201,38 @@ export function getNodeTypeFromSharedType(
     'Expected shared type to include type attribute',
   );
   return type;
+}
+
+export function createLexicalNodeFromCollabNode(
+  binding: Binding,
+  collabNode: AnyCollabNode,
+  parentKey: NodeKey,
+): LexicalNode {
+  const type = collabNode.getType();
+  const registeredNodes = binding.editor._nodes;
+  const nodeInfo = registeredNodes.get(type);
+  invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+  const lexicalNode:
+    | DecoratorNode<unknown>
+    | TextNode
+    | ElementNode
+    | LexicalNode = new nodeInfo.klass();
+  lexicalNode.__parent = parentKey;
+  collabNode._key = lexicalNode.__key;
+
+  if (collabNode instanceof CollabElementNode) {
+    const xmlText = collabNode._xmlText;
+    collabNode.syncPropertiesFromCRDT(binding, null);
+    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+    collabNode.syncChildrenFromCRDT(binding);
+  } else if (collabNode instanceof CollabTextNode) {
+    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+  } else if (collabNode instanceof CollabDecoratorNode) {
+    collabNode.syncPropertiesFromCRDT(binding, null);
+  }
+
+  binding.collabNodeMap.set(lexicalNode.__key, collabNode);
+  return lexicalNode;
 }
 
 export function syncPropertiesFromLexical(
@@ -365,38 +400,6 @@ export function doesSelectionNeedRecovering(
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
   binding.doc.transact(fn, binding);
-}
-
-export function createLexicalNodeFromCollabNode(
-  binding: Binding,
-  collabNode: AnyCollabNode,
-  parentKey: NodeKey,
-): LexicalNode {
-  const type = collabNode.getType();
-  const registeredNodes = binding.editor._nodes;
-  const nodeInfo = registeredNodes.get(type);
-  invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
-  const lexicalNode:
-    | DecoratorNode<unknown>
-    | TextNode
-    | ElementNode
-    | LexicalNode = new nodeInfo.klass();
-  lexicalNode.__parent = parentKey;
-  collabNode._key = lexicalNode.__key;
-
-  if (collabNode instanceof CollabElementNode) {
-    const xmlText = collabNode._xmlText;
-    collabNode.syncPropertiesFromCRDT(binding, null);
-    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-    collabNode.syncChildrenFromCRDT(binding);
-  } else if (collabNode instanceof CollabTextNode) {
-    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
-  } else if (collabNode instanceof CollabDecoratorNode) {
-    collabNode.syncPropertiesFromCRDT(binding, null);
-  }
-
-  binding.collabNodeMap.set(lexicalNode.__key, collabNode);
-  return lexicalNode;
 }
 
 /*****************************************************************************/
