@@ -18,12 +18,6 @@ function $diffTextContentAndApplyDelta(
   prevText: string,
   nextText: string,
 ): void {
-  console.log('🔍 [TEXT-DELTA] Computing text delta:', {
-    nodeKey: key,
-    prevText,
-    nextText
-  })
-  
   const selection = $getSelection();
   let cursorOffset = nextText.length;
 
@@ -36,12 +30,6 @@ function $diffTextContentAndApplyDelta(
   }
 
   const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
-  console.log('📐 [TEXT-DELTA] Computed diff:', {
-    index: diff.index,
-    remove: diff.remove,
-    insert: diff.insert,
-    insertLength: diff.insert?.length || 0
-  })
   
   collabNode.spliceText(diff.index, diff.remove, diff.insert);
 }
@@ -104,39 +92,18 @@ export class CollabTextNode {
   }
 
   spliceText(index: number, delCount: number, newText: string): void {
-    console.log('🔥 [SPLICE-TEXT] About to modify Loro CRDT:', {
-      nodeKey: this._key,
-      index,
-      delCount,
-      newText,
-      newTextLength: newText.length
-    })
-    
     const collabElementNode = this._parent;
     const xmlText = collabElementNode._xmlText;
     const offset = this.getOffset() + 1 + index;
 
-    console.log('📍 [SPLICE-TEXT] Computed offset:', {
-      baseOffset: this.getOffset(),
-      index,
-      finalOffset: offset
-    })
-
     if (delCount !== 0) {
-      console.log('🗑️ [SPLICE-TEXT] Deleting from Loro CRDT:', { offset, delCount })
       xmlText.delete(offset, delCount);
     }
 
     if (newText !== '') {
-      console.log('➕ [SPLICE-TEXT] Inserting into Loro CRDT:', { offset, newText })
       xmlText.insert(offset, newText);
-      console.log('📊 [SPLICE-TEXT] Post-insert document state:', {
-        xmlTextLength: xmlText.length,
-        xmlTextContent: xmlText.toString()
-      })
     }
     
-    console.log('✅ [SPLICE-TEXT] Completed Loro CRDT modifications')
   }
 
   syncPropertiesAndTextFromLexical(
@@ -154,24 +121,10 @@ export class CollabTextNode {
       nextLexicalNode,
     );
 
-    console.log('📝 [TEXT-SYNC] CollabTextNode syncPropertiesFromLexical:', {
-      nodeKey: nextLexicalNode.__key,
-      nextText: nextText,
-      hasPrevNode: prevLexicalNode !== null,
-      prevText: prevLexicalNode?.__text || 'null',
-      textChanged: prevLexicalNode !== null && prevLexicalNode.__text !== nextText
-    })
-
     if (prevLexicalNode !== null) {
       const prevText = prevLexicalNode.__text;
 
       if (prevText !== nextText) {
-        console.log('🔄 [TEXT-DIFF] Applying text delta:', {
-          nodeKey: nextLexicalNode.__key,
-          prevText,
-          nextText,
-          change: `"${prevText}" → "${nextText}"`
-        })
         const key = nextLexicalNode.__key;
         $diffTextContentAndApplyDelta(this, key, prevText, nextText);
         this._text = nextText;

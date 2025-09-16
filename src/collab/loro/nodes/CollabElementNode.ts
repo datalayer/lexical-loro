@@ -196,7 +196,6 @@ export class CollabElementNode {
 
           if (node instanceof CollabTextNode) {
             node._text = spliceString(node._text, offset, 0, insertDelta);
-            console.log(`✅ [DELTA-SUCCESS] Applied text insert: "${insertDelta}" at offset ${offset}, new text: "${node._text}"`);
           } else {
             // TODO: maybe we can improve this by keeping around a redundant
             // text node map, rather than removing all the text nodes, so there
@@ -436,7 +435,6 @@ export class CollabElementNode {
         // Handle LoroMap references (text nodes)
         else if (embedData.object && embedData.object.type === 'loro_ref' && embedData.object.refType === 'LoroMap') {
           const mapId = embedData.object.id;
-          console.log(`🔧 [EMBED-SYNC] Processing LoroMap embed: ${mapId}`);
           
           // Check if we already have a CollabTextNode for this mapId
           const existingChild = this._children.find(child => 
@@ -509,7 +507,6 @@ export class CollabElementNode {
     const nextLexicalChildrenKeys: Array<NodeKey> = [];
     const lexicalChildrenKeysLength = prevLexicalChildrenKeys.length;
     
-    console.log(`🔄 [SYNC-MIDDLE] Lexical node children: ${lexicalChildrenKeysLength}`);
     const collabChildren = this._children;
     const collabChildrenLength = collabChildren.length;
     const collabNodeMap = binding.collabNodeMap;
@@ -712,9 +709,7 @@ export class CollabElementNode {
     prevNodeMap: null | NodeMap,
     dirtyElements: null | Map<NodeKey, IntentionallyMarkedAsDirtyElement>,
     dirtyLeaves: null | Set<NodeKey>,
-  ): void {
-    console.log(`🔄 [SYNC-L2C] ${this._key} (${this._type}) syncChildrenFromLexical - current children: ${this._children.length}`);
-    
+  ): void {    
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const prevChildren =
       prevLexicalNode === null
@@ -900,7 +895,6 @@ export class CollabElementNode {
       children.splice(index, delCount);
     }
     
-    console.log(`✂️ [SPLICE] After: ${children.length} children, XmlText: "${this._xmlText.toPlainString()}"`);
   }
 
   getChildOffset(
@@ -947,7 +941,6 @@ export function $createCollabElementNode(
   // If an explicit key is provided, use it instead of letting Lexical generate one
   if (explicitKey) {
     collabNode._key = explicitKey;
-    console.log(`🔑 [CREATE-ELEMENT] Using explicit key "${explicitKey}" for CollabElementNode`);
   }
   
   (xmlText as any)._collabNode = collabNode;

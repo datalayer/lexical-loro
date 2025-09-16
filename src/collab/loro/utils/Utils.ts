@@ -252,13 +252,6 @@ export function syncPropertiesFromLexical(
   prevLexicalNode: null | LexicalNode,
   nextLexicalNode: LexicalNode,
 ): void {
-  console.log('🔧 [SYNC-PROPS] syncPropertiesFromLexical called:', {
-    nodeType: nextLexicalNode.__type,
-    nodeKey: nextLexicalNode.__key,
-    sharedTypeType: sharedType.constructor.name,
-    hasPrevNode: !!prevLexicalNode
-  })
-  
   const type = nextLexicalNode.__type;
   const nodeProperties = binding.nodeProperties;
   let properties = nodeProperties.get(type);
@@ -417,18 +410,7 @@ export function doesSelectionNeedRecovering(
 }
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
-  console.log('🔄 [TRANSACTION] Starting Loro sync operation')
-  
-  // Get the LoroDoc from the binding
-  const doc = binding.doc;
-  
-  // Execute the sync function
-  console.log('📦 [TRANSACTION] Executing sync function')
   fn();
-  // Use peerId as origin to mark this as a local change
-  binding.doc.commit({ origin: binding.doc.peerId.toString() });
-
-  console.log('✅ [TRANSACTION] Sync operation completed')
 }
 
 /*****************************************************************************/

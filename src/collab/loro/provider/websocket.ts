@@ -1,4 +1,4 @@
-import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEvent, LoroEventBatch } from 'loro-crdt'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEvent, LoroEventBatch, VersionVector } from 'loro-crdt'
 import { ObservableV2 } from 'lib0/observable'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
@@ -156,24 +156,9 @@ messageHandlers[messageLoroUpdate] = (
     // Apply the update to the local document
     const updateBytes = new Uint8Array(message.update)
     
-    console.log(`📥 [PEER-UPDATE] Receiving REMOTE Loro update from peer:`, {
-      updateSize: updateBytes.length,
-      timestamp: new Date().toISOString(),
-      localPeerId: provider.doc.peerId,
-      willImportWithOrigin: `remote-peer-${Date.now()}`,
-      emitSynced: emitSynced,
-      currentlySynced: provider._synced
-    })
-    
     // Get document state before applying update for comparison
     const beforeVersion = provider.doc.version()
     const beforeContent = provider.doc.getText('content').toString()
-    
-    console.log(`📊 [PEER-UPDATE] Document state before import:`, {
-      version: beforeVersion,
-      contentLength: beforeContent.length,
-      contentPreview: beforeContent.slice(0, 100) + (beforeContent.length > 100 ? '...' : '')
-    })
     
     // Import with sender's peerId as origin to mark as remote update
     // We don't know the actual sender's peerId, so use a generic remote identifier
@@ -184,26 +169,11 @@ messageHandlers[messageLoroUpdate] = (
     const afterVersion = provider.doc.version()
     const afterContent = provider.doc.getText('content').toString()
     
-    console.log(`✅ [PEER-UPDATE] Successfully applied update:`, {
-      beforeVersion: beforeVersion,
-      afterVersion: afterVersion,
-      versionChanged: JSON.stringify(beforeVersion) !== JSON.stringify(afterVersion),
-      contentLengthBefore: beforeContent.length,
-      contentLengthAfter: afterContent.length,
-      contentChanged: beforeContent !== afterContent,
-      contentPreviewAfter: afterContent.slice(0, 100) + (afterContent.length > 100 ? '...' : '')
-    })
-    
-    if (beforeContent !== afterContent) {
-      console.log(`📝 [PEER-UPDATE] Content changes detected:`, {
-        oldLength: beforeContent.length,
-        newLength: afterContent.length,
-        delta: afterContent.length - beforeContent.length
-      })
-    }
+    // Update our last exported version to include the remote changes
+    // This ensures we don't re-export remote changes
+    provider._lastExportedVersion = afterVersion
     
     if (emitSynced && !provider._synced) {
-      console.log(`🔄 [PEER-UPDATE] Setting provider as synced`)
       provider.synced = true
     }
     
@@ -515,19 +485,8 @@ const setupWS = (provider) => {
  * Broadcast JSON message to WebSocket and BroadcastChannel
  */
 const broadcastMessage = (provider: WebsocketProvider, message: string) => {
-  console.log('📡 [BROADCAST] broadcastMessage called:', {
-    timestamp: new Date().toISOString(),
-    wsconnected: provider.wsconnected,
-    bcconnected: provider.bcconnected,
-    wsReadyState: provider.ws?.readyState,
-    wsOPEN: provider.ws?.OPEN,
-    messageLength: message.length,
-    messagePreview: message.substring(0, 100) + (message.length > 100 ? '...' : '')
-  })
-  
   const ws = provider.ws
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
-    console.log('🚀 [BROADCAST] Sending message via WebSocket')
     ws.send(message)
   } else {
     console.warn('❌ [BROADCAST] WebSocket not ready for sending:', {
@@ -539,10 +498,9 @@ const broadcastMessage = (provider: WebsocketProvider, message: string) => {
   }
   
   if (provider.bcconnected) {
-    console.log('📻 [BROADCAST] Publishing via BroadcastChannel')
     bc.publish(provider.bcChannel, message, provider)
   } else {
-    console.log('📻 [BROADCAST] BroadcastChannel not connected')
+    console.warn('📻 [BROADCAST] BroadcastChannel not connected')
   }
 }
 
@@ -588,6 +546,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _ephemeralUpdateHandler = null
   _exitHandler = null
   _bcSubscriber = null
+  _lastExportedVersion: VersionVector = null  // Track last exported version for incremental updates
 
   /**
    * @param {string} serverUrl
@@ -712,26 +671,12 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {any} origin
      */
     this._updateHandler = (update: Uint8Array, origin: any) => {
-      console.log('🎯 [UPDATE-HANDLER] Broadcasting local document update:', {
-        timestamp: new Date().toISOString(),
-        updateLength: update.length,
-        origin: origin,
-        docId: this.docId,
-        note: 'This is a LOCAL change being sent to other peers'
-      })
-      
       // This handler is only called for local changes that need to be broadcast
       const updateMessage: LoroUpdateMessage = {
         type: 'loro-update',
         update: Array.from(update),
         docId: this.docId
       }
-      
-      console.log('🚀 [UPDATE-HANDLER] Sending to WebSocket server:', {
-        messageType: updateMessage.type,
-        docId: updateMessage.docId,
-        updateSize: updateMessage.update.length
-      })
       
       broadcastMessage(this, JSON.stringify(updateMessage))
     }
@@ -776,6 +721,9 @@ export class WebsocketProvider extends ObservableV2<any> {
     }
     this.ephemeralStore.subscribe(this._ephemeralUpdateHandler)
     
+    // Initialize the last exported version to current document version
+    this._lastExportedVersion = this.doc.version()
+    
     // Use Loro's native event system to listen for document changes
     try {
       this.doc.subscribe((event: LoroEventBatch) => {
@@ -793,7 +741,9 @@ export class WebsocketProvider extends ObservableV2<any> {
           origin: event.origin,
           localPeerId: localPeerId,
           isLocalChange: isLocalChange,
-          eventType: 'loro-document-update'
+          eventType: 'loro-document-update',
+          events: event.events?.length || 0,
+          eventDetails: event.events?.map(e => ({ target: e.target, diff: e.diff })) || []
         })
 
         // Skip sending remote updates back to the server to avoid loops
@@ -802,25 +752,33 @@ export class WebsocketProvider extends ObservableV2<any> {
           return
         }
 
-        console.log('📤 [WEBSOCKET-PROVIDER] Processing local change, preparing to send update')
+        console.log('📤 [WEBSOCKET-PROVIDER] Processing local change, preparing to send incremental update')
         
-        // For local changes, export and send updates to the server
+        // Use incremental updates with 'from' parameter to get only changes since last export
         try {
-          const update = this.doc.export({ mode: 'update' });
-          console.log('📦 [WEBSOCKET-PROVIDER] Exported update:', {
-            updateLength: update.length,
-            updateType: typeof update,
-            hasData: update.length > 0
-          })
+          // Get current version before commit
+          const currentVersion = this.doc.version()
+
+          // Force a commit first to ensure all changes are in the document
+          this.doc.commit()
+          const afterCommitVersion = this.doc.version()
+          
+          // Export incremental update from last exported version
+          const update = this.doc.export({ 
+            mode: 'update', 
+            from: this._lastExportedVersion 
+          });
           
           if (update.length > 0) {
-            console.log('🚀 [WEBSOCKET-PROVIDER] Calling _updateHandler with update')
             this._updateHandler(update, null);
+            
+            // Update the last exported version to current version
+            this._lastExportedVersion = afterCommitVersion
           } else {
-            console.warn(`[Client] WebsocketProvider - No update to export (empty)`);
+            console.warn(`[WEBSOCKET-PROVIDER] No incremental update available - versions might be the same`);
           }
         } catch (error) {
-          console.error(`[Client] WebsocketProvider - Error exporting document update:`, error);
+          console.error(`[WEBSOCKET-PROVIDER] Error exporting incremental update:`, error);
         }
       });
     } catch (error) {

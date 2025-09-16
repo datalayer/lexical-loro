@@ -285,29 +285,16 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
     // Parse JSON message
     try {
       messageData = JSON.parse(messageStr) as LoroWebSocketMessage
-      console.log('✅ [SERVER] Successfully parsed message:', {
-        type: messageData.type,
-        docId: messageData.docId || 'no-docId',
-        hasUpdate: 'update' in messageData ? messageData.update?.length : 'N/A'
-      })
     } catch (parseError) {
       console.error(`[Server] messageListener - JSON parse error:`, parseError.message)
       console.error(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
       return
     }
     
-    console.log(`🔀 [SERVER] Processing message type: ${messageData.type}`)
     switch (messageData.type) {
       case messageLoroUpdate:
-        console.log('📥 [SERVER] Processing loro-update:', {
-          updateLength: messageData.update.length,
-          docId: messageData.docId,
-          connId: conn.id || 'unknown'
-        })
-        
         // Apply the Loro update to the document
         const updateBytes = new Uint8Array(messageData.update)
-        console.log('📝 [SERVER] Importing update to document')
         doc.doc.import(updateBytes)
         
         // Create properly formatted message for broadcasting
@@ -330,7 +317,6 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
             console.log(`Skipping sender connection: ${c.id}`)
           }
         })
-        console.log(`Broadcasted update to ${broadcastCount} clients (total connections: ${doc.conns.size})`)
         
         // Trigger callback if configured
         if (isCallbackSet) {

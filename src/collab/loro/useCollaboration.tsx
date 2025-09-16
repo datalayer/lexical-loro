@@ -206,21 +206,7 @@ export function useCollaboration(
         tags,
       }) => {
 
-        console.log('🎯 [UPDATE-LISTENER] Editor update triggered:', {
-          timestamp: new Date().toISOString(),
-          dirtyElementsCount: dirtyElements.size,
-          dirtyLeavesCount: dirtyLeaves.size,
-          normalizedNodesCount: normalizedNodes.size,
-          tagsArray: Array.from(tags),
-          hasSkipCollabTag: tags.has(SKIP_COLLAB_TAG),
-          skipCollaborationUpdateRef: skipCollaborationUpdateRef.current,
-          dirtyElementKeys: Array.from(dirtyElements.keys()),
-          dirtyLeafKeys: Array.from(dirtyLeaves)
-        })
-
         if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {          
-          console.log('✅ [UPDATE-LISTENER] Proceeding with CRDT sync')
-          
           syncLexicalUpdatesToCRDT(
             binding,
             provider,
