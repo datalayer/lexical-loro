@@ -840,6 +840,19 @@ export class CollabElementNode {
         : $createChildrenArray(prevLexicalNode, prevNodeMap);
     const nextChildren = $createChildrenArray(nextLexicalNode, null);
     
+    // DEBUG: Log text content details for formatting operations
+    if (prevChildren.length > 0 || nextChildren.length > 0) {
+      console.log(`🔄 [SYNC-L2C-FORMATTING] ${this._key} analyzing text changes:`);
+      console.log(`  Previous children (${prevChildren.length}):`, prevChildren.map(key => {
+        const node = prevNodeMap?.get(key);
+        return node && $isTextNode(node) ? `${key}:"${node.__text}"` : `${key}:${node?.getType()}`;
+      }));
+      console.log(`  Next children (${nextChildren.length}):`, nextChildren.map(key => {
+        const node = $getNodeByKey(key);
+        return node && $isTextNode(node) ? `${key}:"${node.__text}"` : `${key}:${node?.getType()}`;
+      }));
+    }
+    
     console.log(`🔄 [SYNC-L2C] ${this._key} prev: ${prevChildren.length}, next: ${nextChildren.length} Lexical children`);
     if (nextChildren.length > 0) {
       console.log(`🔄 [SYNC-L2C] ${this._key} nextChildren keys:`, nextChildren);
@@ -942,7 +955,10 @@ export class CollabElementNode {
       lastChild !== undefined ? lastChild.getOffset() + lastChild.getSize() : 0;
 
     console.log(`📝 [APPEND] ${this._key} (${this._type}) appending ${collabNode.constructor.name}(${(collabNode as any)._key}) at offset ${offset}`);
-    console.log(`📝 [APPEND] Before: ${this._key} has ${children.length} children`);
+    if (lastChild !== undefined) {
+      console.log(`📝 [APPEND] Last child: ${lastChild.constructor.name}(${(lastChild as any)._key}) offset=${lastChild.getOffset()} size=${lastChild.getSize()} text="${(lastChild as any)._text || 'N/A'}"`);
+    }
+    console.log(`📝 [APPEND] Before: ${this._key} has ${children.length} children, XmlText length: ${this._xmlText.toPlainString().length}`);
 
     if (collabNode instanceof CollabElementNode) {
       xmlText.insertEmbed(offset, collabNode._xmlText);
@@ -950,10 +966,16 @@ export class CollabElementNode {
       const map = collabNode._map;
 
       if (map.parent === null) {
+        console.log(`📝 [APPEND] Inserting embed for map at offset ${offset}, XmlText length before: ${xmlText.toPlainString().length}`);
         xmlText.insertEmbed(offset, map);
+        console.log(`📝 [APPEND] XmlText length after embed: ${xmlText.toPlainString().length}`);
       }
-
-      xmlText.insert(offset + 1, collabNode._text);
+      
+      // The text should be inserted right after the embed
+      // Use the current XmlText length as the insertion point for text
+      const currentLength = xmlText.toPlainString().length;
+      console.log(`📝 [APPEND] Inserting text "${collabNode._text}" at current XmlText length: ${currentLength}`);
+      xmlText.insert(currentLength, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {
@@ -975,6 +997,8 @@ export class CollabElementNode {
   ): void {
     const children = this._children;
     const child = children[index];
+
+
 
     if (child === undefined) {
       invariant(
@@ -1025,6 +1049,8 @@ export class CollabElementNode {
     } else {
       children.splice(index, delCount);
     }
+    
+    console.log(`✂️ [SPLICE] After: ${children.length} children, XmlText: "${this._xmlText.toPlainString()}"`);
   }
 
   getChildOffset(

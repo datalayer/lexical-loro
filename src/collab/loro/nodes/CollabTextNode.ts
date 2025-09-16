@@ -18,6 +18,8 @@ function $diffTextContentAndApplyDelta(
   prevText: string,
   nextText: string,
 ): void {
+  console.log(`🔧 [TEXT-DIFF] Node ${key}: "${prevText}" -> "${nextText}"`);
+  
   const selection = $getSelection();
   let cursorOffset = nextText.length;
 
@@ -30,6 +32,8 @@ function $diffTextContentAndApplyDelta(
   }
 
   const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
+  console.log(`🔧 [TEXT-DIFF] Diff for ${key}:`, diff, `splicing at collabNode._text="${collabNode._text}"`);
+  
   collabNode.spliceText(diff.index, diff.remove, diff.insert);
 }
 
@@ -93,7 +97,7 @@ export class CollabTextNode {
   spliceText(index: number, delCount: number, newText: string): void {
     const collabElementNode = this._parent;
     const xmlText = collabElementNode._xmlText;
-    const offset = this.getOffset() + index;
+    const offset = this.getOffset() + 1 + index;
 
     if (delCount !== 0) {
       xmlText.delete(offset, delCount);
@@ -112,6 +116,9 @@ export class CollabTextNode {
     const prevLexicalNode = this.getPrevNode(prevNodeMap);
     const nextText = nextLexicalNode.__text;
 
+    console.log(`🔤 [TEXT-SYNC] Node ${nextLexicalNode.__key}: prevText="${prevLexicalNode?.__text}" -> nextText="${nextText}"`);
+    console.log(`🔤 [TEXT-SYNC] CollabNode._text="${this._text}"`);
+
     syncPropertiesFromLexical(
       binding,
       this._map,
@@ -124,8 +131,10 @@ export class CollabTextNode {
 
       if (prevText !== nextText) {
         const key = nextLexicalNode.__key;
+        console.log(`🔤 [TEXT-SYNC] Text changed for ${key}: "${prevText}" -> "${nextText}"`);
         $diffTextContentAndApplyDelta(this, key, prevText, nextText);
         this._text = nextText;
+        console.log(`🔤 [TEXT-SYNC] Updated _text for ${key}: "${this._text}", new size: ${this.getSize()}`);
       }
     }
   }
@@ -143,16 +152,8 @@ export class CollabTextNode {
     $syncPropertiesFromCRDT(binding, this._map, lexicalNode, keysChanged);
 
     const collabText = this._text;
-    const lexicalText = lexicalNode.__text;
-    
-    // Additional debugging - get parent XmlText content too
-    const parentXmlText = this._parent._xmlText;
-    const parentTextContent = parentXmlText ? parentXmlText.toPlainString() : '';
-    
-    if (lexicalText !== collabText) {
-      lexicalNode.setTextContent(collabText);
-    } else {
-      // Even if text matches, let's force an update to ensure the editor reflects the content
+
+    if (lexicalNode.__text !== collabText) {
       lexicalNode.setTextContent(collabText);
     }
   }
@@ -175,8 +176,6 @@ export function $createCollabTextNode(
   
   // Set the __type property in the LoroMap so getNodeTypeFromSharedType can find it
   map.set('__type', type);
-  
-  console.log(`🏗️ [CREATE] Created ${collabNode.constructor.name}(${collabNode._key}) with parent: ${parent ? parent.constructor.name + '(' + parent._key + ')' : 'null'}`);
   
   (map as any)._collabNode = collabNode;
   return collabNode;

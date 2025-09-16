@@ -163,7 +163,7 @@ export function createBinding(
       if (!binding) return;
       
       // Debug: log the actual structure to console
-      console.log('🟢 YJS Root structure verification:', {
+      console.log('🟢 YJS Root structure:', {
         rootChildren: binding.root._children.length,
         children: binding.root._children.map((child: any, index: number) => ({
           index,

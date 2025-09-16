@@ -147,7 +147,7 @@ export class XmlText {
       // Validate offset
       const currentLength = this._text.length;
       if (offset < 0 || offset > currentLength) {
-        console.warn(`Invalid embed offset ${offset} for text length ${currentLength}, clamping`);
+        console.warn(`Invalid embed offset ${offset} for text length ${currentLength}, clamping to ${Math.max(0, Math.min(offset, currentLength))}`);
         offset = Math.max(0, Math.min(offset, currentLength));
       }
       
@@ -156,10 +156,13 @@ export class XmlText {
       const embedId = Math.random().toString(36).substr(2, 9);
       const placeholderChar = '\uE000'; // Private Use Area start
       
-      // Insert the placeholder character into the text
+      // Insert the placeholder character into the text at the correct offset
+      console.log(`[XmlText] insertEmbed: Before insert - length=${this._text.length}, inserting at offset=${offset}`);
       this._text.insert(offset, placeholderChar);
+      console.log(`[XmlText] insertEmbed: After insert - length=${this._text.length}, content="${this._text.toString()}"`);
       
       // Store the embedded object metadata in the attributes map
+      // Use the original offset for metadata, not adjusted offset
       const embedKey = `embed_${offset}_${embedId}`;
       const embedData = {
         type: 'embed',
@@ -172,6 +175,13 @@ export class XmlText {
       };
       
       this._attributes.set(embedKey, embedData);
+      
+      // Commit the transaction to ensure changes are persisted
+      try {
+        this._doc.commit();
+      } catch (error) {
+        console.error(`[XmlText] ERROR during commit after insertEmbed:`, error);
+      }
       
       // Notify observers
       this._notifyObservers({
@@ -503,9 +513,9 @@ export class XmlText {
   clone(): XmlText {
     const cloned = new XmlText(this._doc);
     
-    // Apply delta to properly clone content with formatting
-    const delta = this.toDelta();
-    cloned.applyDelta(delta);
+    // YJS uses getContent() for cloning, not toDelta()
+    const content = this.getContent();
+    cloned.applyDelta(content.ops);
     
     // Copy attributes
     for (const key of this._attributes.keys()) {
@@ -513,6 +523,13 @@ export class XmlText {
     }
     
     return cloned;
+  }
+
+  /**
+   * Make a copy that can be included elsewhere (YJS compatible)
+   */
+  _copy(): XmlText {
+    return new XmlText(this._doc);
   }
 
   /**
@@ -609,13 +626,6 @@ export class XmlText {
    */
   removeAttribute(attributeName: string): void {
     this._attributes.delete(attributeName);
-  }
-
-  /**
-   * Make a copy that can be included elsewhere (YJS compatible)
-   */
-  _copy(): XmlText {
-    return new XmlText(this._doc);
   }
 
   /**

@@ -174,7 +174,7 @@ export function createBinding(
       const binding = (window as any).debugLoro.binding;
       if (!binding) return;
       
-      console.log('🟢 Loro Root structure verification:', {
+      console.log('🟢 Loro Root structure', {
         rootChildren: binding.root._children.length,
         children: binding.root._children.map((child: any, index: number) => ({
           index,
