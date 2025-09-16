@@ -51,8 +51,6 @@ export function createBinding(
   );
   collabRoot._key = 'root';
   
-  console.log(`🔧 [BINDING-INIT] Created root CollabElementNode with key: ${collabRoot._key}`);
-  
   // Add debug method to inspect hierarchy
   (collabRoot as any).logHierarchy = function(prefix = "") {
     console.log(`${prefix}${this.constructor.name}(${this._key}) [${this.getType()}] - ${this._children.length} children`);

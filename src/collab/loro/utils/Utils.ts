@@ -473,12 +473,21 @@ export function $getOrInitCollabNodeFromSharedType(
     const nodeInfo = registeredNodes.get(type);
     invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
-    const sharedParent = sharedType.parent;
+    // Handle parent access - for XmlText (LoroText), parent is a function
+    let sharedParent: any = null;
+    if (sharedType instanceof XmlText) {
+      // For LoroText-based XmlText, parent is a function
+      sharedParent = (sharedType.parent as any)();
+    } else {
+      // For LoroMap, parent is a direct property
+      sharedParent = sharedType.parent;
+    }
+    
     const targetParent =
       parent === undefined && sharedParent !== null
         ? $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedParent as XmlText | LoroMap<Record<string, unknown>>,
+            sharedParent as unknown as XmlText | LoroMap<Record<string, unknown>>,
           )
         : parent || null;
 

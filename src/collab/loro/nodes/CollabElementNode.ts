@@ -149,7 +149,6 @@ export class CollabElementNode {
             node instanceof CollabLineBreakNode ||
             node instanceof CollabDecoratorNode
           ) {
-            console.log(`🔄 [DELTA-REMOVE] Removing ${node.constructor.name}(${node._key}) from parent ${this.constructor.name}(${this._key})`);
             children.splice(nodeIndex, 1);
             deletionSize -= 1;
           } else if (node instanceof CollabTextNode) {
@@ -218,7 +217,6 @@ export class CollabElementNode {
           currIndex += insertDelta.length;
         } else {
           const sharedType = insertDelta;
-          console.log(`🔧 [DELTA] Before getPositionFromElementAndOffset - children count: ${this._children.length}, types:`, this._children.map(c => c.constructor.name));
           const {node, nodeIndex, length} = getPositionFromElementAndOffset(
             this,
             currIndex,
@@ -265,18 +263,13 @@ export class CollabElementNode {
     try {
       // Get all embed entries from the XmlText
       const embedEntries = this._xmlText.getEmbedEntries();
-      console.log(`🔧 [EMBED-SYNC] Found ${embedEntries.length} embed entries in XmlText for ${this.constructor.name}(${this._key})`);
 
       // Track processed containers to avoid duplicates
       const processedContainers = new Set<string>();
       
-      // First pass: Collect all text node embeds that would be orphaned at root level
-      const orphanedTextEmbeds: Array<{embedData: any, textId: string, container: LoroMap<Record<string, unknown>>}> = [];
-
       // Process each embed to ensure corresponding CollabElementNode exists in _children
       for (const embedEntry of embedEntries) {
         const embedData = embedEntry.value as any;
-        console.log(`🔧 [EMBED-SYNC] Processing embed:`, JSON.stringify(embedData, null, 2));
         
         // Handle XmlText references (element nodes) and LoroMap references (text nodes)
         if (embedData.object && embedData.object.textId) {
@@ -284,7 +277,6 @@ export class CollabElementNode {
           
           // Skip if we've already processed this container
           if (processedContainers.has(textId)) {
-            console.log(`🔧 [EMBED-SYNC] Skipping duplicate embed for container: ${textId}`);
             continue;
           }
           processedContainers.add(textId);
@@ -292,7 +284,6 @@ export class CollabElementNode {
           // First check if this is actually a LoroMap container (for CollabTextNode)
           try {
             const container = binding.doc.getContainerById(textId);
-            console.log(`🔧 [EMBED-SYNC] Container for ${textId}: ${container ? container.constructor.name : 'null'}`);
             
             // Check if it's a LoroMap (should create CollabTextNode)
             if (container && container.constructor.name === 'LoroMap') {
@@ -324,7 +315,6 @@ export class CollabElementNode {
                     
                     if (!paragraphElement) {
                       // Create a paragraph to contain the orphaned text node
-                      console.log(`� [HIERARCHY-FIX] Creating paragraph for orphaned text node at root`);
                       const xmlText = new XmlText(binding.doc, `auto_paragraph_${Date.now()}`);
                       xmlText.setAttribute('__type', 'paragraph');
                       paragraphElement = $createCollabElementNode(xmlText, this, 'paragraph');
@@ -332,7 +322,6 @@ export class CollabElementNode {
                     }
                     
                     // Create the text node in the paragraph instead
-                    console.log(`🔧 [HIERARCHY-FIX] Creating text node in paragraph ${paragraphElement._key} instead of root`);
                     try {
                       const collabTextNode = new CollabTextNode(loroMap, '', paragraphElement, nodeType);
                       
@@ -343,18 +332,14 @@ export class CollabElementNode {
                       }
                       
                       paragraphElement._children.push(collabTextNode);
-                      console.log(`🔧 [HIERARCHY-FIX] Created CollabTextNode(${collabTextNode._key}) in paragraph ${paragraphElement._key}`);
                     } catch (error) {
                       console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode in paragraph:`, error);
                     }
                     continue;
                   }
                   
-
-                  
                   {
                     // This is a proper element node (paragraph, etc.) - allow text node creation
-                    console.log(`🔧 [HIERARCHY-GOOD] Creating text node as child of ${this.constructor.name}(${this._key})`);
                     try {
                       const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
                       
@@ -375,7 +360,6 @@ export class CollabElementNode {
                       } else {
                         // Keep in current location
                         this._children.push(collabTextNode);
-                        console.log(`�🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
                       }
                     } catch (error) {
                       console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${textId}:`, error);
@@ -461,7 +445,6 @@ export class CollabElementNode {
                       
                       {
                         // Create text node first, then move to proper parent if needed
-                        console.log(`🔧 [HIERARCHY-GOOD] Creating text node as child of ${this.constructor.name}(${this._key})`);
                         try {
                           const collabTextNode = new CollabTextNode(loroMap, '', this, nodeType);
                           
@@ -482,7 +465,6 @@ export class CollabElementNode {
                           } else {
                             // Keep in current location
                             this._children.push(collabTextNode);
-                            console.log(`🔧 [EMBED-SYNC-SUCCESS] Created CollabTextNode(${collabTextNode._key}) as child of ${this.constructor.name}(${this._key})`);
                           }
                         } catch (error) {
                           console.error(`❌ [EMBED-SYNC] Error creating CollabTextNode for ${mapId}:`, error);
@@ -499,7 +481,6 @@ export class CollabElementNode {
             }
             // Check if it's a LoroText (XmlText wrapper - should create CollabElementNode) 
             else if (container && (container instanceof XmlText || container.constructor.name === 'LoroText')) {
-              console.log(`🔧 [EMBED-SYNC] Processing LoroText/XmlText embed: ${textId}`);
               
               // Check if we already have a CollabElementNode for this textId
               const existingChild = this._children.find(child => 
@@ -511,16 +492,11 @@ export class CollabElementNode {
                 !!(container as any).getAttribute('__type') : 
                 !!(container as any).getAttributes && !!(container as any).getAttributes()['__type'];
               
-              console.log(`🔧 [EMBED-SYNC] LoroText/XmlText check - existingChild: ${existingChild ? 'found' : 'not found'}, hasType: ${hasType}`);
-
               if (!existingChild && hasType) {
-                console.log(`🔧 [EMBED-SYNC] CREATING CollabElementNode for textId: ${textId}`);
                 // Extract original key from container ID
                 const containerIdStr = (container as any).id || '';
                 const keyMatch = containerIdStr.match(/element_(\d+):/);
                 const originalKey = keyMatch ? keyMatch[1] : undefined;
-                
-                console.log('🔑 [EMBED-SYNC] Container ID:', containerIdStr, 'Extracted key:', originalKey);
                 
                 // Cast container to XmlText for the helper methods
                 const xmlTextContainer = container as any as XmlText;
@@ -954,28 +930,18 @@ export class CollabElementNode {
     const offset =
       lastChild !== undefined ? lastChild.getOffset() + lastChild.getSize() : 0;
 
-    console.log(`📝 [APPEND] ${this._key} (${this._type}) appending ${collabNode.constructor.name}(${(collabNode as any)._key}) at offset ${offset}`);
-    if (lastChild !== undefined) {
-      console.log(`📝 [APPEND] Last child: ${lastChild.constructor.name}(${(lastChild as any)._key}) offset=${lastChild.getOffset()} size=${lastChild.getSize()} text="${(lastChild as any)._text || 'N/A'}"`);
-    }
-    console.log(`📝 [APPEND] Before: ${this._key} has ${children.length} children, XmlText length: ${this._xmlText.toPlainString().length}`);
-
     if (collabNode instanceof CollabElementNode) {
       xmlText.insertEmbed(offset, collabNode._xmlText);
     } else if (collabNode instanceof CollabTextNode) {
       const map = collabNode._map;
 
       if (map.parent === null) {
-        console.log(`📝 [APPEND] Inserting embed for map at offset ${offset}, XmlText length before: ${xmlText.toPlainString().length}`);
         xmlText.insertEmbed(offset, map);
-        console.log(`📝 [APPEND] XmlText length after embed: ${xmlText.toPlainString().length}`);
       }
       
-      // The text should be inserted right after the embed
-      // Use the current XmlText length as the insertion point for text
-      const currentLength = xmlText.toPlainString().length;
-      console.log(`📝 [APPEND] Inserting text "${collabNode._text}" at current XmlText length: ${currentLength}`);
-      xmlText.insert(currentLength, collabNode._text);
+      // After embed insertion, text should go at offset + 1 (YJS style)
+      const textOffset = offset + 1;
+      xmlText.insert(textOffset, collabNode._text);
     } else if (collabNode instanceof CollabLineBreakNode) {
       xmlText.insertEmbed(offset, collabNode._map);
     } else if (collabNode instanceof CollabDecoratorNode) {

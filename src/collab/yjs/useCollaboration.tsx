@@ -211,12 +211,8 @@ export function useCollaboration(
         const shouldConnect = payload;
 
         if (shouldConnect) {
-          // eslint-disable-next-line no-console
-          console.log('Collaboration connected!');
           connect();
         } else {
-          // eslint-disable-next-line no-console
-          console.log('Collaboration disconnected!');
           disconnect();
         }
 
