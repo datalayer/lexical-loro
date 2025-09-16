@@ -174,6 +174,20 @@ export function createBinding(
       const binding = (window as any).debugLoro.binding;
       if (!binding) return;
       
+      console.log('🟢 Loro Root structure verification:', {
+        rootChildren: binding.root._children.length,
+        children: binding.root._children.map((child: any, index: number) => ({
+          index,
+          type: child.constructor.name,
+          key: child._key,
+          childrenCount: child._children ? child._children.length : 0,
+          children: child._children ? child._children.map((grandChild: any) => ({
+            type: grandChild.constructor.name,
+            key: grandChild._key
+          })) : []
+        }))
+      });
+
       const treeHTML = (window as any).debugLoro.generateTreeHTML(binding.root);
       
       const debugDiv = document.getElementById('debug-loro') || document.createElement('div');
