@@ -30,7 +30,6 @@ import {
 } from '../utils/Utils';
 import { Binding } from '../Bindings';
 import { AnyCollabNode } from '../nodes/AnyCollabNode';
-import { bind } from 'lodash-es';
 
 /*****************************************************************************/
 
@@ -457,7 +456,7 @@ export function syncLexicalUpdatesToCRDT(
       const isInitialSyncNeeded = collabRoot.isEmpty() && 
                                   collabRoot.getSharedType()?.length === 0 && 
                                   lexicalRoot.getChildren().length > 0;
-      
+
       if ((tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) && !isInitialSyncNeeded) {
         if (normalizedNodes.size > 0) {
           $handleNormalizationMergeConflicts(binding, normalizedNodes);
@@ -468,7 +467,6 @@ export function syncLexicalUpdatesToCRDT(
       if (dirtyElements.has('root')) {
         const prevNodeMap = prevEditorState._nodeMap;
         const nextLexicalRoot = $getRoot();
-        const collabRoot = binding.root;
         collabRoot.syncPropertiesFromLexical(
           binding,
           nextLexicalRoot,

@@ -115,12 +115,12 @@ export function useCollaboration(
     ) => {
       const origin = transaction.origin;
       if (origin !== binding) {
-        const isFromUndoManger = origin instanceof UndoManager;
+        const isFromUndoManager = origin instanceof UndoManager;
         syncCRDTUpdatesToLexical(
           binding,
           provider,
           events,
-          isFromUndoManger,
+          isFromUndoManager,
           syncCursorPositionsFn,
         );
       }

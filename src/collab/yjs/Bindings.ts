@@ -54,7 +54,7 @@ export function createBinding(
   (window as any).debugYjs = {
     binding: null,  // Will be set after binding is created
     logStructure: () => {
-      const binding = (window as any).debugYjs.binding;
+      const binding = (window as any).debugYjs.binding as Binding;
       if (binding) {
         console.log('=== YJS STRUCTURE DEBUG ===');
         console.log('Root children:', binding.root._children.length);
@@ -67,7 +67,7 @@ export function createBinding(
       }
     },
     verifyStructure: () => {
-      const binding = (window as any).debugYjs.binding;
+      const binding = (window as any).debugYjs.binding as Binding;
       if (!binding) return console.log('❌ Binding not available');
       
       console.log('🔍 YJS STRUCTURE VERIFICATION:');
@@ -78,11 +78,11 @@ export function createBinding(
         console.log('  Type:', child.constructor.name);
         console.log('  Key:', child._key);
         console.log('  Element Type:', child.getType ? child.getType() : 'N/A');
-        console.log('  Children Count:', child._children ? child._children.length : 0);
-        
-        if (child._children && child._children.length > 0) {
+        console.log('  Children Count:', (child as any)._children ? (child as any)._children.length : 0);
+
+        if ((child as any)._children && (child as any)._children.length > 0) {
           console.log('  Children:');
-          child._children.forEach((grandChild, gIndex) => {
+          (child as any)._children.forEach((grandChild, gIndex) => {
             console.log(`    ${gIndex}: ${grandChild.constructor.name}(${grandChild._key})`);
           });
         }
@@ -96,7 +96,7 @@ export function createBinding(
       }
     },
     inspectNode: (nodeKey: string) => {
-      const binding = (window as any).debugYjs.binding;
+      const binding = (window as any).debugYjs.binding as Binding;
       if (!binding) return console.log('Binding not available');
       
       // Search for node in tree
@@ -159,7 +159,7 @@ export function createBinding(
       return result;
     },
     addDebugToPage: () => {
-      const binding = (window as any).debugYjs.binding;
+      const binding = (window as any).debugYjs.binding as Binding;
       if (!binding) return;
       
       // Debug: log the actual structure to console

@@ -67,7 +67,7 @@ export function createBinding(
   (window as any).debugLoro = {
     binding: null,  // Will be set after binding is created
     logStructure: () => {
-      const binding = (window as any).debugLoro.binding;
+      const binding = (window as any).debugLoro.binding as Binding;
       if (binding) {
         console.log('=== LORO STRUCTURE DEBUG ===');
         binding.root.logHierarchy();
@@ -77,7 +77,7 @@ export function createBinding(
       }
     },
     verifyStructure: () => {
-      const binding = (window as any).debugLoro.binding;
+      const binding = (window as any).debugLoro.binding as Binding;
       if (!binding) return console.log('❌ Binding not available');
       
       console.log('🔍 LORO STRUCTURE VERIFICATION:');
@@ -88,11 +88,11 @@ export function createBinding(
         console.log('  Type:', child.constructor.name);
         console.log('  Key:', child._key);
         console.log('  Element Type:', child.getType ? child.getType() : 'N/A');
-        console.log('  Children Count:', child._children ? child._children.length : 0);
-        
-        if (child._children && child._children.length > 0) {
+        console.log('  Children Count:', (child as any)._children ? (child as any)._children.length : 0);
+
+        if ((child as any)._children && (child as any)._children.length > 0) {
           console.log('  Children:');
-          child._children.forEach((grandChild, gIndex) => {
+          (child as any)._children.forEach((grandChild, gIndex) => {
             console.log(`    ${gIndex}: ${grandChild.constructor.name}(${grandChild._key})`);
           });
         }
@@ -106,7 +106,7 @@ export function createBinding(
       }
     },
     inspectNode: (nodeKey: string) => {
-      const binding = (window as any).debugLoro.binding;
+      const binding = (window as any).debugLoro.binding as Binding;
       if (!binding) return console.log('Binding not available');
       
       // Search for node in tree
@@ -169,7 +169,7 @@ export function createBinding(
       return result;
     },
     addDebugToPage: () => {
-      const binding = (window as any).debugLoro.binding;
+      const binding = (window as any).debugLoro.binding as Binding;
       if (!binding) return;
       
       console.log('🟢 Loro Root structure', {
@@ -185,12 +185,13 @@ export function createBinding(
           })) : []
         }))
       });
+      console.log('🟢 Loro Doc structure', binding.doc.exportJsonUpdates());
 
       const treeHTML = (window as any).debugLoro.generateTreeHTML(binding.root);
       
       const debugDiv = document.getElementById('debug-loro') || document.createElement('div');
       debugDiv.id = 'debug-loro';
-      debugDiv.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.9); color: white; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
+      debugDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); color: white; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
       debugDiv.innerHTML = `
         <div style="color: #ff6b6b; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px;">🔴 LORO STRUCTURE</div>
         <div style="color: #74c0fc; margin-bottom: 8px;">Root children: ${binding.root._children.length}</div>

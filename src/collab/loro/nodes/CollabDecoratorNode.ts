@@ -13,6 +13,7 @@ export class CollabDecoratorNode {
   _type: string;
 
   constructor(xmlElem: LoroMap<Record<string, unknown>>, parent: CollabElementNode, type: string) {
+    console.log('DLA CollabDecoratorNode.constructor', {xmlElem, parent, type});
     this._key = '';
     this._xmlElem = xmlElem;
     this._parent = parent;

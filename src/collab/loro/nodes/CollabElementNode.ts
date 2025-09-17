@@ -559,7 +559,6 @@ export class CollabElementNode {
     }
   }
 
-
   syncChildrenFromLexical(
     binding: Binding,
     nextLexicalNode: ElementNode,
@@ -659,7 +658,6 @@ export class CollabElementNode {
       }
     }
   }
-
 
   append(
     collabNode: AnyCollabNode,
