@@ -148,7 +148,6 @@ export function useCollaboration(
           syncCursorPositionsFn,
         );
       }
-      
     };
     // This updates the local editor state when we receive updates from other clients
     const unsubscribe = binding.doc.subscribe(onCRDTTreeChanges);

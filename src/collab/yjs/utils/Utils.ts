@@ -96,12 +96,12 @@ function getSharedType(
 function setSharedType(
   sharedType: XmlText | YMap<unknown> | XmlElement,
   property: string,
-  nextValue: unknown,
+  value: unknown,
 ): void {
   if (sharedType instanceof YMap) {
-    sharedType.set(property, nextValue);
+    sharedType.set(property, value);
   } else {
-    sharedType.setAttribute(property, nextValue as string);
+    sharedType.setAttribute(property, value as string);
   }
 }
 
@@ -461,6 +461,7 @@ export function $getOrInitCollabNodeFromSharedType(
     invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
     const sharedParent = sharedType.parent;
+    console.log('---DLA sharedParent', sharedParent);
     const targetParent =
       parent === undefined && sharedParent !== null
         ? $getOrInitCollabNodeFromSharedType(

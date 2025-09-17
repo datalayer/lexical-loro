@@ -16,7 +16,7 @@ import {
   RangeSelection,
   TextNode,
 } from 'lexical';
-import {LoroMap, LoroDoc} from 'loro-crdt';
+import {LoroMap, LoroDoc, ContainerID} from 'loro-crdt';
 import {XmlText} from '../types/XmlText';
 import invariant from '../../utils/invariant';
 import type {CRDTNode} from '../State';
@@ -107,12 +107,12 @@ function getSharedType(
 function setSharedType(
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
   property: string,
-  nextValue: unknown,
+  value: unknown,
 ): void {
   if (sharedType instanceof LoroMap) {
-    sharedType.set(property, nextValue);
+    sharedType.set(property, value);
   } else {
-    sharedType.setAttribute(property, nextValue as string);
+    sharedType.setAttribute(property, value as string);
   }
 }
 
@@ -218,15 +218,93 @@ export function getIndexOfCRDTNode(
   return i;
 }
 
+export type NodeDetails = {
+  nodeType: 'root' | 'element' | 'text' | 'decorator';
+  nodeKey: NodeKey;
+  type: string
+  variant: 'attrs' | 'text';
+}
+
+/*
+Parses ContainerID patterns and returns TargetDetails:
+
+root
+cid:root-root-root_attrs:Map     -> { nodeType: 'root', nodeKey: 'root', type: 'root', variant: 'attrs' }
+cid:root-root-root:Text          -> { nodeType: 'root', nodeKey: 'root', type: 'root', variant: 'text' }
+
+element  
+cid:root-element_paragraph_1_attrs:Map -> { nodeType: 'element', nodeKey: '1', type: 'paragraph', variant: 'attrs' }
+cid:root-element_paragraph_5_attrs:Map -> { nodeType: 'element', nodeKey: '5', type: 'paragraph', variant: 'attrs' }
+
+text
+cid:root-text_text_6:Map         -> { nodeType: 'text', nodeKey: '6', type: 'text', variant: 'text' }
+
+decorator
+cid:root-decorator_counter_3:Map -> { nodeType: 'decorator', nodeKey: '3', type: 'counter', variant: 'text' }
+*/
 export function getNodeTypeFromSharedType(
-  sharedType: XmlText | LoroMap<Record<string, unknown>>,
-): string | undefined {
-  const type = getSharedType(sharedType, '__type');
-  invariant(
-    typeof type === 'string' || typeof type === 'undefined',
-    'Expected shared type to include type attribute',
-  );
-  return type;
+  containerId: ContainerID,
+): NodeDetails | undefined {
+  const containerIdStr = containerId.toString();
+  
+  // Remove 'cid:' prefix if present
+  const cleanId = containerIdStr.startsWith('cid:') ? containerIdStr.slice(4) : containerIdStr;
+  
+  // Split by ':' first to separate the container type
+  const [idPart] = cleanId.split(':');
+  
+  // Now parse the ID part - format is usually: root-nodeType-details
+  // Examples:
+  // root-root-root_attrs
+  // root-element_paragraph_1_attrs  
+  // root-text_text_6
+  // root-decorator_counter_3
+  
+  if (!idPart.startsWith('root-')) {
+    return undefined;
+  }
+  
+  // Remove 'root-' prefix
+  const withoutRoot = idPart.slice(5);
+  
+  // Handle the special case of 'root-root-root_attrs' or 'root-root-root'
+  if (withoutRoot.startsWith('root-')) {
+    const rootDetails = withoutRoot.slice(5); // Remove 'root-'
+    return {
+      nodeType: 'root',
+      nodeKey: 'root',
+      type: 'root',
+      variant: rootDetails.includes('_attrs') ? 'attrs' : 'text'
+    };
+  }
+  
+  // For other cases, the format after 'root-' is: nodeType_specificType_key[_attrs]
+  // Split by '_' to parse the components
+  const parts = withoutRoot.split('_');
+  
+  if (parts.length < 2) {
+    return undefined;
+  }
+  
+  const nodeType = parts[0] as 'root' | 'element' | 'text' | 'decorator';
+  
+  // For element, text, decorator nodes
+  if (nodeType === 'element' || nodeType === 'text' || nodeType === 'decorator') {
+    if (parts.length >= 3) {
+      const type = parts[1]; // e.g., 'paragraph', 'text', 'counter'
+      const keyPart = parts[2]; // e.g., '1', '6', '3'
+      const hasAttrs = parts.length > 3 && parts[3] === 'attrs';
+      
+      return {
+        nodeType,
+        nodeKey: keyPart,
+        type,
+        variant: hasAttrs ? 'attrs' : 'text'
+      };
+    }
+  }
+  
+  return undefined;
 }
 
 export function syncPropertiesFromLexical(
@@ -421,18 +499,17 @@ export function $createCollabNodeFromLexicalNode(
   lexicalNode: LexicalNode,
   parent: CollabElementNode,
 ): AnyCollabNode {
-  const nodeType = lexicalNode.__type;
+  const nodeType = lexicalNode.getType();
   let collabNode;
 
   if ($isElementNode(lexicalNode)) {
-    const xmlText = new XmlText(binding.doc, `element_${lexicalNode.__key}`);
+    const xmlText = new XmlText(binding.doc, `element_${nodeType}_${lexicalNode.getKey()}`);
     xmlText.setAttribute('__type', nodeType);
     collabNode = $createCollabElementNode(xmlText, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
     collabNode.syncChildrenFromLexical(binding, lexicalNode, null, null, null);
   } else if ($isTextNode(lexicalNode)) {
-    // TODO create a token text node for token, segmented nodes.
-    const map = binding.doc.getMap(`text_${lexicalNode.__key}`);
+    const map = binding.doc.getMap(`text_${nodeType}_${lexicalNode.getKey()}`);
     collabNode = $createCollabTextNode(
       map,
       lexicalNode.__text,
@@ -441,36 +518,33 @@ export function $createCollabNodeFromLexicalNode(
     );
     collabNode.syncPropertiesAndTextFromLexical(binding, lexicalNode, null);
   } else if ($isLineBreakNode(lexicalNode)) {
-    const map = binding.doc.getMap(`linebreak_${lexicalNode.__key}`);
+    const map = binding.doc.getMap(`linebreak_${nodeType}_${lexicalNode.getKey()}`);
     collabNode = $createCollabLineBreakNode(map, parent);
   } else if ($isDecoratorNode(lexicalNode)) {
-    const map = binding.doc.getMap(`decorator_${lexicalNode.__key}`);
+    const map = binding.doc.getMap(`decorator_${nodeType}_${lexicalNode.getKey()}`);
     collabNode = $createCollabDecoratorNode(map, parent, nodeType);
     collabNode.syncPropertiesFromLexical(binding, lexicalNode, null);
   } else {
     invariant(false, 'Expected text, element, decorator, or linebreak node');
   }
-
-  collabNode._key = lexicalNode.__key;
+  collabNode._key = lexicalNode.getKey();
   return collabNode;
 }
 
 export function $getOrInitCollabNodeFromSharedType(
   binding: Binding,
-  sharedType: XmlText | LoroMap<Record<string, unknown>>,
+  containerId: ContainerID,
   parent?: CollabElementNode,
 ): AnyCollabNode {
-  const collabNode = (sharedType as any)._collabNode;
+
+  const nodeDetails = getNodeTypeFromSharedType(containerId);
+  invariant(nodeDetails !== undefined, 'Could not parse ContainerID: %s', containerId.toString());
+  const collabNode = binding.collabNodeMap.get(nodeDetails.nodeKey);
 
   if (collabNode === undefined) {
     const registeredNodes = binding.editor._nodes;
-    const type = getNodeTypeFromSharedType(sharedType);
-    invariant(
-      typeof type === 'string',
-      'Expected shared type to include type attribute',
-    );
-    const nodeInfo = registeredNodes.get(type);
-    invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+    const nodeInfo = registeredNodes.get(nodeDetails.type);
+    invariant(nodeInfo !== undefined, 'Node %s is not registered', nodeDetails.type);
 
     // Handle parent access - for XmlText (LoroText), parent is a function
     let sharedParent: any = null;
@@ -486,7 +560,7 @@ export function $getOrInitCollabNodeFromSharedType(
       parent === undefined && sharedParent !== null
         ? $getOrInitCollabNodeFromSharedType(
             binding,
-            sharedParent as unknown as XmlText | LoroMap<Record<string, unknown>>,
+            sharedParent as any,
           )
         : parent || null;
 

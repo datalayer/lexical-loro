@@ -41,7 +41,7 @@ export function createBinding(
     'createBinding: doc is null or undefined',
   );
   
-  const rootXmlText = new XmlText(doc, 'root');
+  const rootXmlText = new XmlText(doc, 'root-root');
   rootXmlText.setAttribute('__type', 'root');
   
   const collabRoot: CollabElementNode = $createCollabElementNode(

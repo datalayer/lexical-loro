@@ -497,13 +497,8 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
     sendMessage(ws, message)
   } else {
-    console.warn('❌ [BROADCAST] WebSocket not ready for sending:', {
-      wsconnected: provider.wsconnected,
-      wsExists: !!ws,
-      wsReadyState: ws?.readyState,
-      wsOPEN: ws?.OPEN
-    })
-  }
+    console.warn('❌ [BROADCAST] WebSocket not ready for sending');
+  } 
   
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, JSON.stringify(message), provider)
@@ -516,14 +511,6 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
  * Websocket Provider for CRDT. Creates a websocket connection to sync the shared document.
  * The document name is attached to the provided url. I.e. the following example
  * creates a websocket connection to http://localhost:1235/my-document-name
- *
- * @example
- *   import * as Y from 'yjs'
- *   import { WebsocketProvider } from 'y-websocket'
- *   const doc = new Y.Doc()
- *   const provider = new WebsocketProvider('http://localhost:1235', 'my-document-name', doc)
- *
- * @extends {ObservableV2<{ 'connection-close': (event: CloseEvent | null,  provider: WebsocketProvider) => any, 'status': (event: { status: 'connected' | 'disconnected' | 'connecting' }) => any, 'connection-error': (event: Event, provider: WebsocketProvider) => any, 'sync': (state: boolean) => any }>}
  */
 export class WebsocketProvider extends ObservableV2<any> {
   static globalEphemeralStore: EphemeralStore | null = null
