@@ -2,14 +2,14 @@ import type {LexicalCommand} from 'lexical';
 import {createCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
 import {UndoManager} from 'loro-crdt';
-import type {XmlText} from './types/XmlText';
 import type {Binding} from './Bindings';
+import type {XmlText} from './types/XmlText';
 
 export type UserState = {
-  anchorPos: null | Cursor;
+  anchorPos: Cursor | null;
   color: string;
   focusing: boolean;
-  focusPos: null | Cursor;
+  focusPos: Cursor | null;
   name: string;
   awarenessData: object;
   [key: string]: unknown;
@@ -17,16 +17,16 @@ export type UserState = {
 
 export const CONNECTED_COMMAND: LexicalCommand<boolean> =
   createCommand('CONNECTED_COMMAND');
-export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> = createCommand(
-  'TOGGLE_CONNECT_COMMAND',
-);
+
+export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> =
+  createCommand('TOGGLE_CONNECT_COMMAND');
 
 export type ProviderAwareness = {
   getLocalState: () => UserState | null;
   getStates: () => Map<number, UserState>;
   off: (type: 'update', cb: () => void) => void;
   on: (type: 'update', cb: () => void) => void;
-  setLocalState: (arg0: UserState) => void;
+  setLocalState: (userState: UserState) => void;
   setLocalStateField: (field: string, value: unknown) => void;
 };
 
@@ -54,6 +54,7 @@ export type Operation = {
 export type Delta = Array<Operation>;
 
 export type CRDTNode = Record<string, unknown>;
+
 export type CRDTEvent = Record<string, unknown>;
 
 export function createUndoManager(
@@ -108,7 +109,7 @@ export function initLocalState(
     awarenessData,
     color,
     focusPos: null,
-    focusing: focusing,
+    focusing,
     name,
   });
 }

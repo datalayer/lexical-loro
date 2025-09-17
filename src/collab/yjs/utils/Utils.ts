@@ -163,6 +163,38 @@ function $syncNodeStateToLexical(
 
 /*****************************************************************************/
 
+export function createLexicalNodeFromCollabNode(
+  binding: Binding,
+  collabNode: AnyCollabNode,
+  parentKey: NodeKey,
+): LexicalNode {
+  const type = collabNode.getType();
+  const registeredNodes = binding.editor._nodes;
+  const nodeInfo = registeredNodes.get(type);
+  invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
+  const lexicalNode:
+    | DecoratorNode<unknown>
+    | TextNode
+    | ElementNode
+    | LexicalNode = new nodeInfo.klass();
+  lexicalNode.__parent = parentKey;
+  collabNode._key = lexicalNode.__key;
+
+  if (collabNode instanceof CollabElementNode) {
+    const xmlText = collabNode._xmlText;
+    collabNode.syncPropertiesFromCRDT(binding, null);
+    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
+    collabNode.syncChildrenFromCRDT(binding);
+  } else if (collabNode instanceof CollabTextNode) {
+    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+  } else if (collabNode instanceof CollabDecoratorNode) {
+    collabNode.syncPropertiesFromCRDT(binding, null);
+  }
+
+  binding.collabNodeMap.set(lexicalNode.__key, collabNode);
+  return lexicalNode;
+}
+
 export function getIndexOfCRDTNode(
   yjsParentNode: CRDTNode,
   yjsNode: CRDTNode,
@@ -201,38 +233,6 @@ export function getNodeTypeFromSharedType(
     'Expected shared type to include type attribute',
   );
   return type;
-}
-
-export function createLexicalNodeFromCollabNode(
-  binding: Binding,
-  collabNode: AnyCollabNode,
-  parentKey: NodeKey,
-): LexicalNode {
-  const type = collabNode.getType();
-  const registeredNodes = binding.editor._nodes;
-  const nodeInfo = registeredNodes.get(type);
-  invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
-  const lexicalNode:
-    | DecoratorNode<unknown>
-    | TextNode
-    | ElementNode
-    | LexicalNode = new nodeInfo.klass();
-  lexicalNode.__parent = parentKey;
-  collabNode._key = lexicalNode.__key;
-
-  if (collabNode instanceof CollabElementNode) {
-    const xmlText = collabNode._xmlText;
-    collabNode.syncPropertiesFromCRDT(binding, null);
-    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-    collabNode.syncChildrenFromCRDT(binding);
-  } else if (collabNode instanceof CollabTextNode) {
-    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
-  } else if (collabNode instanceof CollabDecoratorNode) {
-    collabNode.syncPropertiesFromCRDT(binding, null);
-  }
-
-  binding.collabNodeMap.set(lexicalNode.__key, collabNode);
-  return lexicalNode;
 }
 
 export function syncPropertiesFromLexical(

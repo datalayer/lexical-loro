@@ -30,7 +30,6 @@ function $diffTextContentAndApplyDelta(
   }
 
   const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
-  
   collabNode.spliceText(diff.index, diff.remove, diff.insert);
 }
 

@@ -5,10 +5,10 @@ import {UndoManager as CRDTUndoManager} from 'yjs';
 import type {Binding} from './Bindings';
 
 export type UserState = {
-  anchorPos: null | RelativePosition;
+  anchorPos: RelativePosition | null;
   color: string;
   focusing: boolean;
-  focusPos: null | RelativePosition;
+  focusPos: RelativePosition | null;
   name: string;
   awarenessData: object;
   [key: string]: unknown;
@@ -16,16 +16,16 @@ export type UserState = {
 
 export const CONNECTED_COMMAND: LexicalCommand<boolean> =
   createCommand('CONNECTED_COMMAND');
-export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> = createCommand(
-  'TOGGLE_CONNECT_COMMAND',
-);
+
+export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> =
+  createCommand('TOGGLE_CONNECT_COMMAND');
 
 export type ProviderAwareness = {
   getLocalState: () => UserState | null;
   getStates: () => Map<number, UserState>;
   off: (type: 'update', cb: () => void) => void;
   on: (type: 'update', cb: () => void) => void;
-  setLocalState: (arg0: UserState) => void;
+  setLocalState: (userState: UserState) => void;
   setLocalStateField: (field: string, value: unknown) => void;
 };
 
@@ -53,6 +53,7 @@ export type Operation = {
 export type Delta = Array<Operation>;
 
 export type CRDTNode = Record<string, unknown>;
+
 export type CRDTEvent = Record<string, unknown>;
 
 export function createUndoManager(
@@ -76,7 +77,7 @@ export function initLocalState(
     awarenessData,
     color,
     focusPos: null,
-    focusing: focusing,
+    focusing,
     name,
   });
 }

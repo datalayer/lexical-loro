@@ -1,9 +1,3 @@
-/**
- * @module provider/websocket
- */
-
-/* eslint-env browser */
-
 import { ObservableV2 } from 'lib0/observable'
 import * as syncProtocol from 'y-protocols/sync'
 import * as authProtocol from 'y-protocols/auth'
