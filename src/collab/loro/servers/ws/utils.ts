@@ -1,7 +1,15 @@
 import {LoroDoc, EphemeralStore} from 'loro-crdt'
 import * as map from 'lib0/map'
 import * as eventloop from 'lib0/eventloop'
-import { EphemeralMessage, LoroUpdateMessage, LoroWebSocketMessage, SnapshotMessage } from '../../provider/websocket'
+import {
+  messageEphemeral,
+  messageQueryEphemeral,
+  messageSnapshot,
+  messageUpdate,
+  EphemeralMessage,
+  LoroWebSocketMessage,
+  SnapshotMessage,
+} from '../../provider/websocket'
 import { callbackHandler, isCallbackSet } from './callback'
 
 const pingTimeout = 30000
@@ -19,7 +27,7 @@ const wsReadyStateClosed = 3
 const persistenceDir = process.env.YPERSISTENCE
 
 /**
- * @type {{bindState: function(string,WSSharedDoc):void, writeState:function(string,WSSharedDoc):Promise<any>, provider: any}|null}
+ * 
  */
 let persistence = null
 if (typeof persistenceDir === 'string') {
@@ -41,28 +49,21 @@ if (typeof persistenceDir === 'string') {
 }
 
 /**
- * @param {{bindState: function(string,WSSharedDoc):void,
- * writeState:function(string,WSSharedDoc):Promise<any>,provider:any}|null} persistence_
+ * 
  */
 export const setPersistence = persistence_ => {
   persistence = persistence_
 }
 
 /**
- * @return {null|{bindState: function(string,WSSharedDoc):void,
-  * writeState:function(string,WSSharedDoc):Promise<any>}|null} used persistence layer
-  */
+ * 
+*/
 export const getPersistence = () => persistence
 
 /**
- * @type {Map<string,WSSharedDoc>}
+ * 
  */
 export const docs = new Map<string, WSSharedDoc>()
-
-const messageLoroUpdate = 'update'
-const messageSnapshot = 'snapshot'
-const messageEphemeral = 'ephemeral'
-const messageQueryEphemeral = 'query-ephemeral'
 
 /**
  * @type {(ydoc: Y.Doc) => Promise<void>}
@@ -72,88 +73,13 @@ let contentInitializor = _ydoc => Promise.resolve()
 /**
  * This function is called once every time a CRDT document is created. You can
  * use it to pull data from an external source or initialize content.
- *
- * @param {(ydoc: Y.Doc) => Promise<void>} f
  */
 export const setContentInitializor = (f) => {
   contentInitializor = f
 }
 
-export class WSSharedDoc {
-  name: string
-  doc: LoroDoc
-  connections: Map<any, Set<string>>
-  ephemeralStore: EphemeralStore
-  conns: Map<any, Set<any>>
-  private _conns: Set<any>
-  lastEphemeralSender: any
-
-  constructor (name) {
-    this.name = name
-    this.doc = new LoroDoc()
-    /**
-     * Maps from conn to set of controlled ephemeral keys. Delete all keys when this conn is closed
-     * @type {Map<Object, Set<string>>}
-     */
-    this.connections = new Map()
-    this.conns = new Map()
-    this._conns = new Set()
-    /**
-     * @type {EphemeralStore}
-     */
-    this.ephemeralStore = new EphemeralStore(30000) // 30 second timeout
-    
-    // Store the last sender to avoid echo loops
-    this.lastEphemeralSender = null
-    
-    /**
-     * @type {Array<function>}
-     */
-    const ephemeralChangeHandler = (event) => {
-      // Only broadcast if there are actual changes
-      if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
-        try {
-          const encodedData = this.ephemeralStore.encodeAll()
-          
-          // Skip broadcast if no actual data to send
-          if (encodedData.length === 0) {
-            return
-          }
-          
-          const message: EphemeralMessage = {
-            type: 'ephemeral',
-            ephemeral: Array.from(encodedData),
-            docId: this.name
-          }
-          const messageData = new TextEncoder().encode(JSON.stringify(message));          
-          // Broadcast to all connections EXCEPT the one that sent the last ephemeral update
-          this.conns.forEach((_, conn) => {
-            if (conn !== this.lastEphemeralSender) {
-              sendMessage(this, conn, messageData)
-            }
-          })
-          
-          // Clear the sender reference after broadcast
-          this.lastEphemeralSender = null
-        } catch (broadcastError) {
-          console.error(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
-            error: broadcastError.message,
-            stack: broadcastError.stack
-          })
-        }
-      }
-    }
-    this.ephemeralStore.subscribe(ephemeralChangeHandler)
-    // Note: LoroDoc doesn't have 'on' method like Y.Doc
-    // Update handling will be done through message processing
-  }
-}
-
 /**
- * Gets a Y.Doc by name, whether in memory or on disk
- *
- * @param {string} docname - the name of the Y.Doc to find or create
- * @return {WSSharedDoc}
+ * Gets a Doc by name, whether in memory or on disk
  */
 export const getDoc = (docname) => map.setIfUndefined(docs, docname, () => {
   const doc = new WSSharedDoc(docname)
@@ -165,9 +91,39 @@ export const getDoc = (docname) => map.setIfUndefined(docs, docname, () => {
 })
 
 /**
- * @param {any} conn
- * @param {WSSharedDoc} doc
- * @param {ArrayBuffer | string} message
+ * 
+ */
+const sendMessage = (doc: WSSharedDoc, conn, message: LoroWebSocketMessage) => {
+  if (conn.readyState === wsReadyStateClosing || conn.readyState === wsReadyStateClosed) {
+    closeConn(doc, conn)
+  }
+  try {
+//    console.log(`Sending message to ${conn.id || 'unknown'}`)
+    conn.send(JSON.stringify(message), {}, err => { err != null && closeConn(doc, conn) })
+  } catch (e) {
+    console.error(e);
+    closeConn(doc, conn);
+  }
+}
+
+/**
+ * 
+ */
+const sendMessageBinary = (doc: WSSharedDoc, conn, message: Uint8Array) => {
+  if (conn.readyState === wsReadyStateClosing || conn.readyState === wsReadyStateClosed) {
+    closeConn(doc, conn)
+  }
+  try {
+//    console.log(`Sending message to ${conn.id || 'unknown'}`)
+    conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
+  } catch (e) {
+    console.error(e);
+    closeConn(doc, conn);
+  }
+}
+
+/**
+ * 
  */
 const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string | Uint8Array) => {
 
@@ -191,7 +147,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Broadcast the update to other connections
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
-            sendMessage(doc, c, new Uint8Array(message))
+            sendMessageBinary(doc, c, new Uint8Array(message))
           }
         })
         return
@@ -207,7 +163,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Broadcast the update to other connections
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
-            sendMessage(doc, c, message)
+            sendMessageBinary(doc, c, message)
           }
         })
         return
@@ -234,28 +190,22 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
       case messageSnapshot:
         // Send current document snapshot to requesting client
         const snapshot = doc.doc.export({ mode: 'snapshot' })
-        const response: SnapshotMessage = {
+        const message: SnapshotMessage = {
           type: 'snapshot',
           snapshot: Array.from(snapshot),
           docId: doc.name
         }
-        sendMessage(doc, conn, new TextEncoder().encode(JSON.stringify(response)))
+        sendMessage(doc, conn, message)
         break
         
       case messageEphemeral:
-        // Apply ephemeral update
         try {
           const ephemeralBytes = new Uint8Array(messageData.ephemeral)
           // Mark this connection as the sender to avoid echo
           doc.lastEphemeralSender = conn
           doc.ephemeralStore.apply(ephemeralBytes)
         } catch (ephemeralError) {
-          console.error(`[Server] messageEphemeral - ERROR applying ephemeral update:`, {
-            error: ephemeralError.message,
-            stack: ephemeralError.stack,
-            ephemeralLength: messageData.ephemeral?.length,
-            ephemeralSample: messageData.ephemeral?.slice(0, 10)
-          })
+          console.error('messageEphemeral - ERROR applying ephemeral update')
           // Clear sender reference on error
           doc.lastEphemeralSender = null
         }
@@ -270,16 +220,13 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
             ephemeral: Array.from(ephemeralUpdate),
             docId: doc.name
           }
-          sendMessage(doc, conn, new TextEncoder().encode(JSON.stringify(ephemeralResponse)))
-        } catch (queryError) {
-          console.error(`[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:`, {
-            error: queryError.message,
-            stack: queryError.stack
-          })
+          sendMessage(doc, conn, ephemeralResponse)
+        } catch (error) {
+            console.error('[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:')
         }
         break
 
-      case messageLoroUpdate:
+      case messageUpdate:
         // Apply the Loro update to the document.
         const updateBytes = new Uint8Array(messageData.update)
         doc.doc.import(updateBytes)
@@ -289,7 +236,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         doc.conns.forEach((_, c) => {
           if (c !== conn) {
             console.log(`Broadcasting Update to connection: ${c.id}`)
-            sendMessage(doc, c, JSON.stringify(messageData))
+            sendMessage(doc, c, messageData)
             broadcastCount++
           }
         })
@@ -337,24 +284,6 @@ const closeConn = (doc, conn) => {
     }
   }
   conn.close()
-}
-
-/**
- * @param {WSSharedDoc} doc
- * @param {import('ws').WebSocket} conn
- * @param {Uint8Array} message
- */
-const sendMessage = (doc: WSSharedDoc, conn, message) => {
-  if (conn.readyState === wsReadyStateClosing || conn.readyState === wsReadyStateClosed) {
-    closeConn(doc, conn)
-  }
-  try {
-//    console.log(`Sending message to ${conn.id || 'unknown'}`)
-    conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
-  } catch (e) {
-    console.error(e);
-    closeConn(doc, conn);
-  }
 }
 
 /**
@@ -411,7 +340,7 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
       snapshot: Array.from(snapshot),
       docId: doc.name
     }
-    sendMessage(doc, conn, new TextEncoder().encode(JSON.stringify(snapshotMessage)))
+    sendMessage(doc, conn,snapshotMessage)
     
     // Send current ephemeral state if any
     const ephemeralUpdate = doc.ephemeralStore.encodeAll()
@@ -421,7 +350,76 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
         ephemeral: Array.from(ephemeralUpdate),
         docId: doc.name
       }
-      sendMessage(doc, conn, new TextEncoder().encode(JSON.stringify(ephemeralMessage)))
+      sendMessage(doc, conn, ephemeralMessage)
     }
+  }
+}
+
+export class WSSharedDoc {
+  name: string
+  doc: LoroDoc
+  connections: Map<any, Set<string>>
+  ephemeralStore: EphemeralStore
+  conns: Map<any, Set<any>>
+  private _conns: Set<any>
+  lastEphemeralSender: any
+
+  constructor (name) {
+    this.name = name
+    this.doc = new LoroDoc()
+    /**
+     * Maps from conn to set of controlled ephemeral keys. Delete all keys when this conn is closed
+     * @type {Map<Object, Set<string>>}
+     */
+    this.connections = new Map()
+    this.conns = new Map()
+    this._conns = new Set()
+    /**
+     * @type {EphemeralStore}
+     */
+    this.ephemeralStore = new EphemeralStore(30000) // 30 second timeout
+    
+    // Store the last sender to avoid echo loops
+    this.lastEphemeralSender = null
+    
+    /**
+     * @type {Array<function>}
+     */
+    const ephemeralChangeHandler = (event) => {
+      // Only broadcast if there are actual changes
+      if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
+        try {
+          const encodedData = this.ephemeralStore.encodeAll()
+          
+          // Skip broadcast if no actual data to send
+          if (encodedData.length === 0) {
+            return
+          }
+          
+          const message: EphemeralMessage = {
+            type: 'ephemeral',
+            ephemeral: Array.from(encodedData),
+            docId: this.name
+          }
+          // Broadcast to all connections EXCEPT the one that sent the last ephemeral update
+          this.conns.forEach((_, conn) => {
+            if (conn !== this.lastEphemeralSender) {
+              sendMessage(this, conn, message)
+            }
+          })
+          
+          // Clear the sender reference after broadcast
+          this.lastEphemeralSender = null
+        } catch (broadcastError) {
+          console.error(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
+            error: broadcastError.message,
+            stack: broadcastError.stack
+          })
+        }
+      }
+    }
+    this.ephemeralStore.subscribe(ephemeralChangeHandler)
+    // Note: LoroDoc doesn't have 'on' method like Y.Doc
+    // Update handling will be done through message processing
   }
 }

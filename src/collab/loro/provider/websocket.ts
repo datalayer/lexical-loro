@@ -11,7 +11,7 @@ import type { UserState, ProviderAwareness } from '../State'
 const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
 
 // Loro message types
-export const messageLoroUpdate = 'update'
+export const messageUpdate = 'update'
 export const messageSnapshot = 'snapshot'
 export const messageEphemeral = 'ephemeral'
 export const messageQueryEphemeral = 'query-ephemeral'
@@ -150,41 +150,6 @@ class AwarenessAdapter implements ProviderAwareness {
  */
 const messageHandlers: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
 
-messageHandlers[messageLoroUpdate] = (
-  provider: WebsocketProvider,
-  message: LoroUpdateMessage,
-  emitSynced: boolean
-): string | null => {
-  try {
-    // Apply the update to the local document
-    const updateBytes = new Uint8Array(message.update)
-    
-    // Get document state before applying update for comparison
-    // const beforeVersion = provider.doc.version()
-    
-    // Import with sender's peerId as origin to mark as remote update
-    // We don't know the actual sender's peerId, so use a generic remote identifier
-    // The key point is that it's NOT our local peerId
-    provider.doc.import(updateBytes)
-
-    // Get document state after applying update
-    const afterVersion = provider.doc.version()
-    
-    // Update our last exported version to include the remote changes
-    // This ensures we don't re-export remote changes
-    provider._lastExportedVersion = afterVersion
-    
-    if (emitSynced && !provider._synced) {
-      provider.synced = true
-    }
-    
-    return null // No response needed
-  } catch (error) {
-    console.error(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
-    return null
-  }
-}
-
 messageHandlers[messageSnapshot] = (
   provider: WebsocketProvider,
   message: SnapshotMessage,
@@ -295,6 +260,43 @@ messageHandlers[messageEphemeral] = (
   }
 }
 
+messageHandlers[messageUpdate] = (
+  provider: WebsocketProvider,
+  message: LoroUpdateMessage,
+  emitSynced: boolean
+): string | null => {
+
+  try {
+    // Apply the update to the local document
+    const updateBytes = new Uint8Array(message.update)
+    
+    // Get document state before applying update for comparison
+    // const beforeVersion = provider.doc.version()
+    
+    // Import with sender's peerId as origin to mark as remote update
+    // We don't know the actual sender's peerId, so use a generic remote identifier
+    // The key point is that it's NOT our local peerId
+    const importStatus = provider.doc.import(updateBytes)
+    provider.doc.commit({ origin: 'remote' });
+
+    const afterVersion = provider.doc.version()
+    console.log('---DLA', afterVersion.toJSON());
+    
+    // Update our last exported version to include the remote changes
+    // This ensures we don't re-export remote changes
+    provider._lastExportedVersion = afterVersion
+    
+    if (emitSynced && !provider._synced) {
+      provider.synced = true
+    }
+    
+    return null // No response needed
+  } catch (error) {
+    console.error(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
+    return null
+  }
+}
+
 /**
  * @param {WebsocketProvider} provider
  * @param {string} reason
@@ -305,47 +307,38 @@ const permissionDeniedHandler = (provider, reason) =>
 /**
  * Process incoming message (JSON or binary) and return optional response
  */
-const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {
-
-  // Handle binary data - first try to decode as JSON string, then as raw binary
+const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer | object, emitSynced: boolean): string | null => {
   if (data instanceof ArrayBuffer) {
     try {
+      /*
       // Try to decode as UTF-8 string (JSON messages sent as binary)
       const decoder = new TextDecoder()
       const jsonString = decoder.decode(data)
       const message = JSON.parse(jsonString) as LoroWebSocketMessage
       const messageHandler = messageHandlers[message.type]
-      
       if (messageHandler) {
         return messageHandler(provider, message, emitSynced)
       } else {
         console.error('Unknown message type:', message.type)
         return null
       }
-    } catch (jsonError) {
+      */
       // If JSON parsing fails, treat as raw binary Loro update
-      try {
-        const updateBytes = new Uint8Array(data)
-        provider.doc.import(updateBytes)
-        
-        if (emitSynced && !provider._synced) {
-          provider.synced = true
-        }
-        
-        return null // No response needed for binary updates
-      } catch (binaryError) {
-        console.error('Failed to process binary data as JSON or Loro update:', jsonError, binaryError)
-        return null
+      const updateBytes = new Uint8Array(data)
+      provider.doc.import(updateBytes)
+      if (emitSynced && !provider._synced) {
+        provider.synced = true
       }
+      return null // No response needed for binary updates
+    } catch (error) {
+      console.error('Failed to process binary Loro update:', error)
+      return null
     }
   }
-  
-  // Handle string JSON messages
-  if (typeof data === 'string') {
+  else if (typeof data === 'string') {
     try {
       const message = JSON.parse(data) as LoroWebSocketMessage
-      const messageHandler = messageHandlers[message.type]
-      
+      const messageHandler = messageHandlers[message.type]      
       if (messageHandler) {
         return messageHandler(provider, message, emitSynced)
       } else {
@@ -354,6 +347,21 @@ const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, em
       }
     } catch (error) {
       console.error('Failed to process JSON message:', error)
+      return null
+    }
+  }
+  else if (typeof data === 'object' && data !== null) {
+    try {
+      const message = data as LoroWebSocketMessage
+      const messageHandler = messageHandlers[message.type]      
+      if (messageHandler) {
+        return messageHandler(provider, message, emitSynced)
+      } else {
+        console.error('Unknown message type:', message.type)
+        return null
+      }
+    } catch (error) {
+      console.error('Failed to process object message:', error)
       return null
     }
   }
@@ -427,7 +435,7 @@ const setupWS = (provider) => {
     provider.synced = false
     ws.onmessage = (event) => {
       provider.wsLastMessageReceived = time.getUnixTime()
-      const response = readMessage(provider, event.data, true)
+      const response = processMessage(provider, event.data, true)
       if (response) {
         // TODO
 //        sendMessage(ws, response)
@@ -500,7 +508,7 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
   }
   
   if (provider.bcconnected) {
-    bc.publish(provider.bcChannel, message, provider)
+    bc.publish(provider.bcChannel, JSON.stringify(message), provider)
   } else {
     console.warn('📻 [BROADCAST] BroadcastChannel not connected')
   }
@@ -656,12 +664,12 @@ export class WebsocketProvider extends ObservableV2<any> {
     }
 
     /**
-     * @param {string} data
+     * @param {string | object} data
      * @param {any} origin
      */
-    this._bcSubscriber = (data: string, origin: any) => {
+    this._bcSubscriber = (data: string | object, origin: any) => {
       if (origin !== this) {
-        const response = readMessage(this, data, false)
+        const response = processMessage(this, data, false)
         if (response) {
           bc.publish(this.bcChannel, response, this)
         }
