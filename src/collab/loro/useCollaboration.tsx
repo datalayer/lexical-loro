@@ -50,27 +50,6 @@ export function useCollaboration(
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): JSX.Element {
   const isReloadingDoc = useRef(false);
-  const undoManagerRef = useRef<UndoManager | null>(null);
-  const skipCollaborationUpdateRef = useRef(false);
-
-  // Enhanced undo/redo state management
-  const updateUndoRedoStates = useCallback(() => {
-    if (undoManagerRef.current) {
-      editor.dispatchCommand(
-        CAN_UNDO_COMMAND,
-        undoManagerRef.current.canUndo(),
-      );
-      editor.dispatchCommand(
-        CAN_REDO_COMMAND,
-        undoManagerRef.current.canRedo(),
-      );
-    }
-  }, [editor]);
-
-  // Implementation of clearEditorSkipCollaborationUpdate equivalent
-  const clearEditorSkipCollaborationUpdate = useCallback(() => {
-    skipCollaborationUpdateRef.current = false;
-  }, []);
 
   const connect = useCallback(() => provider.connect(), [provider]);
 
@@ -131,24 +110,36 @@ export function useCollaboration(
       syncCursorPositionsFn(binding, provider);
     };
 
-    const onLoroTreeChanges = (
-      event: LoroEventBatch,
-    ) => {
-      // Skip processing if we should skip collaboration updates
-      if (skipCollaborationUpdateRef.current) {
-        skipCollaborationUpdateRef.current = false;
-        return;
-      }
-      
+    initLocalState(
+      provider,
+      name,
+      color,
+      document.activeElement === editor.getRootElement(),
+      awarenessData || {},
+    );
+
+    const onProviderDocReload = (doc: LoroDoc) => {
+      clearEditorSkipCollab(editor, binding);
+      setDoc(doc);
+      docMap.set(id, doc);
+      isReloadingDoc.current = true;
+    };
+
+    provider.on('reload', onProviderDocReload);
+    provider.on('status', onStatus);
+    provider.on('sync', onSync);
+
+    awareness.on('update', onAwarenessUpdate);
+
+    const onCRDTTreeChanges = (event: LoroEventBatch) => {
       // Only skip if the origin is from this specific editor's changes
       // We set 'lexical-edit' as origin when making changes from this editor
       // So we should skip only if the origin is 'lexical-edit' (our own changes)
       const isFromThisEditor = event.origin === binding.doc.peerIdStr;
-      
       if (!isFromThisEditor) {
         // Check if this change is from the undo manager
-        const isFromUndoManager = undoManagerRef.current?.peer() === event.origin;
-        
+        // const isFromUndoManger = origin instanceof UndoManager;
+        const isFromUndoManager = false;
         syncCRDTUpdatesToLexical(
           binding,
           provider,
@@ -159,43 +150,9 @@ export function useCollaboration(
       }
       
     };
-
-    // Initialize the undo manager
-    if (!undoManagerRef.current) {
-      const undoManager = createUndoManager(binding, binding.root.getSharedType());
-      undoManagerRef.current = undoManager;
-    }
-
-    initLocalState(
-      provider,
-      name,
-      color,
-      document.activeElement === editor.getRootElement(),
-      awarenessData || {},
-    );
-
-    const onProviderDocReload = (loroDoc: LoroDoc) => {
-      clearEditorSkipCollaborationUpdate();
-
-      // Update document references
-      docMap.set(id, loroDoc);
-      setDoc(loroDoc);
-      
-      // Create new undo manager for the reloaded document  
-      const newUndoManager = createUndoManager(binding, binding.root.getSharedType());
-      undoManagerRef.current = newUndoManager;
-    };
-
-    provider.on('reload', onProviderDocReload);
-    provider.on('status', onStatus);
-    provider.on('sync', onSync);
-
-    awareness.on('update', onAwarenessUpdate);
-
     // This updates the local editor state when we receive updates from other clients
-    // Subscribe to Loro document changes
-    const doc = docMap.get(id);
-    const unsubscribe = doc?.subscribe(onLoroTreeChanges);
+    const unsubscribe = binding.doc.subscribe(onCRDTTreeChanges);
+
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,
@@ -206,7 +163,7 @@ export function useCollaboration(
         tags,
       }) => {
 
-        if (tags.has(SKIP_COLLAB_TAG) === false && !skipCollaborationUpdateRef.current) {          
+        if (tags.has(SKIP_COLLAB_TAG) === false) {          
           syncLexicalUpdatesToCRDT(
             binding,
             provider,

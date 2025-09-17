@@ -87,25 +87,6 @@ export function useCollaboration(
       syncCursorPositionsFn(binding, provider);
     };
 
-    const onCRDTTreeChanges = (
-      // The below `any` type is taken directly from the vendor types for YJS.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      events: Array<YEvent<any>>,
-      transaction: Transaction,
-    ) => {
-      const origin = transaction.origin;
-      if (origin !== binding) {
-        const isFromUndoManger = origin instanceof UndoManager;
-        syncCRDTUpdatesToLexical(
-          binding,
-          provider,
-          events,
-          isFromUndoManger,
-          syncCursorPositionsFn,
-        );
-      }
-    };
-
     initLocalState(
       provider,
       name,
@@ -125,8 +106,28 @@ export function useCollaboration(
     provider.on('status', onStatus);
     provider.on('sync', onSync);
     awareness.on('update', onAwarenessUpdate);
+
+    const onCRDTTreeChanges = (
+      // The below `any` type is taken directly from the vendor types for YJS.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      events: Array<YEvent<any>>,
+      transaction: Transaction,
+    ) => {
+      const origin = transaction.origin;
+      if (origin !== binding) {
+        const isFromUndoManger = origin instanceof UndoManager;
+        syncCRDTUpdatesToLexical(
+          binding,
+          provider,
+          events,
+          isFromUndoManger,
+          syncCursorPositionsFn,
+        );
+      }
+    };
     // This updates the local editor state when we receive updates from other clients
     root.getSharedType().observeDeep(onCRDTTreeChanges);
+
     const removeListener = editor.registerUpdateListener(
       ({
         prevEditorState,

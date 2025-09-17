@@ -109,19 +109,6 @@ export function CollaborationPlugin({
       excludedProperties,
     );
     setBinding(binding);
-    
-    // Add immediate debug info to page title for visibility
-    document.title = `YJS: ${binding.root._children.length} children`;
-    
-    // Debug after initial sync
-    setTimeout(() => {
-      // Update title with final count
-      document.title = `YJS: ${binding.root._children.length} children (synced)`;
-      // Add visual debug to page
-      if ((window as any).debugYjs?.addDebugToPage) {
-        (window as any).debugYjs.addDebugToPage();
-      }
-    }, 1000);
 
     return () => {
       binding.root.destroy(binding);
