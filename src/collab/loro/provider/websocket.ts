@@ -277,10 +277,8 @@ messageHandlers[messageUpdate] = (
     // We don't know the actual sender's peerId, so use a generic remote identifier
     // The key point is that it's NOT our local peerId
     const importStatus = provider.doc.import(updateBytes)
-    provider.doc.commit({ origin: 'remote' });
 
     const afterVersion = provider.doc.version()
-    console.log('---DLA', afterVersion.toJSON());
     
     // Update our last exported version to include the remote changes
     // This ensures we don't re-export remote changes
