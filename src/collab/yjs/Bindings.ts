@@ -179,7 +179,6 @@ export function createBinding(
       
       const treeHTML = (window as any).debugYjs.generateTreeHTML(binding.root);
       
-      
       const debugDiv = document.getElementById('debug-yjs') || document.createElement('div');
       debugDiv.id = 'debug-yjs';
       debugDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: rgba(0,100,0,0.9); color: white; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
@@ -217,6 +216,11 @@ export function createBinding(
 
   // Expose binding for debugging
   (window as any).debugYjs.binding = binding;
+
+  // Auto-initialize debug window after a short delay
+  setTimeout(() => {
+    (window as any).debugYjs.addDebugToPage();
+  }, 1500); // Slightly later than Loro to avoid overlap
 
   return binding
 }

@@ -12,7 +12,7 @@ import {
   HISTORIC_TAG,
   SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
-import { LoroEvent } from 'loro-crdt';
+import { LoroEvent, LoroEventBatch } from 'loro-crdt';
 import {Provider} from '../State';
 import {CollabDecoratorNode} from '../nodes/CollabDecoratorNode';
 import {CollabElementNode} from '../nodes/CollabElementNode';
@@ -307,13 +307,14 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
 export function syncCRDTUpdatesToLexical(
   binding: Binding,
   provider: Provider,
-  events: Array<LoroEvent>,
+  event: LoroEventBatch,
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {  
+  const events = event.events;
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
-
+ 
   // For Loro events, we don't need to precompute deltas like in Y.js
   // The diff is already computed and available in the event structure
 
@@ -452,7 +453,7 @@ export function syncLexicalUpdatesToCRDT(
       // CRITICAL FIX: Check for initial sync scenario
       const lexicalRoot = $getRoot();
       const collabRoot = binding.root;
-      console.log('--------------DLA', collabRoot)
+
       const isInitialSyncNeeded = collabRoot.isEmpty() && 
                                   collabRoot.getSharedType()?.length === 0 && 
                                   lexicalRoot.getChildren().length > 0;

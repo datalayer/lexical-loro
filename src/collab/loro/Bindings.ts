@@ -227,5 +227,10 @@ export function createBinding(
   // Expose binding for debugging
   (window as any).debugLoro.binding = binding;
 
+  // Auto-initialize debug window after a short delay
+  setTimeout(() => {
+    (window as any).debugLoro.addDebugToPage();
+  }, 1000);
+
   return binding;
 }

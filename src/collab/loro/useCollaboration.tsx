@@ -143,7 +143,7 @@ export function useCollaboration(
         syncCRDTUpdatesToLexical(
           binding,
           provider,
-          event.events, // Array of LoroEvent
+          event,
           isFromUndoManager,
           syncCursorPositionsFn,
         );
