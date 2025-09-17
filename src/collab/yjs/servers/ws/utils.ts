@@ -6,9 +6,7 @@ import * as decoding from 'lib0/decoding'
 import * as map from 'lib0/map'
 import * as eventloop from 'lib0/eventloop'
 import * as yleveldb from 'y-leveldb';
-
 import { callbackHandler, isCallbackSet } from './callback'
-
 
 const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT || '2000')
 const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT || '10000')

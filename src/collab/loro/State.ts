@@ -35,12 +35,12 @@ export type Provider = {
   connect(): void | Promise<void>;
   disconnect(): void;
   off(type: 'sync', cb: (isSynced: boolean) => void): void;
-  off(type: 'update', cb: (arg0: unknown) => void): void;
-  off(type: 'status', cb: (arg0: {status: string}) => void): void;
+  off(type: 'update', cb: (update: unknown) => void): void;
+  off(type: 'status', cb: (status: {status: string}) => void): void;
   off(type: 'reload', cb: (doc: LoroDoc) => void): void;
   on(type: 'sync', cb: (isSynced: boolean) => void): void;
-  on(type: 'status', cb: (arg0: {status: string}) => void): void;
-  on(type: 'update', cb: (arg0: unknown) => void): void;
+  on(type: 'status', cb: (status: {status: string}) => void): void;
+  on(type: 'update', cb: (update: unknown) => void): void;
   on(type: 'reload', cb: (doc: LoroDoc) => void): void;
 }
 

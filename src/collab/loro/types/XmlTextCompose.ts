@@ -1,10 +1,3 @@
-/**
- * LoroXmlText - A YJS XmlText-compatible wrapper around Loro primitives
- * 
- * This class provides the same API as YJS XmlText but uses Loro's LoroList
- * and LoroMap underneath to maintain compatibility with existing code.
- */
-
 import { LoroText, LoroMap, LoroDoc, Cursor } from 'loro-crdt';
 
 export interface EmbedObject {

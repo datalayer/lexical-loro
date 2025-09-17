@@ -24,6 +24,7 @@ import {
   syncLexicalSelectionToCRDT,
 } from './SyncCursors';
 import {
+  $getOrInitCollabNodeFromSharedType,
   $moveSelectionToPreviousNode,
   doesSelectionNeedRecovering,
   syncWithTransaction,
@@ -201,11 +202,12 @@ function processCollabNodeEvent(binding: Binding, collabNode: AnyCollabNode, eve
 
 function $syncEvent(binding: Binding, event: LoroEvent): void {
 
-  if ($syncStateEvent(binding, event)) {
+  const isStateEvent = $syncStateEvent(binding, event);
+  if (isStateEvent) {
     return;
   }
   
-  const {target, diff, path} = event;
+  const {target} = event;
   
   // Find the CollabNode by matching container IDs
   // Unlike Y.js where event.target is the actual shared type object,
@@ -214,6 +216,9 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
   
   let collabNode: AnyCollabNode | null = null;
   
+//  collabNode = $getOrInitCollabNodeFromSharedType(binding, target);
+
+
   // First, try exact match with existing CollabNodes that have matching container IDs
   for (const [key, node] of binding.collabNodeMap.entries()) {
     // Check if the node's underlying container matches the event target
@@ -224,6 +229,8 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
     }
   }
   
+  console.log('---DLA onCRDTTreeChanges event:', event);
+
   // If no exact match, try pattern matching for element nodes
   if (!collabNode && typeof target === 'string') {
     const elementMatch = target.match(/element_(\d+)/);
@@ -306,11 +313,11 @@ function $syncEvent(binding: Binding, event: LoroEvent): void {
 export function syncCRDTUpdatesToLexical(
   binding: Binding,
   provider: Provider,
-  event: LoroEventBatch,
+  eventBatch: LoroEventBatch,
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
-): void {  
-  const events = event.events;
+): void {
+  const events = eventBatch.events;
   const editor = binding.editor;
   const currentEditorState = editor._editorState;
  

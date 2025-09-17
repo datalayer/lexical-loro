@@ -1,7 +1,3 @@
-/**
- * Simplified XmlText that extends LoroText with minimal XML-specific functionality
- */
-
 import { LoroText, LoroMap, LoroDoc } from 'loro-crdt';
 
 export interface TextAttributes {
