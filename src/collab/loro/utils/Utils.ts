@@ -83,7 +83,7 @@ function isExcludedProperty(
   return excludedProperties != null && excludedProperties.has(name);
 }
 
-function sharedTypeGet(
+function getSharedType(
   sharedType: any,
   property: string,
 ): unknown {
@@ -99,12 +99,12 @@ function sharedTypeGet(
     return sharedType.get(property);
   } else {
     // Handle other Loro types that might not have getAttribute or get method
-    console.warn('sharedTypeGet: Unsupported type for property access:', sharedType?.constructor?.name || typeof sharedType, property);
+    console.warn('getSharedType: Unsupported type for property access:', sharedType?.constructor?.name || typeof sharedType, property);
     return undefined;
   }
 }
 
-function sharedTypeSet(
+function setSharedType(
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
   property: string,
   nextValue: unknown,
@@ -123,7 +123,7 @@ function syncNodeStateFromLexical(
   nextLexicalNode: LexicalNode,
 ): void {
   const nextState = nextLexicalNode.__state;
-  const existingState = sharedTypeGet(sharedType, '__state');
+  const existingState = getSharedType(sharedType, '__state');
   if (!nextState) {
     return;
   }
@@ -151,25 +151,8 @@ function syncNodeStateFromLexical(
     }
   }
   if (!existingState) {
-    sharedTypeSet(sharedType, '__state', stateMap);
+    setSharedType(sharedType, '__state', stateMap);
   }
-}
-
-/*****************************************************************************/
-
-function $syncNodeStateToLexical(
-  binding: Binding,
-  sharedType: XmlText | LoroMap<Record<string, unknown>>,
-  lexicalNode: LexicalNode,
-): void {
-  const existingState = sharedTypeGet(sharedType, '__state');
-  if (!(existingState instanceof LoroMap)) {
-    return;
-  }
-  // This should only called when creating the node initially,
-  // incremental updates to state come in through LoroMap events
-  // with the __state as the target.
-  $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 /*****************************************************************************/
@@ -238,7 +221,7 @@ export function getIndexOfCRDTNode(
 export function getNodeTypeFromSharedType(
   sharedType: XmlText | LoroMap<Record<string, unknown>>,
 ): string | undefined {
-  const type = sharedTypeGet(sharedType, '__type');
+  const type = getSharedType(sharedType, '__type');
   invariant(
     typeof type === 'string' || typeof type === 'undefined',
     'Expected shared type to include type attribute',
@@ -301,7 +284,7 @@ export function syncPropertiesFromLexical(
         });
       }
 
-      sharedTypeSet(sharedType, property, nextValue);
+      setSharedType(sharedType, property, nextValue);
     }
   }
 }
@@ -411,6 +394,24 @@ export function doesSelectionNeedRecovering(
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
   fn();
+  binding.doc.commit({ origin: binding.doc.peerIdStr });
+}
+
+/*****************************************************************************/
+
+function $syncNodeStateToLexical(
+  binding: Binding,
+  sharedType: XmlText | LoroMap<Record<string, unknown>>,
+  lexicalNode: LexicalNode,
+): void {
+  const existingState = getSharedType(sharedType, '__state');
+  if (!(existingState instanceof LoroMap)) {
+    return;
+  }
+  // This should only called when creating the node initially,
+  // incremental updates to state come in through LoroMap events
+  // with the __state as the target.
+  $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 /*****************************************************************************/
@@ -537,7 +538,7 @@ export function $syncPropertiesFromCRDT(
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prevValue = (lexicalNode as any)[property];
-    let nextValue = sharedTypeGet(sharedType, property);
+    let nextValue = getSharedType(sharedType, property);
 
     // Special handling for embed properties
     if (property.startsWith('embed_') && nextValue && typeof nextValue === 'object') {

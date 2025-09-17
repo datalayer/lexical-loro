@@ -82,7 +82,7 @@ function isExcludedProperty(
   return excludedProperties != null && excludedProperties.has(name);
 }
 
-function sharedTypeGet(
+function getSharedType(
   sharedType: XmlText | YMap<unknown> | XmlElement,
   property: string,
 ): unknown {
@@ -93,7 +93,7 @@ function sharedTypeGet(
   }
 }
 
-function sharedTypeSet(
+function setSharedType(
   sharedType: XmlText | YMap<unknown> | XmlElement,
   property: string,
   nextValue: unknown,
@@ -112,7 +112,7 @@ function syncNodeStateFromLexical(
   nextLexicalNode: LexicalNode,
 ): void {
   const nextState = nextLexicalNode.__state;
-  const existingState = sharedTypeGet(sharedType, '__state');
+  const existingState = getSharedType(sharedType, '__state');
   if (!nextState) {
     return;
   }
@@ -140,25 +140,8 @@ function syncNodeStateFromLexical(
     }
   }
   if (!existingState) {
-    sharedTypeSet(sharedType, '__state', stateMap);
+    setSharedType(sharedType, '__state', stateMap);
   }
-}
-
-/*****************************************************************************/
-
-function $syncNodeStateToLexical(
-  binding: Binding,
-  sharedType: XmlText | YMap<unknown> | XmlElement,
-  lexicalNode: LexicalNode,
-): void {
-  const existingState = sharedTypeGet(sharedType, '__state');
-  if (!(existingState instanceof YMap)) {
-    return;
-  }
-  // This should only called when creating the node initially,
-  // incremental updates to state come in through YMapEvent
-  // with the __state as the target.
-  $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 /*****************************************************************************/
@@ -227,7 +210,7 @@ export function getIndexOfCRDTNode(
 export function getNodeTypeFromSharedType(
   sharedType: XmlText | YMap<unknown> | XmlElement,
 ): string | undefined {
-  const type = sharedTypeGet(sharedType, '__type');
+  const type = getSharedType(sharedType, '__type');
   invariant(
     typeof type === 'string' || typeof type === 'undefined',
     'Expected shared type to include type attribute',
@@ -290,7 +273,7 @@ export function syncPropertiesFromLexical(
         });
       }
 
-      sharedTypeSet(sharedType, property, nextValue);
+      setSharedType(sharedType, property, nextValue);
     }
   }
 }
@@ -400,6 +383,23 @@ export function doesSelectionNeedRecovering(
 
 export function syncWithTransaction(binding: Binding, fn: () => void): void {
   binding.doc.transact(fn, binding);
+}
+
+/*****************************************************************************/
+
+function $syncNodeStateToLexical(
+  binding: Binding,
+  sharedType: XmlText | YMap<unknown> | XmlElement,
+  lexicalNode: LexicalNode,
+): void {
+  const existingState = getSharedType(sharedType, '__state');
+  if (!(existingState instanceof YMap)) {
+    return;
+  }
+  // This should only called when creating the node initially,
+  // incremental updates to state come in through YMapEvent
+  // with the __state as the target.
+  $getWritableNodeState(lexicalNode).updateFromJSON(existingState.toJSON());
 }
 
 /*****************************************************************************/
@@ -516,7 +516,7 @@ export function $syncPropertiesFromCRDT(
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prevValue = (lexicalNode as any)[property];
-    let nextValue = sharedTypeGet(sharedType, property);
+    let nextValue = getSharedType(sharedType, property);
 
     if (prevValue !== nextValue) {
       if (nextValue instanceof Doc) {

@@ -162,7 +162,6 @@ export function useCollaboration(
         normalizedNodes,
         tags,
       }) => {
-
         if (tags.has(SKIP_COLLAB_TAG) === false) {          
           syncLexicalUpdatesToCRDT(
             binding,

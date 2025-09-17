@@ -485,8 +485,6 @@ export function syncLexicalUpdatesToCRDT(
       const prevSelection = prevEditorState._selection;
       syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
 
-      binding.doc.commit({ origin: binding.doc.peerIdStr });
-
     });
   });
 }

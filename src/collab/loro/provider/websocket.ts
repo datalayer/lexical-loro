@@ -1,4 +1,4 @@
-import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEvent, LoroEventBatch, VersionVector } from 'loro-crdt'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEventBatch, VersionVector } from 'loro-crdt'
 import { ObservableV2 } from 'lib0/observable'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
@@ -7,15 +7,18 @@ import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
 import type { UserState, ProviderAwareness } from '../State'
 
-// Loro message types (JSON-based)
-export const messageLoroUpdate = 'loro-update'
+// @todo - this should depend on ephemeral timeout
+const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
+
+// Loro message types
+export const messageLoroUpdate = 'update'
 export const messageSnapshot = 'snapshot'
 export const messageEphemeral = 'ephemeral'
 export const messageQueryEphemeral = 'query-ephemeral'
 
 // Message type definitions
 export interface LoroUpdateMessage {
-  type: 'loro-update'
+  type: 'update'
   update: number[]
   docId: string
 }
@@ -37,7 +40,7 @@ export interface QueryEphemeralMessage {
   docId: string
 }
 
-export type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage
+export type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage;
 
 /**
  * Awareness adapter that wraps EphemeralStore to provide awareness-like API
@@ -292,9 +295,6 @@ messageHandlers[messageEphemeral] = (
   }
 }
 
-// @todo - this should depend on ephemeral timeout
-const messageReconnectTimeout = 30000
-
 /**
  * @param {WebsocketProvider} provider
  * @param {string} reason
@@ -305,7 +305,8 @@ const permissionDeniedHandler = (provider, reason) =>
 /**
  * Process incoming message (JSON or binary) and return optional response
  */
-const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {  
+const readMessage = (provider: WebsocketProvider, data: string | ArrayBuffer, emitSynced: boolean): string | null => {
+
   // Handle binary data - first try to decode as JSON string, then as raw binary
   if (data instanceof ArrayBuffer) {
     try {
@@ -400,32 +401,45 @@ const closeWebsocketConnection = (provider, ws, event) => {
   }
 }
 
+const sendMessage = (ws: WebSocket, message: LoroWebSocketMessage) => {
+  if (ws && ws.readyState === ws.OPEN) {
+    try {
+      const m = JSON.stringify(message);
+      ws.send(m)
+    } catch (error) {
+      console.error('Failed to send message over WebSocket:', error)
+    }
+  } else {
+    console.warn('WebSocket not open, cannot send message')
+  }
+}
+
 /**
  * @param {WebsocketProvider} provider
  */
 const setupWS = (provider) => {
   if (provider.shouldConnect && provider.ws === null) {
-    const websocket = new provider._WS(provider.url, provider.protocols)
-    websocket.binaryType = 'arraybuffer'
-    provider.ws = websocket
+    const ws = new provider._WS(provider.url, provider.protocols)
+    ws.binaryType = 'arraybuffer'
+    provider.ws = ws
     provider.wsconnecting = true
     provider.wsconnected = false
     provider.synced = false
-
-    websocket.onmessage = (event) => {
+    ws.onmessage = (event) => {
       provider.wsLastMessageReceived = time.getUnixTime()
       const response = readMessage(provider, event.data, true)
       if (response) {
-        websocket.send(response)
+        // TODO
+//        sendMessage(ws, response)
       }
     }
-    websocket.onerror = (event) => {
+    ws.onerror = (event) => {
       provider.emit('connection-error', [event, provider])
     }
-    websocket.onclose = (event) => {
-      closeWebsocketConnection(provider, websocket, event)
+    ws.onclose = (event) => {
+      closeWebsocketConnection(provider, ws, event)
     }
-    websocket.onopen = () => {
+    ws.onopen = () => {
       provider.wsLastMessageReceived = time.getUnixTime()
       provider.wsconnecting = false
       provider.wsconnected = true
@@ -438,17 +452,8 @@ const setupWS = (provider) => {
         type: 'query-ephemeral',
         docId: provider.docId
       }
-      // Send a simple test message first to verify connection
-      const testMessage = JSON.stringify({ type: 'test', data: 'hello' })
-      try {
-        websocket.send(testMessage)
-      } catch (testError) {
-        console.error(`[Client] setupWS - Failed to send test message:`, testError)
-      }
-      
-      const requestString = JSON.stringify(ephemeralRequest)
-      websocket.send(requestString)
-      
+      sendMessage(ws, ephemeralRequest)
+
       // broadcast local ephemeral state if any
       const localState = provider.ephemeralStore.getAllStates()
 
@@ -461,8 +466,7 @@ const setupWS = (provider) => {
             ephemeral: Array.from(encodedData),
             docId: provider.docId
           }
-          const messageString = JSON.stringify(ephemeralMessage)
-          websocket.send(messageString)
+          sendMessage(ws, ephemeralMessage)
         } catch (error) {
           console.error(`[Client] setupWS - MAJOR ERROR in ephemeral process:`, {
             error: error.message,
@@ -482,10 +486,10 @@ const setupWS = (provider) => {
 /**
  * Broadcast JSON message to WebSocket and BroadcastChannel
  */
-const broadcastMessage = (provider: WebsocketProvider, message: string) => {
+const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMessage) => {
   const ws = provider.ws
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
-    ws.send(message)
+    sendMessage(ws, message)
   } else {
     console.warn('❌ [BROADCAST] WebSocket not ready for sending:', {
       wsconnected: provider.wsconnected,
@@ -646,7 +650,7 @@ export class WebsocketProvider extends ObservableV2<any> {
             type: 'query-ephemeral',
             docId: this.docId
           }
-          this.ws.send(JSON.stringify(queryMessage))
+          sendMessage(this.ws, queryMessage)
         }
       }, resyncInterval))
     }
@@ -671,12 +675,12 @@ export class WebsocketProvider extends ObservableV2<any> {
     this._updateHandler = (update: Uint8Array) => {
       // This handler is only called for local changes that need to be broadcast
       const updateMessage: LoroUpdateMessage = {
-        type: 'loro-update',
+        type: 'update',
         update: Array.from(update),
         docId: this.docId
       }
       
-      broadcastMessage(this, JSON.stringify(updateMessage))
+      broadcastMessage(this, updateMessage)
     }
     // Document update handler - called when Loro emits document change events
     /**
@@ -694,7 +698,7 @@ export class WebsocketProvider extends ObservableV2<any> {
             ephemeral: Array.from(encodedData),
             docId: this.docId
           }
-          broadcastMessage(this, JSON.stringify(ephemeralMessage))
+          broadcastMessage(this, ephemeralMessage)
           
         } catch (error) {
           console.error(`[Client] _ephemeralUpdateHandler - ERROR:`, error.message)
@@ -747,17 +751,17 @@ export class WebsocketProvider extends ObservableV2<any> {
       console.error(`[Client] ERROR setting up Loro document subscription:`, error);
     }
     
-    this._checkInterval = /** @type {any} */ (setInterval(() => {
+    this._checkInterval = (setInterval(() => {
       if (
         this.wsconnected &&
-        messageReconnectTimeout <
+        messageReconnectTimeoutMs <
           time.getUnixTime() - this.wsLastMessageReceived
       ) {
         // no message received in a long time - not even your own ephemeral
         // updates (which are updated every 15 seconds)
-        closeWebsocketConnection(this, /** @type {WebSocket} */ (this.ws), null)
+        closeWebsocketConnection(this, this.ws, null)
       }
-    }, messageReconnectTimeout / 10))
+    }, messageReconnectTimeoutMs / 10))
     if (connect) {
       this.connect()
     }
@@ -869,7 +873,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         ephemeral: Array.from(encodedData),
         docId: this.docId
       }
-      broadcastMessage(this, JSON.stringify(ephemeralMessage))
+      broadcastMessage(this, ephemeralMessage)
       
     } catch (error) {
       console.error('Error broadcasting disconnect in disconnectBc:', error.message)
