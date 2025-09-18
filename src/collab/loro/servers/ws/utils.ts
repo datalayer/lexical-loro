@@ -71,7 +71,7 @@ export const docs = new Map<string, WSSharedDoc>()
 let contentInitializor = _ydoc => Promise.resolve()
 
 /**
- * This function is called once every time a CRDT document is created. You can
+ * This function is called once every time a Loro document is created. You can
  * use it to pull data from an external source or initialize content.
  */
 export const setContentInitializor = (f) => {

@@ -8,7 +8,7 @@ import {
 import type {Map as YMap} from 'yjs';
 import invariant from '../../utils/invariant';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
-import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
+import {$syncPropertiesFromYjs, syncPropertiesFromLexical} from '../utils/Utils';
 import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
 
@@ -130,17 +130,17 @@ export class CollabTextNode {
     }
   }
 
-  syncPropertiesAndTextFromCRDT(
+  syncPropertiesAndTextFromYjs(
     binding: Binding,
     keysChanged: null | Set<string>,
   ): void {
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
-      'syncPropertiesAndTextFromCRDT: could not find decorator node',
+      'syncPropertiesAndTextFromYjs: could not find decorator node',
     );
 
-    $syncPropertiesFromCRDT(binding, this._map, lexicalNode, keysChanged);
+    $syncPropertiesFromYjs(binding, this._map, lexicalNode, keysChanged);
 
     const collabText = this._text;
 

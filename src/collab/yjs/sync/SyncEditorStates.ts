@@ -39,7 +39,7 @@ import {
   $syncLocalCursorPosition,
   syncCursorPositions,
   SyncCursorPositionsFn,
-  syncLexicalSelectionToCRDT,
+  syncLexicalSelectionToYjs,
 } from './SyncCursors';
 
 /*****************************************************************************/
@@ -47,7 +47,7 @@ import {
 type IntentionallyMarkedAsDirtyElement = boolean;
 
 /******************************************************************************
- * CRDT -> Lexical
+ * Yjs -> Lexical
  *****************************************************************************/
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -94,12 +94,12 @@ function $syncEvent(binding: Binding, event: any): void {
 
     // Update
     if (keysChanged.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, keysChanged);
+      collabNode.syncPropertiesFromYjs(binding, keysChanged);
     }
 
     if (childListChanged) {
-      collabNode.applyChildrenCRDTDelta(binding, delta);
-      collabNode.syncChildrenFromCRDT(binding);
+      collabNode.applyChildrenYjsDelta(binding, delta);
+      collabNode.syncChildrenFromYjs(binding);
     }
   } else if (
     collabNode instanceof CollabTextNode &&
@@ -109,7 +109,7 @@ function $syncEvent(binding: Binding, event: any): void {
 
     // Update
     if (keysChanged.size > 0) {
-      collabNode.syncPropertiesAndTextFromCRDT(binding, keysChanged);
+      collabNode.syncPropertiesAndTextFromYjs(binding, keysChanged);
     }
   } else if (
     collabNode instanceof CollabDecoratorNode &&
@@ -119,14 +119,14 @@ function $syncEvent(binding: Binding, event: any): void {
 
     // Update
     if (attributesChanged.size > 0) {
-      collabNode.syncPropertiesFromCRDT(binding, attributesChanged);
+      collabNode.syncPropertiesFromYjs(binding, attributesChanged);
     }
   } else {
     invariant(false, 'Expected text, element, or decorator event');
   }
 }
 
-export function syncCRDTUpdatesToLexical(
+export function syncYjsUpdatesToLexical(
   binding: Binding,
   provider: Provider,
   events: Array<YEvent<YText>>,
@@ -165,7 +165,7 @@ export function syncCRDTUpdatesToLexical(
             }
           }
 
-          syncLexicalSelectionToCRDT(
+          syncLexicalSelectionToYjs(
             binding,
             provider,
             prevSelection,
@@ -201,7 +201,7 @@ export function syncCRDTUpdatesToLexical(
 }
 
 /******************************************************************************
- * Lexical -> CRDT
+ * Lexical -> Yjs
  *****************************************************************************/
 
 function $handleNormalizationMergeConflicts(
@@ -255,7 +255,7 @@ function $handleNormalizationMergeConflicts(
   }
 }
 
-export function syncLexicalUpdatesToCRDT(
+export function syncLexicalUpdatesToYjs(
   binding: Binding,
   provider: Provider,
   prevEditorState: EditorState,
@@ -302,7 +302,7 @@ export function syncLexicalUpdatesToCRDT(
 
       const selection = $getSelection();
       const prevSelection = prevEditorState._selection;
-      syncLexicalSelectionToCRDT(binding, provider, prevSelection, selection);
+      syncLexicalSelectionToYjs(binding, provider, prevSelection, selection);
     });
   });
 }

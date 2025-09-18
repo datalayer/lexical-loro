@@ -4,8 +4,10 @@ import {
   ElementNode, 
   $isElementNode,
   LexicalNode,
-  ElementFormatType 
+  ElementFormatType, 
+  NodeKey
 } from 'lexical';
+import { getNodeMapper } from '../utils/Nodes';
 
 /**
  * ElementNode Mutators for Loro Tree Collaboration
@@ -28,7 +30,7 @@ export interface ElementNodeMutatorOptions {
  * Create ElementNode in Loro tree
  */
 export function createElementNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   elementType: string, // 'paragraph', 'heading', 'quote', 'link', etc.
   parentId?: TreeID,
   index?: number,
@@ -36,17 +38,19 @@ export function createElementNodeInLoro(
   lexicalNode?: any, // The actual Lexical ElementNode instance
   options?: ElementNodeMutatorOptions
 ): TreeID {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  // Create the tree node
-  const treeNode = tree.createNode(parentId, index);
+  // Use mapper to get or create the tree node
+  const treeNode = mapper.getLoroNodeByLexicalKey(
+    nodeKey.toString(),
+    lexicalNode,
+    parentId,
+    index
+  );
   
   // Store ElementNode metadata
   treeNode.data.set('nodeType', 'element');
   treeNode.data.set('elementType', elementType);
-  treeNode.data.set('lexicalKey', nodeKey);
-  treeNode.data.set('createdAt', Date.now());
   
   // Store additional metadata if provided
   if (metadata) {
@@ -55,29 +59,16 @@ export function createElementNodeInLoro(
     });
   }
   
-  // Store the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const exportedNode = lexicalNode.exportJSON();
-      treeNode.data.set('node', JSON.stringify(exportedNode));
-    } catch (error) {
-      console.warn('Failed to export Element node JSON:', error);
-      treeNode.data.set('node', JSON.stringify({ 
-        type: elementType, 
-        key: nodeKey,
-        children: []
-      }));
-    }
-  }
-  
-  return treeId;
+  // The exported Lexical node data is already handled by the mapper
+  // Return the TreeID from the node's ID
+  return treeNode.id;
 }
 
 /**
  * Update ElementNode in Loro tree
  */
 export function updateElementNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   elementType?: string,
   parentId?: TreeID,
   index?: number,
@@ -85,63 +76,45 @@ export function updateElementNodeInLoro(
   lexicalNode?: any, // The actual Lexical ElementNode instance
   options?: ElementNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (tree.has(treeId)) {
-    const treeNode = tree.getNodeByID(treeId);
-    
-    if (treeNode) {
-      // Update element type if provided
-      if (elementType !== undefined) {
-        treeNode.data.set('elementType', elementType);
-      }
-      
-      // Update metadata if provided
-      if (metadata) {
-        Object.entries(metadata).forEach(([key, value]) => {
-          treeNode.data.set(key, value);
-        });
-      }
-      
-      // Move the node if parent or position changed
-      if (parentId !== undefined || index !== undefined) {
-        tree.move(treeId, parentId, index);
-      }
-      
-      // Update the exported Lexical node data
-      if (lexicalNode) {
-        try {
-          const exportedNode = lexicalNode.exportJSON();
-          treeNode.data.set('node', JSON.stringify(exportedNode));
-        } catch (error) {
-          console.warn('Failed to export Element node JSON during update:', error);
-          treeNode.data.set('node', JSON.stringify({ 
-            type: elementType || 'element', 
-            key: nodeKey,
-            children: []
-          }));
-        }
-      }
-      
-      treeNode.data.set('lastUpdated', Date.now());
-    }
+  // Get the existing tree node using the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey.toString(), lexicalNode);
+  
+  // Update element type if provided
+  if (elementType !== undefined) {
+    treeNode.data.set('elementType', elementType);
   }
+  
+  // Update metadata if provided
+  if (metadata) {
+    Object.entries(metadata).forEach(([key, value]) => {
+      treeNode.data.set(key, value);
+    });
+  }
+  
+  // Move the node if parent or position changed
+  if (parentId !== undefined || index !== undefined) {
+    // Note: For moving, we need access to tree - this might need to be handled differently
+    const { tree } = options!;
+    tree.move(treeNode.id, parentId, index);
+  }
+      
+  // The exported Lexical node data is already handled by the mapper
+  // No additional JSON export needed since mapper handles exportJSON automatically
+  
+  treeNode.data.set('lastUpdated', Date.now());
 }
 
 /**
  * Delete ElementNode from Loro tree
  */
 export function deleteElementNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   options: ElementNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
-  
-  if (tree.has(treeId)) {
-    tree.delete(treeId);
-  }
+  const mapper = getNodeMapper();
+  mapper.deleteMapping(nodeKey.toString());
 }
 
 /**
@@ -308,12 +281,12 @@ export function getElementNodeDataFromTree(treeId: TreeID, tree: LoroTree): any 
  * Sync ElementNode children relationships in Loro tree
  */
 export function syncElementNodeChildrenInLoro(
-  nodeKey: string,
+  nodeKey: number,
   childKeys: string[],
   options: ElementNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const treeId: TreeID = `${nodeKey}@${peerId}`;
   
   if (!tree.has(treeId)) {
     return;
@@ -335,7 +308,7 @@ export function syncElementNodeChildrenInLoro(
 export function mutateElementNode(
   update: any, // UpdateListenerPayload
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: string,
+  nodeKey: number,
   options: ElementNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;

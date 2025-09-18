@@ -29,7 +29,7 @@ import {
   TOGGLE_CONNECT_COMMAND,
 } from './State';
 import { Binding } from './Bindings';
-import { syncCRDTUpdatesToLexical, syncLexicalUpdatesToCRDT } from './sync/SyncEditorStates';
+import { syncYjsUpdatesToLexical, syncLexicalUpdatesToYjs } from './sync/SyncEditorStates';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
 import { CounterNode } from '../../nodes/CounterNode';
 
@@ -108,7 +108,7 @@ export function useCollaboration(
     provider.on('sync', onSync);
     awareness.on('update', onAwarenessUpdate);
 
-    const onCRDTTreeChanges = (
+    const onYjsTreeChanges = (
       // The below `any` type is taken directly from the vendor types for YJS.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       events: Array<YEvent<any>>,
@@ -117,7 +117,7 @@ export function useCollaboration(
       const origin = transaction.origin;
       if (origin !== binding) {
         const isFromUndoManager = origin instanceof UndoManager;
-        syncCRDTUpdatesToLexical(
+        syncYjsUpdatesToLexical(
           binding,
           provider,
           events,
@@ -127,7 +127,7 @@ export function useCollaboration(
       }
     };
     // This updates the local editor state when we receive updates from other clients
-    root.getSharedType().observeDeep(onCRDTTreeChanges);
+    root.getSharedType().observeDeep(onYjsTreeChanges);
 
     const removeListener = editor.registerUpdateListener(
       ({
@@ -141,7 +141,7 @@ export function useCollaboration(
       }) => {
         if (tags.has(SKIP_COLLAB_TAG) === false) {
           console.log('---DLA', mutatedNodes);
-          syncLexicalUpdatesToCRDT(
+          syncLexicalUpdatesToYjs(
             binding,
             provider,
             prevEditorState,
@@ -177,7 +177,7 @@ export function useCollaboration(
       provider.off('status', onStatus);
       provider.off('reload', onProviderDocReload);
       awareness.off('update', onAwarenessUpdate);
-      root.getSharedType().unobserveDeep(onCRDTTreeChanges);
+      root.getSharedType().unobserveDeep(onYjsTreeChanges);
       docMap.delete(id);
       removeListener();
     };

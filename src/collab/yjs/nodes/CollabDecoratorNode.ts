@@ -2,7 +2,7 @@ import type {XmlElement} from 'yjs';
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';
 import invariant from '../../utils/invariant';
-import {$syncPropertiesFromCRDT, syncPropertiesFromLexical} from '../utils/Utils';
+import {$syncPropertiesFromYjs, syncPropertiesFromLexical} from '../utils/Utils';
 import type {Binding} from '../Bindings';
 import type {CollabElementNode} from './CollabElementNode';
 
@@ -70,17 +70,17 @@ export class CollabDecoratorNode {
     );
   }
 
-  syncPropertiesFromCRDT(
+  syncPropertiesFromYjs(
     binding: Binding,
     keysChanged: null | Set<string>,
   ): void {
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
-      'syncPropertiesFromCRDT: could not find decorator node',
+      'syncPropertiesFromYjs: could not find decorator node',
     );
     const xmlElem = this._xmlElem;
-    $syncPropertiesFromCRDT(binding, xmlElem, lexicalNode, keysChanged);
+    $syncPropertiesFromYjs(binding, xmlElem, lexicalNode, keysChanged);
   }
 
   destroy(binding: Binding): void {

@@ -1,5 +1,6 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $createLineBreakNode, LineBreakNode, $isLineBreakNode } from 'lexical';
+import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, NodeKey } from 'lexical';
+import { getNodeMapper } from '../utils/Nodes';
 
 /**
  * LineBreakNode Mutators for Loro Tree Collaboration
@@ -22,35 +23,28 @@ export interface LineBreakNodeMutatorOptions {
  * Create LineBreakNode in Loro tree
  */
 export function createLineBreakNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   parentId?: TreeID,
   index?: number,
   lexicalNode?: any, // The actual Lexical LineBreakNode instance
   options?: LineBreakNodeMutatorOptions
 ): TreeID {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  // Create the tree node
-  const treeNode = tree.createNode(parentId, index);
+  // Use mapper to get or create the tree node
+  const treeNode = mapper.getLoroNodeByLexicalKey(
+    nodeKey.toString(),
+    lexicalNode,
+    parentId,
+    index
+  );
   
   // Store LineBreakNode metadata
   treeNode.data.set('nodeType', 'linebreak');
-  treeNode.data.set('lexicalKey', nodeKey);
-  treeNode.data.set('createdAt', Date.now());
   
-  // Store the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const exportedNode = lexicalNode.exportJSON();
-      treeNode.data.set('node', JSON.stringify(exportedNode));
-    } catch (error) {
-      console.warn('Failed to export LineBreak node JSON:', error);
-      treeNode.data.set('node', JSON.stringify({ type: 'linebreak', key: nodeKey }));
-    }
-  }
-  
-  return treeId;
+  // The exported Lexical node data is already handled by the mapper
+  // Return the TreeID from the node's ID
+  return treeNode.id;
 }
 
 /**
@@ -58,14 +52,14 @@ export function createLineBreakNodeInLoro(
  * Note: LineBreakNodes typically don't change much since they represent '\n'
  */
 export function updateLineBreakNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   parentId?: TreeID,
   index?: number,
   lexicalNode?: any, // The actual Lexical LineBreakNode instance
   options?: LineBreakNodeMutatorOptions
 ): void {
   const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const treeId: TreeID = `${nodeKey}@${peerId}`;
   
   if (tree.has(treeId)) {
     // Move the node if parent or position changed
@@ -95,11 +89,11 @@ export function updateLineBreakNodeInLoro(
  * Delete LineBreakNode from Loro tree
  */
 export function deleteLineBreakNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   options: LineBreakNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const treeId: TreeID = `${nodeKey}@${peerId}`;
   
   if (tree.has(treeId)) {
     tree.delete(treeId);
@@ -199,7 +193,7 @@ export function getLineBreakNodeDataFromTree(treeId: TreeID, tree: LoroTree): an
 export function mutateLineBreakNode(
   update: any, // UpdateListenerPayload
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: string,
+  nodeKey: number,
   options: LineBreakNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;

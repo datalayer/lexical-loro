@@ -501,7 +501,7 @@ export function syncCursorPositions(
   }
 }
 
-export function syncLexicalSelectionToCRDT(
+export function syncLexicalSelectionToYjs(
   binding: Binding,
   provider: Provider,
   prevSelection: null | BaseSelection,

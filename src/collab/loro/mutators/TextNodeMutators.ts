@@ -5,6 +5,7 @@ import {
   $isTextNode,
   TextFormatType
 } from 'lexical';
+import { getNodeMapper } from '../utils/Nodes';
 
 /**
  * TextNode Mutators for Loro Tree Collaboration
@@ -27,7 +28,7 @@ export interface TextNodeMutatorOptions {
  * Create TextNode in Loro tree
  */
 export function createTextNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   textContent: string,
   format?: number,
   mode?: string,
@@ -36,58 +37,42 @@ export function createTextNodeInLoro(
   lexicalNode?: any, // The actual Lexical TextNode instance
   options?: TextNodeMutatorOptions
 ): TreeID {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  // Create the tree node
-  const treeNode = tree.createNode(parentId, index);
+  // Use mapper to get or create the tree node
+  const treeNode = mapper.getLoroNodeByLexicalKey(
+    nodeKey.toString(),
+    lexicalNode,
+    parentId,
+    index
+  );
   
   // Store TextNode metadata
   treeNode.data.set('nodeType', 'text');
-  treeNode.data.set('lexicalKey', nodeKey);
   treeNode.data.set('textContent', textContent);
   treeNode.data.set('format', format || 0);
   treeNode.data.set('mode', mode || 'normal');
-  treeNode.data.set('createdAt', Date.now());
   
-  // Store the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const exportedNode = lexicalNode.exportJSON();
-      treeNode.data.set('node', JSON.stringify(exportedNode));
-    } catch (error) {
-      console.warn('Failed to export Text node JSON:', error);
-      treeNode.data.set('node', JSON.stringify({ 
-        type: 'text', 
-        key: nodeKey, 
-        text: textContent, 
-        format: format || 0 
-      }));
-    }
-  }
-  
-  return treeId;
+  // The exported Lexical node data is already handled by the mapper
+  // Return the TreeID from the node's ID
+  return treeNode.id;
 }
 
 /**
  * Update TextNode in Loro tree
  */
 export function updateTextNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   newTextContent?: string,
   format?: number,
   mode?: string,
   lexicalNode?: any, // The actual Lexical TextNode instance
   options?: TextNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
-  const treeNode = tree.getNodeByID(treeId);
+  const mapper = getNodeMapper();
   
-  if (!treeNode) {
-    console.warn(`TextNode with ID ${treeId} not found in tree`);
-    return;
-  }
+  // Get the existing tree node using the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey.toString(), lexicalNode);
   
   // Update metadata
   if (newTextContent !== undefined) {
@@ -101,36 +86,19 @@ export function updateTextNodeInLoro(
   }
   treeNode.data.set('updatedAt', Date.now());
   
-  // Update the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const exportedNode = lexicalNode.exportJSON();
-      treeNode.data.set('node', JSON.stringify(exportedNode));
-    } catch (error) {
-      console.warn('Failed to export Text node JSON during update:', error);
-      treeNode.data.set('node', JSON.stringify({ 
-        type: 'text', 
-        key: nodeKey, 
-        text: newTextContent, 
-        format: format 
-      }));
-    }
-  }
+  // The exported Lexical node data is already handled by the mapper
+  // No additional JSON export needed since mapper handles exportJSON automatically
 }
 
 /**
  * Delete TextNode from Loro tree
  */
 export function deleteTextNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   options: TextNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
-  
-  if (tree.has(treeId)) {
-    tree.delete(treeId);
-  }
+  const mapper = getNodeMapper();
+  mapper.deleteMapping(nodeKey.toString());
 }
 
 /**
@@ -282,13 +250,13 @@ export function getTextNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
  * Apply text formatting operations (bold, italic, etc.)
  */
 export function applyTextFormatInLoro(
-  nodeKey: string,
+  nodeKey: number,
   formatType: TextFormatType,
   apply: boolean,
   options: TextNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const treeId: TreeID = `${nodeKey}@${peerId}`;
   
   if (!tree.has(treeId)) {
     return;
@@ -320,7 +288,7 @@ export function applyTextFormatInLoro(
 export function mutateTextNode(
   update: any, // UpdateListenerPayload
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: string,
+  nodeKey: number,
   options: TextNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;

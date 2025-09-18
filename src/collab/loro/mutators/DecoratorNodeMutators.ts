@@ -4,6 +4,7 @@ import {
   $isDecoratorNode,
   LexicalNode
 } from 'lexical';
+import { getNodeMapper } from '../utils/Nodes';
 
 /**
  * DecoratorNode Mutators for Loro Tree Collaboration
@@ -26,7 +27,7 @@ export interface DecoratorNodeMutatorOptions {
  * Create DecoratorNode in Loro tree
  */
 export function createDecoratorNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   decoratorType: string, // 'image', 'video', 'tweet', 'chart', etc.
   decoratorData: any, // The data needed to render the decorator
   parentId?: TreeID,
@@ -35,18 +36,20 @@ export function createDecoratorNodeInLoro(
   lexicalNode?: any, // The actual Lexical DecoratorNode instance
   options?: DecoratorNodeMutatorOptions
 ): TreeID {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  // Create the tree node
-  const treeNode = tree.createNode(parentId, index);
+  // Use mapper to get or create the tree node
+  const treeNode = mapper.getLoroNodeByLexicalKey(
+    nodeKey.toString(),
+    lexicalNode,
+    parentId,
+    index
+  );
   
   // Store DecoratorNode metadata
   treeNode.data.set('nodeType', 'decorator');
   treeNode.data.set('decoratorType', decoratorType);
-  treeNode.data.set('lexicalKey', nodeKey);
   treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
-  treeNode.data.set('createdAt', Date.now());
   
   // Store additional metadata if provided
   if (metadata) {
@@ -55,29 +58,16 @@ export function createDecoratorNodeInLoro(
     });
   }
   
-  // Store the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const exportedNode = lexicalNode.exportJSON();
-      treeNode.data.set('node', JSON.stringify(exportedNode));
-    } catch (error) {
-      console.warn('Failed to export Decorator node JSON:', error);
-      treeNode.data.set('node', JSON.stringify({ 
-        type: decoratorType, 
-        key: nodeKey,
-        decorator: decoratorData
-      }));
-    }
-  }
-  
-  return treeId;
+  // The exported Lexical node data is already handled by the mapper
+  // Return the TreeID from the node's ID
+  return treeNode.id;
 }
 
 /**
  * Update DecoratorNode in Loro tree
  */
 export function updateDecoratorNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   decoratorType?: string,
   decoratorData?: any,
   parentId?: TreeID,
@@ -87,7 +77,7 @@ export function updateDecoratorNodeInLoro(
   options?: DecoratorNodeMutatorOptions
 ): void {
   const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const treeId: TreeID = `${nodeKey}@${peerId}`;
   
   if (tree.has(treeId)) {
     const treeNode = tree.getNodeByID(treeId);
@@ -139,11 +129,11 @@ export function updateDecoratorNodeInLoro(
  * Delete DecoratorNode from Loro tree
  */
 export function deleteDecoratorNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   options: DecoratorNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const treeId: TreeID = `${nodeKey}@${peerId}`;
   
   if (tree.has(treeId)) {
     tree.delete(treeId);
@@ -379,7 +369,7 @@ class GenericDecoratorNode extends DecoratorNode<any> {
 export function mutateDecoratorNode(
   update: any, // UpdateListenerPayload
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: string,
+  nodeKey: number,
   options: DecoratorNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;

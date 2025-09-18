@@ -52,9 +52,9 @@ export type Operation = {
 
 export type Delta = Array<Operation>;
 
-export type CRDTNode = Record<string, unknown>;
+export type LoroNode = Record<string, unknown>;
 
-export type CRDTEvent = Record<string, unknown>;
+export type LoroEvent = Record<string, unknown>;
 
 export function createUndoManager(
   binding: Binding,

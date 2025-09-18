@@ -120,7 +120,7 @@ export function CollaborationPlugin({
   }
 
   return (
-    <CRDTCollaborationCursors
+    <LoroCollaborationCursors
       awarenessData={awarenessData}
       binding={binding}
       collabContext={collabContext}
@@ -139,7 +139,7 @@ export function CollaborationPlugin({
   );
 }
 
-function CRDTCollaborationCursors({
+function LoroCollaborationCursors({
   editor,
   id,
   provider,

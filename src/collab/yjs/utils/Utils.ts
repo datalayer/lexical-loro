@@ -18,7 +18,7 @@ import {
 } from 'lexical';
 import {Doc, Map as YMap, XmlElement, XmlText} from 'yjs';
 import invariant from '../../utils/invariant';
-import type {CRDTNode} from './../State';
+import type {YjsNode} from './../State';
 import type {Binding} from './../Bindings';
 import {
   $createCollabDecoratorNode,
@@ -165,22 +165,22 @@ export function createLexicalNodeFromCollabNode(
 
   if (collabNode instanceof CollabElementNode) {
     const xmlText = collabNode._xmlText;
-    collabNode.syncPropertiesFromCRDT(binding, null);
-    collabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-    collabNode.syncChildrenFromCRDT(binding);
+    collabNode.syncPropertiesFromYjs(binding, null);
+    collabNode.applyChildrenYjsDelta(binding, xmlText.toDelta());
+    collabNode.syncChildrenFromYjs(binding);
   } else if (collabNode instanceof CollabTextNode) {
-    collabNode.syncPropertiesAndTextFromCRDT(binding, null);
+    collabNode.syncPropertiesAndTextFromYjs(binding, null);
   } else if (collabNode instanceof CollabDecoratorNode) {
-    collabNode.syncPropertiesFromCRDT(binding, null);
+    collabNode.syncPropertiesFromYjs(binding, null);
   }
 
   binding.collabNodeMap.set(lexicalNode.__key, collabNode);
   return lexicalNode;
 }
 
-export function getIndexOfCRDTNode(
-  yjsParentNode: CRDTNode,
-  yjsNode: CRDTNode,
+export function getIndexOfYjsNode(
+  yjsParentNode: YjsNode,
+  yjsNode: YjsNode,
 ): number {
   let node = yjsParentNode.firstChild;
   let i = -1;
@@ -489,7 +489,7 @@ export function $getOrInitCollabNodeFromSharedType(
   return collabNode;
 }
 
-export function $syncPropertiesFromCRDT(
+export function $syncPropertiesFromYjs(
   binding: Binding,
   sharedType: XmlText | YMap<unknown> | XmlElement,
   lexicalNode: LexicalNode,

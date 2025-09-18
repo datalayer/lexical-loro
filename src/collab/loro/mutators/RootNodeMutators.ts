@@ -1,5 +1,6 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $getRoot, RootNode } from 'lexical';
+import { $getRoot, NodeKey, RootNode } from 'lexical';
+import { getNodeMapper } from '../utils/Nodes';
 
 /**
  * RootNode Mutators for Loro Tree Collaboration
@@ -25,80 +26,62 @@ export interface RootNodeMutatorOptions {
  * Handle RootNode creation (typically only happens once during initialization)
  */
 export function createRootNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   lexicalNode?: any, // The actual Lexical RootNode instance
   options?: RootNodeMutatorOptions
 ): TreeID {
   const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
+  // Use mapper to get or create the tree node
   // Root node has no parent (undefined) and is always at index 0
-  const rootTreeNode = tree.createNode(undefined, 0);
+  const rootTreeNode = mapper.getLoroNodeByLexicalKey(
+    nodeKey.toString(),
+    lexicalNode,
+    undefined, // no parent for root
+    0 // always at index 0
+  );
   
   // Store metadata about this being a root node
   rootTreeNode.data.set('nodeType', 'root');
-  rootTreeNode.data.set('lexicalKey', nodeKey);
-  rootTreeNode.data.set('createdAt', Date.now());
   
-  // Store the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const exportedNode = lexicalNode.exportJSON();
-      rootTreeNode.data.set('node', JSON.stringify(exportedNode));
-    } catch (error) {
-      console.warn('Failed to export Lexical node JSON:', error);
-      rootTreeNode.data.set('node', JSON.stringify({ type: 'root', key: nodeKey }));
-    }
-  }
-  
-  return treeId;
+  // The exported Lexical node data is already handled by the mapper
+  // Return the TreeID from the node's ID
+  return rootTreeNode.id;
 }
 
 /**
  * Handle RootNode updates (rarely needed since root doesn't change much)
  */
 export function updateRootNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   lexicalNode?: any, // The actual Lexical RootNode instance
   options?: RootNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (tree.has(treeId)) {
-    const treeNode = tree.getNodeByID(treeId);
-    if (treeNode) {
-      // Update any metadata if needed
-      treeNode.data.set('lastUpdated', Date.now());
-      
-      // Update the exported Lexical node data
-      if (lexicalNode) {
-        try {
-          const exportedNode = lexicalNode.exportJSON();
-          treeNode.data.set('node', JSON.stringify(exportedNode));
-        } catch (error) {
-          console.warn('Failed to export Lexical node JSON during update:', error);
-        }
-      }
-    }
-  }
+  // Get the existing tree node using the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey.toString(), lexicalNode);
+  
+    // Update any metadata if needed
+    treeNode.data.set('lastUpdated', Date.now());
+    
+    // The exported Lexical node data is already handled by the mapper
+    // No additional update needed since mapper handles exportJSON automatically
 }
 
 /**
  * Handle RootNode deletion (should rarely happen, but included for completeness)
  */
 export function deleteRootNodeInLoro(
-  nodeKey: string,
+  nodeKey: number,
   options: RootNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (tree.has(treeId)) {
-    // Note: Deleting root node should be done with extreme caution
-    // as it represents the entire editor content
-    tree.delete(treeId);
-  }
+  // Note: Deleting root node should be done with extreme caution
+  // as it represents the entire editor content
+  mapper.deleteMapping(nodeKey.toString());
 }
 
 /**
@@ -158,7 +141,7 @@ export function isRootNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
 export function mutateRootNode(
   update: any, // UpdateListenerPayload
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: string,
+  nodeKey: number,
   options: RootNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;

@@ -29,8 +29,8 @@ import {
   TOGGLE_CONNECT_COMMAND,
 } from './State';
 import { Binding } from './Bindings';
-import { syncLexicalToCRDT } from './sync/SyncLexicalToCRDT';
-import { syncCRDTToLexical } from './sync/SyncCRDTToLexical';
+import { syncLexicalToLoro } from './sync/SyncLexicalToLoro';
+import { syncLoroToLexical } from './sync/SyncLoroToLexical';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
@@ -106,31 +106,31 @@ export function useCollaboration(
 
     awareness.on('update', onAwarenessUpdate);
 
-    const onCRDTTreeChanges = (event: LoroEventBatch) => {
-      // Only skip if the origin is from this specific editor's changes
-      // We set 'lexical-edit' as origin when making changes from this editor
-      // So we should skip only if the origin is 'lexical-edit' (our own changes)
-      const isFromThisEditor = event.origin === binding.doc.peerIdStr;
+    const onLoroUpdates = (eventBatch: LoroEventBatch) => {
+      // Only skip if the origin is from this specific editor's changes.
+      // We set 'lexical-edit' as origin when making changes from this editor.
+      // So we should skip only if the origin is 'lexical-edit' (our own changes).
+      const isFromThisEditor = eventBatch.origin === binding.doc.peerIdStr;
       if (!isFromThisEditor) {
         // Check if this change is from the undo manager
         // const isFromUndoManger = origin instanceof UndoManager;
         const isFromUndoManager = false;
-        syncCRDTToLexical(
+        syncLoroToLexical(
           binding,
           provider,
-          event,
+          eventBatch,
           isFromUndoManager,
           syncCursorPositionsFn,
         );
       }
     };
-    // This updates the local editor state when we receive updates from other clients
-    const unsubscribe = binding.doc.subscribe(onCRDTTreeChanges);
+    // This updates the local editor state when we receive updates from other clients.
+    const unsubscribe = binding.doc.subscribe(onLoroUpdates);
 
     const removeListener = editor.registerUpdateListener(
       (update) => {
         if (update.tags.has(SKIP_COLLAB_TAG) === false) {
-          syncLexicalToCRDT(
+          syncLexicalToLoro(
             binding,
             provider,
             update,

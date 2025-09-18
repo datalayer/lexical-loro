@@ -508,7 +508,7 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
 }
 
 /**
- * Websocket Provider for CRDT. Creates a websocket connection to sync the shared document.
+ * Websocket Provider for Loro. Creates a websocket connection to sync the shared document.
  * The document name is attached to the provided url. I.e. the following example
  * creates a websocket connection to http://localhost:1235/my-document-name
  */
@@ -661,7 +661,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       }
     }
     /**
-     * Listens to Loro CRDT updates and sends them to remote peers (ws and broadcastchannel)
+     * Listens to Loro Loro updates and sends them to remote peers (ws and broadcastchannel)
      * @param {Uint8Array} update
      * @param {any} origin
      */

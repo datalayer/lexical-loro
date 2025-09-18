@@ -1,6 +1,6 @@
-import type {BaseSelection, NodeKey } from 'lexical';
-import type {Binding} from '../Bindings';
-import {Provider, UserState} from '../State';
+import type { BaseSelection, NodeKey } from 'lexical';
+import type { Binding } from '../Bindings';
+import { Provider, UserState } from '../State';
 
 /*****************************************************************************/
 
@@ -45,14 +45,14 @@ export function syncCursorPositions(
   provider: Provider,
   options?: SyncCursorPositionsOptions,
 ): void {
-    
+  //
 }
 
-export function syncLexicalSelectionToCRDT(
+export function syncLexicalSelectionToLoro(
   binding: Binding,
   provider: Provider,
   prevSelection: null | BaseSelection,
   nextSelection: null | BaseSelection,
 ): void {
-    
+  //
 }

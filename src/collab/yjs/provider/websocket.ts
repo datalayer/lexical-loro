@@ -233,7 +233,7 @@ const broadcastMessage = (provider, buf) => {
 }
 
 /**
- * Websocket Provider for CRDT. Creates a websocket connection to sync the shared document.
+ * Websocket Provider for Yjs. Creates a websocket connection to sync the shared document.
  * The document name is attached to the provided url. I.e. the following example
  * creates a websocket connection to http://localhost:1234/my-document-name
  *
@@ -364,7 +364,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       }
     }
     /**
-     * Listens to CRDT updates and sends them to remote peers (ws and broadcastchannel)
+     * Listens to Yjs updates and sends them to remote peers (ws and broadcastchannel)
      * @param {Uint8Array} update
      * @param {any} origin
      */

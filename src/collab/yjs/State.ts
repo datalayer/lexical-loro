@@ -1,7 +1,7 @@
 import type {LexicalCommand} from 'lexical';
 import {createCommand} from 'lexical';
 import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';
-import {UndoManager as CRDTUndoManager} from 'yjs';
+import {UndoManager as YjsUndoManager} from 'yjs';
 import type {Binding} from './Bindings';
 
 export type UserState = {
@@ -52,15 +52,15 @@ export type Operation = {
 
 export type Delta = Array<Operation>;
 
-export type CRDTNode = Record<string, unknown>;
+export type YjsNode = Record<string, unknown>;
 
-export type CRDTEvent = Record<string, unknown>;
+export type YjsEvent = Record<string, unknown>;
 
 export function createUndoManager(
   binding: Binding,
   root: XmlText,
 ): UndoManager {
-  return new CRDTUndoManager(root, {
+  return new YjsUndoManager(root, {
     trackedOrigins: new Set([binding, null]),
   });
 }

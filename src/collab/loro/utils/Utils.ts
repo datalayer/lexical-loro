@@ -1,11 +1,10 @@
-import { LoroDoc, TreeID, LoroTree } from 'loro-crdt';
-import { LexicalNode } from 'lexical';
-import { Binding } from '../Bindings';
+import { LoroDoc, TreeID } from 'loro-crdt';
+import { LexicalNode, NodeKey } from 'lexical';
 
 const DEFAULT_TREE_NAME = 'tree';
 
 /**
- * Ensure binding.doc has a LoroTree instance
+ * Ensure doc has a LoroTree instance
  */
 export function createLoroTree(doc: LoroDoc, treeName = DEFAULT_TREE_NAME) {
   const tree = doc.getTree(treeName);
@@ -17,7 +16,7 @@ export function createLoroTree(doc: LoroDoc, treeName = DEFAULT_TREE_NAME) {
 /**
  * Helper function to parse TreeID back to nodeKey and peerId
  */
-export function parseTreeID(treeId: TreeID): { nodeKey: string; peerId: number } {
+export function parseTreeID(treeId: TreeID): { nodeKey: NodeKey; peerId: number } {
 	const [nodeKey, peerId] = treeId.split('@');
 	return {
 		nodeKey: nodeKey,
@@ -57,4 +56,20 @@ export function isClassExtending(Klass: any, BaseClass: any): boolean {
 	}
 	
 	return false;
+}
+
+export function toKeyNodeNumber(nodeKey: NodeKey): number {
+    // Special case for root node
+    if (nodeKey === "root") {
+        return 0;
+    }
+    
+    // Attempt to convert NodeKey (string) to a number
+    const keyAsNumber = Number(nodeKey);
+    if (!isNaN(keyAsNumber)) {
+        return keyAsNumber;
+    }
+    
+    // If conversion fails, throw an error
+    throw new Error(`NodeKey "${nodeKey}" cannot be converted to a number. Expected numeric string or "root".`);
 }

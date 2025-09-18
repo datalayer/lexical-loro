@@ -220,7 +220,7 @@ export function createBinding(
   // Auto-initialize debug window after a short delay
   setTimeout(() => {
     (window as any).debugYjs.addDebugToPage();
-  }, 1500); // Slightly later than Loro to avoid overlap
+  }, 1500); // Slightly later than Yjs to avoid overlap
 
   return binding
 }

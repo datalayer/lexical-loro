@@ -13,7 +13,7 @@ import invariant from '../../utils/invariant';
 import {
   $createCollabNodeFromLexicalNode,
   $getOrInitCollabNodeFromSharedType,
-  $syncPropertiesFromCRDT,
+  $syncPropertiesFromYjs,
   createLexicalNodeFromCollabNode,
   getPositionFromElementAndOffset,
   spliceString,
@@ -90,19 +90,19 @@ export class CollabElementNode {
     return collabElementNode.getChildOffset(this);
   }
 
-  syncPropertiesFromCRDT(
+  syncPropertiesFromYjs(
     binding: Binding,
     keysChanged: null | Set<string>,
   ): void {
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
-      'syncPropertiesFromCRDT: could not find element node',
+      'syncPropertiesFromYjs: could not find element node',
     );
-    $syncPropertiesFromCRDT(binding, this._xmlText, lexicalNode, keysChanged);
+    $syncPropertiesFromYjs(binding, this._xmlText, lexicalNode, keysChanged);
   }
 
-  applyChildrenCRDTDelta(
+  applyChildrenYjsDelta(
     binding: Binding,
     deltas: Array<{
       insert?: string | object | AbstractType<unknown>;
@@ -240,12 +240,12 @@ export class CollabElementNode {
     }
   }
 
-  syncChildrenFromCRDT(binding: Binding): void {
+  syncChildrenFromYjs(binding: Binding): void {
     // Now diff the children of the collab node with that of our existing Lexical node.
     const lexicalNode = this.getNode();
     invariant(
       lexicalNode !== null,
-      'syncChildrenFromCRDT: could not find element node',
+      'syncChildrenFromYjs: could not find element node',
     );
 
     const key = lexicalNode.__key;
@@ -281,17 +281,17 @@ export class CollabElementNode {
 
           if (childCollabNode instanceof CollabElementNode) {
             const xmlText = childCollabNode._xmlText;
-            childCollabNode.syncPropertiesFromCRDT(binding, null);
-            childCollabNode.applyChildrenCRDTDelta(binding, xmlText.toDelta());
-            childCollabNode.syncChildrenFromCRDT(binding);
+            childCollabNode.syncPropertiesFromYjs(binding, null);
+            childCollabNode.applyChildrenYjsDelta(binding, xmlText.toDelta());
+            childCollabNode.syncChildrenFromYjs(binding);
           } else if (childCollabNode instanceof CollabTextNode) {
-            childCollabNode.syncPropertiesAndTextFromCRDT(binding, null);
+            childCollabNode.syncPropertiesAndTextFromYjs(binding, null);
           } else if (childCollabNode instanceof CollabDecoratorNode) {
-            childCollabNode.syncPropertiesFromCRDT(binding, null);
+            childCollabNode.syncPropertiesFromYjs(binding, null);
           } else if (!(childCollabNode instanceof CollabLineBreakNode)) {
             invariant(
               false,
-              'syncChildrenFromCRDT: expected text, element, decorator, or linebreak collab node',
+              'syncChildrenFromYjs: expected text, element, decorator, or linebreak collab node',
             );
           }
         }

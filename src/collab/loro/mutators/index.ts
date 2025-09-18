@@ -2,8 +2,10 @@
  * Lexical Node Mutators for Loro Tree Collaboration
  * 
  * This module exports mutator functions for all Lexical node types
- * to enable bidirectional synchronization with Loro Tree CRDT.
+ * to enable bidirectional synchronization with Loro Tree Loro.
  */
+
+import { NodeKey } from 'lexical';
 
 // Root Node Mutators
 export * from './RootNodeMutators';
@@ -40,9 +42,9 @@ export interface BaseMutatorOptions {
  * Unified mutator interface for all node types
  */
 export interface NodeMutator<T = any> {
-  create: (nodeKey: string, ...args: any[]) => string; // TreeID
-  update: (nodeKey: string, ...args: any[]) => void;
-  delete: (nodeKey: string, options: BaseMutatorOptions) => void;
+  create: (nodeKey: number, ...args: any[]) => string; // TreeID
+  update: (nodeKey: number, ...args: any[]) => void;
+  delete: (nodeKey: number, options: BaseMutatorOptions) => void;
   createFromLoro: (treeId: string, parentNode: any, index?: number, options?: BaseMutatorOptions) => T | null;
   updateFromLoro: (treeId: string, lexicalNode: T, newParentNode?: any, newIndex?: number, options?: BaseMutatorOptions) => void;
   deleteFromLoro: (treeId: string, lexicalNode: T, options?: BaseMutatorOptions) => void;
