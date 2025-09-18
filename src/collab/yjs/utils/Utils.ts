@@ -461,7 +461,6 @@ export function $getOrInitCollabNodeFromSharedType(
     invariant(nodeInfo !== undefined, 'Node %s is not registered', type);
 
     const sharedParent = sharedType.parent;
-    console.log('---DLA sharedParent', sharedParent);
     const targetParent =
       parent === undefined && sharedParent !== null
         ? $getOrInitCollabNodeFromSharedType(

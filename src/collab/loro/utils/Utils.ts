@@ -244,67 +244,65 @@ cid:root-decorator_counter_3:Map -> { nodeType: 'decorator', nodeKey: '3', type:
 */
 export function getNodeTypeFromSharedType(
   containerId: ContainerID,
-): NodeDetails | undefined {
+): [NodeDetails, NodeDetails?] | undefined {
   const containerIdStr = containerId.toString();
-  
+
   // Remove 'cid:' prefix if present
   const cleanId = containerIdStr.startsWith('cid:') ? containerIdStr.slice(4) : containerIdStr;
-  
+
   // Split by ':' first to separate the container type
-  const [idPart] = cleanId.split(':');
-  
-  // Now parse the ID part - format is usually: root-nodeType-details
-  // Examples:
-  // root-root-root_attrs
-  // root-element_paragraph_1_attrs  
-  // root-text_text_6
-  // root-decorator_counter_3
-  
-  if (!idPart.startsWith('root-')) {
-    return undefined;
-  }
-  
-  // Remove 'root-' prefix
-  const withoutRoot = idPart.slice(5);
-  
-  // Handle the special case of 'root-root-root_attrs' or 'root-root-root'
-  if (withoutRoot.startsWith('root-')) {
-    const rootDetails = withoutRoot.slice(5); // Remove 'root-'
-    return {
-      nodeType: 'root',
-      nodeKey: 'root',
-      type: 'root',
-      variant: rootDetails.includes('_attrs') ? 'attrs' : 'text'
-    };
-  }
-  
-  // For other cases, the format after 'root-' is: nodeType_specificType_key[_attrs]
-  // Split by '_' to parse the components
-  const parts = withoutRoot.split('_');
-  
-  if (parts.length < 2) {
-    return undefined;
-  }
-  
-  const nodeType = parts[0] as 'root' | 'element' | 'text' | 'decorator';
-  
-  // For element, text, decorator nodes
-  if (nodeType === 'element' || nodeType === 'text' || nodeType === 'decorator') {
-    if (parts.length >= 3) {
-      const type = parts[1]; // e.g., 'paragraph', 'text', 'counter'
-      const keyPart = parts[2]; // e.g., '1', '6', '3'
-      const hasAttrs = parts.length > 3 && parts[3] === 'attrs';
-      
+  // Also handle possible parent node (split by '|')
+  const [mainPart, ...restParts] = cleanId.split(':');
+  // mainPart may contain '|', e.g. root-text_text_6|test_text_7
+  const [idPart, parentPart] = mainPart.split('|');
+
+  // Helper to parse a single id string (e.g. root-text_text_6)
+  function parseId(id: string): NodeDetails | undefined {
+    if (!id.startsWith('root-')) {
+      return undefined;
+    }
+    const withoutRoot = id.slice(5);
+    if (withoutRoot.startsWith('root-')) {
+      const rootDetails = withoutRoot.slice(5); // Remove 'root-'
       return {
-        nodeType,
-        nodeKey: keyPart,
-        type,
-        variant: hasAttrs ? 'attrs' : 'text'
+        nodeType: 'root',
+        nodeKey: 'root',
+        type: 'root',
+        variant: rootDetails.includes('_attrs') ? 'attrs' : 'text',
       };
     }
+    const parts = withoutRoot.split('_');
+    if (parts.length < 2) {
+      return undefined;
+    }
+    const nodeType = parts[0] as 'root' | 'element' | 'text' | 'decorator';
+    if (nodeType === 'element' || nodeType === 'text' || nodeType === 'decorator') {
+      if (parts.length >= 3) {
+        const type = parts[1];
+        const keyPart = parts[2];
+        const hasAttrs = parts.length > 3 && parts[3] === 'attrs';
+        return {
+          nodeType,
+          nodeKey: keyPart,
+          type,
+          variant: hasAttrs ? 'attrs' : 'text',
+        };
+      }
+    }
+    return undefined;
   }
-  
-  return undefined;
+
+  const nodeDetails = parseId(idPart);
+  if (!nodeDetails) {
+    return undefined;
+  }
+
+  let parentNodeDetails: NodeDetails | undefined = undefined;
+  if (parentPart) {
+    parentNodeDetails = parseId(parentPart);
+  }
+
+  return [nodeDetails, parentNodeDetails];
 }
 
 export function syncPropertiesFromLexical(
@@ -537,7 +535,14 @@ export function $getOrInitCollabNodeFromSharedType(
   parent?: CollabElementNode,
 ): AnyCollabNode {
 
-  const nodeDetails = getNodeTypeFromSharedType(containerId);
+  const doc = new LoroDoc();
+  const tree = doc.getTree("tree");
+  tree.getNodeByID("3@4")
+  const root = tree.createNode();
+  const child = root.createNode(0);
+  child.id
+
+  const [nodeDetails, parentNodeDetails] = getNodeTypeFromSharedType(containerId);
   invariant(nodeDetails !== undefined, 'Could not parse ContainerID: %s', containerId.toString());
   const collabNode = binding.collabNodeMap.get(nodeDetails.nodeKey);
 

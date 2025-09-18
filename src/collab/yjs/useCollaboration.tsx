@@ -31,6 +31,7 @@ import {
 import { Binding } from './Bindings';
 import { syncCRDTUpdatesToLexical, syncLexicalUpdatesToCRDT } from './sync/SyncEditorStates';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
+import { CounterNode } from '../../nodes/CounterNode';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 
@@ -134,10 +135,12 @@ export function useCollaboration(
         editorState,
         dirtyLeaves,
         dirtyElements,
+        mutatedNodes,
         normalizedNodes,
         tags,
       }) => {
         if (tags.has(SKIP_COLLAB_TAG) === false) {
+          console.log('---DLA', mutatedNodes);
           syncLexicalUpdatesToCRDT(
             binding,
             provider,
