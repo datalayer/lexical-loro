@@ -384,6 +384,24 @@ export function mutateElementNode(
         
           // Determine element type
           elementType = currentNode.getType(); // 'paragraph', 'heading', etc.
+          
+          // Debug logging for table elements
+          if (elementType.includes('table')) {
+            console.log(`🔧 Creating table element: ${nodeKey} [${elementType}]`, {
+              parentKey: parent?.getKey() || 'no-parent',
+              parentType: parent?.getType() || 'N/A',
+              parentId: parentId || 'no-parent-id',
+              index,
+              hasParentMapping: parent ? mapper.hasLexicalMapping(parent.getKey()) : false
+            });
+          }
+          
+          // If parent exists but doesn't have mapping yet, defer parent assignment
+          if (parent && !parentId) {
+            // Store the node creation but defer parent assignment
+            parentId = undefined; // Create as orphan temporarily
+            console.log(`⏳ Deferring parent assignment for ${nodeKey} [${elementType}] - parent ${parent.getKey()} not mapped yet`);
+          }
         
           // Collect metadata (format, style, direction, etc.)
           if (typeof currentNode.getFormat === 'function') {
@@ -403,6 +421,25 @@ export function mutateElementNode(
         
         // Create the node in Loro after safely reading from editor state
         createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, serializedNodeData, options);
+        
+        // If this node was created without a parent, schedule a retry to fix parent assignment
+        if (parent && !parentId) {
+          setTimeout(() => {
+            console.log(`🔄 Retrying parent assignment for ${nodeKey} [${elementType}]`);
+            const mapper = getNodeMapper();
+            const retryParentId = mapper.getTreeIdByLexicalKey(parent.getKey());
+            if (retryParentId) {
+              // Move the node to its correct parent now that the parent exists
+              const loroNode = mapper.getLoroNodeByLexicalKey(nodeKey);
+              if (loroNode && tree.has(loroNode.id)) {
+                tree.move(loroNode.id, retryParentId, index);
+                console.log(`✅ Successfully assigned parent ${retryParentId} to ${nodeKey}`);
+              }
+            } else {
+              console.log(`❌ Parent still not available for ${nodeKey} after retry`);
+            }
+          }, 10); // Small delay to allow parent to be created
+        }
       }
       break;
     }
@@ -427,6 +464,17 @@ export function mutateElementNode(
         
           // Get element type and metadata
           elementType = currentNode.getType();
+          
+          // Debug logging for table elements
+          if (elementType.includes('table')) {
+            console.log(`🔧 Updating table element: ${nodeKey} [${elementType}]`, {
+              parentKey: parent?.getKey() || 'no-parent',
+              parentType: parent?.getType() || 'N/A',
+              parentId: parentId || 'no-parent-id',
+              index,
+              hasParentMapping: parent ? mapper.hasLexicalMapping(parent.getKey()) : false
+            });
+          }
           if (typeof currentNode.getFormat === 'function') {
             metadata.format = currentNode.getFormat();
           }
