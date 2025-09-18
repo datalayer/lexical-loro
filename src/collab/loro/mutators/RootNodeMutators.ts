@@ -1,0 +1,192 @@
+import { TreeID, LoroTree } from 'loro-crdt';
+import { $getRoot, RootNode } from 'lexical';
+
+/**
+ * RootNode Mutators for Loro Tree Collaboration
+ * 
+ * The RootNode is special in Lexical:
+ * - Only one RootNode exists per EditorState
+ * - Cannot be subclassed or replaced
+ * - Represents the contenteditable element itself
+ * - Does not participate in mutation listeners
+ * - Has no parent or siblings
+ * 
+ * Note: RootNode typically doesn't need mutation handling since it's 
+ * always present and doesn't change structure, but we include it for completeness
+ */
+
+export interface RootNodeMutatorOptions {
+  binding: any;
+  tree: LoroTree;
+  peerId: number;
+}
+
+/**
+ * Handle RootNode creation (typically only happens once during initialization)
+ */
+export function createRootNodeInLoro(
+  nodeKey: string,
+  lexicalNode?: any, // The actual Lexical RootNode instance
+  options?: RootNodeMutatorOptions
+): TreeID {
+  const { tree, peerId } = options!;
+  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  
+  // Root node has no parent (undefined) and is always at index 0
+  const rootTreeNode = tree.createNode(undefined, 0);
+  
+  // Store metadata about this being a root node
+  rootTreeNode.data.set('nodeType', 'root');
+  rootTreeNode.data.set('lexicalKey', nodeKey);
+  rootTreeNode.data.set('createdAt', Date.now());
+  
+  // Store the exported Lexical node data
+  if (lexicalNode) {
+    try {
+      const exportedNode = lexicalNode.exportJSON();
+      rootTreeNode.data.set('node', JSON.stringify(exportedNode));
+    } catch (error) {
+      console.warn('Failed to export Lexical node JSON:', error);
+      rootTreeNode.data.set('node', JSON.stringify({ type: 'root', key: nodeKey }));
+    }
+  }
+  
+  return treeId;
+}
+
+/**
+ * Handle RootNode updates (rarely needed since root doesn't change much)
+ */
+export function updateRootNodeInLoro(
+  nodeKey: string,
+  lexicalNode?: any, // The actual Lexical RootNode instance
+  options?: RootNodeMutatorOptions
+): void {
+  const { tree, peerId } = options!;
+  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  
+  if (tree.has(treeId)) {
+    const treeNode = tree.getNodeByID(treeId);
+    if (treeNode) {
+      // Update any metadata if needed
+      treeNode.data.set('lastUpdated', Date.now());
+      
+      // Update the exported Lexical node data
+      if (lexicalNode) {
+        try {
+          const exportedNode = lexicalNode.exportJSON();
+          treeNode.data.set('node', JSON.stringify(exportedNode));
+        } catch (error) {
+          console.warn('Failed to export Lexical node JSON during update:', error);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Handle RootNode deletion (should rarely happen, but included for completeness)
+ */
+export function deleteRootNodeInLoro(
+  nodeKey: string,
+  options: RootNodeMutatorOptions
+): void {
+  const { tree, peerId } = options;
+  const treeId: TreeID = `${Number(nodeKey)}@${peerId}`;
+  
+  if (tree.has(treeId)) {
+    // Note: Deleting root node should be done with extreme caution
+    // as it represents the entire editor content
+    tree.delete(treeId);
+  }
+}
+
+/**
+ * Create RootNode in Lexical from Loro tree data
+ */
+export function createRootNodeFromLoro(
+  treeId: TreeID,
+  options: RootNodeMutatorOptions
+): RootNode | null {
+  // In Lexical, there's always exactly one root node
+  // This function would typically be called during initialization
+  const root = $getRoot();
+  
+  // Root node already exists, just return it
+  return root;
+}
+
+/**
+ * Update RootNode in Lexical from Loro tree data
+ */
+export function updateRootNodeFromLoro(
+  treeId: TreeID,
+  options: RootNodeMutatorOptions
+): void {
+  // Root node updates are typically handled at the document level
+  // Most changes to root would be indirect (children changes)
+  console.log('Root node update from Loro:', treeId);
+}
+
+/**
+ * Delete RootNode in Lexical (should not happen in normal operation)
+ */
+export function deleteRootNodeFromLoro(
+  treeId: TreeID,
+  options: RootNodeMutatorOptions
+): void {
+  // Root node deletion should not happen in normal circumstances
+  // This would essentially clear the entire editor
+  console.warn('Attempting to delete root node - this should not happen:', treeId);
+}
+
+/**
+ * Utility to check if a tree node represents a RootNode
+ */
+export function isRootNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
+  if (!tree.has(treeId)) {
+    return false;
+  }
+  
+  const treeNode = tree.getNodeByID(treeId);
+  return treeNode?.data.get('nodeType') === 'root';
+}
+
+/**
+ * Main mutate method for RootNode - handles all mutation types
+ */
+export function mutateRootNode(
+  update: any, // UpdateListenerPayload
+  mutation: 'created' | 'updated' | 'destroyed',
+  nodeKey: string,
+  options: RootNodeMutatorOptions
+): void {
+  const { tree, peerId } = options;
+
+  switch (mutation) {
+    case 'created': {
+      // Get the current editor state to find the root node
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      if (currentNode && currentNode.getType() === 'root') {
+        // For root node, there's no parent (it's the top-level)
+        createRootNodeInLoro(nodeKey, currentNode, options);
+      }
+      break;
+    }
+
+    case 'updated': {
+      // Root nodes typically don't change much, but we can update metadata
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      if (currentNode && currentNode.getType() === 'root') {
+        updateRootNodeInLoro(nodeKey, currentNode, options);
+      }
+      break;
+    }
+
+    case 'destroyed': {
+      // Delete the root node from Loro tree
+      deleteRootNodeInLoro(nodeKey, options);
+      break;
+    }
+  }
+}

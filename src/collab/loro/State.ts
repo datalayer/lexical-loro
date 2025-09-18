@@ -3,7 +3,6 @@ import {createCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
 import {UndoManager} from 'loro-crdt';
 import type {Binding} from './Bindings';
-import type {XmlText} from './types/XmlText';
 
 export type UserState = {
   anchorPos: Cursor | null;
@@ -59,12 +58,10 @@ export type CRDTEvent = Record<string, unknown>;
 
 export function createUndoManager(
   binding: Binding,
-  root: XmlText,
 ): UndoManager {
-  const doc = root.getDoc();
   
   // Create Loro UndoManager with configuration
-  const undoManager = new UndoManager(doc, {
+  const undoManager = new UndoManager(binding.doc, {
     mergeInterval: 1000, // Merge operations within 1 second
     maxUndoSteps: 100,   // Keep up to 100 undo steps
     excludeOriginPrefixes: ['collab-', 'sync-'], // Exclude collaboration operations
@@ -80,7 +77,7 @@ export function createUndoManager(
         // This would need to be implemented based on the specific selection format
       }
       return {
-        value: doc.toJSON(), // Save document state
+        value: binding.doc.toJSON(), // Save document state
         cursors: cursors
       };
     },

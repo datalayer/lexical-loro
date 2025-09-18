@@ -29,7 +29,8 @@ import {
   TOGGLE_CONNECT_COMMAND,
 } from './State';
 import { Binding } from './Bindings';
-import { syncCRDTUpdatesToLexical, syncLexicalUpdatesToCRDT } from './sync/SyncEditorStates';
+import { syncLexicalToCRDT } from './sync/SyncLexicalToCRDT';
+import { syncCRDTToLexical } from './sync/SyncCRDTToLexical';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
@@ -62,7 +63,6 @@ export function useCollaboration(
   }, [provider]);
 
   useEffect(() => {
-    const {root} = binding;
     const {awareness} = provider;
 
     const onStatus = ({status}: {status: string}) => {
@@ -73,34 +73,9 @@ export function useCollaboration(
       if (
         shouldBootstrap &&
         isSynced &&
-        root.isEmpty() &&
         isReloadingDoc.current === false
       ) {
         initializeEditor(editor, initialEditorState);
-        
-        // 🔧 HIERARCHY FIX: After initializing editor, ensure Lexical structure is synced to CRDT
-        setTimeout(() => {
-          editor.update(() => {
-            const lexicalRoot = $getRoot();
-            const crdtRoot = binding.root;
-            
-            // Force sync if Lexical has structure but CRDT doesn't
-            if (lexicalRoot.getChildren().length > 0 && crdtRoot._children.length === 0) {
-              crdtRoot.syncChildrenFromLexical(
-                binding,
-                lexicalRoot,
-                null, // prevNodeMap
-                new Map([['root', true]]), // mark root as dirty
-                new Set() // dirtyLeaves
-              );
-              
-              // Log final structure
-              if ((crdtRoot as any).logHierarchy) {
-                (crdtRoot as any).logHierarchy("🏗️ [FINAL-STRUCTURE] ");
-              }
-            }
-          });
-        }, 100); // Small delay to ensure initialization is complete
       }
 
       isReloadingDoc.current = false;
@@ -140,7 +115,7 @@ export function useCollaboration(
         // Check if this change is from the undo manager
         // const isFromUndoManger = origin instanceof UndoManager;
         const isFromUndoManager = false;
-        syncCRDTUpdatesToLexical(
+        syncCRDTToLexical(
           binding,
           provider,
           event,
@@ -153,24 +128,12 @@ export function useCollaboration(
     const unsubscribe = binding.doc.subscribe(onCRDTTreeChanges);
 
     const removeListener = editor.registerUpdateListener(
-      ({
-        prevEditorState,
-        editorState,
-        dirtyLeaves,
-        dirtyElements,
-        normalizedNodes,
-        tags,
-      }) => {
-        if (tags.has(SKIP_COLLAB_TAG) === false) {          
-          syncLexicalUpdatesToCRDT(
+      (update) => {
+        if (update.tags.has(SKIP_COLLAB_TAG) === false) {
+          syncLexicalToCRDT(
             binding,
             provider,
-            prevEditorState,
-            editorState,
-            dirtyElements,
-            dirtyLeaves,
-            normalizedNodes,
-            tags,
+            update,
           );
         }
       },
@@ -285,7 +248,7 @@ export function useHistory(
   binding: Binding,
 ): () => void {
   const undoManager = useMemo(
-    () => createUndoManager(binding, binding.root.getSharedType()),
+    () => createUndoManager(binding),
     [binding],
   );
 

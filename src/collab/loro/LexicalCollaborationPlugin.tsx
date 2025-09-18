@@ -111,7 +111,7 @@ export function CollaborationPlugin({
     setBinding(binding);
 
     return () => {
-      binding.root.destroy(binding);
+      // Clean up binding resources if needed
     };
   }, [editor, provider, id, docMap, doc, excludedProperties]);
 
