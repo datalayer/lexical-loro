@@ -2,8 +2,10 @@ import { TreeID, LoroTree } from 'loro-crdt';
 import { 
   DecoratorNode, 
   $isDecoratorNode,
+  UpdateListenerPayload,
 } from 'lexical';
-import { getNodeMapper } from '../mappings/NodesMapper';
+import { getNodeMapper } from '../nodes/NodesMapper';
+import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
  * DecoratorNode Mutators for Loro Tree Collaboration
@@ -45,8 +47,7 @@ export function createDecoratorNodeInLoro(
     index
   );
   
-  // Store DecoratorNode metadata
-  treeNode.data.set('nodeType', 'decorator');
+  // Store DecoratorNode metadata (useful for debugging/logging)
   treeNode.data.set('decoratorType', decoratorType);
   treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
   
@@ -157,40 +158,66 @@ export function createDecoratorNodeFromLoro(
   }
   
   const treeNode = tree.getNodeByID(treeId);
-  if (!treeNode || treeNode.data.get('nodeType') !== 'decorator') {
+  if (!treeNode) {
     return null;
   }
   
-  const decoratorType = treeNode.data.get('decoratorType');
-  const decoratorDataStr = treeNode.data.get('decoratorData');
-  
-  let decoratorData;
-  try {
-    decoratorData = decoratorDataStr && typeof decoratorDataStr === 'string' 
-      ? JSON.parse(decoratorDataStr) : {};
-  } catch (error) {
-    console.warn('Failed to parse decorator data:', error);
-    decoratorData = {};
-  }
-  
-  // In a real implementation, you'd have a factory or registry
-  // to create the appropriate decorator node type
+  // Try to get LexicalNodeData first (new format)
+  const lexicalData = treeNode.data.get('lexical');
   let decoratorNode: DecoratorNode<any>;
-  const safeDecoratorType = typeof decoratorType === 'string' ? decoratorType : 'generic';
   
-  switch (safeDecoratorType) {
-    case 'image':
-      // decoratorNode = new ImageNode(decoratorData.src, decoratorData.alt, etc.);
-      // For now, create a generic decorator placeholder
-      decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
-      break;
-    case 'video':
-      // decoratorNode = new VideoNode(decoratorData.src, decoratorData.controls, etc.);
-      decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
-      break;
-    default:
-      decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
-      break;
+  if (lexicalData && typeof lexicalData === 'string') {
+    try {
+      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
+      const storedNode = deserializedData.lexicalNode;
+      
+      if (!$isDecoratorNode(storedNode)) {
+        return null;
+      }
+      
+      // Use the stored lexical node directly
+      decoratorNode = storedNode;
+    } catch (error) {
+      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
+      return null;
+    }
+  } else {
+    // Fallback to old format for backward compatibility
+    const nodeType = treeNode.data.get('nodeType');
+    if (nodeType !== 'decorator') {
+      return null;
+    }
+    
+    const decoratorType = treeNode.data.get('decoratorType');
+    const decoratorDataStr = treeNode.data.get('decoratorData');
+    
+    let decoratorData;
+    try {
+      decoratorData = decoratorDataStr && typeof decoratorDataStr === 'string' 
+        ? JSON.parse(decoratorDataStr) : {};
+    } catch (error) {
+      console.warn('Failed to parse decorator data:', error);
+      decoratorData = {};
+    }
+    
+    // In a real implementation, you'd have a factory or registry
+    // to create the appropriate decorator node type
+    const safeDecoratorType = typeof decoratorType === 'string' ? decoratorType : 'generic';
+    
+    switch (safeDecoratorType) {
+      case 'image':
+        // decoratorNode = new ImageNode(decoratorData.src, decoratorData.alt, etc.);
+        // For now, create a generic decorator placeholder
+        decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
+        break;
+      case 'video':
+        // decoratorNode = new VideoNode(decoratorData.src, decoratorData.controls, etc.);
+        decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
+        break;
+      default:
+        decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
+        break;
+    }
   }
   
   // Insert into the parent at the specified index
@@ -366,7 +393,7 @@ class GenericDecoratorNode extends DecoratorNode<any> {
  * Main mutate method for DecoratorNode - handles all mutation types
  */
 export function mutateDecoratorNode(
-  update: any, // UpdateListenerPayload
+  update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: number,
   options: DecoratorNodeMutatorOptions
@@ -375,7 +402,7 @@ export function mutateDecoratorNode(
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isDecoratorNode(currentNode)) {
         // Get parent and index for proper positioning
         const parent = currentNode.getParent();
@@ -399,7 +426,7 @@ export function mutateDecoratorNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isDecoratorNode(currentNode)) {
         // Get current position
         const parent = currentNode.getParent();

@@ -1,6 +1,7 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $createLineBreakNode, LineBreakNode, $isLineBreakNode } from 'lexical';
-import { getNodeMapper } from '../mappings/NodesMapper';
+import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload } from 'lexical';
+import { getNodeMapper } from '../nodes/NodesMapper';
+import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
  * LineBreakNode Mutators for Loro Tree Collaboration
@@ -39,8 +40,8 @@ export function createLineBreakNodeInLoro(
     index
   );
   
-  // Store LineBreakNode metadata
-  treeNode.data.set('nodeType', 'linebreak');
+  // Store LineBreakNode metadata (minimal since it's just a line break)
+  // nodeType is now handled by LexicalNodeData in mapper
   
   // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
@@ -109,7 +110,36 @@ export function createLineBreakNodeFromLoro(
   index?: number,
   options?: LineBreakNodeMutatorOptions
 ): LineBreakNode {
-  const lineBreakNode = $createLineBreakNode();
+  const { tree } = options!;
+  
+  if (!tree.has(treeId)) {
+    return $createLineBreakNode(); // Fallback to empty line break
+  }
+  
+  const treeNode = tree.getNodeByID(treeId);
+  let lineBreakNode: LineBreakNode;
+  
+  // Try to get LexicalNodeData first (new format)
+  const lexicalData = treeNode?.data.get('lexical');
+  
+  if (lexicalData && typeof lexicalData === 'string') {
+    try {
+      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
+      const storedNode = deserializedData.lexicalNode;
+      
+      if (!$isLineBreakNode(storedNode)) {
+        lineBreakNode = $createLineBreakNode(); // Fallback
+      } else {
+        lineBreakNode = storedNode;
+      }
+    } catch (error) {
+      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
+      lineBreakNode = $createLineBreakNode(); // Fallback
+    }
+  } else {
+    // Old format or no data - just create a new line break node
+    lineBreakNode = $createLineBreakNode();
+  }
   
   // Insert into the parent at the specified index
   if (index !== undefined && index >= 0) {
@@ -191,7 +221,7 @@ export function getLineBreakNodeDataFromTree(treeId: TreeID, tree: LoroTree): an
  * Main mutate method for LineBreakNode - handles all mutation types
  */
 export function mutateLineBreakNode(
-  update: any, // UpdateListenerPayload
+  update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: number,
   options: LineBreakNodeMutatorOptions
@@ -200,7 +230,7 @@ export function mutateLineBreakNode(
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isLineBreakNode(currentNode)) {
         // Get parent and index for proper positioning
         const parent = currentNode.getParent();
@@ -213,7 +243,7 @@ export function mutateLineBreakNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isLineBreakNode(currentNode)) {
         // Check if position changed
         const parent = currentNode.getParent();

@@ -5,8 +5,6 @@
  * to enable bidirectional synchronization with Loro Tree Loro.
  */
 
-import { NodeKey } from 'lexical';
-
 // Root Node Mutators
 export * from './RootNodeMutators';
 

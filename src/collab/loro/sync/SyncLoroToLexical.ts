@@ -1,10 +1,10 @@
+import { $getRoot, $isElementNode } from 'lexical';
 import { LoroEventBatch } from 'loro-crdt';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 import { parseTreeID } from '../utils/Utils';
-import { createLexicalNodeFromLoro } from '../utils/NodeFactory';
-import { $getRoot, $isElementNode } from 'lexical';
+import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 
 export function syncLoroToLexical(
   binding: Binding,

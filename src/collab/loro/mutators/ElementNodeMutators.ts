@@ -3,9 +3,11 @@ import {
   $createParagraphNode, 
   ElementNode, 
   $isElementNode,
-  ElementFormatType, 
+  ElementFormatType,
+  UpdateListenerPayload, 
 } from 'lexical';
-import { getNodeMapper } from '../mappings/NodesMapper';
+import { getNodeMapper } from '../nodes/NodesMapper';
+import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
  * ElementNode Mutators for Loro Tree Collaboration
@@ -46,8 +48,7 @@ export function createElementNodeInLoro(
     index
   );
   
-  // Store ElementNode metadata
-  treeNode.data.set('nodeType', 'element');
+  // Store ElementNode metadata (elementType still useful for debugging/logging)
   treeNode.data.set('elementType', elementType);
   
   // Store additional metadata if provided
@@ -131,42 +132,68 @@ export function createElementNodeFromLoro(
   }
   
   const treeNode = tree.getNodeByID(treeId);
-  if (!treeNode || treeNode.data.get('nodeType') !== 'element') {
+  if (!treeNode) {
     return null;
   }
   
-  const elementType = treeNode.data.get('elementType');
+  // Try to get LexicalNodeData first (new format)
+  const lexicalData = treeNode.data.get('lexical');
   let elementNode: ElementNode;
   
-  // Create the appropriate element type
-  switch (elementType) {
-    case 'paragraph':
-    default:
-      // For now, create paragraphs for all element types
-      // In a real implementation, you'd import specific element node creators
-      // from their respective packages (e.g., @lexical/rich-text, @lexical/list, etc.)
-      elementNode = $createParagraphNode();
-      break;
+  if (lexicalData && typeof lexicalData === 'string') {
+    try {
+      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
+      const storedNode = deserializedData.lexicalNode;
+      
+      if (!$isElementNode(storedNode)) {
+        return null;
+      }
+      
+      // Use the stored lexical node directly
+      elementNode = storedNode;
+    } catch (error) {
+      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
+      return null;
+    }
+  } else {
+    // Fallback to old format for backward compatibility
+    const nodeType = treeNode.data.get('nodeType');
+    if (nodeType !== 'element') {
+      return null;
+    }
+    
+    const elementType = treeNode.data.get('elementType');
+    
+    // Create the appropriate element type
+    switch (elementType) {
+      case 'paragraph':
+      default:
+        // For now, create paragraphs for all element types
+        // In a real implementation, you'd import specific element node creators
+        // from their respective packages (e.g., @lexical/rich-text, @lexical/list, etc.)
+        elementNode = $createParagraphNode();
+        break;
+    }
   }
   
-  // Apply any stored formatting or styles with proper type casting
-  const format = treeNode.data.get('format');
-  if (format && typeof elementNode.setFormat === 'function' && typeof format === 'number') {
-    elementNode.setFormat(format as unknown as ElementFormatType);
-  }
-  
-  const style = treeNode.data.get('style');
-  if (style && typeof elementNode.setStyle === 'function' && typeof style === 'string') {
-    elementNode.setStyle(style);
-  }
-  
-  const direction = treeNode.data.get('direction');
-  if (direction && typeof elementNode.setDirection === 'function' && 
-      (direction === 'ltr' || direction === 'rtl')) {
-    elementNode.setDirection(direction);
-  }
-  
-  // Insert into the parent at the specified index
+  // Apply any stored formatting or styles with proper type casting (only for old format)
+  if (!lexicalData || typeof lexicalData !== 'string') {
+    const format = treeNode.data.get('format');
+    if (format && typeof elementNode.setFormat === 'function' && typeof format === 'number') {
+      elementNode.setFormat(format as unknown as ElementFormatType);
+    }
+
+    const style = treeNode.data.get('style');
+    if (style && typeof elementNode.setStyle === 'function' && typeof style === 'string') {
+      elementNode.setStyle(style);
+    }
+
+    const direction = treeNode.data.get('direction');
+    if (direction && typeof elementNode.setDirection === 'function' && 
+        (direction === 'ltr' || direction === 'rtl')) {
+      elementNode.setDirection(direction);
+    }
+  }  // Insert into the parent at the specified index
   if (index !== undefined && index >= 0) {
     parentNode.splice(index, 0, [elementNode]);
   } else {
@@ -304,7 +331,7 @@ export function syncElementNodeChildrenInLoro(
  * Main mutate method for ElementNode - handles all mutation types
  */
 export function mutateElementNode(
-  update: any, // UpdateListenerPayload
+  update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: number,
   options: ElementNodeMutatorOptions
@@ -313,7 +340,7 @@ export function mutateElementNode(
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isElementNode(currentNode)) {
         // Get parent and index for proper positioning
         const parent = currentNode.getParent();
@@ -341,7 +368,7 @@ export function mutateElementNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isElementNode(currentNode)) {
         // Get current position
         const parent = currentNode.getParent();

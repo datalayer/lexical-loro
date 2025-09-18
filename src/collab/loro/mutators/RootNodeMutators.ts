@@ -1,6 +1,7 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $getRoot, RootNode } from 'lexical';
-import { getNodeMapper } from '../mappings/NodesMapper';
+import { $getRoot, RootNode, UpdateListenerPayload } from 'lexical';
+import { getNodeMapper } from '../nodes/NodesMapper';
+import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
  * RootNode Mutators for Loro Tree Collaboration
@@ -42,8 +43,8 @@ export function createRootNodeInLoro(
     0 // always at index 0
   );
   
-  // Store metadata about this being a root node
-  rootTreeNode.data.set('nodeType', 'root');
+  // Store metadata about this being a root node (useful for debugging)
+  rootTreeNode.data.set('isRoot', true);
   
   // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
@@ -139,7 +140,7 @@ export function isRootNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
  * Main mutate method for RootNode - handles all mutation types
  */
 export function mutateRootNode(
-  update: any, // UpdateListenerPayload
+  update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: number,
   options: RootNodeMutatorOptions
@@ -149,7 +150,7 @@ export function mutateRootNode(
   switch (mutation) {
     case 'created': {
       // Get the current editor state to find the root node
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && currentNode.getType() === 'root') {
         // For root node, there's no parent (it's the top-level)
         createRootNodeInLoro(nodeKey, currentNode, options);
@@ -159,7 +160,7 @@ export function mutateRootNode(
 
     case 'updated': {
       // Root nodes typically don't change much, but we can update metadata
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && currentNode.getType() === 'root') {
         updateRootNodeInLoro(nodeKey, currentNode, options);
       }

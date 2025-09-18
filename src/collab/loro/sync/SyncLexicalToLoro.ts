@@ -36,6 +36,8 @@ export function syncLexicalToLoro(
 
         const nodeKeyNumber = toKeyNodeNumber(nodeKey);
 
+        console.log('-------DLA', nodeKeyNumber)
+
         if (isClassExtending(Klass, RootNode)) {
           mutateRootNode(update, mutation, nodeKeyNumber, mutatorOptions);
         }

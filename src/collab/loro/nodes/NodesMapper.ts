@@ -1,7 +1,7 @@
 import { LoroTree, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
-import { createLexicalNodeFromLoro } from '../utils/NodeFactory';
+import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs
@@ -153,21 +153,11 @@ export class NodeMapper {
     treeNode.data.set('lexicalKey', nodeKey);
     treeNode.data.set('createdAt', Date.now());
     
-    // Store node type information if lexical node is provided
+    // Store complete lexical node data if lexical node is provided
     if (lexicalNode) {
-      treeNode.data.set('nodeType', lexicalNode.getType());
-      
-      // Store exported JSON if possible
-      try {
-        const exportedNode = lexicalNode.exportJSON();
-        treeNode.data.set('node', JSON.stringify(exportedNode));
-      } catch (error) {
-        console.warn('Failed to export Lexical node JSON:', error);
-        treeNode.data.set('node', JSON.stringify({ 
-          type: lexicalNode.getType(), 
-          key: nodeKey 
-        }));
-      }
+      const lexicalNodeData: LexicalNodeData = { lexicalNode };
+      const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+      treeNode.data.set('lexical', serializedData);
     }
 
     // Create bidirectional mapping

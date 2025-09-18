@@ -1,11 +1,11 @@
-import type {LexicalEditor, NodeKey} from 'lexical';
+import type {LexicalEditor} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
 import type {LoroDoc, LoroTree} from 'loro-crdt';
 import invariant from '../utils/invariant';
 import type {Cursor} from './sync/SyncCursors';
-import {Provider} from './State';
 import { createLoroTree } from './utils/Utils';
-import { NodeMapper, initializeNodeMapper } from './mappings/NodesMapper';
+import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
+import {Provider} from './State';
 
 export type ClientID = number;
 

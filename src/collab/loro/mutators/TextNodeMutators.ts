@@ -3,9 +3,11 @@ import {
   $createTextNode, 
   TextNode, 
   $isTextNode,
-  TextFormatType
+  TextFormatType,
+  UpdateListenerPayload
 } from 'lexical';
-import { getNodeMapper } from '../mappings/NodesMapper';
+import { getNodeMapper } from '../nodes/NodesMapper';
+import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
  * TextNode Mutators for Loro Tree Collaboration
@@ -47,8 +49,7 @@ export function createTextNodeInLoro(
     index
   );
   
-  // Store TextNode metadata
-  treeNode.data.set('nodeType', 'text');
+  // Store TextNode metadata (these are still useful for debugging/logging)
   treeNode.data.set('textContent', textContent);
   treeNode.data.set('format', format || 0);
   treeNode.data.set('mode', mode || 'normal');
@@ -117,25 +118,54 @@ export function createTextNodeFromLoro(
   }
   
   const treeNode = tree.getNodeByID(treeId);
-  if (!treeNode || treeNode.data.get('nodeType') !== 'text') {
+  if (!treeNode) {
     return null;
   }
   
-  const textContent = treeNode.data.get('textContent');
-  const safeTextContent = typeof textContent === 'string' ? textContent : '';
-  const textNode = $createTextNode(safeTextContent);
+  // Try to get LexicalNodeData first (new format)
+  const lexicalData = treeNode.data.get('lexical');
+  let textNode: TextNode;
   
-  // Apply formatting if present
-  const format = treeNode.data.get('format');
-  if (format && typeof format === 'number') {
-    textNode.setFormat(format as unknown as TextFormatType);
+  if (lexicalData && typeof lexicalData === 'string') {
+    try {
+      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
+      const storedNode = deserializedData.lexicalNode;
+      
+      if (!$isTextNode(storedNode)) {
+        return null;
+      }
+      
+      // Use the stored lexical node directly
+      textNode = storedNode;
+    } catch (error) {
+      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
+      return null;
+    }
+  } else {
+    // Fallback to old format for backward compatibility
+    const nodeType = treeNode.data.get('nodeType');
+    if (nodeType !== 'text') {
+      return null;
+    }
+    
+    const textContent = treeNode.data.get('textContent');
+    const safeTextContent = typeof textContent === 'string' ? textContent : '';
+    textNode = $createTextNode(safeTextContent);
+    
+    // Apply formatting if present (only for old format)
+    const format = treeNode.data.get('format');
+    if (format && typeof format === 'number') {
+      textNode.setFormat(format as unknown as TextFormatType);
+    }
   }
   
-  // Apply mode if present (skip for now as it requires specific mode types)
-  // const mode = treeNode.data.get('mode');
-  // if (mode && typeof textNode.setMode === 'function') {
-  //   textNode.setMode(mode);
-  // }
+  // Apply mode if present (only for old format)
+  if (!lexicalData || typeof lexicalData !== 'string') {
+    // const mode = treeNode.data.get('mode');
+    // if (mode && typeof textNode.setMode === 'function') {
+    //   textNode.setMode(mode);
+    // }
+  }
   
   // Insert into the parent at the specified index
   if (index !== undefined && index >= 0) {
@@ -286,7 +316,7 @@ export function applyTextFormatInLoro(
  * Main mutate method for TextNode - handles all mutation types
  */
 export function mutateTextNode(
-  update: any, // UpdateListenerPayload
+  update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: number,
   options: TextNodeMutatorOptions
@@ -295,7 +325,7 @@ export function mutateTextNode(
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isTextNode(currentNode)) {
         // Get parent and index for proper positioning
         const parent = currentNode.getParent();
@@ -313,7 +343,7 @@ export function mutateTextNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey);
+      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
       if (currentNode && $isTextNode(currentNode)) {
         // Get updated text content and formatting
         const textContent = currentNode.getTextContent();
