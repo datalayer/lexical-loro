@@ -193,23 +193,73 @@ export function createBinding(
         const parent = node.parent();
         const children = node.children();
         
+        // Collect lexical properties (new individual property format)
+        const lexicalProps: Record<string, any> = {};
+        Object.entries(data).forEach(([key, value]) => {
+          if (key.startsWith('lexical_')) {
+            lexicalProps[key.substring(8)] = value; // Remove 'lexical_' prefix
+          }
+        });
+        
         console.log('🔍 Loro Node Details:', {
           treeId: node.id,
           lexicalKey: data.lexicalKey,
           elementType: data.elementType,
           createdAt: data.createdAt && typeof data.createdAt === 'number' ? new Date(data.createdAt).toLocaleString() : 'N/A',
-          hasLexicalData: !!data.lexical,
+          hasLexicalData: Object.keys(lexicalProps).length > 0 || !!data.lexical,
           parent: parent ? parent.id : 'None (Root)',
           childrenCount: children ? children.length : 0,
           isRoot: data.isRoot || false
         });
         
-        if (data.lexical && typeof data.lexical === 'string') {
+        // Handle both old and new lexical data formats
+        if (Object.keys(lexicalProps).length > 0) {
+          console.log('📄 Lexical Data (Individual Properties):', lexicalProps);
+        } else if (data.lexical && typeof data.lexical === 'string') {
           try {
             const lexicalData = JSON.parse(data.lexical);
-            console.log('📄 Lexical Data:', lexicalData);
+            console.log('📄 Lexical Data (Legacy JSON):', lexicalData);
           } catch (e) {
             console.log('❌ Failed to parse lexical data:', e);
+          }
+        }
+        
+        // Fetch and log the corresponding lexical node
+        if (data.lexicalKey && data.lexicalKey !== 'no-key' && typeof data.lexicalKey === 'string') {
+          try {
+            const editorState = binding.editor.getEditorState();
+            const nodeInfo = editorState.read(() => {
+              const lexicalNode = editorState._nodeMap.get(data.lexicalKey as string);
+              
+              if (!lexicalNode) {
+                return null;
+              }
+              
+              const info: any = {
+                key: lexicalNode.getKey(),
+                type: lexicalNode.getType(),
+                parent: lexicalNode.getParent()?.getKey() || 'None (Root)',
+                textContent: lexicalNode.getTextContent ? lexicalNode.getTextContent() : 'N/A',
+                serialized: lexicalNode.exportJSON()
+              };
+              
+              // Add children info if it's an ElementNode
+              if ('getChildren' in lexicalNode && typeof lexicalNode.getChildren === 'function') {
+                info.children = (lexicalNode as any).getChildren().map((child: any) => child.getKey());
+              } else {
+                info.children = 'N/A (Not an ElementNode)';
+              }
+              
+              return info;
+            });
+            
+            if (nodeInfo) {
+              console.log('🔗 Linked Lexical Node:', nodeInfo);
+            } else {
+              console.log('⚠️ Linked Lexical Node not found for key:', data.lexicalKey);
+            }
+          } catch (e) {
+            console.log('❌ Failed to fetch lexical node:', e);
           }
         }
       } else {
@@ -254,7 +304,8 @@ export function createBinding(
         children.forEach((child: any, index: number) => {
           const isLastChild = index === children.length - 1;
           // Calculate prefix for children - if current node is last, use spaces, otherwise use vertical line
-          const childPrefix = prefix + (depth === 0 ? '' : (isLast ? '    ' : '│   '));
+          // Use &nbsp; for HTML spaces to ensure proper rendering
+          const childPrefix = prefix + (depth === 0 ? '' : (isLast ? '&nbsp;&nbsp;&nbsp;&nbsp;' : '│&nbsp;&nbsp;&nbsp;'));
           result += (window as any).debugLoro.generateTreeHTML(nodes, child, childPrefix, isLastChild, depth + 1);
         });
       }
@@ -315,9 +366,7 @@ export function createBinding(
 
       console.log('🟢 Loro Tree:', tree.toJSON());
       
-      console.log('🟢 Lexical State:', {
-        state: binding.editor.getEditorState().toJSON(),
-      });
+      console.log('🟢 Lexical State:', binding.editor.getEditorState().toJSON());
       
       const treeHTML = (window as any).debugLoro.generateTreeHTML(nodes);
       
