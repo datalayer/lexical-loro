@@ -6,6 +6,8 @@
  */
 
 import { NodeKey } from 'lexical';
+import { Binding } from '../Bindings';
+import { LoroTree } from 'loro-crdt/bundler/loro_wasm';
 
 // Root Node Mutators
 export * from './RootNodeMutators';
@@ -33,8 +35,8 @@ export { mutateDecoratorNode } from './DecoratorNodeMutators';
  * Type definitions for mutator options
  */
 export interface BaseMutatorOptions {
-  binding: any;
-  tree: any; // LoroTree
+  binding: Binding;
+  tree: LoroTree;
   peerId: number;
 }
 

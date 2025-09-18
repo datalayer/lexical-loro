@@ -13,11 +13,9 @@ export class NodeMapper {
   // Maps Loro TreeID to Lexical NodeKey
   private loroToLexical = new Map<TreeID, NodeKey>();
   
-  private binding: Binding;
   private tree: LoroTree;
 
   constructor(binding: Binding) {
-    this.binding = binding;
     this.tree = binding.tree;
   }
 
@@ -146,6 +144,14 @@ export class NodeMapper {
     
     // Get the TreeID from the created node
     const treeId: TreeID = treeNode.id;
+    
+    // Debug logging for parent relationship issues
+    if (parentTreeId) {
+      const actualParent = treeNode.parent();
+      if (!actualParent || actualParent.id !== parentTreeId) {
+        console.warn(`⚠️  Parent relationship not set correctly for ${nodeKey}: expected ${parentTreeId}, got ${actualParent?.id || 'None'}`);
+      }
+    }
     
     // Store basic metadata
     treeNode.data.set('lexicalKey', nodeKey);

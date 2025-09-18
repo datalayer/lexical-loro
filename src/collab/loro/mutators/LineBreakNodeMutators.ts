@@ -2,6 +2,7 @@ import { TreeID, LoroTree } from 'loro-crdt';
 import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { Binding } from '../Bindings';
 
 /**
  * LineBreakNode Mutators for Loro Tree Collaboration
@@ -15,7 +16,7 @@ import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData
  */
 
 export interface LineBreakNodeMutatorOptions {
-  binding: any;
+  binding: Binding;
   tree: LoroTree;
   peerId: number;
 }
@@ -27,21 +28,26 @@ export function createLineBreakNodeInLoro(
   nodeKey: NodeKey,
   parentId?: TreeID,
   index?: number,
-  lexicalNode?: any, // The actual Lexical LineBreakNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: LineBreakNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
   
-  // Use mapper to get or create the tree node
+  // Use mapper to get or create the tree node (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(
     nodeKey,
-    lexicalNode,
+    undefined, // don't pass lexicalNode to avoid context issues
     parentId,
     index
   );
   
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
+  }
+  
   // Store LineBreakNode metadata (minimal since it's just a line break)
-  // nodeType is now handled by LexicalNodeData in mapper
+  treeNode.data.set('elementType', 'linebreak'); // Set element type for debug panel
   
   // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
@@ -56,19 +62,24 @@ export function updateLineBreakNodeInLoro(
   nodeKey: NodeKey,
   parentId?: TreeID,
   index?: number,
-  lexicalNode?: any, // The actual Lexical LineBreakNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: LineBreakNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
   const { tree } = options!;
   
   // Get the existing Loro node from the mapper
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   if (!treeNode) {
     return;
   }
   
   const treeId = treeNode.id;
+  
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
+  }
   
   // Move the node if parent or position changed
   if (parentId !== undefined || index !== undefined) {
@@ -76,18 +87,8 @@ export function updateLineBreakNodeInLoro(
   }
   
   // Update metadata
+  treeNode.data.set('elementType', 'linebreak'); // Ensure element type is set for debug panel
   treeNode.data.set('lastUpdated', Date.now());
-  
-  // Update the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const lexicalNodeData: LexicalNodeData = { lexicalNode };
-      const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
-      treeNode.data.set('lexical', serializedData);
-    } catch (error) {
-      console.warn('Failed to serialize LineBreak LexicalNodeData during update:', error);
-    }
-  }
 }
 
 /**
@@ -234,18 +235,27 @@ export function mutateLineBreakNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isLineBreakNode(currentNode)) {
-        // Get parent and index for proper positioning using editor state context
-        const { parentId, index } = update.editorState.read(() => {
+        // Get parent, positioning, and serialized data using editor state context
+        const { parentId, index, serializedNodeData } = update.editorState.read(() => {
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
           const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
-          return { parentId, index };
+          // Serialize node data within editor context where node methods are available
+          let serializedNodeData: string | undefined;
+          try {
+            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          } catch (error) {
+            console.warn('Failed to serialize node data in mutateLineBreakNode created:', error);
+          }
+          
+          return { parentId, index, serializedNodeData };
         });
         
-        createLineBreakNodeInLoro(nodeKey, parentId, index, currentNode, options);
+        createLineBreakNodeInLoro(nodeKey, parentId, index, serializedNodeData, options);
       }
       break;
     }
@@ -253,18 +263,27 @@ export function mutateLineBreakNode(
     case 'updated': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isLineBreakNode(currentNode)) {
-        // Check if position changed using editor state context
-        const { parentId, index } = update.editorState.read(() => {
+        // Check if position changed and serialize data using editor state context
+        const { parentId, index, serializedNodeData } = update.editorState.read(() => {
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
           const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
-          return { parentId, index };
+          // Serialize node data within editor context where node methods are available
+          let serializedNodeData: string | undefined;
+          try {
+            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          } catch (error) {
+            console.warn('Failed to serialize node data in mutateLineBreakNode updated:', error);
+          }
+          
+          return { parentId, index, serializedNodeData };
         });
         
-        updateLineBreakNodeInLoro(nodeKey, parentId, index, currentNode, options);
+        updateLineBreakNodeInLoro(nodeKey, parentId, index, serializedNodeData, options);
       }
       break;
     }

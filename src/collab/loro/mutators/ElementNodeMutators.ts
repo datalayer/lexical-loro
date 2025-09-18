@@ -9,6 +9,7 @@ import {
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { Binding } from '../Bindings';
 
 /**
  * ElementNode Mutators for Loro Tree Collaboration
@@ -22,7 +23,7 @@ import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData
  */
 
 export interface ElementNodeMutatorOptions {
-  binding: any;
+  binding: Binding;
   tree: LoroTree;
   peerId: number;
 }
@@ -36,13 +37,18 @@ export function createElementNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  lexicalNode?: any, // The actual Lexical ElementNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: ElementNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
   
-  // Use mapper to get or create the tree node (pass lexicalNode for data storage)
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, lexicalNode, parentId, index);
+  // Use mapper to get or create the tree node (don't pass lexicalNode to avoid context issues)
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined, parentId, index);
+  
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
+  }
   
   // Store ElementNode metadata (elementType still useful for debugging/logging)
   treeNode.data.set('elementType', elementType);
@@ -67,7 +73,7 @@ export function updateElementNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  lexicalNode?: any, // The actual Lexical ElementNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: ElementNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
@@ -75,11 +81,9 @@ export function updateElementNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data if lexical node is provided
-  if (lexicalNode) {
-    const lexicalNodeData: LexicalNodeData = { lexicalNode };
-    const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
-    treeNode.data.set('lexical', serializedData);
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
   }
   
   // Update element type if provided
@@ -341,9 +345,10 @@ export function mutateElementNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isElementNode(currentNode)) {
-        // Use editorState.read() to safely access node methods
+        // Serialize node data and collect metadata within editor context
         let parent: any, parentId: TreeID | undefined, index: number;
         let elementType: string, metadata: Record<string, any> = {};
+        let serializedNodeData: string;
         
         update.editorState.read(() => {
           // Get parent and index for proper positioning within editor state context
@@ -366,10 +371,14 @@ export function mutateElementNode(
           if (typeof currentNode.getDirection === 'function') {
             metadata.direction = currentNode.getDirection();
           }
+          
+          // Serialize node data within editor context where node methods are available
+          const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+          serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
         });
         
         // Create the node in Loro after safely reading from editor state
-        createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, currentNode, options);
+        createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, serializedNodeData, options);
       }
       break;
     }
@@ -380,6 +389,9 @@ export function mutateElementNode(
         // Use editorState.read() to safely access node methods
         let parent: any, parentId: TreeID | undefined, index: number;
         let elementType: string, metadata: Record<string, any> = {};
+        
+        // Serialize node data and collect metadata within editor context
+        let serializedNodeData: string;
         
         update.editorState.read(() => {
           // Get current position within editor state context
@@ -400,10 +412,14 @@ export function mutateElementNode(
           if (typeof currentNode.getDirection === 'function') {
             metadata.direction = currentNode.getDirection();
           }
+          
+          // Serialize node data within editor context where node methods are available
+          const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+          serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
         });
         
         // Update the node in Loro after safely reading from editor state
-        updateElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, currentNode, options);
+        updateElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, serializedNodeData, options);
       }
       break;
     }

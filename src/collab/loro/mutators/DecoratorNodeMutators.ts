@@ -7,6 +7,7 @@ import {
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { Binding } from '../Bindings';
 
 /**
  * DecoratorNode Mutators for Loro Tree Collaboration
@@ -20,7 +21,7 @@ import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData
  */
 
 export interface DecoratorNodeMutatorOptions {
-  binding: any;
+  binding: Binding;
   tree: LoroTree;
   peerId: number;
 }
@@ -35,20 +36,26 @@ export function createDecoratorNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  lexicalNode?: any, // The actual Lexical DecoratorNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: DecoratorNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
   
-  // Use mapper to get or create the tree node
+  // Use mapper to get or create the tree node (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(
     nodeKey,
-    lexicalNode,
+    undefined, // don't pass lexicalNode to avoid context issues
     parentId,
     index
   );
   
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
+  }
+  
   // Store DecoratorNode metadata (useful for debugging/logging)
+  treeNode.data.set('elementType', 'decorator'); // Set element type for debug panel
   treeNode.data.set('decoratorType', decoratorType);
   treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
   
@@ -74,19 +81,24 @@ export function updateDecoratorNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  lexicalNode?: any, // The actual Lexical DecoratorNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: DecoratorNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
   
   // Get the existing Loro node from the mapper
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   if (!treeNode) {
     return;
   }
   
   const { tree } = options!;
   const treeId = treeNode.id;
+  
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
+  }
   
   // Update decorator type if provided
   if (decoratorType !== undefined) {
@@ -110,17 +122,8 @@ export function updateDecoratorNodeInLoro(
     tree.move(treeId, parentId, index);
   }
   
-  // Update the exported Lexical node data
-  if (lexicalNode) {
-    try {
-      const lexicalNodeData: LexicalNodeData = { lexicalNode };
-      const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
-      treeNode.data.set('lexical', serializedData);
-    } catch (error) {
-      console.warn('Failed to serialize Decorator LexicalNodeData during update:', error);
-    }
-  }
-  
+  // Update metadata
+  treeNode.data.set('elementType', 'decorator'); // Ensure element type is set for debug panel
   treeNode.data.set('lastUpdated', Date.now());
 }
 
@@ -401,8 +404,8 @@ export function mutateDecoratorNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isDecoratorNode(currentNode)) {
-        // Get node data using editor state context
-        const { parentId, index, decoratorType, decoratorData, metadata } = update.editorState.read(() => {
+        // Get node data and serialized data using editor state context
+        const { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData } = update.editorState.read(() => {
           // Get parent and index for proper positioning
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
@@ -421,10 +424,19 @@ export function mutateDecoratorNode(
             metadata.isInline = currentNode.isInline();
           }
           
-          return { parentId, index, decoratorType, decoratorData, metadata };
+          // Serialize node data within editor context where node methods are available
+          let serializedNodeData: string | undefined;
+          try {
+            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          } catch (error) {
+            console.warn('Failed to serialize node data in mutateDecoratorNode created:', error);
+          }
+          
+          return { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData };
         });
         
-        createDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, currentNode, options);
+        createDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, serializedNodeData, options);
       }
       break;
     }
@@ -432,8 +444,8 @@ export function mutateDecoratorNode(
     case 'updated': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isDecoratorNode(currentNode)) {
-        // Get node data using editor state context
-        const { parentId, index, decoratorType, decoratorData, metadata } = update.editorState.read(() => {
+        // Get node data and serialized data using editor state context
+        const { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData } = update.editorState.read(() => {
           // Get current position
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
@@ -452,10 +464,19 @@ export function mutateDecoratorNode(
             metadata.isInline = currentNode.isInline();
           }
           
-          return { parentId, index, decoratorType, decoratorData, metadata };
+          // Serialize node data within editor context where node methods are available
+          let serializedNodeData: string | undefined;
+          try {
+            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          } catch (error) {
+            console.warn('Failed to serialize node data in mutateDecoratorNode updated:', error);
+          }
+          
+          return { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData };
         });
         
-        updateDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, currentNode, options);
+        updateDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, serializedNodeData, options);
       }
       break;
     }

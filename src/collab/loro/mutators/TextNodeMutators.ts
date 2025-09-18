@@ -9,6 +9,7 @@ import {
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { Binding } from '../Bindings';
 
 /**
  * TextNode Mutators for Loro Tree Collaboration
@@ -22,7 +23,7 @@ import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData
  */
 
 export interface TextNodeMutatorOptions {
-  binding: any;
+  binding: Binding;
   tree: LoroTree;
   peerId: number;
 }
@@ -37,25 +38,36 @@ export function createTextNodeInLoro(
   mode?: string,
   parentId?: TreeID,
   index?: number,
-  lexicalNode?: any, // The actual Lexical TextNode instance
+  serializedNodeData?: string, // Pre-serialized lexical node data
   options?: TextNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
   
+  // Debug logging for text node creation issues
+  if (!parentId) {
+    console.warn(`⚠️  Creating TextNode ${nodeKey} without parent in Loro tree`);
+  }
+  
   // Use mapper to get or create the tree node
+  // Note: We can't pass lexicalNode directly due to context issues, but parentId should be sufficient
   const treeNode = mapper.getLoroNodeByLexicalKey(
     nodeKey,
-    lexicalNode,
+    undefined, // don't pass lexicalNode to avoid context issues  
     parentId,
     index
   );
   
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
+  }
+  
   // Store TextNode metadata (these are still useful for debugging/logging)
+  treeNode.data.set('elementType', 'text'); // Set element type for debug panel
   treeNode.data.set('textContent', textContent);
   treeNode.data.set('format', format || 0);
   treeNode.data.set('mode', mode || 'normal');
   
-  // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
   return treeNode.id;
 }
@@ -68,22 +80,21 @@ export function updateTextNodeInLoro(
   newTextContent?: string,
   format?: number,
   mode?: string,
-  lexicalNode?: any, // The actual Lexical TextNode instance
+  serializedNodeData?: string, // Serialized lexical node data
   options?: TextNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
   
-  // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
+  // Get the existing tree node using the mapper
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data if lexical node is provided
-  if (lexicalNode) {
-    const lexicalNodeData: LexicalNodeData = { lexicalNode };
-    const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
-    treeNode.data.set('lexical', serializedData);
+  // Store complete lexical node data if serialized data is provided
+  if (serializedNodeData) {
+    treeNode.data.set('lexical', serializedNodeData);
   }
   
   // Update metadata
+  treeNode.data.set('elementType', 'text'); // Ensure element type is set for debug panel
   if (newTextContent !== undefined) {
     treeNode.data.set('textContent', newTextContent);
   }
@@ -334,21 +345,35 @@ export function mutateTextNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isTextNode(currentNode)) {
-        // Get parent and index for proper positioning using editor state context
-        const { parent, parentId, index, textContent, format, mode } = update.editorState.read(() => {
+        // Get parent, positioning, content, and serialized data using editor state context
+        const { parent, parentId, index, textContent, format, mode, serializedNodeData } = update.editorState.read(() => {
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
           const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          
+          // Debug logging for parent-child relationships
+          if (!parentId && parent) {
+            console.warn(`⚠️  TextNode ${nodeKey}: Parent ${parent.getKey()} (${parent.getType()}) not found in Loro tree`);
+          }
           const index = currentNode.getIndexWithinParent();
           const textContent = currentNode.getTextContent();
           const format = currentNode.getFormat();
           const mode = currentNode.getMode();
           
-          return { parent, parentId, index, textContent, format, mode };
+          // Serialize node data within editor context where node methods are available
+          let serializedNodeData: string | undefined;
+          try {
+            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          } catch (error) {
+            console.warn('Failed to serialize node data in mutateTextNode created:', error);
+          }
+          
+          return { parent, parentId, index, textContent, format, mode, serializedNodeData };
         });
         
-        createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, currentNode, options);
+        createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, serializedNodeData, options);
       }
       break;
     }
@@ -356,16 +381,25 @@ export function mutateTextNode(
     case 'updated': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isTextNode(currentNode)) {
-        // Get updated text content and formatting using editor state context
-        const { textContent, format, mode } = update.editorState.read(() => {
+        // Get updated text content, formatting, and serialized data using editor state context
+        const { textContent, format, mode, serializedNodeData } = update.editorState.read(() => {
           const textContent = currentNode.getTextContent();
           const format = currentNode.getFormat();
           const mode = currentNode.getMode();
           
-          return { textContent, format, mode };
+          // Serialize node data within editor context where node methods are available
+          let serializedNodeData: string | undefined;
+          try {
+            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
+            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          } catch (error) {
+            console.warn('Failed to serialize node data in mutateTextNode:', error);
+          }
+          
+          return { textContent, format, mode, serializedNodeData };
         });
         
-        updateTextNodeInLoro(nodeKey, textContent, format, mode, currentNode, options);
+        updateTextNodeInLoro(nodeKey, textContent, format, mode, serializedNodeData, options);
       }
       break;
     }

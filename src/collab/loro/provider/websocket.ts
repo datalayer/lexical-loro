@@ -497,13 +497,13 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
     sendMessage(ws, message)
   } else {
-    console.warn('❌ [BROADCAST] WebSocket not ready for sending');
+    console.log('❌ [BROADCAST] WebSocket not ready for sending');
   } 
   
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, JSON.stringify(message), provider)
   } else {
-    console.warn('📻 [BROADCAST] BroadcastChannel not connected')
+    console.log('📻 [BROADCAST] BroadcastChannel not connected')
   }
 }
 
