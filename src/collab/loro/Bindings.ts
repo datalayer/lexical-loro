@@ -371,21 +371,82 @@ export function createBinding(
       const treeHTML = (window as any).debugLoro.generateTreeHTML(nodes);
       
       const debugDiv = document.getElementById('debug-loro') || document.createElement('div');
+      const existingDiv = document.getElementById('debug-loro');
+      
+      // Preserve current position if panel already exists
+      let currentLeft = '10px';
+      let currentTop = '10px';
+      if (existingDiv) {
+        currentLeft = existingDiv.style.left || '10px';
+        currentTop = existingDiv.style.top || '10px';
+      }
+      
       debugDiv.id = 'debug-loro';
-      debugDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.95); color: #00ff00; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.5); border: 1px solid #00ff00;';
+      debugDiv.style.cssText = `position: fixed; top: ${currentTop}; left: ${currentLeft}; background: rgba(0,0,0,0.95); color: #00ff00; padding: 0; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; box-shadow: 0 4px 8px rgba(0,0,0,0.5); border: 1px solid #00ff00; user-select: none;`;
+      
+      // Add drag functionality if not already added
+      if (!debugDiv.classList.contains('draggable-initialized')) {
+        debugDiv.classList.add('draggable-initialized');
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let startLeft = 0;
+        let startTop = 0;
+        
+        debugDiv.addEventListener('mousedown', (e: MouseEvent) => {
+          // Only start drag if clicking on the header area
+          const target = e.target as HTMLElement;
+          const dragHandle = debugDiv.querySelector('.debug-drag-handle') as HTMLElement;
+          if (!dragHandle || !dragHandle.contains(target)) return;
+          
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          const rect = debugDiv.getBoundingClientRect();
+          startLeft = rect.left;
+          startTop = rect.top;
+          
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          e.preventDefault();
+        });
+        
+        function onMouseMove(e: MouseEvent) {
+          if (!isDragging) return;
+          
+          const deltaX = e.clientX - startX;
+          const deltaY = e.clientY - startY;
+          const newLeft = Math.max(0, Math.min(window.innerWidth - debugDiv.offsetWidth, startLeft + deltaX));
+          const newTop = Math.max(0, Math.min(window.innerHeight - debugDiv.offsetHeight, startTop + deltaY));
+          
+          debugDiv.style.left = newLeft + 'px';
+          debugDiv.style.top = newTop + 'px';
+        }
+        
+        function onMouseUp() {
+          isDragging = false;
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        }
+      }
+      
       debugDiv.innerHTML = `
-        <div style="color: #00ff88; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding-bottom: 5px;">🟢 LORO TREE (v1)</div>
-        <div style="color: #00ffaa; margin-bottom: 8px;">Total nodes: ${nodes.length}</div>
-        <div style="color: #00ff66; margin-bottom: 8px;">Peer ID: ${binding.doc.peerIdStr.slice(0, 8)}...</div>
-        <div style="color: #00ffdd; margin-bottom: 10px;">Time: ${new Date().toLocaleTimeString()}</div>
-        <div style="border-top: 1px solid #444; padding-top: 8px; line-height: 1.4; font-family: 'Courier New', monospace;">
-          ${treeHTML}
+        <div class="debug-drag-handle" style="color: #00ff88; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding: 15px 15px 5px 15px; cursor: move; background: linear-gradient(90deg, rgba(0,255,136,0.1), transparent);">
+          🟢 LORO TREE (v1) <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
         </div>
-        <div style="margin-top: 10px; font-size: 10px; color: #666;">
-          <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
-          <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
-          <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
-          <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;">❌ Close</span>
+        <div style="padding: 0 15px 15px 15px; overflow-y: auto; max-height: calc(80vh - 50px);">
+          <div style="color: #00ffaa; margin-bottom: 8px;">Total nodes: ${nodes.length}</div>
+          <div style="color: #00ff66; margin-bottom: 8px;">Peer ID: ${binding.doc.peerIdStr.slice(0, 8)}...</div>
+          <div style="color: #00ffdd; margin-bottom: 10px;">Time: ${new Date().toLocaleTimeString()}</div>
+          <div style="border-top: 1px solid #444; padding-top: 8px; line-height: 1.4; font-family: 'Courier New', monospace;">
+            ${treeHTML}
+          </div>
+          <div style="margin-top: 10px; font-size: 10px; color: #666;">
+            <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
+            <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
+            <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
+            <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;">❌ Close</span>
+          </div>
         </div>
       `;
       document.body.appendChild(debugDiv);
