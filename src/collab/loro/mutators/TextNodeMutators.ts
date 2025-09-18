@@ -5,7 +5,7 @@ import {
   $isTextNode,
   TextFormatType
 } from 'lexical';
-import { getNodeMapper } from '../utils/Nodes';
+import { getNodeMapper } from '../mappings/NodesMapper';
 
 /**
  * TextNode Mutators for Loro Tree Collaboration

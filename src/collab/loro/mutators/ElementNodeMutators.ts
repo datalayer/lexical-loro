@@ -3,11 +3,9 @@ import {
   $createParagraphNode, 
   ElementNode, 
   $isElementNode,
-  LexicalNode,
   ElementFormatType, 
-  NodeKey
 } from 'lexical';
-import { getNodeMapper } from '../utils/Nodes';
+import { getNodeMapper } from '../mappings/NodesMapper';
 
 /**
  * ElementNode Mutators for Loro Tree Collaboration

@@ -1,6 +1,6 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, NodeKey } from 'lexical';
-import { getNodeMapper } from '../utils/Nodes';
+import { $createLineBreakNode, LineBreakNode, $isLineBreakNode } from 'lexical';
+import { getNodeMapper } from '../mappings/NodesMapper';
 
 /**
  * LineBreakNode Mutators for Loro Tree Collaboration

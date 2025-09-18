@@ -1,6 +1,6 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $getRoot, NodeKey, RootNode } from 'lexical';
-import { getNodeMapper } from '../utils/Nodes';
+import { $getRoot, RootNode } from 'lexical';
+import { getNodeMapper } from '../mappings/NodesMapper';
 
 /**
  * RootNode Mutators for Loro Tree Collaboration

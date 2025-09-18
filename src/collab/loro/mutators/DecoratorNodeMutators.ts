@@ -2,9 +2,8 @@ import { TreeID, LoroTree } from 'loro-crdt';
 import { 
   DecoratorNode, 
   $isDecoratorNode,
-  LexicalNode
 } from 'lexical';
-import { getNodeMapper } from '../utils/Nodes';
+import { getNodeMapper } from '../mappings/NodesMapper';
 
 /**
  * DecoratorNode Mutators for Loro Tree Collaboration

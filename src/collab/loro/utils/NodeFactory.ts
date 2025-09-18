@@ -8,7 +8,6 @@ import { createDecoratorNodeFromLoro } from '../mutators/DecoratorNodeMutators';
 
 /**
  * Factory function to create Lexical nodes from Loro TreeID
- * This acts as a centralized dispatcher to avoid circular dependencies
  */
 export function createLexicalNodeFromLoro(
   treeId: TreeID, 
