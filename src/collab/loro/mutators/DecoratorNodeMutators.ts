@@ -3,6 +3,7 @@ import {
   DecoratorNode, 
   $isDecoratorNode,
   UpdateListenerPayload,
+  NodeKey
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
@@ -28,7 +29,7 @@ export interface DecoratorNodeMutatorOptions {
  * Create DecoratorNode in Loro tree
  */
 export function createDecoratorNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   decoratorType: string, // 'image', 'video', 'tweet', 'chart', etc.
   decoratorData: any, // The data needed to render the decorator
   parentId?: TreeID,
@@ -41,7 +42,7 @@ export function createDecoratorNodeInLoro(
   
   // Use mapper to get or create the tree node
   const treeNode = mapper.getLoroNodeByLexicalKey(
-    nodeKey.toString(),
+    nodeKey,
     lexicalNode,
     parentId,
     index
@@ -67,7 +68,7 @@ export function createDecoratorNodeInLoro(
  * Update DecoratorNode in Loro tree
  */
 export function updateDecoratorNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   decoratorType?: string,
   decoratorData?: any,
   parentId?: TreeID,
@@ -76,68 +77,64 @@ export function updateDecoratorNodeInLoro(
   lexicalNode?: any, // The actual Lexical DecoratorNode instance
   options?: DecoratorNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${nodeKey}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (tree.has(treeId)) {
-    const treeNode = tree.getNodeByID(treeId);
-    
-    if (treeNode) {
-      // Update decorator type if provided
-      if (decoratorType !== undefined) {
-        treeNode.data.set('decoratorType', decoratorType);
-      }
-      
-      // Update decorator data if provided
-      if (decoratorData !== undefined) {
-        treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
-      }
-      
-      // Update metadata if provided
-      if (metadata) {
-        Object.entries(metadata).forEach(([key, value]) => {
-          treeNode.data.set(key, value);
-        });
-      }
-      
-      // Move the node if parent or position changed
-      if (parentId !== undefined || index !== undefined) {
-        tree.move(treeId, parentId, index);
-      }
-      
-      // Update the exported Lexical node data
-      if (lexicalNode) {
-        try {
-          const exportedNode = lexicalNode.exportJSON();
-          treeNode.data.set('node', JSON.stringify(exportedNode));
-        } catch (error) {
-          console.warn('Failed to export Decorator node JSON during update:', error);
-          treeNode.data.set('node', JSON.stringify({ 
-            type: decoratorType || 'decorator', 
-            key: nodeKey,
-            decorator: decoratorData
-          }));
-        }
-      }
-      
-      treeNode.data.set('lastUpdated', Date.now());
+  // Get the existing Loro node from the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
+  if (!treeNode) {
+    return;
+  }
+  
+  const { tree } = options!;
+  const treeId = treeNode.id;
+  
+  // Update decorator type if provided
+  if (decoratorType !== undefined) {
+    treeNode.data.set('decoratorType', decoratorType);
+  }
+  
+  // Update decorator data if provided
+  if (decoratorData !== undefined) {
+    treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
+  }
+  
+  // Update metadata if provided
+  if (metadata) {
+    Object.entries(metadata).forEach(([key, value]) => {
+      treeNode.data.set(key, value);
+    });
+  }
+  
+  // Move the node if parent or position changed
+  if (parentId !== undefined || index !== undefined) {
+    tree.move(treeId, parentId, index);
+  }
+  
+  // Update the exported Lexical node data
+  if (lexicalNode) {
+    try {
+      const lexicalNodeData: LexicalNodeData = { lexicalNode };
+      const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+      treeNode.data.set('lexical', serializedData);
+    } catch (error) {
+      console.warn('Failed to serialize Decorator LexicalNodeData during update:', error);
     }
   }
+  
+  treeNode.data.set('lastUpdated', Date.now());
 }
 
 /**
  * Delete DecoratorNode from Loro tree
  */
 export function deleteDecoratorNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: DecoratorNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${nodeKey}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (tree.has(treeId)) {
-    tree.delete(treeId);
-  }
+  // Use the mapper's delete method which handles TreeID lookup internally
+  mapper.deleteMapping(nodeKey);
 }
 
 /**
@@ -395,30 +392,37 @@ class GenericDecoratorNode extends DecoratorNode<any> {
 export function mutateDecoratorNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: DecoratorNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isDecoratorNode(currentNode)) {
-        // Get parent and index for proper positioning
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
-        
-        // Get decorator type and data
-        const decoratorType = currentNode.getType();
-        // For DecoratorNode, we'll store the node's internal data instead of calling decorate
-        const decoratorData = (currentNode as any).__decoratorData || {};
-        
-        // Collect additional metadata
-        const metadata: Record<string, any> = {};
-        if (typeof currentNode.isInline === 'function') {
-          metadata.isInline = currentNode.isInline();
-        }
+        // Get node data using editor state context
+        const { parentId, index, decoratorType, decoratorData, metadata } = update.editorState.read(() => {
+          // Get parent and index for proper positioning
+          const parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const index = currentNode.getIndexWithinParent();
+          
+          // Get decorator type and data
+          const decoratorType = currentNode.getType();
+          // For DecoratorNode, we'll store the node's internal data instead of calling decorate
+          const decoratorData = (currentNode as any).__decoratorData || {};
+          
+          // Collect additional metadata
+          const metadata: Record<string, any> = {};
+          if (typeof currentNode.isInline === 'function') {
+            metadata.isInline = currentNode.isInline();
+          }
+          
+          return { parentId, index, decoratorType, decoratorData, metadata };
+        });
         
         createDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, currentNode, options);
       }
@@ -426,23 +430,30 @@ export function mutateDecoratorNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isDecoratorNode(currentNode)) {
-        // Get current position
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
-        
-        // Get updated decorator type and data
-        const decoratorType = currentNode.getType();
-        // For DecoratorNode, we'll store the node's internal data instead of calling decorate
-        const decoratorData = (currentNode as any).__decoratorData || {};
-        
-        // Collect metadata
-        const metadata: Record<string, any> = {};
-        if (typeof currentNode.isInline === 'function') {
-          metadata.isInline = currentNode.isInline();
-        }
+        // Get node data using editor state context
+        const { parentId, index, decoratorType, decoratorData, metadata } = update.editorState.read(() => {
+          // Get current position
+          const parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const index = currentNode.getIndexWithinParent();
+          
+          // Get updated decorator type and data
+          const decoratorType = currentNode.getType();
+          // For DecoratorNode, we'll store the node's internal data instead of calling decorate
+          const decoratorData = (currentNode as any).__decoratorData || {};
+          
+          // Collect metadata
+          const metadata: Record<string, any> = {};
+          if (typeof currentNode.isInline === 'function') {
+            metadata.isInline = currentNode.isInline();
+          }
+          
+          return { parentId, index, decoratorType, decoratorData, metadata };
+        });
         
         updateDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, currentNode, options);
       }

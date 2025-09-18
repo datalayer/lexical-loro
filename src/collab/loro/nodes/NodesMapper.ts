@@ -141,13 +141,11 @@ export class NodeMapper {
     parentTreeId?: TreeID,
     index?: number
   ): TreeID {
-    // Generate a unique TreeID - using timestamp + random for uniqueness
-    const peerId = Number(this.binding.doc.peerId);
-    const uniqueId = Date.now() + Math.floor(Math.random() * 1000);
-    const treeId: TreeID = `${uniqueId}@${peerId}`;
-
-    // Create the tree node
+    // Create the tree node first
     const treeNode = this.tree.createNode(parentTreeId, index);
+    
+    // Get the TreeID from the created node
+    const treeId: TreeID = treeNode.id;
     
     // Store basic metadata
     treeNode.data.set('lexicalKey', nodeKey);
@@ -197,6 +195,13 @@ export class NodeMapper {
         this.tree.delete(treeId);
       }
     }
+  }
+
+  /**
+   * Get TreeID by Lexical NodeKey (without creating if not found)
+   */
+  getTreeIdByLexicalKey(nodeKey: NodeKey): TreeID | undefined {
+    return this.lexicalToLoro.get(nodeKey);
   }
 
   /**

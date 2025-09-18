@@ -34,24 +34,22 @@ export function syncLexicalToLoro(
 
       nodeMap.forEach((mutation, nodeKey) => {
 
-        const nodeKeyNumber = toKeyNodeNumber(nodeKey);
-
-        console.log('-------DLA', nodeKeyNumber)
+        console.log('-------DLA', nodeKey)
 
         if (isClassExtending(Klass, RootNode)) {
-          mutateRootNode(update, mutation, nodeKeyNumber, mutatorOptions);
+          mutateRootNode(update, mutation, nodeKey, mutatorOptions);
         }
         else if (isClassExtending(Klass, LineBreakNode)) {
-          mutateLineBreakNode(update, mutation, nodeKeyNumber, mutatorOptions);
+          mutateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
         }
         else if (isClassExtending(Klass, ElementNode)) {
-          mutateElementNode(update, mutation, nodeKeyNumber, mutatorOptions);
+          mutateElementNode(update, mutation, nodeKey, mutatorOptions);
         }
         else if (isClassExtending(Klass, TextNode)) {
-          mutateTextNode(update, mutation, nodeKeyNumber, mutatorOptions);
+          mutateTextNode(update, mutation, nodeKey, mutatorOptions);
         }
         else if (isClassExtending(Klass, DecoratorNode)) {
-          mutateDecoratorNode(update, mutation, nodeKeyNumber, mutatorOptions);
+          mutateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
         } else {
           throw new Error(`Unsupported node type for key: ${nodeKey}, mutation: ${mutation}. Node class: ${Klass.name}`);
         }

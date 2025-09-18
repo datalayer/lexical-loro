@@ -1,5 +1,5 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload } from 'lexical';
+import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
@@ -24,7 +24,7 @@ export interface LineBreakNodeMutatorOptions {
  * Create LineBreakNode in Loro tree
  */
 export function createLineBreakNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   parentId?: TreeID,
   index?: number,
   lexicalNode?: any, // The actual Lexical LineBreakNode instance
@@ -34,7 +34,7 @@ export function createLineBreakNodeInLoro(
   
   // Use mapper to get or create the tree node
   const treeNode = mapper.getLoroNodeByLexicalKey(
-    nodeKey.toString(),
+    nodeKey,
     lexicalNode,
     parentId,
     index
@@ -53,35 +53,39 @@ export function createLineBreakNodeInLoro(
  * Note: LineBreakNodes typically don't change much since they represent '\n'
  */
 export function updateLineBreakNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   parentId?: TreeID,
   index?: number,
   lexicalNode?: any, // The actual Lexical LineBreakNode instance
   options?: LineBreakNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options!;
-  const treeId: TreeID = `${nodeKey}@${peerId}`;
+  const mapper = getNodeMapper();
+  const { tree } = options!;
   
-  if (tree.has(treeId)) {
-    // Move the node if parent or position changed
-    if (parentId !== undefined || index !== undefined) {
-      tree.move(treeId, parentId, index);
-    }
-    
-    // Update metadata
-    const treeNode = tree.getNodeByID(treeId);
-    if (treeNode) {
-      treeNode.data.set('lastUpdated', Date.now());
-      
-      // Update the exported Lexical node data
-      if (lexicalNode) {
-        try {
-          const exportedNode = lexicalNode.exportJSON();
-          treeNode.data.set('node', JSON.stringify(exportedNode));
-        } catch (error) {
-          console.warn('Failed to export LineBreak node JSON during update:', error);
-        }
-      }
+  // Get the existing Loro node from the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
+  if (!treeNode) {
+    return;
+  }
+  
+  const treeId = treeNode.id;
+  
+  // Move the node if parent or position changed
+  if (parentId !== undefined || index !== undefined) {
+    tree.move(treeId, parentId, index);
+  }
+  
+  // Update metadata
+  treeNode.data.set('lastUpdated', Date.now());
+  
+  // Update the exported Lexical node data
+  if (lexicalNode) {
+    try {
+      const lexicalNodeData: LexicalNodeData = { lexicalNode };
+      const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+      treeNode.data.set('lexical', serializedData);
+    } catch (error) {
+      console.warn('Failed to serialize LineBreak LexicalNodeData during update:', error);
     }
   }
 }
@@ -90,15 +94,13 @@ export function updateLineBreakNodeInLoro(
  * Delete LineBreakNode from Loro tree
  */
 export function deleteLineBreakNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: LineBreakNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${nodeKey}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (tree.has(treeId)) {
-    tree.delete(treeId);
-  }
+  // Use the mapper's delete method which handles TreeID lookup internally
+  mapper.deleteMapping(nodeKey);
 }
 
 /**
@@ -223,19 +225,25 @@ export function getLineBreakNodeDataFromTree(treeId: TreeID, tree: LoroTree): an
 export function mutateLineBreakNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: LineBreakNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isLineBreakNode(currentNode)) {
-        // Get parent and index for proper positioning
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
+        // Get parent and index for proper positioning using editor state context
+        const { parentId, index } = update.editorState.read(() => {
+          const parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const index = currentNode.getIndexWithinParent();
+          
+          return { parentId, index };
+        });
         
         createLineBreakNodeInLoro(nodeKey, parentId, index, currentNode, options);
       }
@@ -243,12 +251,18 @@ export function mutateLineBreakNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isLineBreakNode(currentNode)) {
-        // Check if position changed
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
+        // Check if position changed using editor state context
+        const { parentId, index } = update.editorState.read(() => {
+          const parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const index = currentNode.getIndexWithinParent();
+          
+          return { parentId, index };
+        });
         
         updateLineBreakNodeInLoro(nodeKey, parentId, index, currentNode, options);
       }

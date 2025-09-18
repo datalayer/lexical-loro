@@ -4,7 +4,8 @@ import {
   ElementNode, 
   $isElementNode,
   ElementFormatType,
-  UpdateListenerPayload, 
+  UpdateListenerPayload,
+  NodeKey
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
@@ -30,7 +31,7 @@ export interface ElementNodeMutatorOptions {
  * Create ElementNode in Loro tree
  */
 export function createElementNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   elementType: string, // 'paragraph', 'heading', 'quote', 'link', etc.
   parentId?: TreeID,
   index?: number,
@@ -40,13 +41,8 @@ export function createElementNodeInLoro(
 ): TreeID {
   const mapper = getNodeMapper();
   
-  // Use mapper to get or create the tree node
-  const treeNode = mapper.getLoroNodeByLexicalKey(
-    nodeKey.toString(),
-    lexicalNode,
-    parentId,
-    index
-  );
+  // Use mapper to get or create the tree node (pass lexicalNode for data storage)
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, lexicalNode, parentId, index);
   
   // Store ElementNode metadata (elementType still useful for debugging/logging)
   treeNode.data.set('elementType', elementType);
@@ -58,7 +54,6 @@ export function createElementNodeInLoro(
     });
   }
   
-  // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
   return treeNode.id;
 }
@@ -67,7 +62,7 @@ export function createElementNodeInLoro(
  * Update ElementNode in Loro tree
  */
 export function updateElementNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   elementType?: string,
   parentId?: TreeID,
   index?: number,
@@ -77,8 +72,15 @@ export function updateElementNodeInLoro(
 ): void {
   const mapper = getNodeMapper();
   
-  // Get the existing tree node using the mapper
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey.toString(), lexicalNode);
+  // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
+  
+  // Store complete lexical node data if lexical node is provided
+  if (lexicalNode) {
+    const lexicalNodeData: LexicalNodeData = { lexicalNode };
+    const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+    treeNode.data.set('lexical', serializedData);
+  }
   
   // Update element type if provided
   if (elementType !== undefined) {
@@ -109,11 +111,11 @@ export function updateElementNodeInLoro(
  * Delete ElementNode from Loro tree
  */
 export function deleteElementNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: ElementNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
-  mapper.deleteMapping(nodeKey.toString());
+  mapper.deleteMapping(nodeKey);
 }
 
 /**
@@ -306,18 +308,15 @@ export function getElementNodeDataFromTree(treeId: TreeID, tree: LoroTree): any 
  * Sync ElementNode children relationships in Loro tree
  */
 export function syncElementNodeChildrenInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   childKeys: string[],
   options: ElementNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${nodeKey}@${peerId}`;
+  const mapper = getNodeMapper();
+  const { tree } = options;
   
-  if (!tree.has(treeId)) {
-    return;
-  }
-  
-  const treeNode = tree.getNodeByID(treeId);
+  // Get the existing Loro node from the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
   if (!treeNode || treeNode.data.get('nodeType') !== 'element') {
     return;
   }
@@ -333,61 +332,77 @@ export function syncElementNodeChildrenInLoro(
 export function mutateElementNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: ElementNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isElementNode(currentNode)) {
-        // Get parent and index for proper positioning
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
+        // Use editorState.read() to safely access node methods
+        let parent: any, parentId: TreeID | undefined, index: number;
+        let elementType: string, metadata: Record<string, any> = {};
         
-        // Determine element type
-        const elementType = currentNode.getType(); // 'paragraph', 'heading', etc.
+        update.editorState.read(() => {
+          // Get parent and index for proper positioning within editor state context
+          parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          index = currentNode.getIndexWithinParent();
         
-        // Collect metadata (format, style, direction, etc.)
-        const metadata: Record<string, any> = {};
-        if (typeof currentNode.getFormat === 'function') {
-          metadata.format = currentNode.getFormat();
-        }
-        if (typeof currentNode.getStyle === 'function') {
-          metadata.style = currentNode.getStyle();
-        }
-        if (typeof currentNode.getDirection === 'function') {
-          metadata.direction = currentNode.getDirection();
-        }
+          // Determine element type
+          elementType = currentNode.getType(); // 'paragraph', 'heading', etc.
         
+          // Collect metadata (format, style, direction, etc.)
+          if (typeof currentNode.getFormat === 'function') {
+            metadata.format = currentNode.getFormat();
+          }
+          if (typeof currentNode.getStyle === 'function') {
+            metadata.style = currentNode.getStyle();
+          }
+          if (typeof currentNode.getDirection === 'function') {
+            metadata.direction = currentNode.getDirection();
+          }
+        });
+        
+        // Create the node in Loro after safely reading from editor state
         createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, currentNode, options);
       }
       break;
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isElementNode(currentNode)) {
-        // Get current position
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
+        // Use editorState.read() to safely access node methods
+        let parent: any, parentId: TreeID | undefined, index: number;
+        let elementType: string, metadata: Record<string, any> = {};
         
-        // Get element type and metadata
-        const elementType = currentNode.getType();
-        const metadata: Record<string, any> = {};
-        if (typeof currentNode.getFormat === 'function') {
-          metadata.format = currentNode.getFormat();
-        }
-        if (typeof currentNode.getStyle === 'function') {
-          metadata.style = currentNode.getStyle();
-        }
-        if (typeof currentNode.getDirection === 'function') {
-          metadata.direction = currentNode.getDirection();
-        }
+        update.editorState.read(() => {
+          // Get current position within editor state context
+          parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          index = currentNode.getIndexWithinParent();
         
+          // Get element type and metadata
+          elementType = currentNode.getType();
+          if (typeof currentNode.getFormat === 'function') {
+            metadata.format = currentNode.getFormat();
+          }
+          if (typeof currentNode.getStyle === 'function') {
+            metadata.style = currentNode.getStyle();
+          }
+          if (typeof currentNode.getDirection === 'function') {
+            metadata.direction = currentNode.getDirection();
+          }
+        });
+        
+        // Update the node in Loro after safely reading from editor state
         updateElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, currentNode, options);
       }
       break;

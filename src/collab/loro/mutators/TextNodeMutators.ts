@@ -4,7 +4,8 @@ import {
   TextNode, 
   $isTextNode,
   TextFormatType,
-  UpdateListenerPayload
+  UpdateListenerPayload,
+  NodeKey
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
@@ -30,7 +31,7 @@ export interface TextNodeMutatorOptions {
  * Create TextNode in Loro tree
  */
 export function createTextNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   textContent: string,
   format?: number,
   mode?: string,
@@ -43,7 +44,7 @@ export function createTextNodeInLoro(
   
   // Use mapper to get or create the tree node
   const treeNode = mapper.getLoroNodeByLexicalKey(
-    nodeKey.toString(),
+    nodeKey,
     lexicalNode,
     parentId,
     index
@@ -63,7 +64,7 @@ export function createTextNodeInLoro(
  * Update TextNode in Loro tree
  */
 export function updateTextNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   newTextContent?: string,
   format?: number,
   mode?: string,
@@ -72,8 +73,15 @@ export function updateTextNodeInLoro(
 ): void {
   const mapper = getNodeMapper();
   
-  // Get the existing tree node using the mapper
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey.toString(), lexicalNode);
+  // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
+  
+  // Store complete lexical node data if lexical node is provided
+  if (lexicalNode) {
+    const lexicalNodeData: LexicalNodeData = { lexicalNode };
+    const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+    treeNode.data.set('lexical', serializedData);
+  }
   
   // Update metadata
   if (newTextContent !== undefined) {
@@ -95,11 +103,11 @@ export function updateTextNodeInLoro(
  * Delete TextNode from Loro tree
  */
 export function deleteTextNodeInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: TextNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
-  mapper.deleteMapping(nodeKey.toString());
+  mapper.deleteMapping(nodeKey);
 }
 
 /**
@@ -280,19 +288,18 @@ export function getTextNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
  * Apply text formatting operations (bold, italic, etc.)
  */
 export function applyTextFormatInLoro(
-  nodeKey: number,
+  nodeKey: NodeKey,
   formatType: TextFormatType,
   apply: boolean,
   options: TextNodeMutatorOptions
 ): void {
-  const { tree, peerId } = options;
-  const treeId: TreeID = `${nodeKey}@${peerId}`;
+  const mapper = getNodeMapper();
   
-  if (!tree.has(treeId)) {
+  // Get the existing Loro node from the mapper
+  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
+  if (!treeNode) {
     return;
   }
-  
-  const treeNode = tree.getNodeByID(treeId);
   if (!treeNode || treeNode.data.get('nodeType') !== 'text') {
     return;
   }
@@ -318,24 +325,28 @@ export function applyTextFormatInLoro(
 export function mutateTextNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
-  nodeKey: number,
+  nodeKey: NodeKey,
   options: TextNodeMutatorOptions
 ): void {
   const { tree, peerId } = options;
 
   switch (mutation) {
     case 'created': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isTextNode(currentNode)) {
-        // Get parent and index for proper positioning
-        const parent = currentNode.getParent();
-        const parentId = parent ? `${Number(parent.getKey())}@${peerId}` as TreeID : undefined;
-        const index = currentNode.getIndexWithinParent();
-        
-        // Get text content and formatting
-        const textContent = currentNode.getTextContent();
-        const format = currentNode.getFormat();
-        const mode = currentNode.getMode();
+        // Get parent and index for proper positioning using editor state context
+        const { parent, parentId, index, textContent, format, mode } = update.editorState.read(() => {
+          const parent = currentNode.getParent();
+          // Get parentId from the mapper instead of constructing it manually
+          const mapper = getNodeMapper();
+          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const index = currentNode.getIndexWithinParent();
+          const textContent = currentNode.getTextContent();
+          const format = currentNode.getFormat();
+          const mode = currentNode.getMode();
+          
+          return { parent, parentId, index, textContent, format, mode };
+        });
         
         createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, currentNode, options);
       }
@@ -343,12 +354,16 @@ export function mutateTextNode(
     }
 
     case 'updated': {
-      const currentNode = update.editorState._nodeMap.get(nodeKey.toString());
+      const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isTextNode(currentNode)) {
-        // Get updated text content and formatting
-        const textContent = currentNode.getTextContent();
-        const format = currentNode.getFormat();
-        const mode = currentNode.getMode();
+        // Get updated text content and formatting using editor state context
+        const { textContent, format, mode } = update.editorState.read(() => {
+          const textContent = currentNode.getTextContent();
+          const format = currentNode.getFormat();
+          const mode = currentNode.getMode();
+          
+          return { textContent, format, mode };
+        });
         
         updateTextNodeInLoro(nodeKey, textContent, format, mode, currentNode, options);
       }
