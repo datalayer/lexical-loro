@@ -5,6 +5,7 @@ import invariant from '../utils/invariant';
 import type {Cursor} from './sync/SyncCursors';
 import {Provider} from './State';
 import { createLoroTree } from './utils/Utils';
+import { NodeMapper, initializeNodeMapper } from './mappings/NodesMapper';
 
 export type ClientID = number;
 
@@ -19,6 +20,7 @@ export type Binding = {
   id: string;
   nodeProperties: Map<string, Array<string>>;
   excludedProperties: ExcludedProperties;
+  nodeMapper: NodeMapper;
 };
 
 export type ExcludedProperties = Map<Klass<LexicalNode>, Set<string>>;
@@ -49,7 +51,11 @@ export function createBinding(
     excludedProperties: excludedProperties || new Map(),
     id,
     nodeProperties: new Map(),
-  };  
+    nodeMapper: null as any, // Will be initialized below
+  };
+
+  // Initialize the NodeMapper with the binding
+  binding.nodeMapper = initializeNodeMapper(binding);  
 
   return binding;
 }

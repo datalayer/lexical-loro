@@ -3,6 +3,8 @@ import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 import { parseTreeID } from '../utils/Utils';
+import { createLexicalNodeFromLoro } from '../utils/NodeFactory';
+import { $getRoot, $isElementNode } from 'lexical';
 
 export function syncLoroToLexical(
   binding: Binding,
@@ -32,12 +34,34 @@ export function syncLoroToLexical(
                 const treeNode = tree.getNodeByID(treeChange.target);
                 const nodeType = treeNode?.data.get('nodeType');
 
-                // Use appropriate mutator based on node type
-                // Note: For Loro->Lexical sync, you'd call the *FromLoro functions
                 console.log(`---DLA Creating Lexical node from Loro: type=${nodeType}, key=${nodeKey}`);
 
-                // TODO: Implement createNodeFromLoro based on nodeType
-                // Example: createTextNodeFromLoro(treeChange.target, parentNode, index, options)
+                // Use NodeFactory to create the appropriate Lexical node
+                binding.editor.update(() => {
+                  // Get parent node from Loro tree structure if available
+                  const parentTreeId = treeChange.parent;
+                  let parentLexicalNode = parentTreeId ? 
+                    binding.nodeMapper.getLexicalNodeByLoroId(parentTreeId, binding.editor.getEditorState()) : 
+                    $getRoot();
+
+                  // Create the Lexical node using the NodeFactory
+                  const lexicalNode = createLexicalNodeFromLoro(
+                    treeChange.target,
+                    tree,
+                    parentLexicalNode,
+                    treeChange.index,
+                    { tree, binding, provider }
+                  );
+
+                  if (lexicalNode && parentLexicalNode && $isElementNode(parentLexicalNode)) {
+                    // Insert the node at the specified index
+                    if (treeChange.index !== undefined) {
+                      parentLexicalNode.splice(treeChange.index, 0, [lexicalNode]);
+                    } else {
+                      parentLexicalNode.append(lexicalNode);
+                    }
+                  }
+                });
               }
               break;
             }
