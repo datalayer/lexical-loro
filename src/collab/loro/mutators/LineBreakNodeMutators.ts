@@ -41,9 +41,21 @@ export function createLineBreakNodeInLoro(
     index
   );
   
-  // Store complete lexical node data if serialized data is provided
+  // Store complete lexical node data as individual properties if serialized data is provided
   if (serializedNodeData) {
-    treeNode.data.set('lexical', serializedNodeData);
+    try {
+      const parsed = JSON.parse(serializedNodeData);
+      const lexicalNodeData = parsed.lexicalNode;
+      
+      // Store lexical properties directly as individual fields
+      if (lexicalNodeData) {
+        Object.entries(lexicalNodeData).forEach(([key, value]) => {
+          treeNode.data.set(`lexical_${key}`, value);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to parse lexical node data for LineBreakNode:', error);
+    }
   }
   
   // Store LineBreakNode metadata (minimal since it's just a line break)
@@ -76,9 +88,21 @@ export function updateLineBreakNodeInLoro(
   
   const treeId = treeNode.id;
   
-  // Store complete lexical node data if serialized data is provided
+  // Store complete lexical node data as individual properties if serialized data is provided
   if (serializedNodeData) {
-    treeNode.data.set('lexical', serializedNodeData);
+    try {
+      const parsed = JSON.parse(serializedNodeData);
+      const lexicalNodeData = parsed.lexicalNode;
+      
+      // Store lexical properties directly as individual fields
+      if (lexicalNodeData) {
+        Object.entries(lexicalNodeData).forEach(([key, value]) => {
+          treeNode.data.set(`lexical_${key}`, value);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to parse lexical node data for LineBreakNode update:', error);
+    }
   }
   
   // Move the node if parent or position changed

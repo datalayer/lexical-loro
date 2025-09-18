@@ -57,9 +57,21 @@ export function createTextNodeInLoro(
     index
   );
   
-  // Store complete lexical node data if serialized data is provided
+  // Store complete lexical node data as individual properties if serialized data is provided
   if (serializedNodeData) {
-    treeNode.data.set('lexical', serializedNodeData);
+    try {
+      const parsed = JSON.parse(serializedNodeData);
+      const lexicalNodeData = parsed.lexicalNode;
+      
+      // Store lexical properties directly as individual fields
+      if (lexicalNodeData) {
+        Object.entries(lexicalNodeData).forEach(([key, value]) => {
+          treeNode.data.set(`lexical_${key}`, value);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to parse lexical node data for TextNode:', error);
+    }
   }
   
   // Store TextNode metadata (these are still useful for debugging/logging)
@@ -88,9 +100,21 @@ export function updateTextNodeInLoro(
   // Get the existing tree node using the mapper
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data if serialized data is provided
+  // Store complete lexical node data as individual properties if serialized data is provided
   if (serializedNodeData) {
-    treeNode.data.set('lexical', serializedNodeData);
+    try {
+      const parsed = JSON.parse(serializedNodeData);
+      const lexicalNodeData = parsed.lexicalNode;
+      
+      // Store lexical properties directly as individual fields
+      if (lexicalNodeData) {
+        Object.entries(lexicalNodeData).forEach(([key, value]) => {
+          treeNode.data.set(`lexical_${key}`, value);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to parse lexical node data for TextNode update:', error);
+    }
   }
   
   // Update metadata

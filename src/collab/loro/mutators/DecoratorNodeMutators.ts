@@ -49,9 +49,21 @@ export function createDecoratorNodeInLoro(
     index
   );
   
-  // Store complete lexical node data if serialized data is provided
+  // Store complete lexical node data as individual properties if serialized data is provided
   if (serializedNodeData) {
-    treeNode.data.set('lexical', serializedNodeData);
+    try {
+      const parsed = JSON.parse(serializedNodeData);
+      const lexicalNodeData = parsed.lexicalNode;
+      
+      // Store lexical properties directly as individual fields
+      if (lexicalNodeData) {
+        Object.entries(lexicalNodeData).forEach(([key, value]) => {
+          treeNode.data.set(`lexical_${key}`, value);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to parse lexical node data for DecoratorNode creation:', error);
+    }
   }
   
   // Store DecoratorNode metadata (useful for debugging/logging)
@@ -95,9 +107,21 @@ export function updateDecoratorNodeInLoro(
   const { tree } = options!;
   const treeId = treeNode.id;
   
-  // Store complete lexical node data if serialized data is provided
+  // Store complete lexical node data as individual properties if serialized data is provided
   if (serializedNodeData) {
-    treeNode.data.set('lexical', serializedNodeData);
+    try {
+      const parsed = JSON.parse(serializedNodeData);
+      const lexicalNodeData = parsed.lexicalNode;
+      
+      // Store lexical properties directly as individual fields
+      if (lexicalNodeData) {
+        Object.entries(lexicalNodeData).forEach(([key, value]) => {
+          treeNode.data.set(`lexical_${key}`, value);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to parse lexical node data for DecoratorNode update:', error);
+    }
   }
   
   // Update decorator type if provided

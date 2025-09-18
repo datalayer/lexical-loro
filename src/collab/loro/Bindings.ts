@@ -313,6 +313,8 @@ export function createBinding(
         });
       }
 
+      console.log('🟢 Loro Tree:', tree.toJSON());
+      
       console.log('🟢 Lexical State:', {
         state: binding.editor.getEditorState().toJSON(),
       });
