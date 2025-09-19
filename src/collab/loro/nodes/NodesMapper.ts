@@ -1,7 +1,7 @@
 import { LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
-import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { LexicalNodeData } from '../types/LexicalNodeData';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs

@@ -1,5 +1,5 @@
 import { Loro, LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
-import { LexicalNodeDataHelper } from '../types/LexicalNodeData';
+
 
 /**
  * Utility to convert Lexical JSON structure to Loro tree

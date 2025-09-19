@@ -1,7 +1,7 @@
 import { TreeID, LoroTree } from 'loro-crdt';
 import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey, ElementNode } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
-import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**
@@ -28,7 +28,7 @@ export function createLineBreakNodeInLoro(
   nodeKey: NodeKey,
   parentId?: TreeID,
   index?: number,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: LineBreakNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
@@ -41,20 +41,11 @@ export function createLineBreakNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
-    try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
-      // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
-        treeNode.data.set('lexical', cleanedData);
-      }
-    } catch (error) {
-      console.warn('Failed to parse lexical node data for LineBreakNode:', error);
-    }
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
+    // Store complete lexical JSON without the key
+    const { key, ...cleanedData } = lexicalNodeJSON;
+    treeNode.data.set('lexical', cleanedData);
   }
   
   // Store only essential metadata
@@ -74,7 +65,7 @@ export function updateLineBreakNodeInLoro(
   nodeKey: NodeKey,
   parentId?: TreeID,
   index?: number,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: LineBreakNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
@@ -88,20 +79,11 @@ export function updateLineBreakNodeInLoro(
   
   const treeId = treeNode.id;
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
-    try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
-      // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
-        treeNode.data.set('lexical', cleanedData);
-      }
-    } catch (error) {
-      console.warn('Failed to parse lexical node data for LineBreakNode update:', error);
-    }
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
+    // Store complete lexical JSON without the key
+    const { key, ...cleanedData } = lexicalNodeJSON;
+    treeNode.data.set('lexical', cleanedData);
   }
   
   // Move the node if parent or position changed
@@ -247,27 +229,26 @@ export function mutateLineBreakNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isLineBreakNode(currentNode)) {
-        // Get parent, positioning, and serialized data using editor state context
-        const { parentId, index, serializedNodeData } = update.editorState.read(() => {
+        // Get parent, positioning, and JSON data using editor state context
+        const { parentId, index, lexicalNodeJSON } = update.editorState.read(() => {
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
           const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
-          // Serialize node data within editor context where node methods are available
-          let serializedNodeData: string | undefined;
+          // Export node data as JSON object within editor context where node methods are available
+          let lexicalNodeJSON: any = undefined;
           try {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to serialize node data in mutateLineBreakNode created:', error);
+            console.warn('Failed to export node JSON in mutateLineBreakNode created:', error);
           }
           
-          return { parentId, index, serializedNodeData };
+          return { parentId, index, lexicalNodeJSON };
         });
         
-        createLineBreakNodeInLoro(nodeKey, parentId, index, serializedNodeData, options);
+        createLineBreakNodeInLoro(nodeKey, parentId, index, lexicalNodeJSON, options);
       }
       break;
     }
@@ -275,27 +256,26 @@ export function mutateLineBreakNode(
     case 'updated': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isLineBreakNode(currentNode)) {
-        // Check if position changed and serialize data using editor state context
-        const { parentId, index, serializedNodeData } = update.editorState.read(() => {
+        // Check if position changed and export data using editor state context
+        const { parentId, index, lexicalNodeJSON } = update.editorState.read(() => {
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
           const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
-          // Serialize node data within editor context where node methods are available
-          let serializedNodeData: string | undefined;
+          // Export node data within editor context where node methods are available
+          let lexicalNodeJSON: any = undefined;
           try {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to serialize node data in mutateLineBreakNode updated:', error);
+            console.warn('Failed to export node data in mutateLineBreakNode updated:', error);
           }
           
-          return { parentId, index, serializedNodeData };
+          return { parentId, index, lexicalNodeJSON };
         });
         
-        updateLineBreakNodeInLoro(nodeKey, parentId, index, serializedNodeData, options);
+        updateLineBreakNodeInLoro(nodeKey, parentId, index, lexicalNodeJSON, options);
       }
       break;
     }

@@ -7,7 +7,7 @@ import {
   ElementNode
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
-import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**
@@ -37,7 +37,7 @@ export function createDecoratorNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: DecoratorNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
@@ -50,20 +50,11 @@ export function createDecoratorNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
-    try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
-      // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
-        treeNode.data.set('lexical', cleanedData);
-      }
-    } catch (error) {
-      console.warn('Failed to parse lexical node data for DecoratorNode creation:', error);
-    }
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
+    // Store complete lexical JSON without the key
+    const { key, ...cleanedData } = lexicalNodeJSON;
+    treeNode.data.set('lexical', cleanedData);
   }
   
   // Store only essential metadata
@@ -85,7 +76,7 @@ export function updateDecoratorNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: DecoratorNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
@@ -99,20 +90,11 @@ export function updateDecoratorNodeInLoro(
   const { tree } = options!;
   const treeId = treeNode.id;
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
-    try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
-      // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
-        treeNode.data.set('lexical', cleanedData);
-      }
-    } catch (error) {
-      console.warn('Failed to parse lexical node data for DecoratorNode update:', error);
-    }
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
+    // Store complete lexical JSON without the key
+    const { key, ...cleanedData } = lexicalNodeJSON;
+    treeNode.data.set('lexical', cleanedData);
   }
   
   // All decorator information is now contained in lexical data object
@@ -172,42 +154,9 @@ export function createDecoratorNodeFromLoro(
     console.warn(`DecoratorNode creation from JSON object not fully implemented for TreeID: ${treeId}`);
     return null;
   } else {
-    // Fallback to old format for backward compatibility
-    const nodeType = treeNode.data.get('nodeType');
-    if (nodeType !== 'decorator') {
-      return null;
-    }
-    
-    const decoratorType = treeNode.data.get('decoratorType');
-    const decoratorDataStr = treeNode.data.get('decoratorData');
-    
-    let decoratorData;
-    try {
-      decoratorData = decoratorDataStr && typeof decoratorDataStr === 'string' 
-        ? JSON.parse(decoratorDataStr) : {};
-    } catch (error) {
-      console.warn('Failed to parse decorator data:', error);
-      decoratorData = {};
-    }
-    
-    // In a real implementation, you'd have a factory or registry
-    // to create the appropriate decorator node type
-    const safeDecoratorType = typeof decoratorType === 'string' ? decoratorType : 'generic';
-    
-    switch (safeDecoratorType) {
-      case 'image':
-        // decoratorNode = new ImageNode(decoratorData.src, decoratorData.alt, etc.);
-        // For now, create a generic decorator placeholder
-        decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
-        break;
-      case 'video':
-        // decoratorNode = new VideoNode(decoratorData.src, decoratorData.controls, etc.);
-        decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
-        break;
-      default:
-        decoratorNode = new GenericDecoratorNode(safeDecoratorType, decoratorData);
-        break;
-    }
+    // No lexical JSON data found - cannot create DecoratorNode
+    console.warn('No lexical JSON data found for DecoratorNode TreeID:', treeId);
+    return null;
   }
   
   // Insert into the parent at the specified index
@@ -394,8 +343,8 @@ export function mutateDecoratorNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isDecoratorNode(currentNode)) {
-        // Get node data and serialized data using editor state context
-        const { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData } = update.editorState.read(() => {
+        // Get node data using editor state context
+        const { parentId, index, decoratorType, decoratorData, metadata, lexicalNodeJSON } = update.editorState.read(() => {
           // Get parent and index for proper positioning
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
@@ -414,19 +363,18 @@ export function mutateDecoratorNode(
             metadata.isInline = currentNode.isInline();
           }
           
-          // Serialize node data within editor context where node methods are available
-          let serializedNodeData: string | undefined;
+          // Export node data within editor context where node methods are available
+          let lexicalNodeJSON: any = undefined;
           try {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to serialize node data in mutateDecoratorNode created:', error);
+            console.warn('Failed to export node data in mutateDecoratorNode created:', error);
           }
           
-          return { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData };
+          return { parentId, index, decoratorType, decoratorData, metadata, lexicalNodeJSON };
         });
         
-        createDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, serializedNodeData, options);
+        createDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, lexicalNodeJSON, options);
       }
       break;
     }
@@ -434,8 +382,8 @@ export function mutateDecoratorNode(
     case 'updated': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isDecoratorNode(currentNode)) {
-        // Get node data and serialized data using editor state context
-        const { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData } = update.editorState.read(() => {
+        // Get node data using editor state context
+        const { parentId, index, decoratorType, decoratorData, metadata, lexicalNodeJSON } = update.editorState.read(() => {
           // Get current position
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
@@ -454,19 +402,18 @@ export function mutateDecoratorNode(
             metadata.isInline = currentNode.isInline();
           }
           
-          // Serialize node data within editor context where node methods are available
-          let serializedNodeData: string | undefined;
+          // Export node data within editor context where node methods are available
+          let lexicalNodeJSON: any = undefined;
           try {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to serialize node data in mutateDecoratorNode updated:', error);
+            console.warn('Failed to export node data in mutateDecoratorNode updated:', error);
           }
           
-          return { parentId, index, decoratorType, decoratorData, metadata, serializedNodeData };
+          return { parentId, index, decoratorType, decoratorData, metadata, lexicalNodeJSON };
         });
         
-        updateDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, serializedNodeData, options);
+        updateDecoratorNodeInLoro(nodeKey, decoratorType, decoratorData, parentId, index, metadata, lexicalNodeJSON, options);
       }
       break;
     }

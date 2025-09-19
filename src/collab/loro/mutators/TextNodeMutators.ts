@@ -9,7 +9,7 @@ import {
   ElementNode
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
-import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 import { $diffTextContentAndApplyDelta } from '../utils/Utils';
 
@@ -173,21 +173,9 @@ export function createTextNodeFromLoro(
       return null;
     }
   } else {
-    // Fallback to old format for backward compatibility
-    const nodeType = treeNode.data.get('nodeType');
-    if (nodeType !== 'text') {
-      return null;
-    }
-    
-    const textContent = treeNode.data.get('textContent');
-    const safeTextContent = typeof textContent === 'string' ? textContent : '';
-    textNode = $createTextNode(safeTextContent);
-    
-    // Apply formatting if present (only for old format)
-    const format = treeNode.data.get('format');
-    if (format && typeof format === 'number') {
-      textNode.setFormat(format as unknown as TextFormatType);
-    }
+    // No lexical JSON data found - cannot create TextNode
+    console.warn('No lexical JSON data found for TextNode TreeID:', treeId);
+    return null;
   }
   
   // Apply mode if present (only for old format)

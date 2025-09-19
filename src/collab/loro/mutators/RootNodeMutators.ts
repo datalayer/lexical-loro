@@ -1,7 +1,7 @@
 import { TreeID, LoroTree } from 'loro-crdt';
 import { UpdateListenerPayload, NodeKey, RootNode, $getRoot } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
-import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**
@@ -29,7 +29,7 @@ export interface RootNodeMutatorOptions {
  */
 export function createRootNodeInLoro(
   nodeKey: NodeKey,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: RootNodeMutatorOptions
 ): TreeID {
   const { tree, peerId } = options!;
@@ -44,19 +44,18 @@ export function createRootNodeInLoro(
     0 // always at index 0
   );
   
-  // Store complete lexical node data as individual properties if serialized data is provided
-  if (serializedNodeData) {
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
     try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
       // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
+        const { key, __key, ...cleanedData } = lexicalNodeJSON;
         rootTreeNode.data.set('lexical', cleanedData);
+      } else {
+        rootTreeNode.data.set('lexical', lexicalNodeJSON);
       }
     } catch (error) {
-      console.warn('Failed to parse lexical node data for RootNode:', error);
+      console.warn('Failed to store lexical node JSON for RootNode:', error);
     }
   }
   
@@ -74,7 +73,7 @@ export function createRootNodeInLoro(
  */
 export function updateRootNodeInLoro(
   nodeKey: NodeKey,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: RootNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
@@ -82,19 +81,18 @@ export function updateRootNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
     try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
       // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
+        const { key, __key, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
+      } else {
+        treeNode.data.set('lexical', lexicalNodeJSON);
       }
     } catch (error) {
-      console.warn('Failed to parse lexical node data for RootNode update:', error);
+      console.warn('Failed to store lexical node JSON for RootNode update:', error);
     }
   }
   
@@ -184,18 +182,21 @@ export function mutateRootNode(
       // Get the current editor state to find the root node
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode) {
-        // Serialize node data within editor context where node methods are available
-        let serializedNodeData: string | undefined;
+        // Export node data as JSON object within editor context where node methods are available
+        let lexicalNodeJSON: any = undefined;
         
         update.editorState.read(() => {
           if (currentNode.getType() === 'root') {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            try {
+              lexicalNodeJSON = currentNode.exportJSON();
+            } catch (error) {
+              console.warn('Failed to export root node JSON:', error);
+            }
           }
         });
         
-        if (serializedNodeData) {
-          createRootNodeInLoro(nodeKey, serializedNodeData, options);
+        if (lexicalNodeJSON) {
+          createRootNodeInLoro(nodeKey, lexicalNodeJSON, options);
         }
       }
       break;
@@ -205,18 +206,21 @@ export function mutateRootNode(
       // Root nodes typically don't change much, but we can update metadata
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode) {
-        // Serialize node data within editor context where node methods are available
-        let serializedNodeData: string | undefined;
+        // Export node data as JSON object within editor context where node methods are available
+        let lexicalNodeJSON: any = undefined;
         
         update.editorState.read(() => {
           if (currentNode.getType() === 'root') {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            try {
+              lexicalNodeJSON = currentNode.exportJSON();
+            } catch (error) {
+              console.warn('Failed to export root node JSON for update:', error);
+            }
           }
         });
         
-        if (serializedNodeData) {
-          updateRootNodeInLoro(nodeKey, serializedNodeData, options);
+        if (lexicalNodeJSON) {
+          updateRootNodeInLoro(nodeKey, lexicalNodeJSON, options);
         }
       }
       break;

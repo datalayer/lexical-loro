@@ -8,7 +8,7 @@ import {
   NodeKey
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
-import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { LexicalNodeData } from '../types/LexicalNodeData';
 import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { Binding } from '../Bindings';
 
@@ -38,7 +38,7 @@ export function createElementNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: ElementNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
@@ -46,21 +46,11 @@ export function createElementNodeInLoro(
   // Use mapper to get or create the tree node (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined, parentId, index);
   
-  // Store complete lexical node data as JSON object (without the key) if serialized data is provided
-  if (serializedNodeData) {
-    try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
-      // Remove the key from lexical node data and store the cleaned object
-      if (lexicalNodeData) {
-        const cleanedLexicalData = { ...lexicalNodeData };
-        delete cleanedLexicalData.key; // Remove the node key
-        treeNode.data.set('lexical', cleanedLexicalData);
-      }
-    } catch (error) {
-      console.warn('Failed to parse lexical node data for ElementNode:', error);
-    }
+  // Store complete lexical node data as JSON object (without the key) if provided
+  if (lexicalNodeJSON) {
+    // Remove the key from lexical node data and store the cleaned object
+    const { key, ...cleanedLexicalData } = lexicalNodeJSON;
+    treeNode.data.set('lexical', cleanedLexicalData);
   }
   
   // Store only essential metadata (elementType for debug panel)
@@ -80,7 +70,7 @@ export function updateElementNodeInLoro(
   parentId?: TreeID,
   index?: number,
   metadata?: Record<string, any>,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: ElementNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
@@ -88,21 +78,11 @@ export function updateElementNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as JSON object (without the key) if serialized data is provided
-  if (serializedNodeData) {
-    try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
-      // Remove the key from lexical node data and store the cleaned object
-      if (lexicalNodeData) {
-        const cleanedLexicalData = { ...lexicalNodeData };
-        delete cleanedLexicalData.key; // Remove the node key
-        treeNode.data.set('lexical', cleanedLexicalData);
-      }
-    } catch (error) {
-      console.warn('Failed to parse lexical node data for ElementNode update:', error);
-    }
+  // Store complete lexical node data as JSON object (without the key) if provided
+  if (lexicalNodeJSON) {
+    // Remove the key from lexical node data and store the cleaned object
+    const { key, ...cleanedLexicalData } = lexicalNodeJSON;
+    treeNode.data.set('lexical', cleanedLexicalData);
   }
   
   // Update only essential metadata
@@ -196,22 +176,9 @@ export function createElementNodeFromLoro(
       return null;
     }
   } else {
-    // Fallback to old format for backward compatibility
-    const nodeType = treeNode.data.get('nodeType');
-    if (nodeType !== 'element') {
-      return null;
-    }
-    
-    const elementType = treeNode.data.get('elementType');
-    
-    // Create the appropriate element type
-    switch (elementType) {
-      case 'paragraph':
-      default:
-        // For now, create paragraphs for all element types
-        elementNode = $createParagraphNode();
-        break;
-    }
+    // No lexical JSON data found - cannot create ElementNode
+    console.warn('No lexical JSON data found for ElementNode TreeID:', treeId);
+    return null;
   }
   
   // Insert into the parent at the specified index
@@ -360,10 +327,10 @@ export function mutateElementNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isElementNode(currentNode)) {
-        // Serialize node data and collect metadata within editor context
+        // Export node data and collect metadata within editor context
         let parent: any, parentId: TreeID | undefined, index: number;
         let elementType: string, metadata: Record<string, any> = {};
-        let serializedNodeData: string;
+        let lexicalNodeJSON: any;
         
         update.editorState.read(() => {
           // Get parent and index for proper positioning within editor state context
@@ -405,13 +372,12 @@ export function mutateElementNode(
             metadata.direction = currentNode.getDirection();
           }
           
-          // Serialize node data within editor context where node methods are available
-          const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-          serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          // Export node data within editor context where node methods are available
+          lexicalNodeJSON = currentNode.exportJSON();
         });
         
         // Create the node in Loro after safely reading from editor state
-        createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, serializedNodeData, options);
+        createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, lexicalNodeJSON, options);
         
         // If this node was created without a parent, schedule a retry to fix parent assignment
         if (parent && !parentId) {
@@ -442,8 +408,8 @@ export function mutateElementNode(
         let parent: any, parentId: TreeID | undefined, index: number;
         let elementType: string, metadata: Record<string, any> = {};
         
-        // Serialize node data and collect metadata within editor context
-        let serializedNodeData: string;
+        // Export node data and collect metadata within editor context
+        let lexicalNodeJSON: any;
         
         update.editorState.read(() => {
           // Get current position within editor state context
@@ -476,13 +442,12 @@ export function mutateElementNode(
             metadata.direction = currentNode.getDirection();
           }
           
-          // Serialize node data within editor context where node methods are available
-          const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-          serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+          // Export node data within editor context where node methods are available
+          lexicalNodeJSON = currentNode.exportJSON();
         });
         
         // Update the node in Loro after safely reading from editor state
-        updateElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, serializedNodeData, options);
+        updateElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, lexicalNodeJSON, options);
       }
       break;
     }
