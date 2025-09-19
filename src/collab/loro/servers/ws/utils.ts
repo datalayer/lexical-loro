@@ -254,8 +254,6 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         conn.send(snapshot)
         break
 
-
-        
       case messageEphemeral:
         try {
           const ephemeralBytes = new Uint8Array(messageData.ephemeral)
@@ -393,7 +391,7 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   {
     // Send initial snapshot to new client
     // Log tree structure before creating initial snapshot
-    logTreeStructure(doc.doc, `Before creating initial snapshot for new client`)
+//    logTreeStructure(doc.doc, `Before creating initial snapshot for new client`)
     
     const snapshot = doc.doc.export({ mode: 'snapshot' })
     console.log(`[Server] Sending initial snapshot to new client: ${snapshot.length} bytes`)

@@ -46,13 +46,17 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
   handleInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
     // Sort create operations to ensure parents are processed before children
     const createOps = diff.diff.filter(change => change.action === 'create') as Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>;
-    const otherOps = diff.diff.filter(change => change.action !== 'create');
+    const moveOps = diff.diff.filter(change => change.action === 'move') as Array<{ action: 'move'; target: TreeID; parent?: TreeID; index?: number }>;
+    const otherOps = diff.diff.filter(change => change.action !== 'create' && change.action !== 'move');
     
     // Sort creates by hierarchy depth (parents first, then children)
     const sortedCreates = this.sortCreatesByHierarchy(createOps, binding, provider);
     
-    // Process creates first (in sorted order), then other operations
-    [...sortedCreates, ...otherOps].forEach(treeChange => {
+    // Filter move operations to avoid unwanted reordering during text splitting
+    const filteredMoves = this.filterUnnecessaryMoves(moveOps, createOps, binding);
+    
+    // Process creates first (in sorted order), then filtered moves, then other operations
+    [...sortedCreates, ...filteredMoves, ...otherOps].forEach(treeChange => {
         switch (treeChange.action) {
           case 'create':
             this.handleCreateInternal(treeChange, binding, provider);
@@ -441,5 +445,69 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     
     console.log(`🌳 Sorted ${createOps.length} create operations by hierarchy depth`);
     return sorted;
+  }
+
+  /**
+   * Filter out move operations that might cause unwanted reordering during text splitting
+   */
+  private filterUnnecessaryMoves(
+    moveOps: Array<{ action: 'move'; target: TreeID; parent?: TreeID; index?: number }>,
+    createOps: Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>,
+    binding: Binding
+  ): Array<{ action: 'move'; target: TreeID; parent?: TreeID; index?: number }> {
+    
+    // If no creates are happening, allow all moves (normal move operations)
+    if (createOps.length === 0) {
+      console.log(`🌳 No create operations, allowing all ${moveOps.length} move operations`);
+      return moveOps;
+    }
+
+    // Detect if this looks like a text splitting operation:
+    // - New paragraph/heading nodes are being created
+    // - Text nodes are being created
+    const hasNewTextNodes = createOps.some(op => {
+      const tree = binding.tree;
+      if (tree.has(op.target)) {
+        const node = tree.getNodeByID(op.target);
+        const nodeData = Object.fromEntries(node.data.entries());
+        return String(nodeData.elementType) === 'text';
+      }
+      return false;
+    });
+
+    const hasNewStructureNodes = createOps.some(op => {
+      const tree = binding.tree;
+      if (tree.has(op.target)) {
+        const node = tree.getNodeByID(op.target);
+        const nodeData = Object.fromEntries(node.data.entries());
+        return ['paragraph', 'heading'].includes(String(nodeData.elementType));
+      }
+      return false;
+    });
+
+    const isTextSplittingContext = hasNewTextNodes && hasNewStructureNodes;
+
+    if (isTextSplittingContext) {
+      console.log(`🌳 Text splitting detected (${createOps.length} creates, ${moveOps.length} moves)`);
+      
+      // During text splitting, filter out moves that would reorder existing paragraphs to index 0
+      const filteredMoves = moveOps.filter(moveOp => {
+        // Skip moves to index 0 (beginning of document) during text splitting
+        // as these typically cause unwanted paragraph reordering
+        if (moveOp.index === 0) {
+          const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(moveOp.target);
+          console.log(`🌳 Skipping move to index 0 during text splitting: TreeID=${moveOp.target}, LexicalKey=${lexicalKey}`);
+          return false;
+        }
+        return true;
+      });
+
+      console.log(`🌳 Filtered moves: ${moveOps.length} → ${filteredMoves.length} (removed ${moveOps.length - filteredMoves.length} moves to index 0)`);
+      return filteredMoves;
+    }
+
+    // Not a text splitting context, allow all moves
+    console.log(`🌳 Normal operation context, allowing all ${moveOps.length} move operations`);
+    return moveOps;
   }
 }
