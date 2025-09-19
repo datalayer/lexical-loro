@@ -93,14 +93,18 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     const parentTreeId = treeChange.parent;
     let parentLexicalNode;
     
+    console.log(`🌳 Looking for parent: treeId=${parentTreeId}, targetNode=${nodeKey}, type=${elementType}`);
+    
     if (parentTreeId) {
       const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(parentTreeId);
       parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
+      console.log(`🌳 Parent mapping: ${parentTreeId} → ${parentKey} → ${parentLexicalNode?.getType() || 'null'}`);
     }
     
     // Default to root if no parent found ($ method - already in editor.update)
     if (!parentLexicalNode) {
       parentLexicalNode = $getRoot();
+      console.log(`🌳 Using root as parent for ${nodeKey}`);
     }
 
     // Check the node type before creating to avoid root node issues
@@ -121,11 +125,11 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     }
 
       // Create the Lexical node using the NodeFactory
+      // Note: We don't pass parentKey anymore - let Lexical handle relationships via append()
       const lexicalNode = createLexicalNodeFromLoro(
         treeChange.target,
         tree,
-        binding,
-        parentLexicalNode?.getKey()
+        binding
       );
 
       // Set up bidirectional mapping between TreeID and Lexical key
@@ -155,25 +159,40 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
             targetIndex = currentChildrenCount;
           }
           
-          // Create a range selection at the target position
-          const selection = $createRangeSelection();
-          selection.anchor.set(parentLexicalNode.getKey(), targetIndex, 'element');
-          selection.focus.set(parentLexicalNode.getKey(), targetIndex, 'element');
-          $setSelection(selection);
+          // Debug the node and parent before insertion
+          console.log(`🌳 About to insert node ${nodeKey} (type: ${lexicalNode.getType()}) into parent ${parentLexicalNode.getKey()} (type: ${parentLexicalNode.getType()})`);
+          console.log(`🌳 Node type: ${lexicalNode.getType()}, Parent can have children: ${$isElementNode(parentLexicalNode)}`);
+          console.log(`🌳 Parent children before: ${parentLexicalNode.getChildrenSize()}`);
           
-          // Use Lexical's $insertNodes utility to insert the node properly
-          $insertNodes([lexicalNode]);
-          
-          console.log(`🌳 Successfully inserted node ${nodeKey} at index ${targetIndex} using Lexical commands`);
-        } catch (error) {
-          console.error(`🌳 Failed to insert node ${nodeKey} using commands:`, error);
-          // Fallback to direct insertion if command fails
-          try {
+          // Use $ methods for proper tree building (we're already inside editor.update)
+          if (targetIndex >= parentLexicalNode.getChildrenSize()) {
+            // Append at end using $ method
             parentLexicalNode.append(lexicalNode);
-            console.log(`🌳 Fallback: Successfully appended node ${nodeKey} directly`);
-          } catch (fallbackError) {
-            console.error(`🌳 Fallback insertion also failed:`, fallbackError);
+            console.log(`🌳 Appended node ${nodeKey} to parent ${parentLexicalNode.getKey()}`);
+          } else {
+            // Insert at specific index using $ method
+            const childAtIndex = parentLexicalNode.getChildAtIndex(targetIndex);
+            if (childAtIndex) {
+              childAtIndex.insertBefore(lexicalNode);
+              console.log(`🌳 Inserted node ${nodeKey} before child at index ${targetIndex}`);
+            } else {
+              parentLexicalNode.append(lexicalNode);
+              console.log(`🌳 Appended node ${nodeKey} (no child at index)`);
+            }
           }
+          
+          console.log(`🌳 Parent children after: ${parentLexicalNode.getChildrenSize()}`);
+          console.log(`🌳 Node parent after insertion: ${lexicalNode.getParent()?.getKey() || 'none'} (${lexicalNode.getParent()?.getType() || 'none'})`);
+          
+          // Verify the node was properly inserted
+          const verifyNode = $getNodeByKey(nodeKey);
+          if (verifyNode && verifyNode.getParent()) {
+            console.log(`🌳 ✅ Node ${nodeKey} (${verifyNode.getType()}) successfully inserted`);
+          } else {
+            console.warn(`🌳 ❌ Node ${nodeKey} insertion failed - node missing or not attached`);
+          }
+        } catch (error) {
+          console.error(`🌳 Failed to insert node ${nodeKey} using direct methods:`, error);
         }
       } else {
         console.warn(`🌳 Failed to create or insert node ${nodeKey}:`, {

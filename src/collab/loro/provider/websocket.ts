@@ -182,6 +182,9 @@ messageHandlers[messageSnapshot] = (
     console.log('📸 Document state AFTER import:', afterNodes)
     console.log('📸 Successfully imported snapshot, document now has content')
     
+    // Mark snapshot as loaded to prevent double loading
+    provider.snapshotLoaded = true
+    
     if (emitSynced && !provider._synced) {
       provider.synced = true
     }
@@ -503,13 +506,18 @@ const setupWS = (provider) => {
       // Since we're in onopen, we know the WebSocket is ready
       // Use sendMessage directly to avoid any race conditions
       
-      // First request a snapshot to get the initial document state
-      const snapshotRequest: QuerySnapshotMessage = {
-        type: 'query-snapshot',
-        docId: provider.docId
+      // Only request snapshot if we haven't already loaded it
+      if (!provider.snapshotLoaded) {
+        // First request a snapshot to get the initial document state
+        const snapshotRequest: QuerySnapshotMessage = {
+          type: 'query-snapshot',
+          docId: provider.docId
+        }
+        console.log('🔄 Requesting initial snapshot from server:', snapshotRequest)
+        sendMessage(ws, snapshotRequest)
+      } else {
+        console.log('📸 Snapshot already loaded, skipping request')
       }
-      console.log('🔄 Requesting initial snapshot from server:', snapshotRequest)
-      sendMessage(ws, snapshotRequest)
       
       // Then request initial ephemeral state from server  
       const ephemeralRequest: QueryEphemeralMessage = {
@@ -593,6 +601,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _synced = false
   wsLastMessageReceived = 0
   shouldConnect = false
+  snapshotLoaded = false
   _checkInterval = null
   _resyncInterval = null
   _updateHandler = null

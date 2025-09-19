@@ -56,10 +56,8 @@ export function createLexicalNodeFromLoro(
   // Create new instance of the registered node class
   const lexicalNode: LexicalNode = new nodeInfo.klass();
   
-  // Set parent if provided
-  if (parentKey) {
-    lexicalNode.__parent = parentKey;
-  }
+  // Note: DO NOT set __parent manually - let Lexical handle parent-child relationships
+  // through proper $ methods like append(), insertBefore(), etc.
 
   // Apply properties from the deserialized data if available
   if (deserializedData?.lexicalNode) {

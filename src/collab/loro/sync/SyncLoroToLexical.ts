@@ -37,19 +37,19 @@ export function syncLoroToLexical(
         break;
 
       case 'map':
-        mapHandler.handle(event.diff as any, binding, provider);
+//        mapHandler.handle(event.diff as any, binding, provider);
         break;
 
       case 'list':
-        listHandler.handle(event.diff as any, binding, provider);
+//        listHandler.handle(event.diff as any, binding, provider);
         break;
 
       case 'text':
-        textHandler.handle(event.diff as any, binding, provider);
+//        textHandler.handle(event.diff as any, binding, provider);
         break;
 
       case 'counter':
-        counterHandler.handle(event.diff as any, binding, provider);
+//        counterHandler.handle(event.diff as any, binding, provider);
         break;
 
       default:
