@@ -156,9 +156,18 @@ export class NodeMapper {
     
     // Store complete lexical node data if lexical node is provided
     if (lexicalNode) {
-      const lexicalNodeData: LexicalNodeData = { lexicalNode };
-      const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
-      treeNode.data.set('lexical', serializedData);
+      try {
+        const lexicalNodeJSON = lexicalNode.exportJSON();
+        // Remove key if it exists to avoid duplication (TreeID serves as the key)
+        if ('key' in lexicalNodeJSON) {
+          const { key, ...cleanedData } = lexicalNodeJSON;
+          treeNode.data.set('lexical', cleanedData);
+        } else {
+          treeNode.data.set('lexical', lexicalNodeJSON);
+        }
+      } catch (error) {
+        console.warn('Failed to export lexical node JSON in NodesMapper:', error);
+      }
     }
 
     // Create bidirectional mapping

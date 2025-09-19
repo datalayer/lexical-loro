@@ -40,7 +40,7 @@ export function createTextNodeInLoro(
   mode?: string,
   parentId?: TreeID,
   index?: number,
-  serializedNodeData?: string, // Pre-serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: TextNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
@@ -59,19 +59,18 @@ export function createTextNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
     try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
       // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
+        const { key, __key, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
+      } else {
+        treeNode.data.set('lexical', lexicalNodeJSON);
       }
     } catch (error) {
-      console.warn('Failed to parse lexical node data for TextNode:', error);
+      console.warn('Failed to store lexical node JSON for TextNode:', error);
     }
   }
   
@@ -91,7 +90,7 @@ export function updateTextNodeInLoro(
   newTextContent?: string,
   format?: number,
   mode?: string,
-  serializedNodeData?: string, // Serialized lexical node data
+  lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: TextNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
@@ -99,19 +98,18 @@ export function updateTextNodeInLoro(
   // Get the existing tree node using the mapper
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as clean JSON if serialized data is provided
-  if (serializedNodeData) {
+  // Store complete lexical node data as clean JSON if provided
+  if (lexicalNodeJSON) {
     try {
-      const parsed = JSON.parse(serializedNodeData);
-      const lexicalNodeData = parsed.lexicalNode;
-      
       // Store complete lexical JSON without the key
-      if (lexicalNodeData) {
-        const { key, ...cleanedData } = lexicalNodeData;
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
+        const { key, __key, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
+      } else {
+        treeNode.data.set('lexical', lexicalNodeJSON);
       }
     } catch (error) {
-      console.warn('Failed to parse lexical node data for TextNode update:', error);
+      console.warn('Failed to store lexical node JSON for TextNode update:', error);
     }
   }
   
@@ -154,23 +152,24 @@ export function createTextNodeFromLoro(
     return null;
   }
   
-  // Try to get LexicalNodeData first (new format)
+  // Get LexicalNodeData (JSON object format only)
   const lexicalData = treeNode.data.get('lexical');
   let textNode: TextNode;
   
-  if (lexicalData && typeof lexicalData === 'string') {
+  if (lexicalData && typeof lexicalData === 'object') {
     try {
-      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
-      const storedNode = deserializedData.lexicalNode;
+      // lexicalData is a direct JSON object, use it to create a TextNode
+      const lexicalDataObj = lexicalData as any;
+      const textContent = lexicalDataObj.text || lexicalDataObj.__text || '';
+      const format = lexicalDataObj.format || lexicalDataObj.__format || 0;
+      const mode = lexicalDataObj.mode || lexicalDataObj.__mode || 0;
       
-      if (!$isTextNode(storedNode)) {
-        return null;
-      }
+      textNode = $createTextNode(textContent);
+      textNode.setFormat(format);
+      textNode.setMode(mode);
       
-      // Use the stored lexical node directly
-      textNode = storedNode;
     } catch (error) {
-      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
+      console.warn('Failed to create TextNode from JSON data for TreeID:', treeId, error);
       return null;
     }
   } else {
@@ -371,7 +370,7 @@ export function mutateTextNode(
       
       if (currentNode && $isTextNode(currentNode)) {
         // Get parent, positioning, content, and serialized data using editor state context
-        const { parent, parentId, index, textContent, format, mode, serializedNodeData } = update.editorState.read(() => {
+        const { parent, parentId, index, textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
@@ -386,19 +385,18 @@ export function mutateTextNode(
           const format = currentNode.getFormat();
           const mode = currentNode.getMode();
           
-          // Serialize node data within editor context where node methods are available
-          let serializedNodeData: string | undefined;
+          // Export node data as JSON object within editor context where node methods are available
+          let lexicalNodeJSON: any = undefined;
           try {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to serialize node data in mutateTextNode created:', error);
+            console.warn('Failed to export node JSON in mutateTextNode created:', error);
           }
           
-          return { parent, parentId, index, textContent, format, mode, serializedNodeData };
+          return { parent, parentId, index, textContent, format, mode, lexicalNodeJSON };
         });
         
-        createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, serializedNodeData, options);
+        createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, lexicalNodeJSON, options);
       }
       break;
     }
@@ -406,25 +404,24 @@ export function mutateTextNode(
     case 'updated': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       if (currentNode && $isTextNode(currentNode)) {
-        // Get updated text content, formatting, and serialized data using editor state context
-        const { textContent, format, mode, serializedNodeData } = update.editorState.read(() => {
+        // Get updated text content, formatting, and JSON data using editor state context
+        const { textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
           const textContent = currentNode.getTextContent();
           const format = currentNode.getFormat();
           const mode = currentNode.getMode();
           
-          // Serialize node data within editor context where node methods are available
-          let serializedNodeData: string | undefined;
+          // Export node data as JSON object within editor context where node methods are available
+          let lexicalNodeJSON: any = undefined;
           try {
-            const lexicalNodeData: LexicalNodeData = { lexicalNode: currentNode };
-            serializedNodeData = LexicalNodeDataHelper.serialize(lexicalNodeData);
+            lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to serialize node data in mutateTextNode:', error);
+            console.warn('Failed to export node JSON in mutateTextNode updated:', error);
           }
           
-          return { textContent, format, mode, serializedNodeData };
+          return { textContent, format, mode, lexicalNodeJSON };
         });
         
-        updateTextNodeInLoro(nodeKey, textContent, format, mode, serializedNodeData, options);
+        updateTextNodeInLoro(nodeKey, textContent, format, mode, lexicalNodeJSON, options);
       }
       break;
     }

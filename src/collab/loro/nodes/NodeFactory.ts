@@ -33,24 +33,13 @@ export function createLexicalNodeFromLoro(
   let deserializedData: any = null;
   
   // Debug: log what data we have
-  console.log(`🏭 NodeFactory: Processing TreeID ${treeId}, type will be: ${typeof lexicalData === 'object' && lexicalData ? lexicalData.type || lexicalData.__type : 'from-string-data'}`);
+  console.log(`🏭 NodeFactory: Processing TreeID ${treeId}, type will be: ${typeof lexicalData === 'object' && lexicalData ? lexicalData.type || lexicalData.__type : 'no-lexical-data'}`);
   
-  if (lexicalData && typeof lexicalData === 'string') {
-    // New format: deserialize LexicalNodeData to get the nodeType and properties
-    try {
-      deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
-      // The deserialized data is a plain JSON object, access __type directly
-      nodeType = deserializedData.lexicalNode.__type;
-      console.log(`🏭 NodeFactory: Deserialized nodeType: ${nodeType}`, deserializedData);
-    } catch (error) {
-      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
-      return null;
-    }
-  } else if (lexicalData && typeof lexicalData === 'object') {
-    // Direct object format (from TreeDiff handler or MapDiff)
+  if (lexicalData && typeof lexicalData === 'object') {
+    // JSON object format - the only supported format
     nodeType = lexicalData.type || lexicalData.__type;
     deserializedData = { lexicalNode: lexicalData };
-    console.log(`🏭 NodeFactory: Using direct lexical object for TreeID ${treeId}:`, nodeType, lexicalData);
+    console.log(`🏭 NodeFactory: Using lexical JSON object for TreeID ${treeId}:`, nodeType, lexicalData);
   } else {
     // Fallback to element type from nodeDataFromDiff or old nodeType
     const fallbackType = nodeDataFromDiff?.elementType || treeNode?.data.get('nodeType');
@@ -76,17 +65,32 @@ export function createLexicalNodeFromLoro(
   }
 
   // Create new instance of the registered node class
-  const lexicalNode: LexicalNode = new nodeInfo.klass();
+  let lexicalNode: LexicalNode;
   
-  // Special handling for HeadingNode which requires tag parameter to be set after creation
+  // Special handling for HeadingNode which requires tag parameter in constructor
   if (nodeType === 'heading') {
     const tag = (deserializedData?.lexicalNode?.tag || 
                  (lexicalData && typeof lexicalData === 'object' && lexicalData.tag) || 
                  'h1');
-    console.log(`🏭 NodeFactory: Setting HeadingNode tag: ${tag}`);
+    console.log(`🏭 NodeFactory: Creating HeadingNode with tag: ${tag}`);
     
-    // Set the internal __tag property that HeadingNode uses
-    (lexicalNode as any).__tag = tag;
+    try {
+      // HeadingNode constructor signature: new HeadingNode(tag, key)
+      // We pass tag as first argument, let Lexical generate the key
+      lexicalNode = new nodeInfo.klass(tag);
+      console.log(`🏭 NodeFactory: Created HeadingNode using constructor with tag: ${tag}`);
+    } catch (error) {
+      console.error(`🏭 NodeFactory: Failed to create HeadingNode:`, error);
+      return null;
+    }
+  } else {
+    try {
+      lexicalNode = new nodeInfo.klass();
+      console.log(`🏭 NodeFactory: Created ${nodeType} instance successfully`);
+    } catch (error) {
+      console.error(`🏭 NodeFactory: Failed to create ${nodeType} instance:`, error);
+      return null;
+    }
   }
   
   // Note: DO NOT set __parent manually - let Lexical handle parent-child relationships
@@ -98,14 +102,13 @@ export function createLexicalNodeFromLoro(
     
     console.log(`🏭 NodeFactory: Applying ${Object.keys(nodeData).length} properties from deserializedData.lexicalNode`);
     
-    // Apply all properties except system ones
+    // Apply all properties except system ones and tag (for HeadingNode)
     Object.keys(nodeData).forEach(key => {
       if (key !== '__parent' && key !== '__key') {
         try {
           if (key === 'tag' && nodeType === 'heading') {
-            // Special handling for HeadingNode tag - use internal property name
-            (lexicalNode as any).__tag = nodeData[key];
-            console.log(`🏭 NodeFactory: Set HeadingNode __tag to: ${nodeData[key]}`);
+            // Tag is already set in HeadingNode constructor, skip
+            console.log(`🏭 NodeFactory: Skipping tag property (already set in constructor): ${nodeData[key]}`);
           } else {
             (lexicalNode as any)[key] = nodeData[key];
           }
@@ -124,9 +127,8 @@ export function createLexicalNodeFromLoro(
     applicableKeys.forEach(key => {
       try {
         if (key === 'tag' && nodeType === 'heading') {
-          // Special handling for HeadingNode tag - use internal property name
-          (lexicalNode as any).__tag = lexicalData[key];
-          console.log(`🏭 NodeFactory: Set HeadingNode __tag to: ${lexicalData[key]}`);
+          // Tag is already set in HeadingNode constructor, skip
+          console.log(`🏭 NodeFactory: Skipping tag property (already set in constructor): ${lexicalData[key]}`);
         } else {
           (lexicalNode as any)[key] = lexicalData[key];
         }

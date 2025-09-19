@@ -27,6 +27,56 @@ const wsReadyStateClosed = 3
 
 const persistenceDir = process.env.YPERSISTENCE
 
+// Helper function to log tree structure for debugging
+const logTreeStructure = (doc: LoroDoc, context: string) => {
+  try {
+    console.log(`[Server] ${context} - Tree Structure Debug:`)
+    
+    // Try to get the tree container using getTree method
+    try {
+      const tree = doc.getTree('tree')
+      if (tree) {
+        console.log(`[Server] Tree container found`)
+
+        // Get nodes using correct method
+        if (typeof tree.getNodes === 'function') {
+          const nodes = tree.getNodes()
+          console.log(`[Server] Tree nodes:`, JSON.stringify(nodes, null, 2))
+        } else {
+          console.log(`[Server] Tree container methods:`, Object.getOwnPropertyNames(tree))
+        }
+        
+        // Try to get root nodes or traverse tree
+        if (typeof tree.toArray === 'function') {
+          const array = tree.toArray()
+          console.log(`[Server] Tree as array:`, JSON.stringify(array, null, 2))
+        }
+      } else {
+        console.log(`[Server] No tree container found`)
+      }
+    } catch (treeError) {
+      console.log(`[Server] Error accessing tree container:`, treeError.message)
+    }
+    
+    // Log doc methods to understand the API
+    console.log(`[Server] LoroDoc methods:`, Object.getOwnPropertyNames(doc))
+    
+    // Try export with different modes for debugging
+    try {
+      const snapshot = doc.export({ mode: 'snapshot' })
+      console.log(`[Server] Snapshot size: ${snapshot.length} bytes`)
+      
+      const update = doc.export({ mode: 'update' })  
+      console.log(`[Server] Update size: ${update.length} bytes`)
+    } catch (exportError) {
+      console.log(`[Server] Error exporting:`, exportError.message)
+    }
+    
+  } catch (error) {
+    console.error(`[Server] Error logging tree structure:`, error)
+  }
+}
+
 /**
  * 
  */
@@ -194,6 +244,10 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Client is requesting a snapshot - send current document state
         const requestId = Math.random().toString(36).substr(2, 9);
         console.log(`[Server] Client requesting snapshot for doc: ${doc.name} (Request ID: ${requestId})`)
+        
+        // Log tree structure before creating snapshot
+        logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
+        
         const snapshot = doc.doc.export({ mode: 'snapshot' })
         console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)
         // Send binary snapshot data directly instead of wrapped message
@@ -338,6 +392,9 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   // scope
   {
     // Send initial snapshot to new client
+    // Log tree structure before creating initial snapshot
+    logTreeStructure(doc.doc, `Before creating initial snapshot for new client`)
+    
     const snapshot = doc.doc.export({ mode: 'snapshot' })
     console.log(`[Server] Sending initial snapshot to new client: ${snapshot.length} bytes`)
     // Send binary snapshot data directly instead of wrapped message

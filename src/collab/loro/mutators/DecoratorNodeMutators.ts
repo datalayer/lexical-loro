@@ -162,25 +162,15 @@ export function createDecoratorNodeFromLoro(
     return null;
   }
   
-  // Try to get LexicalNodeData first (new format)
+  // Get LexicalNodeData (JSON object format only)
   const lexicalData = treeNode.data.get('lexical');
   let decoratorNode: DecoratorNode<any>;
   
-  if (lexicalData && typeof lexicalData === 'string') {
-    try {
-      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
-      const storedNode = deserializedData.lexicalNode;
-      
-      if (!$isDecoratorNode(storedNode)) {
-        return null;
-      }
-      
-      // Use the stored lexical node directly
-      decoratorNode = storedNode;
-    } catch (error) {
-      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
-      return null;
-    }
+  if (lexicalData && typeof lexicalData === 'object') {
+    // For DecoratorNode, we need to handle this case appropriately
+    // But DecoratorNodes are complex and might need special handling
+    console.warn(`DecoratorNode creation from JSON object not fully implemented for TreeID: ${treeId}`);
+    return null;
   } else {
     // Fallback to old format for backward compatibility
     const nodeType = treeNode.data.get('nodeType');

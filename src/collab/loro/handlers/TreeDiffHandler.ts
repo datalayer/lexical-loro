@@ -125,8 +125,10 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     }
 
     // Create the Lexical node using the NodeFactory
+    let lexicalNode;
+    try {
       // Pass nodeData so NodeFactory can access lexical data immediately
-      const lexicalNode = createLexicalNodeFromLoro(
+      lexicalNode = createLexicalNodeFromLoro(
         treeChange.target,
         tree,
         binding,
@@ -137,7 +139,15 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       // Set up bidirectional mapping between TreeID and Lexical key
       if (lexicalNode) {
         binding.nodeMapper.setMapping(lexicalNode.getKey(), treeChange.target);
+        console.log(`🌳 Successfully created and mapped node ${nodeKey} (${elementType})`);
+      } else {
+        console.warn(`🌳 Failed to create node ${nodeKey} (${elementType}) - NodeFactory returned null`);
+        return;
       }
+    } catch (nodeCreationError) {
+      console.error(`🌳 Exception during node creation for ${nodeKey} (${elementType}):`, nodeCreationError);
+      return;
+    }
 
       if (lexicalNode && parentLexicalNode && $isElementNode(parentLexicalNode)) {
         // Safety check: Don't try to append a RootNode to another RootNode

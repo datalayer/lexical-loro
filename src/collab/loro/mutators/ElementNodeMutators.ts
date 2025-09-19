@@ -9,6 +9,7 @@ import {
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { Binding } from '../Bindings';
 
 /**
@@ -167,23 +168,31 @@ export function createElementNodeFromLoro(
     return null;
   }
   
-  // Try to get LexicalNodeData first (new format)
+  // Get LexicalNodeData (JSON object format only)
   const lexicalData = treeNode.data.get('lexical');
   let elementNode: ElementNode;
   
-  if (lexicalData && typeof lexicalData === 'string') {
+  if (lexicalData && typeof lexicalData === 'object') {
     try {
-      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
-      const storedNode = deserializedData.lexicalNode;
+      // lexicalData is a direct JSON object, create the appropriate node type
+      const lexicalDataObj = lexicalData as any;
+      const nodeType = lexicalDataObj.type || lexicalDataObj.__type;
       
-      if (!$isElementNode(storedNode)) {
-        return null;
+      if (nodeType === 'paragraph') {
+        elementNode = $createParagraphNode();
+      } else {
+        // For other node types, fall back to paragraph for now
+        console.warn(`Unsupported ElementNode type: ${nodeType}, creating paragraph instead`);
+        elementNode = $createParagraphNode();
       }
       
-      // Use the stored lexical node directly
-      elementNode = storedNode;
+      // Apply formatting if available
+      if (lexicalDataObj.format || lexicalDataObj.__format) {
+        elementNode.setFormat(lexicalDataObj.format || lexicalDataObj.__format);
+      }
+      
     } catch (error) {
-      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
+      console.warn('Failed to create ElementNode from JSON data for TreeID:', treeId, error);
       return null;
     }
   } else {
@@ -200,31 +209,12 @@ export function createElementNodeFromLoro(
       case 'paragraph':
       default:
         // For now, create paragraphs for all element types
-        // In a real implementation, you'd import specific element node creators
-        // from their respective packages (e.g., @lexical/rich-text, @lexical/list, etc.)
         elementNode = $createParagraphNode();
         break;
     }
   }
   
-  // Apply any stored formatting or styles with proper type casting (only for old format)
-  if (!lexicalData || typeof lexicalData !== 'string') {
-    const format = treeNode.data.get('format');
-    if (format && typeof elementNode.setFormat === 'function' && typeof format === 'number') {
-      elementNode.setFormat(format as unknown as ElementFormatType);
-    }
-
-    const style = treeNode.data.get('style');
-    if (style && typeof elementNode.setStyle === 'function' && typeof style === 'string') {
-      elementNode.setStyle(style);
-    }
-
-    const direction = treeNode.data.get('direction');
-    if (direction && typeof elementNode.setDirection === 'function' && 
-        (direction === 'ltr' || direction === 'rtl')) {
-      elementNode.setDirection(direction);
-    }
-  }  // Insert into the parent at the specified index
+  // Insert into the parent at the specified index
   if (index !== undefined && index >= 0) {
     parentNode.splice(index, 0, [elementNode]);
   } else {

@@ -58,10 +58,16 @@ function processLexicalNode(
     // Store element type for quick access
     nodeData.set('elementType', lexicalNode.type);
     
-    // Create a minimal lexical node representation and serialize it
+    // Store lexical node data directly as JSON object
     const lexicalNodeData = createLexicalNodeFromJSON(lexicalNode);
-    const serializedData = LexicalNodeDataHelper.serialize(lexicalNodeData);
-    nodeData.set('lexical', serializedData);
+    const lexicalNodeJSON = lexicalNodeData.lexicalNode.exportJSON();
+    // Remove key if it exists to avoid duplication (TreeID serves as the key)
+    if ('__key' in lexicalNodeJSON) {
+      const { __key, ...cleanedData } = lexicalNodeJSON;
+      nodeData.set('lexical', cleanedData);
+    } else {
+      nodeData.set('lexical', lexicalNodeJSON);
+    }
   }
 
   // Process children if they exist

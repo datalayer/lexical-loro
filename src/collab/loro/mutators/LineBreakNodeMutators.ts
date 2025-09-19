@@ -145,25 +145,14 @@ export function createLineBreakNodeFromLoro(
   const treeNode = tree.getNodeByID(treeId);
   let lineBreakNode: LineBreakNode;
   
-  // Try to get LexicalNodeData first (new format)
+  // Get LexicalNodeData (JSON object format only)
   const lexicalData = treeNode?.data.get('lexical');
   
-  if (lexicalData && typeof lexicalData === 'string') {
-    try {
-      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
-      const storedNode = deserializedData.lexicalNode;
-      
-      if (!$isLineBreakNode(storedNode)) {
-        lineBreakNode = $createLineBreakNode(); // Fallback
-      } else {
-        lineBreakNode = storedNode;
-      }
-    } catch (error) {
-      console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
-      lineBreakNode = $createLineBreakNode(); // Fallback
-    }
+  if (lexicalData && typeof lexicalData === 'object') {
+    // lexicalData is a direct JSON object - LineBreak nodes are simple
+    lineBreakNode = $createLineBreakNode();
   } else {
-    // Old format or no data - just create a new line break node
+    // No lexical data - just create a new line break node
     lineBreakNode = $createLineBreakNode();
   }
   

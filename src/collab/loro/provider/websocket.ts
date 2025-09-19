@@ -732,7 +732,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           const afterCommitVersion = this.doc.version()
           const update = this.doc.export({ 
             mode: 'update',
-//            from: this._lastExportedVersion 
+            from: this._lastExportedVersion 
           });
 
           if (update.length > 0) {
