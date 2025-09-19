@@ -1,12 +1,10 @@
 import { 
   $getRoot, 
-  $isElementNode, 
   $getNodeByKey, 
-  $isRootNode, 
-  $insertNodes,
-  $getSelection,
-  $createRangeSelection,
-  $setSelection
+  $isRootNode,
+  $isElementNode,
+  LexicalNode,
+  ElementNode
 } from 'lexical';
 import { TreeID } from 'loro-crdt';
 import { BaseDiffHandler } from './BaseDiffHandler';
@@ -26,513 +24,254 @@ interface TreeDiff {
 }
 
 /**
- * Handles tree structure changes (node creation, movement, deletion)
+ * Simplified tree diff handler that trusts Loro's CRDT conflict resolution
+ * and applies operations directly without complex filtering or context classification
  */
 export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
   
   handle(diff: TreeDiff, binding: Binding, provider: Provider): void {
     console.log('🌳 Handling TreeDiff:', diff);
     
-    // Ensure root mapping is preserved
-    this.ensureRootMapping(binding);
-    
-    // Batch all tree changes into a single editor update to avoid reconciliation issues
+    // Batch all changes in a single editor update
     binding.editor.update(() => {
       this.handleInternal(diff, binding, provider);
     });
   }
 
-  // Internal method that can be called when already inside editor.update()
+    // Internal method that can be called when already inside editor.update()
   handleInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
-    // Sort create operations to ensure parents are processed before children
-    const createOps = diff.diff.filter(change => change.action === 'create') as Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>;
-    const moveOps = diff.diff.filter(change => change.action === 'move') as Array<{ action: 'move'; target: TreeID; parent?: TreeID; index?: number }>;
-    const otherOps = diff.diff.filter(change => change.action !== 'create' && change.action !== 'move');
+    // Sort operations: deletes first, then creates (element nodes before text), then moves
+    const operations = [...diff.diff];
+    operations.sort((a, b) => {
+      // Delete operations first
+      if (a.action === 'delete' && b.action !== 'delete') return -1;
+      if (b.action === 'delete' && a.action !== 'delete') return 1;
+      
+      // Move operations last
+      if (a.action === 'move' && b.action !== 'move') return 1;
+      if (b.action === 'move' && a.action !== 'move') return -1;
+      
+      // For create operations, prioritize element nodes over text nodes
+      if (a.action === 'create' && b.action === 'create') {
+        const aNode = binding.tree.getNodeByID(a.target);
+        const bNode = binding.tree.getNodeByID(b.target);
+        const aIsText = aNode?.data.get('elementType') === 'text';
+        const bIsText = bNode?.data.get('elementType') === 'text';
+        
+        if (aIsText && !bIsText) return 1;  // b (element) comes before a (text)
+        if (!aIsText && bIsText) return -1; // a (element) comes before b (text)
+      }
+      
+      return 0; // Keep original order for same priority
+    });
     
-    // Sort creates by hierarchy depth (parents first, then children)
-    const sortedCreates = this.sortCreatesByHierarchy(createOps, binding, provider);
+    console.log(`🌳 Processing ${operations.length} operations in dependency order`);
+    operations.forEach((op, index) => {
+      console.log(`🌳 Operation ${index + 1}: ${op.action} ${op.target} (parent: ${op.parent})`);
+    });
     
-    // Filter move operations to avoid unwanted reordering during text splitting
-    const filteredMoves = this.filterUnnecessaryMoves(moveOps, createOps, binding);
-    
-    // Process creates first (in sorted order), then filtered moves, then other operations
-    [...sortedCreates, ...filteredMoves, ...otherOps].forEach(treeChange => {
-        switch (treeChange.action) {
-          case 'create':
-            this.handleCreateInternal(treeChange, binding, provider);
-            break;
-          case 'move':
-            this.handleMoveInternal(treeChange, binding, provider);
-            break;
-          case 'delete':
-            this.handleDeleteInternal(treeChange, binding, provider);
-            break;
-          default:
-            throw new Error(`Unknown tree change action: ${(treeChange as any).action}`);
-        }
-      });
+    operations.forEach(operation => {
+      switch (operation.action) {
+        case 'create':
+          this.handleCreate(operation, binding, provider);
+          break;
+        case 'move':
+          this.handleMove(operation, binding, provider);
+          break;
+        case 'delete':
+          this.handleDelete(operation, binding, provider);
+          break;
+        default:
+          console.warn(`🌳 Unknown tree operation: ${operation.action}`);
+      }
+    });
   }
 
-  private handleCreateInternal(
-    treeChange: { target: TreeID; parent?: TreeID; index?: number }, 
+  private handleCreate(
+    operation: { target: TreeID; parent?: TreeID; index?: number }, 
     binding: Binding, 
     provider: Provider
   ): void {
-    const { nodeKey } = parseTreeID(treeChange.target);
-    const tree = binding.tree;
-
-    // Get the tree node to determine its type and data
-    if (!tree.has(treeChange.target)) {
-      console.warn(`🌳 Tree node ${treeChange.target} not found during create`);
-      return;
-    }
-
-    const loroTreeNode = tree.getNodeByID(treeChange.target);
-    const nodeData = Object.fromEntries(loroTreeNode.data.entries());
-    const elementType = nodeData.elementType;
-
-    // Early check for root node type to avoid unnecessary processing
-    const lexicalData = loroTreeNode?.data.get('lexical');
-    if (lexicalData && typeof lexicalData === 'string') {
-      try {
-        const deserializedData = JSON.parse(lexicalData);
-        const nodeType = deserializedData.lexicalNode?.__type;
-        
-        // Skip root nodes - they should not be created as children
-        if (nodeType === 'root') {
-          console.log(`🌳 Skipping root node creation during initialization - root already exists`);
-          return;
-        }
-      } catch (error) {
-        console.warn('Failed to parse node data for type check:', error);
-      }
-    }
-
-    console.log(`🌳 Creating Lexical node from Loro: type=${elementType}, key=${nodeKey}`, nodeData);
-    
-    // Special logging for text nodes
-    if (elementType === 'text') {
-      console.log(`📝 TEXT NODE CREATION REQUEST: TreeID=${treeChange.target}, NodeKey=${nodeKey}`);
-      console.log(`📝 TEXT NODE DATA:`, JSON.stringify(nodeData, null, 2));
-    }
-
-    // Check if node already exists to avoid duplicates ($ method - already in editor.update)
-    const existingNode = $getNodeByKey(nodeKey);
-    if (existingNode) {
-      console.log(`🌳 Node ${nodeKey} already exists in Lexical, skipping creation`);
-      console.log(`🌳 Existing node type: ${existingNode.getType()}, Expected type: ${elementType}`);
-      
-      if (elementType === 'text') {
-        console.log(`📝 TEXT NODE ${nodeKey} ALREADY EXISTS - Type: ${existingNode.getType()}, Text: "${existingNode.getTextContent()}"`);
-      }
-      
-      // Check for type mismatch
-      if (existingNode.getType() !== elementType) {
-        console.warn(`🌳 TYPE MISMATCH: Existing node ${nodeKey} is type '${existingNode.getType()}' but Loro expects '${elementType}'`);
-        
-        // For critical mismatches (element vs text), recreate the node with correct type  
-        if ((elementType === 'text' && $isElementNode(existingNode)) || 
-            (elementType !== 'text' && !$isElementNode(existingNode))) {
-          console.warn(`🌳 Critical type mismatch detected, removing incorrect node and creating new one`);
-          
-          // Remove the existing node with wrong type
-          existingNode.remove();
-          console.log(`🌳 Removed existing node ${nodeKey} with incorrect type '${existingNode.getType()}'`);
-          
-          // The nodeKey is now available since the node was removed
-          // Continue with normal node creation process (don't return early)
-        } else {
-          // Non-critical mismatch, preserve the existing node
-          console.log(`🌳 Non-critical type mismatch, preserving existing node`);
-          binding.nodeMapper.setMapping(nodeKey, treeChange.target);
-          console.log(`🌳 Preserved mapping for existing node: ${treeChange.target} → ${nodeKey}`);
-          return;
-        }
-      } else {
-        // Type matches, preserve the mapping
-        binding.nodeMapper.setMapping(nodeKey, treeChange.target);
-        console.log(`🌳 Preserved mapping for existing node: ${treeChange.target} → ${nodeKey}`);
-        return;
-      }
-    }
-
-    // Get parent node from Loro tree structure if available ($ methods - already in editor.update)
-    const parentTreeId = treeChange.parent;
-    let parentLexicalNode;
-    
-    console.log(`🌳 Looking for parent: treeId=${parentTreeId}, targetNode=${nodeKey}, type=${elementType}`);
-    
-    if (parentTreeId) {
-      const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(parentTreeId);
-      parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
-      console.log(`🌳 Parent mapping: ${parentTreeId} → ${parentKey} → ${parentLexicalNode?.getType() || 'null'}`);
-      
-      // Additional debugging for parent node
-      if (parentLexicalNode) {
-        console.log(`🌳 Parent node details: Key=${parentLexicalNode.getKey()}, Type=${parentLexicalNode.getType()}, CanHaveChildren=${$isElementNode(parentLexicalNode)}`);
-      }
-    }
-    
-    // Default to root if no parent found ($ method - already in editor.update)
-    if (!parentLexicalNode) {
-      parentLexicalNode = $getRoot();
-      console.log(`🌳 Using root as parent for ${nodeKey}`);
-      
-      // Safety check: Text nodes cannot be direct children of root
-      if (elementType === 'text') {
-        console.warn(`🌳 Cannot insert text node ${nodeKey} directly into root. Skipping creation.`);
-        return;
-      }
-    }
-
-    // Create the Lexical node using the NodeFactory
-    let lexicalNode;
     try {
-      // Pass nodeData so NodeFactory can access lexical data immediately
-      lexicalNode = createLexicalNodeFromLoro(
-        treeChange.target,
-        tree,
-        binding,
-        undefined, // parentKey - not used anymore
-        nodeData   // pass the node data from Loro
+      let { nodeKey } = parseTreeID(operation.target);
+      
+      // Skip root node creation - root is handled during initial setup
+      // But ensure the root mapping exists
+      if (nodeKey === "0") {
+        const root = $getRoot();
+        binding.nodeMapper.setMapping(root.getKey(), operation.target);
+        console.log(`🌳 Skipping root node creation but ensured root mapping: ${root.getKey()} → ${operation.target}`);
+        return;
+      }
+      
+      // Check if node already exists and if it's the same TreeID
+      const existingNode = $getNodeByKey(nodeKey);
+      if (existingNode) {
+        const existingTreeID = binding.nodeMapper.getTreeIdByLexicalKey(nodeKey);
+        if (existingTreeID === operation.target) {
+          console.log(`🌳 Node ${nodeKey} already exists for same TreeID, preserving`);
+          return;
+        } else {
+          console.log(`🌳 Key collision: ${nodeKey} exists for TreeID ${existingTreeID}, but creating for ${operation.target}`);
+          // Don't reuse existing keys for different TreeIDs - let Lexical generate a fresh one
+          nodeKey = undefined; // Let createLexicalNodeFromLoro generate a fresh key
+          console.log(`🌳 Will generate fresh key for TreeID: ${operation.target}`);
+        }
+      }
+
+      // Create Lexical node from Loro data
+      console.log(`🌳 Creating Lexical node for TreeID: ${operation.target}, NodeKey: ${nodeKey}`);
+      const lexicalNode = createLexicalNodeFromLoro(
+        operation.target,
+        binding.tree,
+        binding
       );
 
-      // Set up bidirectional mapping between TreeID and Lexical key
-      if (lexicalNode) {
-        binding.nodeMapper.setMapping(lexicalNode.getKey(), treeChange.target);
-        console.log(`🌳 Successfully created and mapped node ${nodeKey} (${elementType})`);
-        
-        // Special logging for text nodes
-        if (elementType === 'text') {
-          console.log(`📝 TEXT NODE SUCCESSFULLY CREATED:`);
-          console.log(`📝   TreeID: ${treeChange.target}`);
-          console.log(`📝   Lexical Key: ${lexicalNode.getKey()}`);
-          console.log(`📝   Type: ${lexicalNode.getType()}`);
-          console.log(`📝   Text Content: "${lexicalNode.getTextContent()}"`);
-          console.log(`📝   Node in Editor: ${$getNodeByKey(lexicalNode.getKey()) !== null}`);
-        }
-      } else {
-        console.warn(`🌳 Failed to create node ${nodeKey} (${elementType}) - NodeFactory returned null`);
-        if (elementType === 'text') {
-          console.error(`📝 TEXT NODE CREATION FAILED for TreeID: ${treeChange.target}`);
-        }
+      if (!lexicalNode) {
+        console.warn(`🌳 Failed to create Lexical node for ${operation.target}`);
         return;
       }
-    } catch (nodeCreationError) {
-      console.error(`🌳 Exception during node creation for ${nodeKey} (${elementType}):`, nodeCreationError);
-      return;
-    }
 
-      if (lexicalNode && parentLexicalNode && $isElementNode(parentLexicalNode)) {
-        // Safety check: Don't try to append a RootNode to another RootNode
-        if ($isRootNode(lexicalNode) && $isRootNode(parentLexicalNode)) {
-          console.warn(`🌳 Attempting to append RootNode to RootNode - skipping insertion`);
-          return;
-        }
+      console.log(`🌳 Successfully created Lexical node: ${lexicalNode.getKey()} (type: ${lexicalNode.getType()}) for TreeID: ${operation.target}`);
+      console.log(`🌳 Operation details - parent: ${operation.parent}, index: ${operation.index}`);
+
+      // Find parent node
+      let parentNode: ElementNode;
+      if (operation.parent) {
+        const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
+        const parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
         
-        // Use Lexical's proper command system for inserting nodes
-        try {
-          // Create a selection at the target position within the parent
-          let targetIndex = treeChange.index;
-          if (typeof targetIndex !== 'number') {
-            targetIndex = parentLexicalNode.getChildrenSize(); // Append to end
-          }
-          
-          // Validate index bounds
-          const currentChildrenCount = parentLexicalNode.getChildrenSize();
-          if (targetIndex < 0 || targetIndex > currentChildrenCount) {
-            console.warn(`🌳 Invalid index ${targetIndex}, using end position`);
-            targetIndex = currentChildrenCount;
-          }
-          
-          // Debug the node and parent before insertion
-          console.log(`🌳 About to insert node ${nodeKey} (type: ${lexicalNode.getType()}) into parent ${parentLexicalNode.getKey()} (type: ${parentLexicalNode.getType()})`);
-          console.log(`🌳 Node type: ${lexicalNode.getType()}, Parent can have children: ${$isElementNode(parentLexicalNode)}`);
-          console.log(`🌳 Parent children before: ${parentLexicalNode.getChildrenSize()}`);
-          
-          // Use $ methods for proper tree building (we're already inside editor.update)
-          if (targetIndex >= parentLexicalNode.getChildrenSize()) {
-            // Append at end using $ method
-            parentLexicalNode.append(lexicalNode);
-            console.log(`🌳 Appended node ${nodeKey} to parent ${parentLexicalNode.getKey()}`);
+        console.log(`🌳 Parent lookup - TreeID: ${operation.parent} → LexicalKey: ${parentKey} → Node: ${parentLexicalNode?.getType()}`);
+        console.log(`🌳 DEBUG: Current node type: ${lexicalNode.getType()}, parent type: ${parentLexicalNode?.getType()}`);
+        
+        if (parentLexicalNode && $isElementNode(parentLexicalNode)) {
+          parentNode = parentLexicalNode;
+          console.log(`🌳 Using parent node: ${parentNode.getKey()} (${parentNode.getType()})`);
+        } else {
+          // If the expected parent is not an element node, this is likely a mapping issue
+          if (parentLexicalNode) {
+            console.error(`🌳 MAPPING ERROR: Parent ${operation.parent} maps to ${parentLexicalNode.getType()} instead of element!`);
           } else {
-            // Insert at specific index using $ method
-            const childAtIndex = parentLexicalNode.getChildAtIndex(targetIndex);
-            if (childAtIndex) {
-              childAtIndex.insertBefore(lexicalNode);
-              console.log(`🌳 Inserted node ${nodeKey} before child at index ${targetIndex}`);
-            } else {
-              parentLexicalNode.append(lexicalNode);
-              console.log(`🌳 Appended node ${nodeKey} (no child at index)`);
-            }
+            console.error(`🌳 MISSING PARENT: Parent ${operation.parent} not found in mapping`);
           }
           
-          console.log(`🌳 Parent children after: ${parentLexicalNode.getChildrenSize()}`);
-          console.log(`🌳 Node parent after insertion: ${lexicalNode.getParent()?.getKey() || 'none'} (${lexicalNode.getParent()?.getType() || 'none'})`);
-          
-          // Special logging for text node insertion
-          if (elementType === 'text') {
-            console.log(`📝 TEXT NODE INSERTED INTO PARENT:`);
-            console.log(`📝   Text Node Key: ${lexicalNode.getKey()}`);
-            console.log(`📝   Parent Key: ${parentLexicalNode.getKey()}`);
-            console.log(`📝   Parent Type: ${parentLexicalNode.getType()}`);
-            console.log(`📝   Parent Children Count: ${parentLexicalNode.getChildrenSize()}`);
-            console.log(`📝   Text Node Parent: ${lexicalNode.getParent()?.getKey() || 'none'}`);
-            console.log(`📝   Node findable by key: ${$getNodeByKey(lexicalNode.getKey()) !== null}`);
+          // For text nodes, we MUST have a proper parent element
+          if (lexicalNode.getType() === 'text') {
+            console.error(`🌳 SKIPPING: Cannot insert text node without proper parent element`);
+            return;
           }
           
-          // Verify the node was properly inserted (we already have the node object)
-          if (lexicalNode.getParent()) {
-            console.log(`🌳 ✅ Node ${nodeKey} (Lexical key: ${lexicalNode.getKey()}, type: ${lexicalNode.getType()}) successfully inserted`);
-          } else {
-            console.warn(`🌳 ❌ Node ${nodeKey} (Lexical key: ${lexicalNode.getKey()}) insertion failed - no parent`);
-          }
-        } catch (error) {
-          console.error(`🌳 Failed to insert node ${nodeKey} using direct methods:`, error);
+          parentNode = $getRoot();
+          console.log(`🌳 Using root as fallback parent`);
         }
       } else {
-        console.warn(`🌳 Failed to create or insert node ${nodeKey}:`, {
-          hasLexicalNode: !!lexicalNode,
-          hasParent: !!parentLexicalNode,
-          isParentElement: parentLexicalNode ? $isElementNode(parentLexicalNode) : false,
-          nodeType: lexicalNode?.getType(),
-          parentType: parentLexicalNode?.getType()
-        });
+        parentNode = $getRoot();
+        console.log(`🌳 No parent specified, using root`);
+        console.log(`🌳 WARNING: About to insert ${lexicalNode.getType()} into root - this may fail!`);
       }
-  }
 
-  private handleMoveInternal(
-    treeChange: { target: TreeID; parent?: TreeID; index?: number }, 
-    binding: Binding, 
-    provider: Provider
-  ): void {
-    const treeId = treeChange.target;
-    console.log(`🌳 Moving Lexical node from Loro TreeID: ${treeId}`);
+      // Insert the node
+      if (operation.index !== undefined) {
+        console.log(`🌳 Inserting ${lexicalNode.getKey()} at index ${operation.index} in parent ${parentNode.getKey()}`);
+        parentNode.splice(operation.index, 0, [lexicalNode]);
+      } else {
+        console.log(`🌳 Appending ${lexicalNode.getKey()} to parent ${parentNode.getKey()}`);
+        parentNode.append(lexicalNode);
+      }
 
-    // Use nodeMapper to get the actual Lexical key from the Loro TreeID
-    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(treeId);
-    if (!lexicalKey) {
-      console.warn(`🌳 No Lexical key found for Loro TreeID ${treeId} during move operation`);
-      return;
-    }
-
-    const nodeToMove = $getNodeByKey(lexicalKey);
-    if (!nodeToMove) {
-      console.warn(`🌳 Node ${lexicalKey} (TreeID: ${treeId}) not found for move operation`);
-      return;
-    }
-
-      // Get new parent
-      const parentTreeId = treeChange.parent;
-      let newParentLexicalNode;
+      // Set up mapping
+      console.log(`🌳 Setting up mapping: ${lexicalNode.getKey()} ↔ ${operation.target}`);
+      binding.nodeMapper.setMapping(lexicalNode.getKey(), operation.target);
       
-      if (parentTreeId) {
-        const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(parentTreeId);
-        newParentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
-      }
+      // Verify mapping was set correctly
+      const verifyKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.target);
+      console.log(`🌳 Mapping verification: TreeID ${operation.target} → ${verifyKey} (expected: ${lexicalNode.getKey()})`);
       
-      if (!newParentLexicalNode) {
-        newParentLexicalNode = $getRoot();
-      }
-
-      if ($isElementNode(newParentLexicalNode)) {
-        try {
-          // Use Lexical commands for moving nodes
-          let targetIndex = treeChange.index;
-          if (typeof targetIndex !== 'number') {
-            targetIndex = newParentLexicalNode.getChildrenSize(); // Append to end
-          }
-          
-          // Validate index bounds
-          const currentChildrenCount = newParentLexicalNode.getChildrenSize();
-          if (targetIndex < 0 || targetIndex > currentChildrenCount) {
-            console.warn(`🌳 Invalid move index ${targetIndex}, using end position`);
-            targetIndex = currentChildrenCount;
-          }
-          
-          // Remove from current parent (this is allowed as a $ method)
-          nodeToMove.remove();
-          
-          // Create a selection at the target position in the new parent
-          const selection = $createRangeSelection();
-          selection.anchor.set(newParentLexicalNode.getKey(), targetIndex, 'element');
-          selection.focus.set(newParentLexicalNode.getKey(), targetIndex, 'element');
-          $setSelection(selection);
-          
-          // Use $insertNodes to insert at the correct position
-          $insertNodes([nodeToMove]);
-          
-          console.log(`🌳 Successfully moved node ${lexicalKey} (TreeID: ${treeId}) to new parent at index ${targetIndex}`);
-        } catch (error) {
-          console.error(`🌳 Failed to move node ${lexicalKey} (TreeID: ${treeId}) using commands:`, error);
-          // Fallback to direct manipulation if needed
-          try {
-            if (typeof treeChange.index === 'number') {
-              newParentLexicalNode.splice(treeChange.index, 0, [nodeToMove]);
-            } else {
-              newParentLexicalNode.append(nodeToMove);
-            }
-            console.log(`🌳 Fallback: Successfully moved node ${lexicalKey} (TreeID: ${treeId}) directly`);
-          } catch (fallbackError) {
-            console.error(`🌳 Fallback move also failed:`, fallbackError);
-          }
-        }
-      }
-  }
-
-  private handleDeleteInternal(
-    treeChange: { target: TreeID }, 
-    binding: Binding, 
-    provider: Provider
-  ): void {
-    const treeId = treeChange.target;
-    console.log(`🌳 Deleting Lexical node from Loro TreeID: ${treeId}`);
-
-    // Use nodeMapper to get the actual Lexical key from the Loro TreeID
-    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(treeId);
-    if (!lexicalKey) {
-      console.warn(`🌳 No Lexical key found for Loro TreeID ${treeId} during delete operation`);
-      return;
-    }
-
-    const nodeToDelete = $getNodeByKey(lexicalKey);
-    if (nodeToDelete) {
-      nodeToDelete.remove();
-      console.log(`🌳 Successfully deleted node ${lexicalKey} (TreeID: ${treeId})`);
-    } else {
-      console.warn(`🌳 Node ${lexicalKey} (TreeID: ${treeId}) not found for deletion`);
+      console.log(`🌳 Created node ${lexicalNode.getKey()} for ${operation.target}`);
+      
+    } catch (error) {
+      console.error(`🌳 Error creating node for ${operation.target}:`, error);
     }
   }
 
-  /**
-   * Ensure that the Loro root is always mapped to the Lexical root key
-   */
-  private ensureRootMapping(binding: Binding): void {
-    binding.editor.getEditorState().read(() => {
-      const lexicalRoot = $getRoot();
-      const loroRoots = binding.tree.roots();
-      
-      if (loroRoots.length > 0) {
-        const loroRootId = loroRoots[0].id;
-        const currentMapping = binding.nodeMapper.getLexicalKeyByLoroId(loroRootId);
-        
-        if (!currentMapping || currentMapping === 'no-key') {
-          binding.nodeMapper.setMapping(lexicalRoot.getKey(), loroRootId);
-          console.log(`🌳 Established root mapping: ${lexicalRoot.getKey()} ↔ ${loroRootId}`);
-        }
-      }
-    });
-  }
-
-  /**
-   * Sort create operations to ensure parents are processed before children
-   */
-  private sortCreatesByHierarchy(
-    createOps: Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>,
+  private handleMove(
+    operation: { target: TreeID; parent?: TreeID; index?: number },
     binding: Binding,
     provider: Provider
-  ): Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }> {
-    // Build a parent-child map to determine hierarchy
-    const parentMap = new Map<TreeID, TreeID>();
-    const hasParentInOps = new Set<TreeID>();
-    
-    // Map each node to its parent and track which nodes have parents in this batch
-    createOps.forEach(op => {
-      if (op.parent) {
-        parentMap.set(op.target, op.parent);
-        hasParentInOps.add(op.target);
+  ): void {
+    try {
+      const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.target);
+      if (!lexicalKey) {
+        console.warn(`🌳 No Lexical key found for move target ${operation.target}`);
+        return;
       }
-    });
-    
-    // Function to calculate depth of a node in the hierarchy
-    const getDepth = (nodeId: TreeID): number => {
-      let depth = 0;
-      let current = nodeId;
-      const visited = new Set<TreeID>();
-      
-      while (parentMap.has(current) && !visited.has(current)) {
-        visited.add(current);
-        current = parentMap.get(current)!;
-        depth++;
-        
-        // Prevent infinite loops
-        if (depth > 20) {
-          console.warn(`🌳 Deep hierarchy detected for ${nodeId}, breaking at depth ${depth}`);
-          break;
-        }
-      }
-      
-      return depth;
-    };
-    
-    // Sort by depth (lower depth = parents processed first)
-    const sorted = createOps.sort((a, b) => {
-      const depthA = getDepth(a.target);
-      const depthB = getDepth(b.target);
-      
-      if (depthA !== depthB) {
-        return depthA - depthB;
-      }
-      
-      // If same depth, maintain original order
-      return 0;
-    });
-    
-    console.log(`🌳 Sorted ${createOps.length} create operations by hierarchy depth`);
-    return sorted;
-  }
 
-  /**
-   * Filter out move operations that might cause unwanted reordering during text splitting
-   */
-  private filterUnnecessaryMoves(
-    moveOps: Array<{ action: 'move'; target: TreeID; parent?: TreeID; index?: number }>,
-    createOps: Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>,
-    binding: Binding
-  ): Array<{ action: 'move'; target: TreeID; parent?: TreeID; index?: number }> {
-    
-    // If no creates are happening, allow all moves (normal move operations)
-    if (createOps.length === 0) {
-      console.log(`🌳 No create operations, allowing all ${moveOps.length} move operations`);
-      return moveOps;
+      const nodeToMove = $getNodeByKey(lexicalKey);
+      if (!nodeToMove) {
+        console.warn(`🌳 Node to move not found: ${lexicalKey}`);
+        return;
+      }
+
+      // Find new parent
+      let newParent: ElementNode;
+      if (operation.parent) {
+        const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
+        const parentNode = parentKey ? $getNodeByKey(parentKey) : null;
+        
+        if (parentNode && $isElementNode(parentNode)) {
+          newParent = parentNode;
+        } else {
+          newParent = $getRoot();
+        }
+      } else {
+        newParent = $getRoot();
+      }
+
+      // Remove from current position and insert at new position
+      nodeToMove.remove();
+      
+      if (operation.index !== undefined) {
+        newParent.splice(operation.index, 0, [nodeToMove]);
+      } else {
+        newParent.append(nodeToMove);
+      }
+
+      console.log(`🌳 Moved node ${lexicalKey} to new position`);
+      
+    } catch (error) {
+      console.error(`🌳 Error moving node ${operation.target}:`, error);
     }
-
-    // When new nodes are being created, be cautious about moves to index 0 as they often cause unwanted reordering
-    console.log(`🌳 Content insertion detected (${createOps.length} creates, ${moveOps.length} moves)`);
-    
-    // Analyze what types of nodes are being created
-    const createdNodeTypes = createOps.map(op => {
-      const tree = binding.tree;
-      if (tree.has(op.target)) {
-        const node = tree.getNodeByID(op.target);
-        const nodeData = Object.fromEntries(node.data.entries());
-        return String(nodeData.elementType);
-      }
-      return 'unknown';
-    });
-    
-    console.log(`🌳 Creating nodes of types: ${createdNodeTypes.join(', ')}`);
-    
-    // Filter out moves that would cause unwanted paragraph reordering
-    const filteredMoves = moveOps.filter(moveOp => {
-      // Skip moves to index 0 during content insertion operations
-      // These typically represent CRDT reordering that doesn't match user intent
-      if (moveOp.index === 0) {
-        const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(moveOp.target);
-        
-        // Check if this is moving an existing paragraph/heading to the beginning
-        const nodeToMove = $getNodeByKey(lexicalKey || '');
-        const nodeType = nodeToMove?.getType();
-        
-        if (['paragraph', 'heading'].includes(nodeType || '')) {
-          console.log(`🌳 Skipping move of ${nodeType} to index 0 during content insertion: TreeID=${moveOp.target}, LexicalKey=${lexicalKey}`);
-          return false;
-        }
-      }
-      return true;
-    });
-
-    console.log(`🌳 Filtered moves: ${moveOps.length} → ${filteredMoves.length} (removed ${moveOps.length - filteredMoves.length} potentially disruptive moves)`);
-    return filteredMoves;
   }
+
+  private handleDelete(
+    operation: { target: TreeID },
+    binding: Binding,
+    provider: Provider
+  ): void {
+    try {
+      const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.target);
+      if (!lexicalKey) {
+        console.warn(`🌳 No Lexical key found for delete target ${operation.target}`);
+        return;
+      }
+
+      const nodeToDelete = $getNodeByKey(lexicalKey);
+      if (!nodeToDelete) {
+        console.warn(`🌳 Node to delete not found: ${lexicalKey}`);
+        return;
+      }
+
+      // Remove from Lexical tree
+      nodeToDelete.remove();
+      
+      // Clean up mapping
+      binding.nodeMapper.deleteMapping(lexicalKey);
+      
+      console.log(`🌳 Deleted node ${lexicalKey} for ${operation.target}`);
+      
+    } catch (error) {
+      console.error(`🌳 Error deleting node ${operation.target}:`, error);
+    }
+  }
+
 }

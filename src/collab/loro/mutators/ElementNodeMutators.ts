@@ -102,12 +102,31 @@ export function updateElementNodeInLoro(
     console.log(`🔄 Moving node ${treeNode.id} to parent ${parentId} at index ${index}`);
     console.log(`🔄 Parent has ${parentChildCount} children, trying to move to index ${index}`);
     
-    if (index !== undefined && index > parentChildCount) {
-      console.warn(`🔄 Index ${index} is out of bounds for parent with ${parentChildCount} children. Adjusting to end.`);
-      // Adjust index to be at the end instead of out of bounds
-      tree.move(treeNode.id, parentId, parentChildCount);
+    // Check if the node is already a child of the target parent
+    const currentParent = treeNode.parent();
+    const isAlreadyChild = currentParent?.id === parentId;
+    
+    if (index !== undefined) {
+      let adjustedIndex = index;
+      
+      if (isAlreadyChild) {
+        // If moving within the same parent, the index calculation is different
+        // because the node will first be removed, reducing the child count by 1
+        console.log(`🔄 Node is already child of target parent, adjusting index calculation`);
+      } else {
+        // Moving to a new parent - check bounds against current child count
+        if (index > parentChildCount) {
+          console.log(`🔄 Index ${index} > parent child count ${parentChildCount}, using parent child count`);
+          adjustedIndex = parentChildCount;
+        }
+      }
+      
+      console.log(`🔄 Final move: ${treeNode.id} to parent ${parentId} at index ${adjustedIndex}`);
+      tree.move(treeNode.id, parentId, adjustedIndex);
     } else {
-      tree.move(treeNode.id, parentId, index);
+      // No specific index, append to end
+      console.log(`🔄 Appending ${treeNode.id} to end of parent ${parentId}`);
+      tree.move(treeNode.id, parentId, parentChildCount);
     }
   }
       
