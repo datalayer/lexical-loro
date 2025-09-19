@@ -1,5 +1,5 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey } from 'lexical';
+import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey, ElementNode } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
@@ -132,7 +132,7 @@ export function deleteLineBreakNodeInLoro(
  */
 export function createLineBreakNodeFromLoro(
   treeId: TreeID,
-  parentNode: any, // The Lexical parent node where this should be inserted
+  parentNode: ElementNode,
   index?: number,
   options?: LineBreakNodeMutatorOptions
 ): LineBreakNode {
@@ -183,7 +183,7 @@ export function createLineBreakNodeFromLoro(
 export function updateLineBreakNodeFromLoro(
   treeId: TreeID,
   lexicalNode: LineBreakNode,
-  newParentNode?: any,
+  newParentNode?: ElementNode,
   newIndex?: number,
   options?: LineBreakNodeMutatorOptions
 ): void {

@@ -3,7 +3,8 @@ import {
   DecoratorNode, 
   $isDecoratorNode,
   UpdateListenerPayload,
-  NodeKey
+  NodeKey,
+  ElementNode
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
@@ -146,7 +147,7 @@ export function deleteDecoratorNodeInLoro(
  */
 export function createDecoratorNodeFromLoro(
   treeId: TreeID,
-  parentNode: any, // The Lexical parent node where this should be inserted
+  parentNode: ElementNode,
   index?: number,
   options?: DecoratorNodeMutatorOptions
 ): DecoratorNode<any> | null {
@@ -235,7 +236,7 @@ export function createDecoratorNodeFromLoro(
 export function updateDecoratorNodeFromLoro(
   treeId: TreeID,
   lexicalNode: DecoratorNode<any>,
-  newParentNode?: any,
+  newParentNode?: ElementNode,
   newIndex?: number,
   options?: DecoratorNodeMutatorOptions
 ): void {

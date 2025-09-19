@@ -30,6 +30,7 @@ export function syncLoroToLexical(
   // Process Loro events and apply them to Lexical using the appropriate handlers
   eventBatch.events.forEach(event => {
     console.log(`🔄 Processing event with diff type: ${event.diff.type}`);
+    console.log(`🔄 Event details:`, event);
 
     switch (event.diff.type) {
       case 'tree':
@@ -37,7 +38,12 @@ export function syncLoroToLexical(
         break;
 
       case 'map':
-        mapHandler.handle(event.diff as any, binding, provider);
+        // Pass the event target (TreeID) to the map handler for context
+        if (event.target) {
+          (mapHandler as any).handleWithContext(event.diff as any, event.target, binding, provider);
+        } else {
+          mapHandler.handle(event.diff as any, binding, provider);
+        }
         break;
 
       case 'list':

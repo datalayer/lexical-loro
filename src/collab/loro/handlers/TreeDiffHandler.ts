@@ -61,7 +61,7 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    const { nodeKey, peerId } = parseTreeID(treeChange.target);
+    const { nodeKey } = parseTreeID(treeChange.target);
     const tree = binding.tree;
 
     // Get the tree node to determine its type and data
@@ -74,13 +74,24 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     const nodeData = Object.fromEntries(loroTreeNode.data.entries());
     const elementType = nodeData.elementType;
 
-    console.log(`🌳 Creating Lexical node from Loro: type=${elementType}, key=${nodeKey}`, nodeData);
-
-    // Skip if this peer initiated the change (avoid circular updates)
-    if (peerId === binding.clientID) {
-      console.log(`🌳 Skipping creation from same peer: ${peerId}`);
-      return;
+    // Early check for root node type to avoid unnecessary processing
+    const lexicalData = loroTreeNode?.data.get('lexical');
+    if (lexicalData && typeof lexicalData === 'string') {
+      try {
+        const deserializedData = JSON.parse(lexicalData);
+        const nodeType = deserializedData.lexicalNode?.__type;
+        
+        // Skip root nodes - they should not be created as children
+        if (nodeType === 'root') {
+          console.log(`🌳 Skipping root node creation during initialization - root already exists`);
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to parse node data for type check:', error);
+      }
     }
+
+    console.log(`🌳 Creating Lexical node from Loro: type=${elementType}, key=${nodeKey}`, nodeData);
 
     // Check if node already exists to avoid duplicates ($ method - already in editor.update)
     const existingNode = $getNodeByKey(nodeKey);
@@ -105,26 +116,15 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     if (!parentLexicalNode) {
       parentLexicalNode = $getRoot();
       console.log(`🌳 Using root as parent for ${nodeKey}`);
-    }
-
-    // Check the node type before creating to avoid root node issues
-    const lexicalData = loroTreeNode?.data.get('lexical');
-    if (lexicalData && typeof lexicalData === 'string') {
-      try {
-        const deserializedData = JSON.parse(lexicalData);
-        const nodeType = deserializedData.lexicalNode?.__type;
-        
-        // Skip root nodes - they should not be created as children
-        if (nodeType === 'root') {
-          console.warn(`🌳 Skipping creation of root node - this should not happen`);
-          return;
-        }
-      } catch (error) {
-        console.warn('Failed to parse node data for type check:', error);
+      
+      // Safety check: Text nodes cannot be direct children of root
+      if (elementType === 'text') {
+        console.warn(`🌳 Cannot insert text node ${nodeKey} directly into root. Skipping creation.`);
+        return;
       }
     }
 
-      // Create the Lexical node using the NodeFactory
+    // Create the Lexical node using the NodeFactory
       // Pass nodeData so NodeFactory can access lexical data immediately
       const lexicalNode = createLexicalNodeFromLoro(
         treeChange.target,
@@ -211,14 +211,8 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    const { nodeKey, peerId } = parseTreeID(treeChange.target);
+    const { nodeKey } = parseTreeID(treeChange.target);
     console.log(`🌳 Moving Lexical node from Loro: key=${nodeKey}`);
-
-    // Skip if this peer initiated the change
-    if (peerId === binding.clientID) {
-      console.log(`🌳 Skipping move from same peer: ${peerId}`);
-      return;
-    }
 
     const nodeToMove = $getNodeByKey(nodeKey);
     if (!nodeToMove) {
@@ -289,14 +283,8 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    const { nodeKey, peerId } = parseTreeID(treeChange.target);
+    const { nodeKey } = parseTreeID(treeChange.target);
     console.log(`🌳 Deleting Lexical node from Loro: key=${nodeKey}`);
-
-    // Skip if this peer initiated the change
-    if (peerId === binding.clientID) {
-      console.log(`🌳 Skipping delete from same peer: ${peerId}`);
-      return;
-    }
 
     const nodeToDelete = $getNodeByKey(nodeKey);
     if (nodeToDelete) {

@@ -5,7 +5,8 @@ import {
   $isTextNode,
   TextFormatType,
   UpdateListenerPayload,
-  NodeKey
+  NodeKey,
+  ElementNode
 } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
@@ -137,7 +138,7 @@ export function deleteTextNodeInLoro(
  */
 export function createTextNodeFromLoro(
   treeId: TreeID,
-  parentNode: any, // The Lexical parent node where this should be inserted
+  parentNode: ElementNode,
   index?: number,
   options?: TextNodeMutatorOptions
 ): TextNode | null {
@@ -213,7 +214,7 @@ export function createTextNodeFromLoro(
 export function updateTextNodeFromLoro(
   treeId: TreeID,
   lexicalNode: TextNode,
-  newParentNode?: any,
+  newParentNode?: ElementNode,
   newIndex?: number,
   options?: TextNodeMutatorOptions
 ): void {
@@ -352,9 +353,20 @@ export function mutateTextNode(
 ): void {
   const { tree, peerId } = options;
 
+  console.log(`📝 TextNode mutation: ${mutation} for key: ${nodeKey}`);
+  
   switch (mutation) {
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
+      
+      // Check if this node already exists in Loro (indicates initialization/restoration)
+      const mapper = getNodeMapper();
+      const existingTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
+      if (existingTreeId) {
+        console.log(`📝 TextNode ${nodeKey} already exists in Loro as ${existingTreeId} - skipping creation (likely initialization)`);
+        return; // Skip creation since this is restoration from existing Loro state
+      }
+      
       if (currentNode && $isTextNode(currentNode)) {
         // Get parent, positioning, content, and serialized data using editor state context
         const { parent, parentId, index, textContent, format, mode, serializedNodeData } = update.editorState.read(() => {

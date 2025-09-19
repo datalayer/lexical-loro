@@ -152,7 +152,7 @@ export function deleteElementNodeInLoro(
  */
 export function createElementNodeFromLoro(
   treeId: TreeID,
-  parentNode: any, // The Lexical parent node where this should be inserted
+  parentNode: ElementNode, // The Lexical parent node where this should be inserted
   index?: number,
   options?: ElementNodeMutatorOptions
 ): ElementNode | null {
@@ -240,7 +240,7 @@ export function createElementNodeFromLoro(
 export function updateElementNodeFromLoro(
   treeId: TreeID,
   lexicalNode: ElementNode,
-  newParentNode?: any,
+  newParentNode?: ElementNode,
   newIndex?: number,
   options?: ElementNodeMutatorOptions
 ): void {

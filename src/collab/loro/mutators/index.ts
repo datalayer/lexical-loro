@@ -5,7 +5,7 @@
  * to enable bidirectional synchronization with Loro Tree Loro.
  */
 
-import { NodeKey } from 'lexical';
+import { ElementNode, NodeKey } from 'lexical';
 import { Binding } from '../Bindings';
 import { LoroTree } from 'loro-crdt/bundler/loro_wasm';
 
@@ -47,8 +47,8 @@ export interface NodeMutator<T = any> {
   create: (nodeKey: NodeKey, ...args: any[]) => string; // TreeID
   update: (nodeKey: NodeKey, ...args: any[]) => void;
   delete: (nodeKey: NodeKey, options: BaseMutatorOptions) => void;
-  createFromLoro: (treeId: string, parentNode: any, index?: number, options?: BaseMutatorOptions) => T | null;
-  updateFromLoro: (treeId: string, lexicalNode: T, newParentNode?: any, newIndex?: number, options?: BaseMutatorOptions) => void;
+  createFromLoro: (treeId: string, parentNode: ElementNode, index?: number, options?: BaseMutatorOptions) => T | null;
+  updateFromLoro: (treeId: string, lexicalNode: T, newParentNode?: ElementNode, newIndex?: number, options?: BaseMutatorOptions) => void;
   deleteFromLoro: (treeId: string, lexicalNode: T, options?: BaseMutatorOptions) => void;
 }
 

@@ -398,7 +398,7 @@ export function createBinding(
       
       // Preserve current position if panel already exists
       let currentLeft = '10px';
-      let currentTop = '10px';
+      let currentTop = '700px';
       if (existingDiv) {
         currentLeft = existingDiv.style.left || '10px';
         currentTop = existingDiv.style.top || '10px';

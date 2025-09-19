@@ -165,8 +165,15 @@ messageHandlers[messageSnapshot] = (
     console.log('📸 Received snapshot from server:', {
       snapshotSize: message.snapshot.length,
       docId: message.docId,
-      emitSynced
+      emitSynced,
+      alreadyLoaded: provider.snapshotLoaded
     })
+    
+    // Skip if snapshot was already loaded to prevent duplicate initialization
+    if (provider.snapshotLoaded) {
+      console.log('📸 Snapshot already loaded, ignoring duplicate')
+      return null
+    }
     
     // Import the snapshot with remote origin to distinguish from local changes
     const snapshotBytes = new Uint8Array(message.snapshot)
@@ -509,11 +516,13 @@ const setupWS = (provider) => {
       // Only request snapshot if we haven't already loaded it
       if (!provider.snapshotLoaded) {
         // First request a snapshot to get the initial document state
+        const requestId = Math.random().toString(36).substr(2, 9);
         const snapshotRequest: QuerySnapshotMessage = {
           type: 'query-snapshot',
           docId: provider.docId
         }
-        console.log('🔄 Requesting initial snapshot from server:', snapshotRequest)
+        console.log(`🔄 Requesting initial snapshot from server (ID: ${requestId}):`, snapshotRequest)
+        console.log(`🔄 Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
         sendMessage(ws, snapshotRequest)
       } else {
         console.log('📸 Snapshot already loaded, skipping request')

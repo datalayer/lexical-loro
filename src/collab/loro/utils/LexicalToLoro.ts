@@ -1,4 +1,4 @@
-import { LoroTree, TreeID } from 'loro-crdt';
+import { Loro, LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNodeDataHelper } from '../types/LexicalNodeData';
 
 /**
@@ -36,7 +36,7 @@ export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroT
   const rootTreeNode = tree.createNode();
   const rootTreeId = rootTreeNode.id;
   
-  processLexicalNode(parsedJson.root, tree, rootTreeNode, null);
+  processLexicalNode(parsedJson.root, tree, rootTreeNode);
   
   console.log('🌳 Successfully converted Lexical JSON to Loro tree');
   return rootTreeId;
@@ -48,8 +48,7 @@ export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroT
 function processLexicalNode(
   lexicalNode: LexicalNodeJSON,
   tree: LoroTree,
-  treeNode: any, // TreeNode from Loro
-  parentNode: any | null
+  treeNode: LoroTreeNode
 ): void {
   console.log(`🌳 Processing node: ${lexicalNode.type} (${treeNode.id})`);
 
@@ -70,7 +69,7 @@ function processLexicalNode(
     lexicalNode.children.forEach((child, childIndex) => {
       // Create child node under current node
       const childTreeNode = tree.createNode(treeNode.id, childIndex);
-      processLexicalNode(child, tree, childTreeNode, treeNode);
+      processLexicalNode(child, tree, childTreeNode);
     });
   }
 }

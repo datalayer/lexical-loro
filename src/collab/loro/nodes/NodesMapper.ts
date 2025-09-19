@@ -1,4 +1,4 @@
-import { LoroTree, TreeID } from 'loro-crdt';
+import { LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
@@ -44,7 +44,7 @@ export class NodeMapper {
     lexicalNode?: LexicalNode,
     parentTreeId?: TreeID,
     index?: number
-  ): any {
+  ): LoroTreeNode {
     // Check if mapping already exists
     const existingTreeId = this.lexicalToLoro.get(nodeKey);
     if (existingTreeId && this.tree.has(existingTreeId)) {
@@ -127,8 +127,6 @@ export class NodeMapper {
     this.lexicalToLoro.set(nodeKey, treeId);
     this.loroToLexical.set(treeId, nodeKey);
   }
-
-
 
   /**
    * Create a new Loro TreeNode and establish mapping
@@ -302,7 +300,7 @@ export function getLoroNodeByLexicalKey(
   lexicalNode?: LexicalNode,
   parentTreeId?: TreeID,
   index?: number
-): any {
+): LoroTreeNode {
   return getNodeMapper().getLoroNodeByLexicalKey(nodeKey, lexicalNode, parentTreeId, index);
 }
 

@@ -1,4 +1,4 @@
-import { $getNodeByKey, $getRoot } from 'lexical';
+import { $getNodeByKey, $getRoot, RootNode, TextNode } from 'lexical';
 import { BaseDiffHandler } from './BaseDiffHandler';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
@@ -33,6 +33,52 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
     }
   }
 
+  // Enhanced handle method with TreeID context
+  handleWithContext(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
+    console.log('🗺️ Handling MapDiff with context:', diff, 'TreeID:', treeId);
+
+    // Handle updated properties with TreeID context
+    if (diff.updated) {
+      Object.entries(diff.updated).forEach(([key, value]) => {
+        this.handlePropertyUpdateWithContext(key, value, treeId, binding, provider);
+      });
+    }
+
+    // Handle deleted properties
+    if (diff.deleted) {
+      diff.deleted.forEach((key: string) => {
+        this.handlePropertyDelete(key, binding, provider);
+      });
+    }
+  }
+
+  private handlePropertyUpdateWithContext(
+    key: string, 
+    value: any, 
+    treeId: TreeID,
+    binding: Binding, 
+    provider: Provider
+  ): void {
+    console.log(`🗺️ Map update with context: ${key} = ${value}, TreeID: ${treeId}`);
+
+    // Handle specific property updates with TreeID context
+    switch (key) {
+      case 'lexical':
+        this.handleLexicalDataUpdateWithContext(value, treeId, binding, provider);
+        break;
+      case 'textContent':
+        // Text content updates should be handled via lexical data updates
+        console.log(`🗺️ Text content update with context: ${value}`);
+        break;
+      case 'elementType':
+        // Element type changes are rare, mostly for debugging
+        console.log(`🗺️ Element type updated to: ${value}`);
+        break;
+      default:
+        console.log(`🗺️ Generic property update with context: ${key} = ${value}`);
+    }
+  }
+
   private handlePropertyUpdate(
     key: string, 
     value: any, 
@@ -44,7 +90,8 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
     // Handle specific property updates
     switch (key) {
       case 'lexical':
-        this.handleLexicalDataUpdate(value, binding, provider);
+        // Use targeted update only - the broad heuristic causes scrambling
+        console.log(`🗺️ Lexical data update without context - skipping to prevent scrambling`);
         break;
       case 'textContent':
         // Text content updates should be handled via lexical data updates
@@ -76,105 +123,84 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
     }
   }
 
-  private handleLexicalDataUpdate(
-    lexicalData: any, 
+  private handleLexicalDataUpdateWithContext(
+    lexicalData: any,
+    treeId: TreeID | string,
     binding: Binding, 
     provider: Provider
   ): void {
-    console.log(`🗺️ Lexical data updated:`, lexicalData);
-    console.log(`🗺️ Lexical data keys:`, Object.keys(lexicalData || {}));
-    console.log(`🗺️ Lexical data.__text:`, lexicalData?.__text);
-    console.log(`🗺️ Lexical data text content:`, JSON.stringify(lexicalData, null, 2));
+    console.log(`🗺️ Lexical data updated with context:`, lexicalData, 'TreeID:', treeId);
 
-    // Handle live editing updates by finding nodes that match the updated data
-    // Since we don't have TreeID context here, we'll need to find matching nodes by their properties
-    
+    // Extract the actual TreeID from container ID format
+    // Container ID format: "cid:6@7648424808278730813:Map"
+    // TreeID format: "6@7648424808278730813"
+    let actualTreeId = treeId;
+    if (typeof treeId === 'string' && treeId.startsWith('cid:')) {
+      const parts = treeId.split(':');
+      if (parts.length >= 3) {
+        actualTreeId = parts[1]; // Extract "6@7648424808278730813" from "cid:6@7648424808278730813:Map"
+        console.log(`🗺️ Extracted TreeID from container: ${treeId} → ${actualTreeId}`);
+      }
+    }
+
+    // Use the TreeID to find the specific Lexical node
+    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeId as TreeID);
+    if (!lexicalKey) {
+      console.log(`🗺️ No Lexical key found for TreeID: ${actualTreeId} (original: ${treeId})`);
+      return;
+    }
+
     if (lexicalData && typeof lexicalData === 'object') {
       binding.editor.update(() => {
-        // Try to find the target node by matching type and other properties
-        const root = $getRoot();
+        const targetNode = $getNodeByKey(lexicalKey);
+        if (!targetNode) {
+          console.log(`🗺️ No Lexical node found for key: ${lexicalKey}`);
+          return;
+        }
+
         const targetType = lexicalData.type || lexicalData.__type;
-        
-        // Check for text content in various possible properties
         const textContent = lexicalData.__text || lexicalData.text || lexicalData.textContent;
         
         if (targetType === 'text' && textContent !== undefined) {
-          // For text nodes, find matching node and update its content
-          console.log(`🗺️ Found text content to update: "${textContent}"`);
-          this.updateTextNodeContent(textContent, lexicalData, root, binding);
-        } else if (targetType && (lexicalData.format !== undefined || lexicalData.style !== undefined)) {
-          // For other property updates (format, style, etc.)
-          this.updateNodeProperties(targetType, lexicalData, root, binding);
+          console.log(`🗺️ Updating specific text node ${lexicalKey}: "${targetNode.getTextContent()}" → "${textContent}"`);
+          
+          // Cast to TextNode to access text-specific methods
+          if (targetNode.getType() === 'text') {
+            const textNode = targetNode as TextNode;
+            
+            // Only update if the content is actually different to avoid unnecessary updates
+            const currentText = textNode.getTextContent();
+            if (currentText !== textContent) {
+              console.log(`🗺️ Text content differs, updating: "${currentText}" → "${textContent}"`);
+              
+              // Check if this editor currently has focus - if so, skip the update to preserve focus
+              const rootElement = binding.editor.getRootElement();
+              const hasFocus = rootElement === document.activeElement || 
+                              rootElement?.contains(document.activeElement);
+              
+              if (hasFocus) {
+                console.log(`🗺️ Skipping update for focused editor to preserve focus`);
+                return;
+              }
+              textNode.setTextContent(textContent);
+              console.log(`🗺️ Text content updated successfully`);
+            } else {
+              console.log(`🗺️ Text content unchanged, skipping update: "${textContent}"`);
+            }
+            
+            // Apply other text properties if present
+            if (lexicalData.format !== undefined) {
+              textNode.setFormat(lexicalData.format);
+            }
+            if (lexicalData.style !== undefined) {
+              textNode.setStyle(lexicalData.style);
+            }
+          }
         } else {
-          console.log(`🗺️ Lexical data update - no matching update strategy for type: ${targetType}, textContent: ${textContent}`);
+          console.log(`🗺️ Lexical data update for node ${lexicalKey} - type: ${targetType}, textContent: ${textContent}`);
         }
-      }, { tag: 'loro-map-sync' });
+      }, { tag: 'loro-map-sync-targeted' });
     }
   }
 
-  private updateTextNodeContent(
-    newText: string, 
-    nodeData: any, 
-    root: any, 
-    binding: Binding
-  ): void {
-    // Find text nodes that might match this update
-    // In a more sophisticated system, we'd have better node tracking
-    
-    function findAndUpdateTextNodes(node: any): boolean {
-      if (node.getType && node.getType() === 'text') {
-        // Check if this could be the target node
-        const currentText = node.getTextContent();
-        
-        // Simple heuristic: if the current text is a substring of the new text
-        // or they're similar, this might be our target node
-        if (newText.includes(currentText) || currentText.includes(newText) || 
-            Math.abs(newText.length - currentText.length) <= 5) {
-          
-          console.log(`🗺️ Updating text node: "${currentText}" → "${newText}"`);
-          node.setTextContent(newText);
-          
-          // Apply other text properties if present
-          if (nodeData.format !== undefined) {
-            node.setFormat(nodeData.format);
-          }
-          if (nodeData.style !== undefined) {
-            node.setStyle(nodeData.style);
-          }
-          
-          return true; // Found and updated
-        }
-      }
-      
-      // Recursively check children if this is an element node
-      if (node.getChildren) {
-        const children = node.getChildren();
-        for (const child of children) {
-          if (findAndUpdateTextNodes(child)) {
-            return true;
-          }
-        }
-      }
-      
-      return false;
-    }
-    
-    const updated = findAndUpdateTextNodes(root);
-    if (updated) {
-      console.log(`🗺️ ✅ Successfully updated text node content`);
-    } else {
-      console.log(`🗺️ ❌ Could not find matching text node to update`);
-    }
-  }
-
-  private updateNodeProperties(
-    targetType: string,
-    nodeData: any,
-    root: any, 
-    binding: Binding
-  ): void {
-    console.log(`🗺️ Updating ${targetType} node properties:`, nodeData);
-    // This would handle format, style, and other property updates
-    // Implementation depends on specific property types needed
-  }
 }

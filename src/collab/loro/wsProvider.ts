@@ -20,6 +20,9 @@ export function createWebsocketProvider(
     docMap.set(id, doc);
   }
 
+  const providerInstanceId = Math.random().toString(36).substr(2, 9);
+  console.log(`🏭 Creating WebsocketProvider instance (ID: ${providerInstanceId}) for docId: ${id}`);
+  
   const websocketProvider = new WebsocketProvider(
     WEBSOCKET_ENDPOINT,
     WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,
@@ -28,5 +31,7 @@ export function createWebsocketProvider(
       connect: false,
     },
   );
+  
+  console.log(`🏭 WebsocketProvider created for: ${WEBSOCKET_ENDPOINT}/${WEBSOCKET_SLUG}/${WEBSOCKET_ID}/${id}`);
   return websocketProvider;
 }
