@@ -120,10 +120,40 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     const existingNode = $getNodeByKey(nodeKey);
     if (existingNode) {
       console.log(`🌳 Node ${nodeKey} already exists in Lexical, skipping creation`);
+      console.log(`🌳 Existing node type: ${existingNode.getType()}, Expected type: ${elementType}`);
+      
       if (elementType === 'text') {
         console.log(`📝 TEXT NODE ${nodeKey} ALREADY EXISTS - Type: ${existingNode.getType()}, Text: "${existingNode.getTextContent()}"`);
       }
-      return;
+      
+      // Check for type mismatch
+      if (existingNode.getType() !== elementType) {
+        console.warn(`🌳 TYPE MISMATCH: Existing node ${nodeKey} is type '${existingNode.getType()}' but Loro expects '${elementType}'`);
+        
+        // For critical mismatches (element vs text), recreate the node with correct type  
+        if ((elementType === 'text' && $isElementNode(existingNode)) || 
+            (elementType !== 'text' && !$isElementNode(existingNode))) {
+          console.warn(`🌳 Critical type mismatch detected, removing incorrect node and creating new one`);
+          
+          // Remove the existing node with wrong type
+          existingNode.remove();
+          console.log(`🌳 Removed existing node ${nodeKey} with incorrect type '${existingNode.getType()}'`);
+          
+          // The nodeKey is now available since the node was removed
+          // Continue with normal node creation process (don't return early)
+        } else {
+          // Non-critical mismatch, preserve the existing node
+          console.log(`🌳 Non-critical type mismatch, preserving existing node`);
+          binding.nodeMapper.setMapping(nodeKey, treeChange.target);
+          console.log(`🌳 Preserved mapping for existing node: ${treeChange.target} → ${nodeKey}`);
+          return;
+        }
+      } else {
+        // Type matches, preserve the mapping
+        binding.nodeMapper.setMapping(nodeKey, treeChange.target);
+        console.log(`🌳 Preserved mapping for existing node: ${treeChange.target} → ${nodeKey}`);
+        return;
+      }
     }
 
     // Get parent node from Loro tree structure if available ($ methods - already in editor.update)
@@ -136,6 +166,11 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(parentTreeId);
       parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
       console.log(`🌳 Parent mapping: ${parentTreeId} → ${parentKey} → ${parentLexicalNode?.getType() || 'null'}`);
+      
+      // Additional debugging for parent node
+      if (parentLexicalNode) {
+        console.log(`🌳 Parent node details: Key=${parentLexicalNode.getKey()}, Type=${parentLexicalNode.getType()}, CanHaveChildren=${$isElementNode(parentLexicalNode)}`);
+      }
     }
     
     // Default to root if no parent found ($ method - already in editor.update)
@@ -462,52 +497,42 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       return moveOps;
     }
 
-    // Detect if this looks like a text splitting operation:
-    // - New paragraph/heading nodes are being created
-    // - Text nodes are being created
-    const hasNewTextNodes = createOps.some(op => {
+    // When new nodes are being created, be cautious about moves to index 0 as they often cause unwanted reordering
+    console.log(`🌳 Content insertion detected (${createOps.length} creates, ${moveOps.length} moves)`);
+    
+    // Analyze what types of nodes are being created
+    const createdNodeTypes = createOps.map(op => {
       const tree = binding.tree;
       if (tree.has(op.target)) {
         const node = tree.getNodeByID(op.target);
         const nodeData = Object.fromEntries(node.data.entries());
-        return String(nodeData.elementType) === 'text';
+        return String(nodeData.elementType);
       }
-      return false;
+      return 'unknown';
     });
-
-    const hasNewStructureNodes = createOps.some(op => {
-      const tree = binding.tree;
-      if (tree.has(op.target)) {
-        const node = tree.getNodeByID(op.target);
-        const nodeData = Object.fromEntries(node.data.entries());
-        return ['paragraph', 'heading'].includes(String(nodeData.elementType));
-      }
-      return false;
-    });
-
-    const isTextSplittingContext = hasNewTextNodes && hasNewStructureNodes;
-
-    if (isTextSplittingContext) {
-      console.log(`🌳 Text splitting detected (${createOps.length} creates, ${moveOps.length} moves)`);
-      
-      // During text splitting, filter out moves that would reorder existing paragraphs to index 0
-      const filteredMoves = moveOps.filter(moveOp => {
-        // Skip moves to index 0 (beginning of document) during text splitting
-        // as these typically cause unwanted paragraph reordering
-        if (moveOp.index === 0) {
-          const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(moveOp.target);
-          console.log(`🌳 Skipping move to index 0 during text splitting: TreeID=${moveOp.target}, LexicalKey=${lexicalKey}`);
+    
+    console.log(`🌳 Creating nodes of types: ${createdNodeTypes.join(', ')}`);
+    
+    // Filter out moves that would cause unwanted paragraph reordering
+    const filteredMoves = moveOps.filter(moveOp => {
+      // Skip moves to index 0 during content insertion operations
+      // These typically represent CRDT reordering that doesn't match user intent
+      if (moveOp.index === 0) {
+        const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(moveOp.target);
+        
+        // Check if this is moving an existing paragraph/heading to the beginning
+        const nodeToMove = $getNodeByKey(lexicalKey || '');
+        const nodeType = nodeToMove?.getType();
+        
+        if (['paragraph', 'heading'].includes(nodeType || '')) {
+          console.log(`🌳 Skipping move of ${nodeType} to index 0 during content insertion: TreeID=${moveOp.target}, LexicalKey=${lexicalKey}`);
           return false;
         }
-        return true;
-      });
+      }
+      return true;
+    });
 
-      console.log(`🌳 Filtered moves: ${moveOps.length} → ${filteredMoves.length} (removed ${moveOps.length - filteredMoves.length} moves to index 0)`);
-      return filteredMoves;
-    }
-
-    // Not a text splitting context, allow all moves
-    console.log(`🌳 Normal operation context, allowing all ${moveOps.length} move operations`);
-    return moveOps;
+    console.log(`🌳 Filtered moves: ${moveOps.length} → ${filteredMoves.length} (removed ${moveOps.length - filteredMoves.length} potentially disruptive moves)`);
+    return filteredMoves;
   }
 }

@@ -81,6 +81,8 @@ export function $diffTextContentAndApplyDelta(
   prevText: string,
   nextText: string,
 ): void {
+  console.log(`🔄 $diffTextContentAndApplyDelta: Key=${key}, "${prevText}" → "${nextText}"`);
+  
   const selection = $getSelection();
   let cursorOffset = nextText.length;
 
@@ -97,5 +99,11 @@ export function $diffTextContentAndApplyDelta(
   }
 
   const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
+  console.log(`🔄 Computed diff: index=${diff.index}, remove=${diff.remove}, insert="${diff.insert}"`);
+  
+  const beforeSplice = textNode.getTextContent();
   textNode.spliceText(diff.index, diff.remove, diff.insert);
+  const afterSplice = textNode.getTextContent();
+  
+  console.log(`🔄 Text splice result: "${beforeSplice}" → "${afterSplice}"`);
 }
