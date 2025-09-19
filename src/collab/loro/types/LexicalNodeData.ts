@@ -72,6 +72,12 @@ export class LexicalNodeDataHelper {
    * Get node type from LexicalNodeData
    */
   static getNodeType(data: LexicalNodeData): string {
-    return data.lexicalNode.getType();
+    // Handle both actual Lexical nodes (with getType method) and deserialized JSON objects
+    if (typeof data.lexicalNode.getType === 'function') {
+      return data.lexicalNode.getType();
+    } else {
+      // Fallback to direct property access for deserialized JSON
+      return data.lexicalNode.__type || 'unknown';
+    }
   }
 }

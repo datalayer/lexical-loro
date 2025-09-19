@@ -4,6 +4,7 @@ import * as eventloop from 'lib0/eventloop'
 import {
   messageEphemeral,
   messageQueryEphemeral,
+  messageQuerySnapshot,
   messageSnapshot,
   messageUpdate,
   EphemeralMessage,
@@ -11,6 +12,7 @@ import {
   SnapshotMessage,
 } from '../../provider/websocket'
 import { callbackHandler, isCallbackSet } from './callback'
+import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
 
 const pingTimeout = 30000
 
@@ -187,12 +189,25 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
 
     switch (messageData.type) {
 
-      case messageSnapshot:
-        // Send current document snapshot to requesting client
+      case messageQuerySnapshot:
+        // Client is requesting a snapshot - send current document state
+        console.log(`[Server] Client requesting snapshot for doc: ${doc.name}`)
         const snapshot = doc.doc.export({ mode: 'snapshot' })
-        const message: SnapshotMessage = {
+        const snapshotResponse: SnapshotMessage = {
           type: 'snapshot',
           snapshot: Array.from(snapshot),
+          docId: doc.name
+        }
+        console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes`)
+        sendMessage(doc, conn, snapshotResponse)
+        break
+
+      case messageSnapshot:
+        // Send current document snapshot to requesting client
+        const existingSnapshot = doc.doc.export({ mode: 'snapshot' })
+        const message: SnapshotMessage = {
+          type: 'snapshot',
+          snapshot: Array.from(existingSnapshot),
           docId: doc.name
         }
         sendMessage(doc, conn, message)
@@ -367,6 +382,11 @@ export class WSSharedDoc {
   constructor (name) {
     this.name = name
     this.doc = new LoroDoc()
+    
+    // Initialize the document with default Lexical content
+    console.log(`[Server] Initializing document '${name}' with default content`)
+    initializeLoroDocWithLexicalContent(this.doc)
+    
     /**
      * Maps from conn to set of controlled ephemeral keys. Delete all keys when this conn is closed
      * @type {Map<Object, Set<string>>}

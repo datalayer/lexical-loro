@@ -1,21 +1,17 @@
 import { TreeID, LoroTree } from 'loro-crdt';
-import { LexicalNode } from 'lexical';
-import { createRootNodeFromLoro } from '../mutators/RootNodeMutators';
-import { createElementNodeFromLoro } from '../mutators/ElementNodeMutators';
-import { createTextNodeFromLoro } from '../mutators/TextNodeMutators';
-import { createLineBreakNodeFromLoro } from '../mutators/LineBreakNodeMutators';
-import { createDecoratorNodeFromLoro } from '../mutators/DecoratorNodeMutators';
+import { LexicalNode, NodeKey } from 'lexical';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
+import { Binding } from '../Bindings';
 
 /**
  * Factory function to create Lexical nodes from Loro TreeID
+ * Uses the editor's registered node classes, similar to YJS implementation
  */
 export function createLexicalNodeFromLoro(
   treeId: TreeID, 
   loroTree: LoroTree,
-  parentLexicalNode?: LexicalNode,
-  index?: number,
-  options?: any
+  binding: Binding,
+  parentKey?: NodeKey
 ): LexicalNode | null {
   // Get node data from Loro tree
   if (!loroTree.has(treeId)) {
@@ -26,11 +22,14 @@ export function createLexicalNodeFromLoro(
   const lexicalData = treeNode?.data.get('lexical');
   
   let nodeType: string;
+  let deserializedData: any = null;
+  
   if (lexicalData && typeof lexicalData === 'string') {
-    // New format: deserialize LexicalNodeData to get the nodeType
+    // New format: deserialize LexicalNodeData to get the nodeType and properties
     try {
-      const deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
-      nodeType = deserializedData.lexicalNode.getType();
+      deserializedData = LexicalNodeDataHelper.deserialize(lexicalData);
+      // The deserialized data is a plain JSON object, access __type directly
+      nodeType = deserializedData.lexicalNode.__type;
     } catch (error) {
       console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
       return null;
@@ -45,27 +44,39 @@ export function createLexicalNodeFromLoro(
     nodeType = oldNodeType;
   }
 
-  // Call appropriate mutator based on node type
-  switch (nodeType) {
-    case 'root':
-      return createRootNodeFromLoro(treeId, { tree: loroTree, ...options });
-      
-    case 'element':
-    case 'paragraph':
-    case 'heading':
-      return createElementNodeFromLoro(treeId, parentLexicalNode, index, { tree: loroTree, ...options });
-      
-    case 'text':
-      return createTextNodeFromLoro(treeId, parentLexicalNode, index, { tree: loroTree, ...options });
-      
-    case 'linebreak':
-      return createLineBreakNodeFromLoro(treeId, parentLexicalNode, index, { tree: loroTree, ...options });
-      
-    case 'decorator':
-      return createDecoratorNodeFromLoro(treeId, parentLexicalNode, index, { tree: loroTree, ...options });
-      
-    default:
-      console.warn('Unknown nodeType for Loro->Lexical conversion:', nodeType);
-      return null;
+  // Get the registered node class from the editor (following YJS pattern)
+  const registeredNodes = binding.editor._nodes;
+  const nodeInfo = registeredNodes.get(nodeType);
+  
+  if (!nodeInfo) {
+    console.warn('Node type not registered:', nodeType);
+    return null;
   }
+
+  // Create new instance of the registered node class
+  const lexicalNode: LexicalNode = new nodeInfo.klass();
+  
+  // Set parent if provided
+  if (parentKey) {
+    lexicalNode.__parent = parentKey;
+  }
+
+  // Apply properties from the deserialized data if available
+  if (deserializedData?.lexicalNode) {
+    const nodeData = deserializedData.lexicalNode;
+    
+    // Apply all properties except system ones
+    Object.keys(nodeData).forEach(key => {
+      if (key !== '__parent' && key !== '__key') {
+        try {
+          (lexicalNode as any)[key] = nodeData[key];
+        } catch (error) {
+          console.warn(`Failed to set property ${key} on node:`, error);
+        }
+      }
+    });
+  }
+
+  console.log(`✅ Created Lexical node: ${nodeType} with key: ${lexicalNode.getKey()}`);
+  return lexicalNode;
 }

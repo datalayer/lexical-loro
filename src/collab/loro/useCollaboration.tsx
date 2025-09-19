@@ -349,17 +349,8 @@ function initializeEditor(
             }
           }
         } else {
-          const paragraph = $createParagraphNode();
-          root.append(paragraph);          
-          const {activeElement} = document;
-
-          if (
-            $getSelection() !== null ||
-            (activeElement !== null &&
-              activeElement === editor.getRootElement())
-          ) {
-            paragraph.select();
-          }
+          // Don't create default content - let it come from Loro tree sync
+          console.log('🌳 Skipping default paragraph creation - content will come from Loro sync');
         }
       }
     },

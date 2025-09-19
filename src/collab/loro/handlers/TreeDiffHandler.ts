@@ -1,4 +1,4 @@
-import { $getRoot, $isElementNode, $getNodeByKey } from 'lexical';
+import { $getRoot, $isElementNode, $getNodeByKey, $isRootNode } from 'lexical';
 import { TreeID } from 'loro-crdt';
 import { BaseDiffHandler } from './BaseDiffHandler';
 import { Binding } from '../Bindings';
@@ -23,6 +23,9 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
   
   handle(diff: TreeDiff, binding: Binding, provider: Provider): void {
     console.log('🌳 Handling TreeDiff:', diff);
+    
+    // Ensure root mapping is preserved
+    this.ensureRootMapping(binding);
     
     diff.diff.forEach(treeChange => {
       switch (treeChange.action) {
@@ -89,19 +92,57 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         parentLexicalNode = $getRoot();
       }
 
+      // Check the node type before creating to avoid root node issues
+      const treeNode = tree.getNodeByID(treeChange.target);
+      const lexicalData = treeNode?.data.get('lexical');
+      if (lexicalData && typeof lexicalData === 'string') {
+        try {
+          const deserializedData = JSON.parse(lexicalData);
+          const nodeType = deserializedData.lexicalNode?.__type;
+          
+          // Skip root nodes - they should not be created as children
+          if (nodeType === 'root') {
+            console.warn(`🌳 Skipping creation of root node - this should not happen`);
+            return;
+          }
+        } catch (error) {
+          console.warn('Failed to parse node data for type check:', error);
+        }
+      }
+
       // Create the Lexical node using the NodeFactory
       const lexicalNode = createLexicalNodeFromLoro(
         treeChange.target,
         tree,
-        parentLexicalNode,
-        treeChange.index,
-        { tree, binding, provider }
+        binding,
+        parentLexicalNode?.getKey()
       );
 
+      // Set up bidirectional mapping between TreeID and Lexical key
+      if (lexicalNode) {
+        binding.nodeMapper.setMapping(lexicalNode.getKey(), treeChange.target);
+      }
+
       if (lexicalNode && parentLexicalNode && $isElementNode(parentLexicalNode)) {
+        // Safety check: Don't try to append a RootNode to another RootNode
+        if ($isRootNode(lexicalNode) && $isRootNode(parentLexicalNode)) {
+          console.warn(`🌳 Attempting to append RootNode to RootNode - skipping insertion`);
+          return;
+        }
+        
         // Insert the node at the specified index
         if (typeof treeChange.index === 'number') {
-          parentLexicalNode.splice(treeChange.index, 0, [lexicalNode]);
+          // Validate index bounds
+          const currentChildrenCount = parentLexicalNode.getChildrenSize();
+          const safeIndex = Math.min(treeChange.index, currentChildrenCount);
+          
+          if (safeIndex < 0) {
+            console.warn(`🌳 Invalid index ${treeChange.index}, appending to end`);
+            parentLexicalNode.append(lexicalNode);
+          } else {
+            console.log(`🌳 Inserting at index ${safeIndex} (requested: ${treeChange.index}, max: ${currentChildrenCount})`);
+            parentLexicalNode.splice(safeIndex, 0, [lexicalNode]);
+          }
         } else {
           parentLexicalNode.append(lexicalNode);
         }
@@ -111,7 +152,9 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         console.warn(`🌳 Failed to create or insert node ${nodeKey}:`, {
           hasLexicalNode: !!lexicalNode,
           hasParent: !!parentLexicalNode,
-          isParentElement: parentLexicalNode ? $isElementNode(parentLexicalNode) : false
+          isParentElement: parentLexicalNode ? $isElementNode(parentLexicalNode) : false,
+          nodeType: lexicalNode?.getType(),
+          parentType: parentLexicalNode?.getType()
         });
       }
     }, { tag: 'loro-sync' });
@@ -190,5 +233,25 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         console.warn(`🌳 Node ${nodeKey} not found for deletion`);
       }
     }, { tag: 'loro-sync' });
+  }
+
+  /**
+   * Ensure that the Loro root is always mapped to the Lexical root key
+   */
+  private ensureRootMapping(binding: Binding): void {
+    binding.editor.getEditorState().read(() => {
+      const lexicalRoot = $getRoot();
+      const loroRoots = binding.tree.roots();
+      
+      if (loroRoots.length > 0) {
+        const loroRootId = loroRoots[0].id;
+        const currentMapping = binding.nodeMapper.getLexicalKeyByLoroId(loroRootId);
+        
+        if (!currentMapping || currentMapping === 'no-key') {
+          binding.nodeMapper.setMapping(lexicalRoot.getKey(), loroRootId);
+          console.log(`🌳 Established root mapping: ${lexicalRoot.getKey()} ↔ ${loroRootId}`);
+        }
+      }
+    });
   }
 }

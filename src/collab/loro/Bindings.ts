@@ -7,6 +7,7 @@ import { createLoroTree } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
 
+
 export type ClientID = number;
 
 export type Binding = {
@@ -39,6 +40,10 @@ export function createBinding(
     'createBinding: doc is null or undefined',
   );
   
+  // Initialize the tree - content will come from server snapshot via sync
+  const tree = createLoroTree(doc);
+  console.log('📄 Loro tree initialized, content will be populated via server sync');
+  
   const binding: Binding = {
 //    clientID: doc.peerId,
     clientID: Number(doc.peerIdStr.slice(0, 8)), // Convert Loro peer ID to number
@@ -47,7 +52,7 @@ export function createBinding(
     doc,
     docMap,
     editor,
-    tree: createLoroTree(doc),
+    tree,
     excludedProperties: excludedProperties || new Map(),
     id,
     nodeProperties: new Map(),

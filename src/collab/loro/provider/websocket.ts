@@ -6,6 +6,7 @@ import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
 import type { UserState, ProviderAwareness } from '../State'
+import { performInitialSync } from '../sync/InitialSync'
 
 // @todo - this should depend on ephemeral timeout
 const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
@@ -13,6 +14,7 @@ const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
 // Loro message types
 export const messageUpdate = 'update'
 export const messageSnapshot = 'snapshot'
+export const messageQuerySnapshot = 'query-snapshot'
 export const messageEphemeral = 'ephemeral'
 export const messageQueryEphemeral = 'query-ephemeral'
 
@@ -40,7 +42,12 @@ export interface QueryEphemeralMessage {
   docId: string
 }
 
-export type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage;
+export interface QuerySnapshotMessage {
+  type: 'query-snapshot'
+  docId: string
+}
+
+export type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage | QuerySnapshotMessage;
 
 /**
  * Awareness adapter that wraps EphemeralStore to provide awareness-like API
@@ -156,9 +163,25 @@ messageHandlers[messageSnapshot] = (
   emitSynced: boolean
 ): string | null => {
   try {
+    console.log('📸 Received snapshot from server:', {
+      snapshotSize: message.snapshot.length,
+      docId: message.docId,
+      emitSynced
+    })
+    
     // Import the snapshot with remote origin to distinguish from local changes
     const snapshotBytes = new Uint8Array(message.snapshot)
+    
+    // Log document state before import
+    const beforeNodes = provider.doc.toJSON()
+    console.log('📸 Document state BEFORE import:', beforeNodes)
+    
     provider.doc.import(snapshotBytes)
+    
+    // Log document state after import  
+    const afterNodes = provider.doc.toJSON()
+    console.log('📸 Document state AFTER import:', afterNodes)
+    console.log('📸 Successfully imported snapshot, document now has content')
     
     if (emitSynced && !provider._synced) {
       provider.synced = true
@@ -189,6 +212,28 @@ messageHandlers[messageQueryEphemeral] = (
     return JSON.stringify(response)
   } catch (error) {
     console.error('Error in messageQueryEphemeral handler:', error.message)
+    return null
+  }
+}
+
+messageHandlers[messageQuerySnapshot] = (
+  provider: WebsocketProvider,
+  message: QuerySnapshotMessage,
+  _emitSynced: boolean
+): string | null => {
+  try {
+    // Export current document state as snapshot
+    const snapshotBytes = provider.doc.export({ mode: 'snapshot' })
+    
+    const response: SnapshotMessage = {
+      type: 'snapshot',
+      snapshot: Array.from(snapshotBytes),
+      docId: message.docId
+    }
+    
+    return JSON.stringify(response)
+  } catch (error) {
+    console.error('Error in messageQuerySnapshot handler:', error.message)
     return null
   }
 }
@@ -453,7 +498,21 @@ const setupWS = (provider) => {
       provider.emit('status', [{
         status: 'connected'
       }])
-      // Request initial ephemeral state from server
+      
+      console.log('✅ WebSocket connection established, requesting initial data')
+      
+      // Since we're in onopen, we know the WebSocket is ready
+      // Use sendMessage directly to avoid any race conditions
+      
+      // First request a snapshot to get the initial document state
+      const snapshotRequest: QuerySnapshotMessage = {
+        type: 'query-snapshot',
+        docId: provider.docId
+      }
+      console.log('🔄 Requesting initial snapshot from server:', snapshotRequest)
+      sendMessage(ws, snapshotRequest)
+      
+      // Then request initial ephemeral state from server  
       const ephemeralRequest: QueryEphemeralMessage = {
         type: 'query-ephemeral',
         docId: provider.docId
