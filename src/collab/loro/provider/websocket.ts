@@ -6,7 +6,6 @@ import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
 import type { UserState, ProviderAwareness } from '../State'
-import { performInitialSync } from '../sync/InitialSync'
 
 // @todo - this should depend on ephemeral timeout
 const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds

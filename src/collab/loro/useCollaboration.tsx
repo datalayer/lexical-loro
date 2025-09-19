@@ -110,6 +110,7 @@ export function useCollaboration(
       // Only skip if the origin is from this specific editor's changes.
       // We set 'lexical-edit' as origin when making changes from this editor.
       // So we should skip only if the origin is 'lexical-edit' (our own changes).
+
       if (eventBatch.origin !== binding.doc.peerIdStr) {
         // Check if this change is from the undo manager
         // const isFromUndoManger = origin instanceof UndoManager;

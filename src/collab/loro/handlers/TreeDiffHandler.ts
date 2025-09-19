@@ -1,4 +1,13 @@
-import { $getRoot, $isElementNode, $getNodeByKey, $isRootNode } from 'lexical';
+import { 
+  $getRoot, 
+  $isElementNode, 
+  $getNodeByKey, 
+  $isRootNode, 
+  $insertNodes,
+  $getSelection,
+  $createRangeSelection,
+  $setSelection
+} from 'lexical';
 import { TreeID } from 'loro-crdt';
 import { BaseDiffHandler } from './BaseDiffHandler';
 import { Binding } from '../Bindings';
@@ -27,24 +36,27 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     // Ensure root mapping is preserved
     this.ensureRootMapping(binding);
     
-    diff.diff.forEach(treeChange => {
-      switch (treeChange.action) {
-        case 'create':
-          this.handleCreate(treeChange, binding, provider);
-          break;
-        case 'move':
-          this.handleMove(treeChange, binding, provider);
-          break;
-        case 'delete':
-          this.handleDelete(treeChange, binding, provider);
-          break;
-        default:
-          throw new Error(`Unknown tree change action: ${(treeChange as any).action}`);
-      }
-    });
+    // Batch all tree changes into a single editor update to avoid reconciliation issues
+    binding.editor.update(() => {
+      diff.diff.forEach(treeChange => {
+        switch (treeChange.action) {
+          case 'create':
+            this.handleCreateInternal(treeChange, binding, provider);
+            break;
+          case 'move':
+            this.handleMoveInternal(treeChange, binding, provider);
+            break;
+          case 'delete':
+            this.handleDeleteInternal(treeChange, binding, provider);
+            break;
+          default:
+            throw new Error(`Unknown tree change action: ${(treeChange as any).action}`);
+        }
+      });
+    }, { tag: 'loro-tree-batch' });
   }
 
-  private handleCreate(
+  private handleCreateInternal(
     treeChange: { target: TreeID; parent?: TreeID; index?: number }, 
     binding: Binding, 
     provider: Provider
@@ -58,8 +70,8 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       return;
     }
 
-    const treeNode = tree.getNodeByID(treeChange.target);
-    const nodeData = Object.fromEntries(treeNode.data.entries());
+    const loroTreeNode = tree.getNodeByID(treeChange.target);
+    const nodeData = Object.fromEntries(loroTreeNode.data.entries());
     const elementType = nodeData.elementType;
 
     console.log(`🌳 Creating Lexical node from Loro: type=${elementType}, key=${nodeKey}`, nodeData);
@@ -70,45 +82,43 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       return;
     }
 
-    binding.editor.update(() => {
-      // Check if node already exists to avoid duplicates
-      const existingNode = $getNodeByKey(nodeKey);
-      if (existingNode) {
-        console.log(`🌳 Node ${nodeKey} already exists in Lexical, skipping creation`);
-        return;
-      }
+    // Check if node already exists to avoid duplicates ($ method - already in editor.update)
+    const existingNode = $getNodeByKey(nodeKey);
+    if (existingNode) {
+      console.log(`🌳 Node ${nodeKey} already exists in Lexical, skipping creation`);
+      return;
+    }
 
-      // Get parent node from Loro tree structure if available
-      const parentTreeId = treeChange.parent;
-      let parentLexicalNode;
-      
-      if (parentTreeId) {
-        const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(parentTreeId);
-        parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
-      }
-      
-      // Default to root if no parent found
-      if (!parentLexicalNode) {
-        parentLexicalNode = $getRoot();
-      }
+    // Get parent node from Loro tree structure if available ($ methods - already in editor.update)
+    const parentTreeId = treeChange.parent;
+    let parentLexicalNode;
+    
+    if (parentTreeId) {
+      const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(parentTreeId);
+      parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
+    }
+    
+    // Default to root if no parent found ($ method - already in editor.update)
+    if (!parentLexicalNode) {
+      parentLexicalNode = $getRoot();
+    }
 
-      // Check the node type before creating to avoid root node issues
-      const treeNode = tree.getNodeByID(treeChange.target);
-      const lexicalData = treeNode?.data.get('lexical');
-      if (lexicalData && typeof lexicalData === 'string') {
-        try {
-          const deserializedData = JSON.parse(lexicalData);
-          const nodeType = deserializedData.lexicalNode?.__type;
-          
-          // Skip root nodes - they should not be created as children
-          if (nodeType === 'root') {
-            console.warn(`🌳 Skipping creation of root node - this should not happen`);
-            return;
-          }
-        } catch (error) {
-          console.warn('Failed to parse node data for type check:', error);
+    // Check the node type before creating to avoid root node issues
+    const lexicalData = loroTreeNode?.data.get('lexical');
+    if (lexicalData && typeof lexicalData === 'string') {
+      try {
+        const deserializedData = JSON.parse(lexicalData);
+        const nodeType = deserializedData.lexicalNode?.__type;
+        
+        // Skip root nodes - they should not be created as children
+        if (nodeType === 'root') {
+          console.warn(`🌳 Skipping creation of root node - this should not happen`);
+          return;
         }
+      } catch (error) {
+        console.warn('Failed to parse node data for type check:', error);
       }
+    }
 
       // Create the Lexical node using the NodeFactory
       const lexicalNode = createLexicalNodeFromLoro(
@@ -130,24 +140,41 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
           return;
         }
         
-        // Insert the node at the specified index
-        if (typeof treeChange.index === 'number') {
+        // Use Lexical's proper command system for inserting nodes
+        try {
+          // Create a selection at the target position within the parent
+          let targetIndex = treeChange.index;
+          if (typeof targetIndex !== 'number') {
+            targetIndex = parentLexicalNode.getChildrenSize(); // Append to end
+          }
+          
           // Validate index bounds
           const currentChildrenCount = parentLexicalNode.getChildrenSize();
-          const safeIndex = Math.min(treeChange.index, currentChildrenCount);
-          
-          if (safeIndex < 0) {
-            console.warn(`🌳 Invalid index ${treeChange.index}, appending to end`);
-            parentLexicalNode.append(lexicalNode);
-          } else {
-            console.log(`🌳 Inserting at index ${safeIndex} (requested: ${treeChange.index}, max: ${currentChildrenCount})`);
-            parentLexicalNode.splice(safeIndex, 0, [lexicalNode]);
+          if (targetIndex < 0 || targetIndex > currentChildrenCount) {
+            console.warn(`🌳 Invalid index ${targetIndex}, using end position`);
+            targetIndex = currentChildrenCount;
           }
-        } else {
-          parentLexicalNode.append(lexicalNode);
+          
+          // Create a range selection at the target position
+          const selection = $createRangeSelection();
+          selection.anchor.set(parentLexicalNode.getKey(), targetIndex, 'element');
+          selection.focus.set(parentLexicalNode.getKey(), targetIndex, 'element');
+          $setSelection(selection);
+          
+          // Use Lexical's $insertNodes utility to insert the node properly
+          $insertNodes([lexicalNode]);
+          
+          console.log(`🌳 Successfully inserted node ${nodeKey} at index ${targetIndex} using Lexical commands`);
+        } catch (error) {
+          console.error(`🌳 Failed to insert node ${nodeKey} using commands:`, error);
+          // Fallback to direct insertion if command fails
+          try {
+            parentLexicalNode.append(lexicalNode);
+            console.log(`🌳 Fallback: Successfully appended node ${nodeKey} directly`);
+          } catch (fallbackError) {
+            console.error(`🌳 Fallback insertion also failed:`, fallbackError);
+          }
         }
-        
-        console.log(`🌳 Successfully created and inserted node ${nodeKey} into parent`);
       } else {
         console.warn(`🌳 Failed to create or insert node ${nodeKey}:`, {
           hasLexicalNode: !!lexicalNode,
@@ -157,10 +184,9 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
           parentType: parentLexicalNode?.getType()
         });
       }
-    }, { tag: 'loro-sync' });
   }
 
-  private handleMove(
+  private handleMoveInternal(
     treeChange: { target: TreeID; parent?: TreeID; index?: number }, 
     binding: Binding, 
     provider: Provider
@@ -174,12 +200,11 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       return;
     }
 
-    binding.editor.update(() => {
-      const nodeToMove = $getNodeByKey(nodeKey);
-      if (!nodeToMove) {
-        console.warn(`🌳 Node ${nodeKey} not found for move operation`);
-        return;
-      }
+    const nodeToMove = $getNodeByKey(nodeKey);
+    if (!nodeToMove) {
+      console.warn(`🌳 Node ${nodeKey} not found for move operation`);
+      return;
+    }
 
       // Get new parent
       const parentTreeId = treeChange.parent;
@@ -195,22 +220,51 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       }
 
       if ($isElementNode(newParentLexicalNode)) {
-        // Remove from current parent
-        nodeToMove.remove();
-        
-        // Insert at new location
-        if (typeof treeChange.index === 'number') {
-          newParentLexicalNode.splice(treeChange.index, 0, [nodeToMove]);
-        } else {
-          newParentLexicalNode.append(nodeToMove);
+        try {
+          // Use Lexical commands for moving nodes
+          let targetIndex = treeChange.index;
+          if (typeof targetIndex !== 'number') {
+            targetIndex = newParentLexicalNode.getChildrenSize(); // Append to end
+          }
+          
+          // Validate index bounds
+          const currentChildrenCount = newParentLexicalNode.getChildrenSize();
+          if (targetIndex < 0 || targetIndex > currentChildrenCount) {
+            console.warn(`🌳 Invalid move index ${targetIndex}, using end position`);
+            targetIndex = currentChildrenCount;
+          }
+          
+          // Remove from current parent (this is allowed as a $ method)
+          nodeToMove.remove();
+          
+          // Create a selection at the target position in the new parent
+          const selection = $createRangeSelection();
+          selection.anchor.set(newParentLexicalNode.getKey(), targetIndex, 'element');
+          selection.focus.set(newParentLexicalNode.getKey(), targetIndex, 'element');
+          $setSelection(selection);
+          
+          // Use $insertNodes to insert at the correct position
+          $insertNodes([nodeToMove]);
+          
+          console.log(`🌳 Successfully moved node ${nodeKey} to new parent at index ${targetIndex}`);
+        } catch (error) {
+          console.error(`🌳 Failed to move node ${nodeKey} using commands:`, error);
+          // Fallback to direct manipulation if needed
+          try {
+            if (typeof treeChange.index === 'number') {
+              newParentLexicalNode.splice(treeChange.index, 0, [nodeToMove]);
+            } else {
+              newParentLexicalNode.append(nodeToMove);
+            }
+            console.log(`🌳 Fallback: Successfully moved node ${nodeKey} directly`);
+          } catch (fallbackError) {
+            console.error(`🌳 Fallback move also failed:`, fallbackError);
+          }
         }
-        
-        console.log(`🌳 Successfully moved node ${nodeKey} to new parent`);
       }
-    }, { tag: 'loro-sync' });
   }
 
-  private handleDelete(
+  private handleDeleteInternal(
     treeChange: { target: TreeID }, 
     binding: Binding, 
     provider: Provider
@@ -224,15 +278,13 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       return;
     }
 
-    binding.editor.update(() => {
-      const nodeToDelete = $getNodeByKey(nodeKey);
-      if (nodeToDelete) {
-        nodeToDelete.remove();
-        console.log(`🌳 Successfully deleted node ${nodeKey}`);
-      } else {
-        console.warn(`🌳 Node ${nodeKey} not found for deletion`);
-      }
-    }, { tag: 'loro-sync' });
+    const nodeToDelete = $getNodeByKey(nodeKey);
+    if (nodeToDelete) {
+      nodeToDelete.remove();
+      console.log(`🌳 Successfully deleted node ${nodeKey}`);
+    } else {
+      console.warn(`🌳 Node ${nodeKey} not found for deletion`);
+    }
   }
 
   /**
