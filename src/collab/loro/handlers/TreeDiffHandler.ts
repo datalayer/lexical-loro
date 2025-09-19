@@ -38,7 +38,15 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     
     // Batch all tree changes into a single editor update to avoid reconciliation issues
     binding.editor.update(() => {
-      diff.diff.forEach(treeChange => {
+      // Sort create operations to ensure parents are processed before children
+      const createOps = diff.diff.filter(change => change.action === 'create') as Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>;
+      const otherOps = diff.diff.filter(change => change.action !== 'create');
+      
+      // Sort creates by hierarchy depth (parents first, then children)
+      const sortedCreates = this.sortCreatesByHierarchy(createOps, binding, provider);
+      
+      // Process creates first (in sorted order), then other operations
+      [...sortedCreates, ...otherOps].forEach(treeChange => {
         switch (treeChange.action) {
           case 'create':
             this.handleCreateInternal(treeChange, binding, provider);
@@ -323,5 +331,63 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         }
       }
     });
+  }
+
+  /**
+   * Sort create operations to ensure parents are processed before children
+   */
+  private sortCreatesByHierarchy(
+    createOps: Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>,
+    binding: Binding,
+    provider: Provider
+  ): Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }> {
+    // Build a parent-child map to determine hierarchy
+    const parentMap = new Map<TreeID, TreeID>();
+    const hasParentInOps = new Set<TreeID>();
+    
+    // Map each node to its parent and track which nodes have parents in this batch
+    createOps.forEach(op => {
+      if (op.parent) {
+        parentMap.set(op.target, op.parent);
+        hasParentInOps.add(op.target);
+      }
+    });
+    
+    // Function to calculate depth of a node in the hierarchy
+    const getDepth = (nodeId: TreeID): number => {
+      let depth = 0;
+      let current = nodeId;
+      const visited = new Set<TreeID>();
+      
+      while (parentMap.has(current) && !visited.has(current)) {
+        visited.add(current);
+        current = parentMap.get(current)!;
+        depth++;
+        
+        // Prevent infinite loops
+        if (depth > 20) {
+          console.warn(`🌳 Deep hierarchy detected for ${nodeId}, breaking at depth ${depth}`);
+          break;
+        }
+      }
+      
+      return depth;
+    };
+    
+    // Sort by depth (lower depth = parents processed first)
+    const sorted = createOps.sort((a, b) => {
+      const depthA = getDepth(a.target);
+      const depthB = getDepth(b.target);
+      
+      if (depthA !== depthB) {
+        return depthA - depthB;
+      }
+      
+      // If same depth, maintain original order
+      return 0;
+    });
+    
+    console.log(`🌳 Sorted ${createOps.length} create operations by hierarchy depth`);
+    return sorted;
   }
 }
