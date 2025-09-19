@@ -1,5 +1,5 @@
 import { LoroEventBatch } from 'loro-crdt';
-import { $getRoot } from 'lexical';
+import { $getRoot, $getSelection, $setSelection, SKIP_COLLAB_TAG } from 'lexical';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
@@ -32,6 +32,13 @@ export function syncLoroToLexical(
   // Using discrete: true ensures immediate synchronous commit before other operations
   binding.editor.update(() => {
     console.log('🔄 Starting batched DISCRETE editor update for all events');
+    
+    // Clear selection temporarily to avoid cursor position conflicts during text updates
+    const currentSelection = $getSelection();
+    if (currentSelection) {
+      console.log('🔄 Clearing selection during sync to prevent cursor conflicts');
+      $setSelection(null);
+    }
     
     // Process Loro events and apply them to Lexical using the appropriate handlers
     eventBatch.events.forEach((event, index) => {
@@ -76,7 +83,7 @@ export function syncLoroToLexical(
     });
     
     console.log('🔄 Completed batched DISCRETE editor update for all events');
-  }, { discrete: true, tag: 'loro-sync-batch' });
+  }, { discrete: true, tag: SKIP_COLLAB_TAG });
 
   console.log('🔄 SyncLoroToLexical: Finished processing events');
 

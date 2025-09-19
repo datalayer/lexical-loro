@@ -88,7 +88,11 @@ export function $diffTextContentAndApplyDelta(
     const anchor = selection.anchor;
 
     if (anchor.key === key) {
-      cursorOffset = anchor.offset;
+      // Ensure cursor offset doesn't exceed the new text length
+      // This prevents errors when text is split or content changes significantly
+      cursorOffset = Math.min(anchor.offset, nextText.length);
+      
+      console.log(`🔄 Cursor adjustment for key ${key}: anchor.offset=${anchor.offset}, nextText.length=${nextText.length}, adjusted=${cursorOffset}`);
     }
   }
 

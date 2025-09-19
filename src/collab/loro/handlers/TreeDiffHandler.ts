@@ -267,12 +267,19 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    const { nodeKey } = parseTreeID(treeChange.target);
-    console.log(`🌳 Moving Lexical node from Loro: key=${nodeKey}`);
+    const treeId = treeChange.target;
+    console.log(`🌳 Moving Lexical node from Loro TreeID: ${treeId}`);
 
-    const nodeToMove = $getNodeByKey(nodeKey);
+    // Use nodeMapper to get the actual Lexical key from the Loro TreeID
+    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(treeId);
+    if (!lexicalKey) {
+      console.warn(`🌳 No Lexical key found for Loro TreeID ${treeId} during move operation`);
+      return;
+    }
+
+    const nodeToMove = $getNodeByKey(lexicalKey);
     if (!nodeToMove) {
-      console.warn(`🌳 Node ${nodeKey} not found for move operation`);
+      console.warn(`🌳 Node ${lexicalKey} (TreeID: ${treeId}) not found for move operation`);
       return;
     }
 
@@ -316,9 +323,9 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
           // Use $insertNodes to insert at the correct position
           $insertNodes([nodeToMove]);
           
-          console.log(`🌳 Successfully moved node ${nodeKey} to new parent at index ${targetIndex}`);
+          console.log(`🌳 Successfully moved node ${lexicalKey} (TreeID: ${treeId}) to new parent at index ${targetIndex}`);
         } catch (error) {
-          console.error(`🌳 Failed to move node ${nodeKey} using commands:`, error);
+          console.error(`🌳 Failed to move node ${lexicalKey} (TreeID: ${treeId}) using commands:`, error);
           // Fallback to direct manipulation if needed
           try {
             if (typeof treeChange.index === 'number') {
@@ -326,7 +333,7 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
             } else {
               newParentLexicalNode.append(nodeToMove);
             }
-            console.log(`🌳 Fallback: Successfully moved node ${nodeKey} directly`);
+            console.log(`🌳 Fallback: Successfully moved node ${lexicalKey} (TreeID: ${treeId}) directly`);
           } catch (fallbackError) {
             console.error(`🌳 Fallback move also failed:`, fallbackError);
           }
@@ -339,15 +346,22 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    const { nodeKey } = parseTreeID(treeChange.target);
-    console.log(`🌳 Deleting Lexical node from Loro: key=${nodeKey}`);
+    const treeId = treeChange.target;
+    console.log(`🌳 Deleting Lexical node from Loro TreeID: ${treeId}`);
 
-    const nodeToDelete = $getNodeByKey(nodeKey);
+    // Use nodeMapper to get the actual Lexical key from the Loro TreeID
+    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(treeId);
+    if (!lexicalKey) {
+      console.warn(`🌳 No Lexical key found for Loro TreeID ${treeId} during delete operation`);
+      return;
+    }
+
+    const nodeToDelete = $getNodeByKey(lexicalKey);
     if (nodeToDelete) {
       nodeToDelete.remove();
-      console.log(`🌳 Successfully deleted node ${nodeKey}`);
+      console.log(`🌳 Successfully deleted node ${lexicalKey} (TreeID: ${treeId})`);
     } else {
-      console.warn(`🌳 Node ${nodeKey} not found for deletion`);
+      console.warn(`🌳 Node ${lexicalKey} (TreeID: ${treeId}) not found for deletion`);
     }
   }
 
