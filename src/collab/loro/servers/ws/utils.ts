@@ -5,11 +5,10 @@ import {
   messageEphemeral,
   messageQueryEphemeral,
   messageQuerySnapshot,
-  messageSnapshot,
   messageUpdate,
   EphemeralMessage,
   LoroWebSocketMessage,
-  SnapshotMessage,
+  QuerySnapshotMessage,
 } from '../../provider/websocket'
 import { callbackHandler, isCallbackSet } from './callback'
 import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
@@ -187,31 +186,21 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
       return
     }
 
+    console.log(`[Server] Received message type: ${messageData.type} for doc: ${doc.name}`)
+    
     switch (messageData.type) {
 
       case messageQuerySnapshot:
         // Client is requesting a snapshot - send current document state
-        console.log(`[Server] Client requesting snapshot for doc: ${doc.name}`)
+        const requestId = Math.random().toString(36).substr(2, 9);
+        console.log(`[Server] Client requesting snapshot for doc: ${doc.name} (Request ID: ${requestId})`)
         const snapshot = doc.doc.export({ mode: 'snapshot' })
-        const snapshotResponse: SnapshotMessage = {
-          type: 'snapshot',
-          snapshot: Array.from(snapshot),
-          docId: doc.name
-        }
-        console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes`)
-        sendMessage(doc, conn, snapshotResponse)
+        console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)
+        // Send binary snapshot data directly instead of wrapped message
+        conn.send(snapshot)
         break
 
-      case messageSnapshot:
-        // Send current document snapshot to requesting client
-        const existingSnapshot = doc.doc.export({ mode: 'snapshot' })
-        const message: SnapshotMessage = {
-          type: 'snapshot',
-          snapshot: Array.from(existingSnapshot),
-          docId: doc.name
-        }
-        sendMessage(doc, conn, message)
-        break
+
         
       case messageEphemeral:
         try {
@@ -350,12 +339,9 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   {
     // Send initial snapshot to new client
     const snapshot = doc.doc.export({ mode: 'snapshot' })
-    const snapshotMessage: SnapshotMessage = {
-      type: 'snapshot',
-      snapshot: Array.from(snapshot),
-      docId: doc.name
-    }
-    sendMessage(doc, conn,snapshotMessage)
+    console.log(`[Server] Sending initial snapshot to new client: ${snapshot.length} bytes`)
+    // Send binary snapshot data directly instead of wrapped message
+    conn.send(snapshot)
     
     // Send current ephemeral state if any
     const ephemeralUpdate = doc.ephemeralStore.encodeAll()

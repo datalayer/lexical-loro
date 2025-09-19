@@ -12,7 +12,6 @@ const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
 
 // Loro message types
 export const messageUpdate = 'update'
-export const messageSnapshot = 'snapshot'
 export const messageQuerySnapshot = 'query-snapshot'
 export const messageEphemeral = 'ephemeral'
 export const messageQueryEphemeral = 'query-ephemeral'
@@ -24,11 +23,7 @@ export interface LoroUpdateMessage {
   docId: string
 }
 
-export interface SnapshotMessage {
-  type: 'snapshot'
-  snapshot: number[]
-  docId: string
-}
+
 
 export interface EphemeralMessage {
   type: 'ephemeral'
@@ -46,7 +41,7 @@ export interface QuerySnapshotMessage {
   docId: string
 }
 
-export type LoroWebSocketMessage = LoroUpdateMessage | SnapshotMessage | EphemeralMessage | QueryEphemeralMessage | QuerySnapshotMessage;
+export type LoroWebSocketMessage = LoroUpdateMessage | EphemeralMessage | QueryEphemeralMessage | QuerySnapshotMessage;
 
 /**
  * Awareness adapter that wraps EphemeralStore to provide awareness-like API
@@ -156,52 +151,7 @@ class AwarenessAdapter implements ProviderAwareness {
  */
 const messageHandlers: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
 
-messageHandlers[messageSnapshot] = (
-  provider: WebsocketProvider,
-  message: SnapshotMessage,
-  emitSynced: boolean
-): string | null => {
-  try {
-    console.log('📸 Received snapshot from server:', {
-      snapshotSize: message.snapshot.length,
-      docId: message.docId,
-      emitSynced,
-      alreadyLoaded: provider.snapshotLoaded
-    })
-    
-    // Skip if snapshot was already loaded to prevent duplicate initialization
-    if (provider.snapshotLoaded) {
-      console.log('📸 Snapshot already loaded, ignoring duplicate')
-      return null
-    }
-    
-    // Import the snapshot with remote origin to distinguish from local changes
-    const snapshotBytes = new Uint8Array(message.snapshot)
-    
-    // Log document state before import
-    const beforeNodes = provider.doc.toJSON()
-    console.log('📸 Document state BEFORE import:', beforeNodes)
-    
-    provider.doc.import(snapshotBytes)
-    
-    // Log document state after import  
-    const afterNodes = provider.doc.toJSON()
-    console.log('📸 Document state AFTER import:', afterNodes)
-    console.log('📸 Successfully imported snapshot, document now has content')
-    
-    // Mark snapshot as loaded to prevent double loading
-    provider.snapshotLoaded = true
-    
-    if (emitSynced && !provider._synced) {
-      provider.synced = true
-    }
-    
-    return null // No response needed
-  } catch (error) {
-    console.error('Failed to import Loro snapshot:', error)
-    return null
-  }
-}
+
 
 messageHandlers[messageQueryEphemeral] = (
   provider: WebsocketProvider,
@@ -225,27 +175,7 @@ messageHandlers[messageQueryEphemeral] = (
   }
 }
 
-messageHandlers[messageQuerySnapshot] = (
-  provider: WebsocketProvider,
-  message: QuerySnapshotMessage,
-  _emitSynced: boolean
-): string | null => {
-  try {
-    // Export current document state as snapshot
-    const snapshotBytes = provider.doc.export({ mode: 'snapshot' })
-    
-    const response: SnapshotMessage = {
-      type: 'snapshot',
-      snapshot: Array.from(snapshotBytes),
-      docId: message.docId
-    }
-    
-    return JSON.stringify(response)
-  } catch (error) {
-    console.error('Error in messageQuerySnapshot handler:', error.message)
-    return null
-  }
-}
+
 
 messageHandlers[messageEphemeral] = (
   provider: WebsocketProvider,
@@ -890,18 +820,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       this.bcconnected = true
     }
     
-    // Send current document snapshot to other tabs
-    try {
-      const snapshot = this.doc.export({ mode: 'snapshot' })
-      const snapshotMessage: SnapshotMessage = {
-        type: 'snapshot',
-        snapshot: Array.from(snapshot),
-        docId: this.docId
-      }
-      bc.publish(this.bcChannel, JSON.stringify(snapshotMessage), this)
-    } catch (error) {
-      console.warn('Failed to export snapshot for BroadcastChannel:', error)
-    }
+    // Note: BroadcastChannel snapshot sharing removed - only WebSocket queries supported
     
     // Query ephemeral state from other tabs
     const queryMessage: QueryEphemeralMessage = {

@@ -181,7 +181,7 @@ export function createBinding(
       
       const debugDiv = document.getElementById('debug-yjs') || document.createElement('div');
       debugDiv.id = 'debug-yjs';
-      debugDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: rgba(0,100,0,0.9); color: white; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
+      debugDiv.style.cssText = 'position: fixed; top: 700px; left: 10px; background: rgba(0,100,0,0.9); color: white; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
       debugDiv.innerHTML = `
         <div style="color: #51cf66; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px;">🟢 YJS STRUCTURE (v2)</div>
         <div style="color: #74c0fc; margin-bottom: 8px;">Root children: ${binding.root._children.length}</div>

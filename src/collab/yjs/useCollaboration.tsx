@@ -135,12 +135,10 @@ export function useCollaboration(
         editorState,
         dirtyLeaves,
         dirtyElements,
-        mutatedNodes,
         normalizedNodes,
         tags,
       }) => {
         if (tags.has(SKIP_COLLAB_TAG) === false) {
-          console.log('---DLA', mutatedNodes);
           syncLexicalUpdatesToYjs(
             binding,
             provider,
