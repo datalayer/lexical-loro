@@ -213,7 +213,7 @@ export function createTextNodeFromLoro(
  */
 export function updateTextNodeFromLoro(
   treeId: TreeID,
-  lexicalNode: TextNode,
+  textNode: TextNode,
   newParentNode?: ElementNode,
   newIndex?: number,
   options?: TextNodeMutatorOptions
@@ -232,14 +232,14 @@ export function updateTextNodeFromLoro(
   // Update text content if it has changed
   const textContent = treeNode.data.get('textContent');
   if (textContent !== undefined && typeof textContent === 'string' && 
-      lexicalNode.getTextContent() !== textContent) {
-    lexicalNode.setTextContent(textContent);
+      textNode.getTextContent() !== textContent) {
+    textNode.setTextContent(textContent);
   }
   
   // Update format if it has changed
   const format = treeNode.data.get('format');
   if (format !== undefined && typeof format === 'number') {
-    lexicalNode.setFormat(format as unknown as TextFormatType);
+    textNode.setFormat(format as unknown as TextFormatType);
   }
   
   // Update mode if it has changed (skip for now due to type complexity)
@@ -251,10 +251,10 @@ export function updateTextNodeFromLoro(
   // If parent or position changed, move the node
   if (newParentNode && newIndex !== undefined) {
     // Remove from current location
-    lexicalNode.remove();
+    textNode.remove();
     
     // Insert at new location
-    newParentNode.splice(newIndex, 0, [lexicalNode]);
+    newParentNode.splice(newIndex, 0, [textNode]);
   }
 }
 

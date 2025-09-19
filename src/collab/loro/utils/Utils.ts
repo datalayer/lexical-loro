@@ -1,5 +1,6 @@
 import { LoroDoc, TreeID } from 'loro-crdt';
-import { LexicalNode, NodeKey } from 'lexical';
+import { $getSelection, $isRangeSelection, LexicalNode, NodeKey, TextNode } from 'lexical';
+import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
 const DEFAULT_TREE_NAME = 'tree';
 
@@ -72,4 +73,25 @@ export function toKeyNodeNumber(nodeKey: NodeKey): number {
     
     // If conversion fails, throw an error
     throw new Error(`NodeKey "${nodeKey}" cannot be converted to a number. Expected numeric string or "root".`);
+}
+
+export function $diffTextContentAndApplyDelta(
+  textNode: TextNode,
+  key: NodeKey,
+  prevText: string,
+  nextText: string,
+): void {
+  const selection = $getSelection();
+  let cursorOffset = nextText.length;
+
+  if ($isRangeSelection(selection) && selection.isCollapsed()) {
+    const anchor = selection.anchor;
+
+    if (anchor.key === key) {
+      cursorOffset = anchor.offset;
+    }
+  }
+
+  const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
+  textNode.spliceText(diff.index, diff.remove, diff.insert);
 }

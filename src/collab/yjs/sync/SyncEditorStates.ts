@@ -80,7 +80,7 @@ function $syncStateEvent(binding: Binding, event: YMapEvent<any>): boolean {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function $syncEvent(binding: Binding, event: any): void {
+function $syncEvent(binding: Binding, event: YEvent<any>): void {
 
   if (event instanceof YMapEvent && $syncStateEvent(binding, event)) {
     return;
