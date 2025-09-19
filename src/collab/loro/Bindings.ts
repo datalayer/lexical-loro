@@ -219,16 +219,22 @@ export function createBinding(
           isRoot: data.isRoot || false
         });
         
-        // Handle both old and new lexical data formats
+        // Handle different lexical data formats
         if (Object.keys(lexicalProps).length > 0) {
           console.log('📄 Lexical Data (Individual Properties):', lexicalProps);
-        } else if (data.lexical && typeof data.lexical === 'string') {
-          try {
-            const lexicalData = JSON.parse(data.lexical);
-            console.log('📄 Lexical Data (Legacy JSON):', lexicalData);
-          } catch (e) {
-            console.log('❌ Failed to parse lexical data:', e);
+        } else if (data.lexical) {
+          if (typeof data.lexical === 'object') {
+            console.log('📄 Lexical Data (Current JSON Object):', data.lexical);
+          } else if (typeof data.lexical === 'string') {
+            try {
+              const lexicalData = JSON.parse(data.lexical);
+              console.log('📄 Lexical Data (Legacy JSON String):', lexicalData);
+            } catch (e) {
+              console.log('❌ Failed to parse lexical data:', e);
+            }
           }
+        } else {
+          console.log('⚠️ No lexical data found for this node');
         }
         
         // Fetch and log the corresponding lexical node
@@ -263,11 +269,13 @@ export function createBinding(
             if (nodeInfo) {
               console.log('🔗 Linked Lexical Node:', nodeInfo);
             } else {
-              console.log('⚠️ Linked Lexical Node not found for key:', lexicalKey);
+              console.log('⚠️ No lexical node found in editor state for key:', lexicalKey, '(node may have been deleted or not yet created)');
             }
           } catch (e) {
             console.log('❌ Failed to fetch lexical node:', e);
           }
+        } else {
+          console.log('⚠️ No valid lexical key found for this Loro node (key:', lexicalKey, ')');
         }
       } else {
         console.warn(`Node with TreeID "${treeId}" not found`);
