@@ -34,8 +34,6 @@ export function syncLexicalToLoro(
 
       nodeMap.forEach((mutation, nodeKey) => {
 
-        console.log('-------DLA', nodeKey)
-
         if (isClassExtending(Klass, RootNode)) {
           mutateRootNode(update, mutation, nodeKey, mutatorOptions);
         }
@@ -53,6 +51,9 @@ export function syncLexicalToLoro(
         } else {
           throw new Error(`Unsupported node type for key: ${nodeKey}, mutation: ${mutation}. Node class: ${Klass.name}`);
         }
+
+        binding.doc.commit({ origin: binding.doc.peerIdStr })
+
       });
     });
 

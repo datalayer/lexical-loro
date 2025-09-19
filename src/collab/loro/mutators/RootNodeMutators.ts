@@ -50,20 +50,19 @@ export function createRootNodeInLoro(
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          rootTreeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        rootTreeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for RootNode:', error);
     }
   }
   
-  // Store metadata about this being a root node (useful for debugging)
-  rootTreeNode.data.set('elementType', 'root'); // Set element type for debug panel
-  rootTreeNode.data.set('isRoot', true);
+  // Store only essential metadata
+  rootTreeNode.data.set('elementType', 'root');
+  rootTreeNode.data.set('createdAt', Date.now());
   
   // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
@@ -83,25 +82,24 @@ export function updateRootNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for RootNode update:', error);
     }
   }
   
-  // Update any metadata if needed
-  treeNode.data.set('elementType', 'root'); // Ensure element type is set for debug panel
+  // Update only essential metadata
+  treeNode.data.set('elementType', 'root');
   treeNode.data.set('lastUpdated', Date.now());
 }
 

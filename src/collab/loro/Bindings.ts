@@ -72,7 +72,8 @@ export function createBinding(
         const logTreeStructure = (node: any, prefix: string = '', isLast: boolean = true, depth: number = 0) => {
           const data = Object.fromEntries(node.data.entries());
           const treeId = node.id;
-          const lexicalKey = data.lexicalKey || 'no-key';
+          // Get lexical key from mapper instead of node data
+          const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(treeId) || 'no-key';
           const elementType = data.elementType || 'no-type';
           
           const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ');
@@ -131,8 +132,9 @@ export function createBinding(
       
       nodes.forEach((node, index) => {
         const data = Object.fromEntries(node.data.entries());
-        const lexicalKey = data.lexicalKey;
         const treeId = node.id;
+        // Get lexical key from mapper instead of node data
+        const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(treeId) || 'no-key';
         
         console.log(`\n📍 Node ${index}:`);
         console.log('  TreeID:', treeId);
@@ -165,7 +167,8 @@ export function createBinding(
         console.log('\n⚠️  WARNING: Found orphaned nodes (no parent, not root):');
         orphanedNodes.forEach(node => {
           const data = Object.fromEntries(node.data.entries());
-          console.log(`   - ${node.id} (${data.lexicalKey}, ${data.elementType})`);
+          const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(node.id) || 'no-key';
+          console.log(`   - ${node.id} (${lexicalKey}, ${data.elementType})`);
         });
       }
       
@@ -175,7 +178,8 @@ export function createBinding(
         const data = Object.fromEntries(node.data.entries());
         const parent = node.parent();
         const children = node.children();
-        console.log(`${node.id} (${data.lexicalKey || 'no-key'}, ${data.elementType || 'no-type'})`);
+        const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(node.id) || 'no-key';
+        console.log(`${node.id} (${lexicalKey}, ${data.elementType || 'no-type'})`);
         console.log(`   Parent: ${parent ? parent.id : 'None'}`);
         console.log(`   Children: ${children ? children.map(child => child.id).join(', ') : 'None'}`);
       });
@@ -201,9 +205,12 @@ export function createBinding(
           }
         });
         
+        // Get lexical key from mapper instead of node data
+        const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(node.id) || 'no-key';
+        
         console.log('🔍 Loro Node Details:', {
           treeId: node.id,
-          lexicalKey: data.lexicalKey,
+          lexicalKey: lexicalKey,
           elementType: data.elementType,
           createdAt: data.createdAt && typeof data.createdAt === 'number' ? new Date(data.createdAt).toLocaleString() : 'N/A',
           hasLexicalData: Object.keys(lexicalProps).length > 0 || !!data.lexical,
@@ -225,11 +232,11 @@ export function createBinding(
         }
         
         // Fetch and log the corresponding lexical node
-        if (data.lexicalKey && data.lexicalKey !== 'no-key' && typeof data.lexicalKey === 'string') {
+        if (lexicalKey && lexicalKey !== 'no-key' && typeof lexicalKey === 'string') {
           try {
             const editorState = binding.editor.getEditorState();
             const nodeInfo = editorState.read(() => {
-              const lexicalNode = editorState._nodeMap.get(data.lexicalKey as string);
+              const lexicalNode = editorState._nodeMap.get(lexicalKey as string);
               
               if (!lexicalNode) {
                 return null;
@@ -256,7 +263,7 @@ export function createBinding(
             if (nodeInfo) {
               console.log('🔗 Linked Lexical Node:', nodeInfo);
             } else {
-              console.log('⚠️ Linked Lexical Node not found for key:', data.lexicalKey);
+              console.log('⚠️ Linked Lexical Node not found for key:', lexicalKey);
             }
           } catch (e) {
             console.log('❌ Failed to fetch lexical node:', e);
@@ -287,7 +294,9 @@ export function createBinding(
       
       const data = Object.fromEntries(rootNode.data.entries());
       const treeId = rootNode.id;
-      const lexicalKey = data.lexicalKey || 'no-key';
+      // Get lexical key from mapper instead of node data
+      const binding = (window as any).debugLoro.binding as Binding;
+      const lexicalKey = binding?.nodeMapper?.getLexicalKeyByLoroId(treeId) || 'no-key';
       const elementType = data.elementType || 'no-type';
       const nodeInfo = `TreeID(${treeId.slice(0, 8)}...) → ${lexicalKey} [${elementType}]`;
       
@@ -330,7 +339,8 @@ export function createBinding(
       const logTreeStructure = (node: any, prefix: string = '', isLast: boolean = true, depth: number = 0) => {
         const data = Object.fromEntries(node.data.entries());
         const treeId = node.id;
-        const lexicalKey = data.lexicalKey || 'no-key';
+        // Get lexical key from mapper instead of node data
+        const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(treeId) || 'no-key';
         const elementType = data.elementType || 'no-type';
         
         const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ');

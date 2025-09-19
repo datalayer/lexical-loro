@@ -41,25 +41,25 @@ export function createLineBreakNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for LineBreakNode:', error);
     }
   }
   
-  // Store LineBreakNode metadata (minimal since it's just a line break)
-  treeNode.data.set('elementType', 'linebreak'); // Set element type for debug panel
+  // Store only essential metadata
+  treeNode.data.set('elementType', 'linebreak');
+  treeNode.data.set('createdAt', Date.now());
   
   // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
@@ -88,17 +88,16 @@ export function updateLineBreakNodeInLoro(
   
   const treeId = treeNode.id;
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for LineBreakNode update:', error);
@@ -110,8 +109,8 @@ export function updateLineBreakNodeInLoro(
     tree.move(treeId, parentId, index);
   }
   
-  // Update metadata
-  treeNode.data.set('elementType', 'linebreak'); // Ensure element type is set for debug panel
+  // Update only essential metadata
+  treeNode.data.set('elementType', 'linebreak');
   treeNode.data.set('lastUpdated', Date.now());
 }
 

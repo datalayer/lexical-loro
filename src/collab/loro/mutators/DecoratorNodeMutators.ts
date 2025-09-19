@@ -49,34 +49,25 @@ export function createDecoratorNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for DecoratorNode creation:', error);
     }
   }
   
-  // Store DecoratorNode metadata (useful for debugging/logging)
-  treeNode.data.set('elementType', 'decorator'); // Set element type for debug panel
-  treeNode.data.set('decoratorType', decoratorType);
-  treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
-  
-  // Store additional metadata if provided
-  if (metadata) {
-    Object.entries(metadata).forEach(([key, value]) => {
-      treeNode.data.set(key, value);
-    });
-  }
+  // Store only essential metadata
+  treeNode.data.set('elementType', 'decorator');
+  treeNode.data.set('createdAt', Date.now());
   
   // The exported Lexical node data is already handled by the mapper
   // Return the TreeID from the node's ID
@@ -107,47 +98,31 @@ export function updateDecoratorNodeInLoro(
   const { tree } = options!;
   const treeId = treeNode.id;
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for DecoratorNode update:', error);
     }
   }
   
-  // Update decorator type if provided
-  if (decoratorType !== undefined) {
-    treeNode.data.set('decoratorType', decoratorType);
-  }
-  
-  // Update decorator data if provided
-  if (decoratorData !== undefined) {
-    treeNode.data.set('decoratorData', JSON.stringify(decoratorData));
-  }
-  
-  // Update metadata if provided
-  if (metadata) {
-    Object.entries(metadata).forEach(([key, value]) => {
-      treeNode.data.set(key, value);
-    });
-  }
+  // All decorator information is now contained in lexical data object
   
   // Move the node if parent or position changed
   if (parentId !== undefined || index !== undefined) {
     tree.move(treeId, parentId, index);
   }
   
-  // Update metadata
-  treeNode.data.set('elementType', 'decorator'); // Ensure element type is set for debug panel
+  // Update only essential metadata
+  treeNode.data.set('elementType', 'decorator');
   treeNode.data.set('lastUpdated', Date.now());
 }
 

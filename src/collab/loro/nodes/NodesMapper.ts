@@ -154,7 +154,6 @@ export class NodeMapper {
     }
     
     // Store basic metadata
-    treeNode.data.set('lexicalKey', nodeKey);
     treeNode.data.set('createdAt', Date.now());
     
     // Store complete lexical node data if lexical node is provided
@@ -179,10 +178,9 @@ export class NodeMapper {
       this.removeMapping(oldNodeKey, treeId);
       this.createMapping(newNodeKey, treeId);
       
-      // Update the stored lexical key in tree node data
+      // Update timestamp in tree node data
       const treeNode = this.tree.getNodeByID(treeId);
       if (treeNode) {
-        treeNode.data.set('lexicalKey', newNodeKey);
         treeNode.data.set('updatedAt', Date.now());
       }
     }

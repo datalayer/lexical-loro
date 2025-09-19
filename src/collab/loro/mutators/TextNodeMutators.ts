@@ -57,28 +57,25 @@ export function createTextNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for TextNode:', error);
     }
   }
   
-  // Store TextNode metadata (these are still useful for debugging/logging)
-  treeNode.data.set('elementType', 'text'); // Set element type for debug panel
-  treeNode.data.set('textContent', textContent);
-  treeNode.data.set('format', format || 0);
-  treeNode.data.set('mode', mode || 'normal');
+  // Store only essential metadata (elementType for debug panel)
+  treeNode.data.set('elementType', 'text');
+  treeNode.data.set('createdAt', Date.now());
   
   // Return the TreeID from the node's ID
   return treeNode.id;
@@ -100,34 +97,24 @@ export function updateTextNodeInLoro(
   // Get the existing tree node using the mapper
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as individual properties if serialized data is provided
+  // Store complete lexical node data as clean JSON if serialized data is provided
   if (serializedNodeData) {
     try {
       const parsed = JSON.parse(serializedNodeData);
       const lexicalNodeData = parsed.lexicalNode;
       
-      // Store lexical properties directly as individual fields
+      // Store complete lexical JSON without the key
       if (lexicalNodeData) {
-        Object.entries(lexicalNodeData).forEach(([key, value]) => {
-          treeNode.data.set(`lexical_${key}`, value);
-        });
+        const { key, ...cleanedData } = lexicalNodeData;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to parse lexical node data for TextNode update:', error);
     }
   }
   
-  // Update metadata
-  treeNode.data.set('elementType', 'text'); // Ensure element type is set for debug panel
-  if (newTextContent !== undefined) {
-    treeNode.data.set('textContent', newTextContent);
-  }
-  if (format !== undefined) {
-    treeNode.data.set('format', format);
-  }
-  if (mode !== undefined) {
-    treeNode.data.set('mode', mode);
-  }
+  // Update only essential metadata
+  treeNode.data.set('elementType', 'text');
   treeNode.data.set('updatedAt', Date.now());
   
   // The exported Lexical node data is already handled by the mapper
