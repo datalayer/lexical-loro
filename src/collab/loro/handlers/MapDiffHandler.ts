@@ -38,10 +38,32 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
   handleWithContext(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
     console.log('🗺️ Handling MapDiff with context:', diff, 'TreeID:', treeId);
 
+    this.handleWithContextInternal(diff, treeId, binding, provider);
+  }
+
+  // Internal method for use when already inside editor.update()
+  handleInternal(diff: MapDiff, binding: Binding, provider: Provider): void {
+    // Handle updated properties
+    if (diff.updated) {
+      Object.entries(diff.updated).forEach(([key, value]) => {
+        this.handlePropertyUpdate(key, value, binding, provider);
+      });
+    }
+
+    // Handle deleted properties
+    if (diff.deleted) {
+      diff.deleted.forEach((key: string) => {
+        this.handlePropertyDelete(key, binding, provider);
+      });
+    }
+  }
+
+  // Internal method for use when already inside editor.update() with context
+  handleWithContextInternal(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
     // Handle updated properties with TreeID context
     if (diff.updated) {
       Object.entries(diff.updated).forEach(([key, value]) => {
-        this.handlePropertyUpdateWithContext(key, value, treeId, binding, provider);
+        this.handlePropertyUpdateWithContextInternal(key, value, treeId, binding, provider);
       });
     }
 
@@ -66,6 +88,48 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
     switch (key) {
       case 'lexical':
         this.handleLexicalDataUpdateWithContext(value, treeId, binding);
+        break;
+      case 'textContent':
+        // Text content updates should be handled via lexical data updates
+        console.log(`🗺️ Text content update with context: ${value}`);
+        break;
+      case 'elementType':
+        // Element type changes are rare, mostly for debugging
+        console.log(`🗺️ Element type updated to: ${value}`);
+        break;
+      default:
+        console.log(`🗺️ Generic property update with context: ${key} = ${value}`);
+    }
+  }
+
+  // Internal version for use when already inside editor.update()
+  private handlePropertyUpdateWithContextInternal(
+    key: string, 
+    value: any, 
+    treeId: TreeID,
+    binding: Binding, 
+    provider: Provider
+  ): void {
+    console.log(`🗺️ Map update with context: ${key} = ${value}, TreeID: ${treeId}`);
+
+    // Handle specific property updates with TreeID context
+    switch (key) {
+      case 'lexical':
+        // Extract TreeID and call internal method directly (already inside editor.update())
+        let actualTreeId = treeId;
+        if (typeof treeId === 'string' && treeId.startsWith('cid:')) {
+          const parts = treeId.split(':');
+          if (parts.length >= 3) {
+            actualTreeId = parts[1] as TreeID;
+          }
+        }
+        
+        const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeId as TreeID);
+        if (lexicalKey) {
+          this.handleLexicalDataUpdateInternal(value, lexicalKey, actualTreeId as TreeID);
+        } else {
+          console.log(`🗺️ No Lexical key found for TreeID: ${actualTreeId}`);
+        }
         break;
       case 'textContent':
         // Text content updates should be handled via lexical data updates
@@ -152,47 +216,83 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
 
     if (lexicalData && typeof lexicalData === 'object') {
       binding.editor.update(() => {
-        const targetNode = $getNodeByKey(lexicalKey);
-        if (!targetNode) {
-          console.log(`🗺️ No Lexical node found for key: ${lexicalKey}`);
-          return;
-        }
-
-        const targetType = lexicalData.type || lexicalData.__type;
-        const textContent = lexicalData.__text || lexicalData.text || lexicalData.textContent;
-        
-        if (targetType === 'text' && textContent !== undefined) {
-          console.log(`🗺️ Updating specific text node ${lexicalKey}: "${targetNode.getTextContent()}" → "${textContent}"`);
-          
-          // Cast to TextNode to access text-specific methods
-          if (targetNode.getType() === 'text') {
-            const textNode = targetNode as TextNode;
-            
-            // Only update if the content is actually different to avoid unnecessary updates
-            const currentText = textNode.getTextContent();
-            if (currentText !== textContent) {
-              console.log(`🗺️ Text content differs, updating: "${currentText}" → "${textContent}"`);
-              
-              // Apply the text update using delta to preserve cursor position and minimize disruption
-              $diffTextContentAndApplyDelta(textNode, lexicalKey, currentText, textContent);
-              console.log(`🗺️ Text content updated successfully using diffTextContentAndApplyDelta`);
-            } else {
-              console.log(`🗺️ Text content unchanged, skipping update: "${textContent}"`);
-            }
-            
-            // Apply other text properties if present
-            if (lexicalData.format !== undefined) {
-              textNode.setFormat(lexicalData.format);
-            }
-            if (lexicalData.style !== undefined) {
-              textNode.setStyle(lexicalData.style);
-            }
-          }
-        } else {
-          console.log(`🗺️ Lexical data update for node ${lexicalKey} - type: ${targetType}, textContent: ${textContent}`);
-        }
-      }, { tag: 'loro-map-sync-targeted' });
+        this.handleLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeId as TreeID);
+      });
     }
   }
 
+  // Internal method for use when already inside editor.update()
+  private handleLexicalDataUpdateInternal(lexicalData: any, lexicalKey: string, treeId: TreeID): void {
+    const targetType = lexicalData.type || lexicalData.__type;
+    
+    // Special logging for text node lookups
+    if (targetType === 'text') {
+      console.log(`📝 TEXT NODE MAP UPDATE ATTEMPT:`);
+      console.log(`📝   Looking for Lexical key: ${lexicalKey}`);
+      console.log(`📝   TreeID: ${treeId}`);
+      console.log(`📝   Lexical Data:`, JSON.stringify(lexicalData, null, 2));
+    }
+    
+    const targetNode = $getNodeByKey(lexicalKey);
+    if (!targetNode) {
+      console.log(`🗺️ No Lexical node found for key: ${lexicalKey}`);
+      if (targetType === 'text') {
+        console.error(`📝 TEXT NODE NOT FOUND IN EDITOR:`);
+        console.error(`📝   Searched key: ${lexicalKey}`);
+        console.error(`📝   TreeID: ${treeId}`);
+        
+        // Debug: List all nodes in editor
+        const root = $getRoot();
+        console.log(`📝   Current editor nodes:`, root.getChildren().map(child => {
+          const childInfo: any = {
+            key: child.getKey(),
+            type: child.getType()
+          };
+          // Check if child is ElementNode with children
+          if ('getChildren' in child && typeof child.getChildren === 'function') {
+            childInfo.children = (child as any).getChildren().map((c: any) => ({
+              key: c.getKey(),
+              type: c.getType(),
+              text: 'getTextContent' in c ? c.getTextContent() : 'n/a'
+            }));
+          }
+          return childInfo;
+        }));
+      }
+      return;
+    }
+    
+    const textContent = lexicalData.__text || lexicalData.text || lexicalData.textContent;
+    
+    if (targetType === 'text' && textContent !== undefined) {
+      console.log(`🗺️ Updating specific text node ${lexicalKey}: "${targetNode.getTextContent()}" → "${textContent}"`);
+      
+      // Cast to TextNode to access text-specific methods
+      if (targetNode.getType() === 'text') {
+        const textNode = targetNode as TextNode;
+        
+        // Only update if the content is actually different to avoid unnecessary updates
+        const currentText = textNode.getTextContent();
+        if (currentText !== textContent) {
+          console.log(`🗺️ Text content differs, updating: "${currentText}" → "${textContent}"`);
+          
+          // Apply the text update using delta to preserve cursor position and minimize disruption
+          $diffTextContentAndApplyDelta(textNode, lexicalKey, currentText, textContent);
+          console.log(`🗺️ Text content updated successfully using diffTextContentAndApplyDelta`);
+        } else {
+          console.log(`🗺️ Text content unchanged, skipping update: "${textContent}"`);
+        }
+        
+        // Apply other text properties if present
+        if (lexicalData.format !== undefined) {
+          textNode.setFormat(lexicalData.format);
+        }
+        if (lexicalData.style !== undefined) {
+          textNode.setStyle(lexicalData.style);
+        }
+      }
+    } else {
+      console.log(`🗺️ Lexical data update for node ${lexicalKey} - type: ${targetType}, textContent: ${textContent}`);
+    }
+  }
 }

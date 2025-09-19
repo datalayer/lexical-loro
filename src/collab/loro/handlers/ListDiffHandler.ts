@@ -20,7 +20,11 @@ export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
   
   handle(diff: ListDiff, binding: Binding, provider: Provider): void {
     console.log('📋 Handling ListDiff:', diff);
+    this.handleInternal(diff, binding, provider);
+  }
 
+  // Internal method for use when already inside editor.update()
+  handleInternal(diff: ListDiff, binding: Binding, provider: Provider): void {
     if (diff.diff) {
       diff.diff.forEach((change: any) => {
         switch (change.type) {

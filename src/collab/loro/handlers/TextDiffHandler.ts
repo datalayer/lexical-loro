@@ -21,7 +21,11 @@ export class TextDiffHandler implements BaseDiffHandler<TextDiff> {
   
   handle(diff: TextDiff, binding: Binding, provider: Provider): void {
     console.log('📝 Handling TextDiff:', diff);
+    this.handleInternal(diff, binding, provider);
+  }
 
+  // Internal method for use when already inside editor.update()
+  handleInternal(diff: TextDiff, binding: Binding, provider: Provider): void {
     if (diff.diff) {
       diff.diff.forEach((change: any) => {
         switch (change.type) {

@@ -38,15 +38,21 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     
     // Batch all tree changes into a single editor update to avoid reconciliation issues
     binding.editor.update(() => {
-      // Sort create operations to ensure parents are processed before children
-      const createOps = diff.diff.filter(change => change.action === 'create') as Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>;
-      const otherOps = diff.diff.filter(change => change.action !== 'create');
-      
-      // Sort creates by hierarchy depth (parents first, then children)
-      const sortedCreates = this.sortCreatesByHierarchy(createOps, binding, provider);
-      
-      // Process creates first (in sorted order), then other operations
-      [...sortedCreates, ...otherOps].forEach(treeChange => {
+      this.handleInternal(diff, binding, provider);
+    });
+  }
+
+  // Internal method that can be called when already inside editor.update()
+  handleInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
+    // Sort create operations to ensure parents are processed before children
+    const createOps = diff.diff.filter(change => change.action === 'create') as Array<{ action: 'create'; target: TreeID; parent?: TreeID; index?: number }>;
+    const otherOps = diff.diff.filter(change => change.action !== 'create');
+    
+    // Sort creates by hierarchy depth (parents first, then children)
+    const sortedCreates = this.sortCreatesByHierarchy(createOps, binding, provider);
+    
+    // Process creates first (in sorted order), then other operations
+    [...sortedCreates, ...otherOps].forEach(treeChange => {
         switch (treeChange.action) {
           case 'create':
             this.handleCreateInternal(treeChange, binding, provider);
@@ -61,7 +67,6 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
             throw new Error(`Unknown tree change action: ${(treeChange as any).action}`);
         }
       });
-    }, { tag: 'loro-tree-batch' });
   }
 
   private handleCreateInternal(
@@ -100,11 +105,20 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     }
 
     console.log(`🌳 Creating Lexical node from Loro: type=${elementType}, key=${nodeKey}`, nodeData);
+    
+    // Special logging for text nodes
+    if (elementType === 'text') {
+      console.log(`📝 TEXT NODE CREATION REQUEST: TreeID=${treeChange.target}, NodeKey=${nodeKey}`);
+      console.log(`📝 TEXT NODE DATA:`, JSON.stringify(nodeData, null, 2));
+    }
 
     // Check if node already exists to avoid duplicates ($ method - already in editor.update)
     const existingNode = $getNodeByKey(nodeKey);
     if (existingNode) {
       console.log(`🌳 Node ${nodeKey} already exists in Lexical, skipping creation`);
+      if (elementType === 'text') {
+        console.log(`📝 TEXT NODE ${nodeKey} ALREADY EXISTS - Type: ${existingNode.getType()}, Text: "${existingNode.getTextContent()}"`);
+      }
       return;
     }
 
@@ -148,8 +162,21 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       if (lexicalNode) {
         binding.nodeMapper.setMapping(lexicalNode.getKey(), treeChange.target);
         console.log(`🌳 Successfully created and mapped node ${nodeKey} (${elementType})`);
+        
+        // Special logging for text nodes
+        if (elementType === 'text') {
+          console.log(`📝 TEXT NODE SUCCESSFULLY CREATED:`);
+          console.log(`📝   TreeID: ${treeChange.target}`);
+          console.log(`📝   Lexical Key: ${lexicalNode.getKey()}`);
+          console.log(`📝   Type: ${lexicalNode.getType()}`);
+          console.log(`📝   Text Content: "${lexicalNode.getTextContent()}"`);
+          console.log(`📝   Node in Editor: ${$getNodeByKey(lexicalNode.getKey()) !== null}`);
+        }
       } else {
         console.warn(`🌳 Failed to create node ${nodeKey} (${elementType}) - NodeFactory returned null`);
+        if (elementType === 'text') {
+          console.error(`📝 TEXT NODE CREATION FAILED for TreeID: ${treeChange.target}`);
+        }
         return;
       }
     } catch (nodeCreationError) {
@@ -203,6 +230,17 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
           
           console.log(`🌳 Parent children after: ${parentLexicalNode.getChildrenSize()}`);
           console.log(`🌳 Node parent after insertion: ${lexicalNode.getParent()?.getKey() || 'none'} (${lexicalNode.getParent()?.getType() || 'none'})`);
+          
+          // Special logging for text node insertion
+          if (elementType === 'text') {
+            console.log(`📝 TEXT NODE INSERTED INTO PARENT:`);
+            console.log(`📝   Text Node Key: ${lexicalNode.getKey()}`);
+            console.log(`📝   Parent Key: ${parentLexicalNode.getKey()}`);
+            console.log(`📝   Parent Type: ${parentLexicalNode.getType()}`);
+            console.log(`📝   Parent Children Count: ${parentLexicalNode.getChildrenSize()}`);
+            console.log(`📝   Text Node Parent: ${lexicalNode.getParent()?.getKey() || 'none'}`);
+            console.log(`📝   Node findable by key: ${$getNodeByKey(lexicalNode.getKey()) !== null}`);
+          }
           
           // Verify the node was properly inserted (we already have the node object)
           if (lexicalNode.getParent()) {
