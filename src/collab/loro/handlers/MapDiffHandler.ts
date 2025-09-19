@@ -1,4 +1,4 @@
-import { $getNodeByKey } from 'lexical';
+import { $getNodeByKey, $getRoot } from 'lexical';
 import { BaseDiffHandler } from './BaseDiffHandler';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
@@ -47,7 +47,8 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
         this.handleLexicalDataUpdate(value, binding, provider);
         break;
       case 'textContent':
-        this.handleTextContentUpdate(value, binding, provider);
+        // Text content updates should be handled via lexical data updates
+        console.log(`🗺️ Text content update: ${value}`);
         break;
       case 'elementType':
         // Element type changes are rare, mostly for debugging
@@ -81,40 +82,99 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
     provider: Provider
   ): void {
     console.log(`🗺️ Lexical data updated:`, lexicalData);
+    console.log(`🗺️ Lexical data keys:`, Object.keys(lexicalData || {}));
+    console.log(`🗺️ Lexical data.__text:`, lexicalData?.__text);
+    console.log(`🗺️ Lexical data text content:`, JSON.stringify(lexicalData, null, 2));
 
-    // If lexicalData contains a key, we can identify and update the specific lexical node
-    if (lexicalData && typeof lexicalData === 'object' && lexicalData.key) {
-      const nodeKey = lexicalData.key;
-      
+    // Handle live editing updates by finding nodes that match the updated data
+    // Since we don't have TreeID context here, we'll need to find matching nodes by their properties
+    
+    if (lexicalData && typeof lexicalData === 'object') {
       binding.editor.update(() => {
-        const lexicalNode = $getNodeByKey(nodeKey);
-        if (lexicalNode) {
-          // Update node properties based on the new lexical data
-          if (lexicalData.textContent !== undefined && 'setTextContent' in lexicalNode) {
-            (lexicalNode as any).setTextContent(lexicalData.textContent);
-          }
-          
-          if (lexicalData.format !== undefined && 'setFormat' in lexicalNode) {
-            (lexicalNode as any).setFormat(lexicalData.format);
-          }
-          
-          console.log(`🗺️ Updated lexical node ${nodeKey} with new data`);
+        // Try to find the target node by matching type and other properties
+        const root = $getRoot();
+        const targetType = lexicalData.type || lexicalData.__type;
+        
+        // Check for text content in various possible properties
+        const textContent = lexicalData.__text || lexicalData.text || lexicalData.textContent;
+        
+        if (targetType === 'text' && textContent !== undefined) {
+          // For text nodes, find matching node and update its content
+          console.log(`🗺️ Found text content to update: "${textContent}"`);
+          this.updateTextNodeContent(textContent, lexicalData, root, binding);
+        } else if (targetType && (lexicalData.format !== undefined || lexicalData.style !== undefined)) {
+          // For other property updates (format, style, etc.)
+          this.updateNodeProperties(targetType, lexicalData, root, binding);
         } else {
-          console.warn(`🗺️ Lexical node ${nodeKey} not found for update`);
+          console.log(`🗺️ Lexical data update - no matching update strategy for type: ${targetType}, textContent: ${textContent}`);
         }
-      }, { tag: 'loro-sync' });
+      }, { tag: 'loro-map-sync' });
     }
   }
 
-  private handleTextContentUpdate(
-    textContent: string, 
-    binding: Binding, 
-    provider: Provider
+  private updateTextNodeContent(
+    newText: string, 
+    nodeData: any, 
+    root: any, 
+    binding: Binding
   ): void {
-    console.log(`🗺️ Text content updated:`, textContent);
+    // Find text nodes that might match this update
+    // In a more sophisticated system, we'd have better node tracking
+    
+    function findAndUpdateTextNodes(node: any): boolean {
+      if (node.getType && node.getType() === 'text') {
+        // Check if this could be the target node
+        const currentText = node.getTextContent();
+        
+        // Simple heuristic: if the current text is a substring of the new text
+        // or they're similar, this might be our target node
+        if (newText.includes(currentText) || currentText.includes(newText) || 
+            Math.abs(newText.length - currentText.length) <= 5) {
+          
+          console.log(`🗺️ Updating text node: "${currentText}" → "${newText}"`);
+          node.setTextContent(newText);
+          
+          // Apply other text properties if present
+          if (nodeData.format !== undefined) {
+            node.setFormat(nodeData.format);
+          }
+          if (nodeData.style !== undefined) {
+            node.setStyle(nodeData.style);
+          }
+          
+          return true; // Found and updated
+        }
+      }
+      
+      // Recursively check children if this is an element node
+      if (node.getChildren) {
+        const children = node.getChildren();
+        for (const child of children) {
+          if (findAndUpdateTextNodes(child)) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }
+    
+    const updated = findAndUpdateTextNodes(root);
+    if (updated) {
+      console.log(`🗺️ ✅ Successfully updated text node content`);
+    } else {
+      console.log(`🗺️ ❌ Could not find matching text node to update`);
+    }
+  }
 
-    // This would need context about which node is being updated
-    // In practice, this should be handled through the lexical data update
-    console.log(`🗺️ Text content change should be handled via lexical data update`);
+  private updateNodeProperties(
+    targetType: string,
+    nodeData: any,
+    root: any, 
+    binding: Binding
+  ): void {
+    console.log(`🗺️ Updating ${targetType} node properties:`, nodeData);
+    // This would handle format, style, and other property updates
+    // Implementation depends on specific property types needed
   }
 }

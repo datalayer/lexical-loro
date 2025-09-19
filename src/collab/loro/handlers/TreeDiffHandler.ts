@@ -125,11 +125,13 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
     }
 
       // Create the Lexical node using the NodeFactory
-      // Note: We don't pass parentKey anymore - let Lexical handle relationships via append()
+      // Pass nodeData so NodeFactory can access lexical data immediately
       const lexicalNode = createLexicalNodeFromLoro(
         treeChange.target,
         tree,
-        binding
+        binding,
+        undefined, // parentKey - not used anymore
+        nodeData   // pass the node data from Loro
       );
 
       // Set up bidirectional mapping between TreeID and Lexical key
@@ -184,12 +186,11 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
           console.log(`🌳 Parent children after: ${parentLexicalNode.getChildrenSize()}`);
           console.log(`🌳 Node parent after insertion: ${lexicalNode.getParent()?.getKey() || 'none'} (${lexicalNode.getParent()?.getType() || 'none'})`);
           
-          // Verify the node was properly inserted
-          const verifyNode = $getNodeByKey(nodeKey);
-          if (verifyNode && verifyNode.getParent()) {
-            console.log(`🌳 ✅ Node ${nodeKey} (${verifyNode.getType()}) successfully inserted`);
+          // Verify the node was properly inserted (we already have the node object)
+          if (lexicalNode.getParent()) {
+            console.log(`🌳 ✅ Node ${nodeKey} (Lexical key: ${lexicalNode.getKey()}, type: ${lexicalNode.getType()}) successfully inserted`);
           } else {
-            console.warn(`🌳 ❌ Node ${nodeKey} insertion failed - node missing or not attached`);
+            console.warn(`🌳 ❌ Node ${nodeKey} (Lexical key: ${lexicalNode.getKey()}) insertion failed - no parent`);
           }
         } catch (error) {
           console.error(`🌳 Failed to insert node ${nodeKey} using direct methods:`, error);

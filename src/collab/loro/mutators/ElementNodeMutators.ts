@@ -113,7 +113,21 @@ export function updateElementNodeInLoro(
   if (parentId !== undefined || index !== undefined) {
     // Note: For moving, we need access to tree - this might need to be handled differently
     const { tree } = options!;
-    tree.move(treeNode.id, parentId, index);
+    
+    // Debug: Check if the parent exists and its children count
+    const parentNode = parentId ? tree.getNodeByID(parentId) : null;
+    const parentChildCount = parentNode ? parentNode.children.length : tree.roots().length;
+    
+    console.log(`🔄 Moving node ${treeNode.id} to parent ${parentId} at index ${index}`);
+    console.log(`🔄 Parent has ${parentChildCount} children, trying to move to index ${index}`);
+    
+    if (index !== undefined && index > parentChildCount) {
+      console.warn(`🔄 Index ${index} is out of bounds for parent with ${parentChildCount} children. Adjusting to end.`);
+      // Adjust index to be at the end instead of out of bounds
+      tree.move(treeNode.id, parentId, parentChildCount);
+    } else {
+      tree.move(treeNode.id, parentId, index);
+    }
   }
       
   // The exported Lexical node data is already handled by the mapper

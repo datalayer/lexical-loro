@@ -11,7 +11,8 @@ export function createLexicalNodeFromLoro(
   treeId: TreeID, 
   loroTree: LoroTree,
   binding: Binding,
-  parentKey?: NodeKey
+  parentKey?: NodeKey,
+  nodeDataFromDiff?: any
 ): LexicalNode | null {
   // Get node data from Loro tree
   if (!loroTree.has(treeId)) {
@@ -19,7 +20,14 @@ export function createLexicalNodeFromLoro(
   }
 
   const treeNode = loroTree.getNodeByID(treeId);
-  const lexicalData = treeNode?.data.get('lexical');
+  
+  // First try nodeData passed from TreeDiff handler (has immediate lexical data)
+  let lexicalData = nodeDataFromDiff?.lexical;
+  
+  // Fallback to tree node data
+  if (!lexicalData) {
+    lexicalData = treeNode?.data.get('lexical');
+  }
   
   let nodeType: string;
   let deserializedData: any = null;
@@ -34,14 +42,20 @@ export function createLexicalNodeFromLoro(
       console.warn('Failed to deserialize LexicalNodeData for TreeID:', treeId, error);
       return null;
     }
+  } else if (lexicalData && typeof lexicalData === 'object') {
+    // Direct object format (from TreeDiff handler or MapDiff)
+    nodeType = lexicalData.type || lexicalData.__type;
+    deserializedData = { lexicalNode: lexicalData };
+    console.log(`Using direct lexical object for TreeID ${treeId}:`, nodeType);
   } else {
-    // Fallback to old format for backward compatibility
-    const oldNodeType = treeNode?.data.get('nodeType');
-    if (!oldNodeType || typeof oldNodeType !== 'string') {
+    // Fallback to element type from nodeDataFromDiff or old nodeType
+    const fallbackType = nodeDataFromDiff?.elementType || treeNode?.data.get('nodeType');
+    if (!fallbackType || typeof fallbackType !== 'string') {
       console.warn('No lexical data or nodeType found for TreeID:', treeId);
       return null;
     }
-    nodeType = oldNodeType;
+    nodeType = fallbackType;
+    console.log(`Using fallback nodeType for TreeID ${treeId}:`, nodeType);
   }
 
   // Get the registered node class from the editor (following YJS pattern)
