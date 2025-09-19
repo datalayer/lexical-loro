@@ -11,6 +11,7 @@ import {
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
+import { $diffTextContentAndApplyDelta } from '../utils/Utils';
 
 /**
  * TextNode Mutators for Loro Tree Collaboration
@@ -233,7 +234,8 @@ export function updateTextNodeFromLoro(
   const textContent = treeNode.data.get('textContent');
   if (textContent !== undefined && typeof textContent === 'string' && 
       textNode.getTextContent() !== textContent) {
-    textNode.setTextContent(textContent);
+    const currentText = textNode.getTextContent();
+    $diffTextContentAndApplyDelta(textNode, textNode.getKey(), currentText, textContent);
   }
   
   // Update format if it has changed

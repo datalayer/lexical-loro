@@ -3,6 +3,7 @@ import { BaseDiffHandler } from './BaseDiffHandler';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { TreeID } from 'loro-crdt';
+import { $diffTextContentAndApplyDelta } from '../utils/Utils';
 
 interface MapDiff {
   type: 'map';
@@ -64,7 +65,7 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
     // Handle specific property updates with TreeID context
     switch (key) {
       case 'lexical':
-        this.handleLexicalDataUpdateWithContext(value, treeId, binding, provider);
+        this.handleLexicalDataUpdateWithContext(value, treeId, binding);
         break;
       case 'textContent':
         // Text content updates should be handled via lexical data updates
@@ -126,8 +127,7 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
   private handleLexicalDataUpdateWithContext(
     lexicalData: any,
     treeId: TreeID | string,
-    binding: Binding, 
-    provider: Provider
+    binding: Binding,
   ): void {
     console.log(`🗺️ Lexical data updated with context:`, lexicalData, 'TreeID:', treeId);
 
@@ -173,17 +173,9 @@ export class MapDiffHandler implements BaseDiffHandler<MapDiff> {
             if (currentText !== textContent) {
               console.log(`🗺️ Text content differs, updating: "${currentText}" → "${textContent}"`);
               
-              // Check if this editor currently has focus - if so, skip the update to preserve focus
-              const rootElement = binding.editor.getRootElement();
-              const hasFocus = rootElement === document.activeElement || 
-                              rootElement?.contains(document.activeElement);
-              
-              if (hasFocus) {
-                console.log(`🗺️ Skipping update for focused editor to preserve focus`);
-                return;
-              }
-              textNode.setTextContent(textContent);
-              console.log(`🗺️ Text content updated successfully`);
+              // Apply the text update using delta to preserve cursor position and minimize disruption
+              $diffTextContentAndApplyDelta(textNode, lexicalKey, currentText, textContent);
+              console.log(`🗺️ Text content updated successfully using diffTextContentAndApplyDelta`);
             } else {
               console.log(`🗺️ Text content unchanged, skipping update: "${textContent}"`);
             }
