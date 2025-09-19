@@ -98,6 +98,14 @@ export function updateTextNodeInLoro(
   // Get the existing tree node using the mapper
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
+  if (!treeNode) {
+    console.warn(`📝 TextNode ${nodeKey} not found in Loro, skipping update`);
+    return;
+  }
+  
+  // Note: Container validation is done in each try-catch block below since
+  // the container can be deleted between operations
+  
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
     try {
@@ -109,13 +117,20 @@ export function updateTextNodeInLoro(
         treeNode.data.set('lexical', lexicalNodeJSON);
       }
     } catch (error) {
-      console.warn('Failed to store lexical node JSON for TextNode update:', error);
+      // This is expected during text operations when nodes get deleted/recreated
+      console.log(`📝 TextNode ${nodeKey} container was deleted during update, skipping (normal during text operations):`, error.message);
+      return;
     }
   }
   
   // Update only essential metadata
-  treeNode.data.set('elementType', 'text');
-  treeNode.data.set('updatedAt', Date.now());
+  try {
+    treeNode.data.set('elementType', 'text');
+    treeNode.data.set('updatedAt', Date.now());
+  } catch (error) {
+    console.log(`📝 TextNode ${nodeKey} container deleted during metadata update (normal during text operations):`, error.message);
+    return;
+  }
   
   // The exported Lexical node data is already handled by the mapper
   // No additional JSON export needed since mapper handles exportJSON automatically
@@ -316,6 +331,15 @@ export function applyTextFormatInLoro(
     return;
   }
   
+  // Check if the TreeNode's container is still valid
+  try {
+    // Try a simple read operation to verify the container is accessible
+    treeNode.data.get('format');
+  } catch (error) {
+    console.log(`📝 TextNode ${nodeKey} container deleted during format check (normal during text operations):`, error.message);
+    return;
+  }
+  
   let currentFormat = treeNode.data.get('format') || 0;
   const formatNumber = formatType as unknown as number;
   
@@ -327,8 +351,13 @@ export function applyTextFormatInLoro(
     currentFormat = (currentFormat as number) & ~formatNumber;
   }
   
-  treeNode.data.set('format', currentFormat);
-  treeNode.data.set('lastUpdated', Date.now());
+  try {
+    treeNode.data.set('format', currentFormat);
+    treeNode.data.set('lastUpdated', Date.now());
+  } catch (error) {
+    console.log(`📝 TextNode ${nodeKey} container deleted during format update (normal during text operations):`, error.message);
+    return;
+  }
 }
 
 /**
@@ -348,12 +377,38 @@ export function mutateTextNode(
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
       
-      // Check if this node already exists in Loro (indicates initialization/restoration)
+      // Check if this node already exists in Loro
       const mapper = getNodeMapper();
       const existingTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
-      if (existingTreeId) {
-        console.log(`📝 TextNode ${nodeKey} already exists in Loro as ${existingTreeId} - skipping creation (likely initialization)`);
-        return; // Skip creation since this is restoration from existing Loro state
+      if (existingTreeId && currentNode && $isTextNode(currentNode)) {
+        // Check if the existing text node has the correct parent relationship
+        const { currentParentId, expectedParentId } = update.editorState.read(() => {
+          const parent = currentNode.getParent();
+          const expectedParentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          
+          // Get the current parent from Loro tree
+          let currentParentId: string | undefined;
+          try {
+            const treeNode = tree.getNodeByID(existingTreeId);
+            if (treeNode) {
+              const parentNode = treeNode.parent();
+              currentParentId = parentNode ? parentNode.id.toString() : undefined;
+            }
+          } catch (error) {
+            console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeId}:`, error);
+          }
+          
+          return { currentParentId, expectedParentId };
+        });
+        
+        if (currentParentId === expectedParentId) {
+          console.log(`📝 TextNode ${nodeKey} already exists in Loro as ${existingTreeId} with correct parent - skipping creation`);
+          return; // Skip creation since the parent relationship is correct
+        } else {
+          console.log(`📝 TextNode ${nodeKey} exists as ${existingTreeId} but parent changed: ${currentParentId} → ${expectedParentId} - creating new text node`);
+          // Clear the old mapping so we can create a new text node with the new parent
+          mapper.deleteMapping(nodeKey);
+        }
       }
       
       if (currentNode && $isTextNode(currentNode)) {

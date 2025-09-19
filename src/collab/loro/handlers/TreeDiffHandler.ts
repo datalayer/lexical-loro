@@ -270,7 +270,12 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       console.log(`🌳 Deleted node ${lexicalKey} for ${operation.target}`);
       
     } catch (error) {
-      console.error(`🌳 Error deleting node ${operation.target}:`, error);
+      // Handle the case where Loro is trying to delete an already deleted node
+      if (error.message && error.message.includes('is deleted or does not exist')) {
+        console.log(`🌳 Node ${operation.target} already deleted (normal during restructuring):`, error.message);
+      } else {
+        console.error(`🌳 Error deleting node ${operation.target}:`, error);
+      }
     }
   }
 

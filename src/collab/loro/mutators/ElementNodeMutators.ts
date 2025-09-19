@@ -133,7 +133,11 @@ export function updateElementNodeInLoro(
   // The exported Lexical node data is already handled by the mapper
   // No additional JSON export needed since mapper handles exportJSON automatically
   
-  treeNode.data.set('lastUpdated', Date.now());
+  try {
+    treeNode.data.set('lastUpdated', Date.now());
+  } catch (error) {
+    console.log(`🔄 ElementNode ${treeNode.id} container deleted during timestamp update (normal during operations):`, error.message);
+  }
 }
 
 /**
