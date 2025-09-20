@@ -274,7 +274,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         console.log(`[Server] Client requesting snapshot for doc: ${doc.name} (Request ID: ${requestId})`)
         
         // Log tree structure before creating snapshot
-        logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
+        // logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
         
         try {
           const snapshot = doc.doc.export({ mode: 'snapshot' })
@@ -325,7 +325,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Apply the Loro update to the document.
         const updateBytes = new Uint8Array(messageData.update)
         const i = doc.doc.import(updateBytes)
-        logTreeStructure(doc.doc, `After applying update from client ${conn.id || 'unknown'}`)
+        // logTreeStructure(doc.doc, `After applying update from client ${conn.id || 'unknown'}`)
         // Create properly formatted message for broadcasting
         // Send the update to all other connections
         let broadcastCount = 0
@@ -382,7 +382,7 @@ const closeConn = (doc, conn) => {
       } else {
         // No persistence configured - keep document in memory for reconnections
         console.log(`[Server] No persistence configured - keeping document ${doc.name} in memory for future connections`)
-        logTreeStructure(doc.doc, `Document ${doc.name} structure before keeping in memory`)
+        // logTreeStructure(doc.doc, `Document ${doc.name} structure before keeping in memory`)
       }
     }
   }
@@ -438,7 +438,7 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   {
     // Send initial snapshot to new client
     // Log tree structure before creating initial snapshot
-    logTreeStructure(doc.doc, `Before creating initial snapshot for new client ${conn.id}`)
+    // logTreeStructure(doc.doc, `Before creating initial snapshot for new client ${conn.id}`)
     
     try {
       const snapshot = doc.doc.export({ mode: 'snapshot' })
