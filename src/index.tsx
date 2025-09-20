@@ -3,6 +3,24 @@ import {createRoot} from 'react-dom/client';
 // at import time (disableBeforeInput is used to test legacy events)
 // eslint-disable-next-line simple-import-sort/imports
 import setupEnv from './setupEnv';
+
+// Initialize Prism.js for code highlighting
+import Prism from 'prismjs';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-markup';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-objectivec';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-swift';
+
+// Make Prism globally available
+(window as any).Prism = Prism;
+
 import App from './App';
 
 import './index.css';

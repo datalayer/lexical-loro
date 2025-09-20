@@ -1,6 +1,6 @@
 {
-  "name": "@datalayer/lexical-loro-yjs",
-  "version": "0.6.0",
+  "name": "@datalayer/lexical-loro",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -34,10 +34,10 @@
     "test:py": "python3 -m pytest lexical_loro/tests/ -v",
     "test:py:coverage": "python3 -m pytest lexical_loro/tests/ --cov=. --cov-report=html --cov-report=term",
     "test:py:watch": "python3 -m pytest lexical_loro/tests/ -v --tb=short -f"
-
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
+    "@floating-ui/react": "^0.27.8",
     "@lexical/clipboard": "0.35.0",
     "@lexical/code": "0.35.0",
     "@lexical/code-shiki": "0.35.0",
@@ -75,10 +75,10 @@
     "@types/lodash-es": "^4.14.182",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
     "eslint": "^9.30.1",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
-    "cross-env": "^7.0.3",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "rollup-plugin-copy": "^3.5.0",
@@ -87,11 +87,10 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^5.2.11",
-    "vitest": "^2.1.4",
     "vite-plugin-static-copy": "^2.3.0",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
-    "ws": "^8.18.3"
+    "vitest": "^2.1.4"
   },
   "sideEffects": false
 }
