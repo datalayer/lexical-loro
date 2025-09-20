@@ -1,4 +1,4 @@
-import { BaseDiffIntegrator } from './BaseDiffIntegrator';
+import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 
@@ -16,7 +16,7 @@ interface TextDiff {
 /**
  * Handles text changes (character insertions, deletions, formatting)
  */
-export class TextDiffIntegrator implements BaseDiffIntegrator<TextDiff> {
+export class TextIntegrator implements BaseIntegrator<TextDiff> {
   
   integrate(diff: TextDiff, binding: Binding, provider: Provider): void {
     this.integrateInternal(diff, binding, provider);

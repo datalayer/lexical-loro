@@ -5,18 +5,18 @@ import { Provider } from '../State';
 import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
 // Import the new diff integraters
-import { TreeDiffIntegrator } from '../integrators/TreeDiffIntegrator';
-import { MapDiffIntegrator } from '../integrators/MapDiffIntegrator';
-import { ListDiffIntegrator } from '../integrators/ListDiffIntegrator';
-import { TextDiffIntegrator } from '../integrators/TextDiffIntegrator';
-import { CounterDiffIntegrator } from '../integrators/CounterDiffIntegrator';
+import { TreeIntegrator } from '../integrators/TreeIntegrator';
+import { MapIntegrator } from '../integrators/MapIntegrator';
+import { ListIntegrator } from '../integrators/ListIntegrator';
+import { TextIntegrator } from '../integrators/TextIntegrator';
+import { CounterIntegrator } from '../integrators/CounterIntegrator';
 
 // Create singleton instances of the diff integraters (created once, reused across calls)
-const treeIntegrator = new TreeDiffIntegrator();
-const mapIntegrator = new MapDiffIntegrator();
-const listIntegrator = new ListDiffIntegrator();
-const textIntegrator = new TextDiffIntegrator();
-const counterIntegrator = new CounterDiffIntegrator();
+const treeIntegrator = new TreeIntegrator();
+const mapIntegrator = new MapIntegrator();
+const listIntegrator = new ListIntegrator();
+const textIntegrator = new TextIntegrator();
+const counterIntegrator = new CounterIntegrator();
 
 export function syncLoroToLexical(
   binding: Binding,

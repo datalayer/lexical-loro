@@ -1,5 +1,5 @@
 import { $getNodeByKey, $getRoot, RootNode, TextNode } from 'lexical';
-import { BaseDiffIntegrator } from './BaseDiffIntegrator';
+import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { TreeID } from 'loro-crdt';
@@ -14,7 +14,7 @@ interface MapDiff {
 /**
  * Handles map data changes (node properties, metadata updates)
  */
-export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
+export class MapIntegrator implements BaseIntegrator<MapDiff> {
   
   integrate(diff: MapDiff, binding: Binding, provider: Provider): void {
 
