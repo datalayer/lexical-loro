@@ -1,7 +1,6 @@
 import { TreeID, LoroTree } from 'loro-crdt';
 import { UpdateListenerPayload, NodeKey, RootNode, $getRoot } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
-import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**

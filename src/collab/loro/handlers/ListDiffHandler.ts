@@ -1,4 +1,3 @@
-import { $getNodeByKey, $isElementNode } from 'lexical';
 import { BaseDiffHandler } from './BaseDiffHandler';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';

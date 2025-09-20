@@ -1,9 +1,7 @@
 import { 
   $getRoot, 
   $getNodeByKey, 
-  $isRootNode,
   $isElementNode,
-  LexicalNode,
   ElementNode
 } from 'lexical';
 import { TreeID } from 'loro-crdt';
@@ -40,6 +38,7 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
 
     // Internal method that can be called when already inside editor.update()
   handleInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
+    console.log(`🌳 Processing ${diff.diff.length} operations`);
     // Sort operations: deletes first, then creates (element nodes before text), then moves
     const operations = [...diff.diff];
     operations.sort((a, b) => {
