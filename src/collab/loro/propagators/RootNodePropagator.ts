@@ -4,7 +4,7 @@ import { getNodeMapper } from '../nodes/NodesMapper';
 import { Binding } from '../Bindings';
 
 /**
- * RootNode Mutators for Loro Tree Collaboration
+ * RootNode Propagator for Loro Tree Collaboration
  * 
  * The RootNode is special in Lexical:
  * - Only one RootNode exists per EditorState

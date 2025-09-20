@@ -19,9 +19,9 @@ export const messageAuth = 2
  *                       encoder,          decoder,          provider,          emitSynced, messageType
  * @type {Array<function(encoding.Encoder, decoding.Decoder, WebsocketProvider, boolean,    number):void>}
  */
-const messageHandlers = []
+const messageIntegrators = []
 
-messageHandlers[messageSync] = (
+messageIntegrators[messageSync] = (
   encoder,
   decoder,
   provider,
@@ -43,7 +43,7 @@ messageHandlers[messageSync] = (
   }
 }
 
-messageHandlers[messageQueryAwareness] = (
+messageIntegrators[messageQueryAwareness] = (
   encoder,
   _decoder,
   provider,
@@ -60,7 +60,7 @@ messageHandlers[messageQueryAwareness] = (
   )
 }
 
-messageHandlers[messageAwareness] = (
+messageIntegrators[messageAwareness] = (
   _encoder,
   decoder,
   provider,
@@ -74,7 +74,7 @@ messageHandlers[messageAwareness] = (
   )
 }
 
-messageHandlers[messageAuth] = (
+messageIntegrators[messageAuth] = (
   _encoder,
   decoder,
   provider,
@@ -84,7 +84,7 @@ messageHandlers[messageAuth] = (
   authProtocol.readAuthMessage(
     decoder,
     provider.doc,
-    (_ydoc, reason) => permissionDeniedHandler(provider, reason)
+    (_ydoc, reason) => permissionDeniedIntegrator(provider, reason)
   )
 }
 
@@ -95,7 +95,7 @@ const messageReconnectTimeout = 30000
  * @param {WebsocketProvider} provider
  * @param {string} reason
  */
-const permissionDeniedHandler = (provider, reason) =>
+const permissionDeniedIntegrator = (provider, reason) =>
   console.warn(`Permission denied to access ${provider.url}.\n${reason}`)
 
 /**
@@ -108,9 +108,9 @@ const readMessage = (provider, buf, emitSynced) => {
   const decoder = decoding.createDecoder(buf)
   const encoder = encoding.createEncoder()
   const messageType = decoding.readVarUint(decoder)
-  const messageHandler = provider.messageHandlers[messageType]
-  if (/** @type {any} */ (messageHandler)) {
-    messageHandler(encoder, decoder, provider, emitSynced, messageType)
+  const messageIntegrator = provider.messageIntegrators[messageType]
+  if (/** @type {any} */ (messageIntegrator)) {
+    messageIntegrator(encoder, decoder, provider, emitSynced, messageType)
   } else {
     console.error('Unable to compute message')
   }
@@ -261,15 +261,15 @@ export class WebsocketProvider extends ObservableV2<any> {
   bcChannel = ''
   maxBackoffTime = 2500
   wsUnsuccessfulReconnects = 0
-  messageHandlers = []
+  messageIntegrators = []
   _synced = false
   wsLastMessageReceived = 0
   shouldConnect = false
   _checkInterval = null
   _resyncInterval = null
-  _updateHandler = null
-  _awarenessUpdateHandler = null
-  _exitHandler = null
+  _updateIntegrator = null
+  _awarenessUpdateIntegrator = null
+  _exitIntegrator = null
   _bcSubscriber = null
   /**
    * @param {string} serverUrl
@@ -319,7 +319,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.bcconnected = false
     this.disableBc = disableBc
     this.wsUnsuccessfulReconnects = 0
-    this.messageHandlers = messageHandlers.slice()
+    this.messageIntegrators = messageIntegrators.slice()
     /**
      * @type {boolean}
      */
@@ -368,7 +368,7 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {Uint8Array} update
      * @param {any} origin
      */
-    this._updateHandler = (update, origin) => {
+    this._updateIntegrator = (update, origin) => {
       if (origin !== this) {
         const encoder = encoding.createEncoder()
         encoding.writeVarUint(encoder, messageSync)
@@ -376,12 +376,12 @@ export class WebsocketProvider extends ObservableV2<any> {
         broadcastMessage(this, encoding.toUint8Array(encoder))
       }
     }
-    this.doc.on('update', this._updateHandler)
+    this.doc.on('update', this._updateIntegrator)
     /**
      * @param {any} changed
      * @param {any} _origin
      */
-    this._awarenessUpdateHandler = ({ added, updated, removed }, _origin) => {
+    this._awarenessUpdateIntegrator = ({ added, updated, removed }, _origin) => {
       const changedClients = added.concat(updated).concat(removed)
       const encoder = encoding.createEncoder()
       encoding.writeVarUint(encoder, messageAwareness)
@@ -391,7 +391,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       )
       broadcastMessage(this, encoding.toUint8Array(encoder))
     }
-    this._exitHandler = () => {
+    this._exitIntegrator = () => {
       awarenessProtocol.removeAwarenessStates(
         this.awareness,
         [doc.clientID],
@@ -399,9 +399,9 @@ export class WebsocketProvider extends ObservableV2<any> {
       )
     }
     if (env.isNode && typeof process !== 'undefined') {
-      process.on('exit', this._exitHandler)
+      process.on('exit', this._exitIntegrator)
     }
-    awareness.on('update', this._awarenessUpdateHandler)
+    awareness.on('update', this._awarenessUpdateIntegrator)
     this._checkInterval = /** @type {any} */ (setInterval(() => {
       if (
         this.wsconnected &&
@@ -446,10 +446,10 @@ export class WebsocketProvider extends ObservableV2<any> {
     clearInterval(this._checkInterval)
     this.disconnect()
     if (env.isNode && typeof process !== 'undefined') {
-      process.off('exit', this._exitHandler)
+      process.off('exit', this._exitIntegrator)
     }
-    this.awareness.off('update', this._awarenessUpdateHandler)
-    this.doc.off('update', this._updateHandler)
+    this.awareness.off('update', this._awarenessUpdateIntegrator)
+    this.doc.off('update', this._updateIntegrator)
     super.destroy()
   }
 

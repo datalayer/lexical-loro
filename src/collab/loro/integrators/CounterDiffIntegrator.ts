@@ -1,4 +1,4 @@
-import { BaseDiffHandler } from './BaseDiffHandler';
+import { BaseDiffIntegrator } from './BaseDiffIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 
@@ -11,7 +11,7 @@ interface CounterDiff {
 /**
  * Handles counter changes (increment/decrement operations)
  */
-export class CounterDiffHandler implements BaseDiffHandler<CounterDiff> {
+export class CounterDiffIntegrator implements BaseDiffIntegrator<CounterDiff> {
   
   handle(diff: CounterDiff, binding: Binding, provider: Provider): void {
     this.handleInternal(diff, binding, provider);

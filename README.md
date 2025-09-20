@@ -6,8 +6,6 @@
 
 A collaborative editing plugin for [Lexical](https://github.com/facebook/lexical) Rich Editor built with [Loro](https://github.com/loro-dev) CRDT, providing real-time collaborative editing capabilities with conflict-free synchronization.
 
-- [ ] Rename Mutator / Handler to Propagator / Integrator
-
 ## Core Components
 
 This package provides three main components for building collaborative text editors:

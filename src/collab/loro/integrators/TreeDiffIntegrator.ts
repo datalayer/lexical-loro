@@ -5,7 +5,7 @@ import {
   ElementNode
 } from 'lexical';
 import { TreeID } from 'loro-crdt';
-import { BaseDiffHandler } from './BaseDiffHandler';
+import { BaseDiffIntegrator } from './BaseDiffIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { parseTreeID } from '../utils/Utils';
@@ -25,7 +25,7 @@ interface TreeDiff {
  * Simplified tree diff handler that trusts Loro's CRDT conflict resolution
  * and applies operations directly without complex filtering or context classification
  */
-export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
+export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
   
   handle(diff: TreeDiff, binding: Binding, provider: Provider): void {
     

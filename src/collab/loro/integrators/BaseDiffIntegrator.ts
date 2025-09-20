@@ -4,7 +4,7 @@ import { Provider } from '../State';
 /**
  * Base interface for all diff handlers
  */
-export interface BaseDiffHandler<T = any> {
+export interface BaseDiffIntegrator<T = any> {
   /**
    * Handle the diff event
    * @param diff The diff event to handle

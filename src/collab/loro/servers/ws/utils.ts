@@ -10,7 +10,7 @@ import {
   LoroWebSocketMessage,
   QuerySnapshotMessage,
 } from '../../provider/websocket'
-import { callbackHandler, isCallbackSet } from './callback'
+import { callbackIntegrator, isCallbackSet } from './callback'
 import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
 
 const pingTimeout = 30000
@@ -338,7 +338,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         })
         // Trigger callback if configured
         if (isCallbackSet) {
-          debouncer(() => callbackHandler(doc))
+          debouncer(() => callbackIntegrator(doc))
         }
         break
         
@@ -504,7 +504,7 @@ export class WSSharedDoc {
     /**
      * @type {Array<function>}
      */
-    const ephemeralChangeHandler = (event) => {
+    const ephemeralChangeIntegrator = (event) => {
       // Only broadcast if there are actual changes
       if (event.added.length > 0 || event.updated.length > 0 || event.removed.length > 0) {
         try {
@@ -530,14 +530,14 @@ export class WSSharedDoc {
           // Clear the sender reference after broadcast
           this.lastEphemeralSender = null
         } catch (broadcastError) {
-          console.warn(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
+          console.warn(`[Server] ephemeralChangeIntegrator - ERROR broadcasting:`, {
             error: broadcastError.message,
             stack: broadcastError.stack
           })
         }
       }
     }
-    this.ephemeralStore.subscribe(ephemeralChangeHandler)
+    this.ephemeralStore.subscribe(ephemeralChangeIntegrator)
     // Note: LoroDoc doesn't have 'on' method like Y.Doc
     // Update handling will be done through message processing
   }

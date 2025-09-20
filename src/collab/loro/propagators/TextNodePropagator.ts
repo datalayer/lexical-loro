@@ -14,7 +14,7 @@ import { Binding } from '../Bindings';
 import { $diffTextContentAndApplyDelta } from '../utils/Utils';
 
 /**
- * TextNode Mutators for Loro Tree Collaboration
+ * TextNode Propagator for Loro Tree Collaboration
  * 
  * TextNode characteristics:
  * - Leaf nodes that represent text content

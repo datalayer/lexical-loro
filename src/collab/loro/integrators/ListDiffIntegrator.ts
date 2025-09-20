@@ -1,4 +1,4 @@
-import { BaseDiffHandler } from './BaseDiffHandler';
+import { BaseDiffIntegrator } from './BaseDiffIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
 
@@ -15,7 +15,7 @@ interface ListDiff {
 /**
  * Handles list changes (insertions, deletions, moves in ordered structures)
  */
-export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
+export class ListDiffIntegrator implements BaseDiffIntegrator<ListDiff> {
   
   handle(diff: ListDiff, binding: Binding, provider: Provider): void {
     console.log('📋 Handling ListDiff:', diff);
@@ -50,7 +50,7 @@ export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
   ): void {
 
     // This typically represents insertion of child nodes in an ElementNode
-    // The actual node creation should be handled by TreeDiffHandler
+    // The actual node creation should be handled by TreeDiffIntegrator
     // This handler focuses on the ordering and position updates
     
     // For now, log the operation - specific implementation would depend on
@@ -64,7 +64,7 @@ export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
   ): void {
 
     // This typically represents removal of child nodes from an ElementNode
-    // The actual node deletion should be handled by TreeDiffHandler
+    // The actual node deletion should be handled by TreeDiffIntegrator
     // This handler focuses on the ordering and position updates
     
   }

@@ -5,7 +5,7 @@ import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**
- * LineBreakNode Mutators for Loro Tree Collaboration
+ * LineBreakNode Propagator for Loro Tree Collaboration
  * 
  * LineBreakNode characteristics:
  * - Represents '\n' characters in the editor

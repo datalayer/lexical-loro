@@ -13,7 +13,7 @@ import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { Binding } from '../Bindings';
 
 /**
- * ElementNode Mutators for Loro Tree Collaboration
+ * ElementNode Propagator for Loro Tree Collaboration
  * 
  * ElementNode characteristics:
  * - Parent nodes that can contain other nodes (including other ElementNodes)

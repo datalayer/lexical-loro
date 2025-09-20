@@ -132,7 +132,7 @@ export function createBinding(
       const connector = isLast ? '└── ' : '├── ';
       const childPrefix = prefix + (isLast ? '    ' : '│   ');
       
-      const clickHandler = nodeKey !== 'no-key' ? `onclick="window.debugYjs.inspectNode('${nodeKey}')"` : '';
+      const clickIntegrator = nodeKey !== 'no-key' ? `onclick="window.debugYjs.inspectNode('${nodeKey}')"` : '';
       const nodeColor = nodeKey !== 'no-key' ? '#00ff88' : '#888';
       const cursor = nodeKey !== 'no-key' ? 'cursor: pointer; text-decoration: underline;' : '';
       
@@ -140,7 +140,7 @@ export function createBinding(
       const htmlPrefix = prefix.replace(/ /g, '&nbsp;');
       const htmlConnector = connector.replace(/ /g, '&nbsp;');
       
-      let result = `<div style="color: ${nodeColor}; ${cursor}" ${clickHandler}>${htmlPrefix}${htmlConnector}${nodeInfo}</div>`;
+      let result = `<div style="color: ${nodeColor}; ${cursor}" ${clickIntegrator}>${htmlPrefix}${htmlConnector}${nodeInfo}</div>`;
       
       if (node._children && node._children.length > 0) {
         node._children.forEach((child: any, index: number) => {

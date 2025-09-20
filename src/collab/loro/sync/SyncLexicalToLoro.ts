@@ -1,11 +1,11 @@
 import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode } from 'lexical';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
-import { mutateRootNode } from '../mutators/RootNodeMutators';
-import { mutateLineBreakNode } from '../mutators/LineBreakNodeMutators';
-import { mutateElementNode } from '../mutators/ElementNodeMutators';
-import { mutateTextNode } from '../mutators/TextNodeMutators';
-import { mutateDecoratorNode } from '../mutators/DecoratorNodeMutators';
+import { mutateRootNode } from '../propagators/RootNodePropagator';
+import { mutateLineBreakNode } from '../propagators/LineBreakNodePropagator';
+import { mutateElementNode } from '../propagators/ElementNodePropagator';
+import { mutateTextNode } from '../propagators/TextNodePropagator';
+import { mutateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, toKeyNodeNumber } from '../utils/Utils';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 

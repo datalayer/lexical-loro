@@ -11,7 +11,7 @@ import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**
- * DecoratorNode Mutators for Loro Tree Collaboration
+ * DecoratorNode Propagator for Loro Tree Collaboration
  * 
  * DecoratorNode characteristics:
  * - Wraps arbitrary view (React components, DOM nodes, etc.)

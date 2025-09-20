@@ -6,7 +6,7 @@ import * as decoding from 'lib0/decoding'
 import * as map from 'lib0/map'
 import * as eventloop from 'lib0/eventloop'
 import * as yleveldb from 'y-leveldb';
-import { callbackHandler, isCallbackSet } from './callback'
+import { callbackIntegrator, isCallbackSet } from './callback'
 
 const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT || '2000')
 const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT || '10000')
@@ -74,7 +74,7 @@ const messageAwareness = 1
  * @param {WSSharedDoc} doc
  * @param {any} _tr
  */
-const updateHandler = (update, _origin, doc: WSSharedDoc, _tr) => {
+const updateIntegrator = (update, _origin, doc: WSSharedDoc, _tr) => {
   const encoder = encoding.createEncoder()
   encoding.writeVarUint(encoder, messageSync)
   syncProtocol.writeUpdate(encoder, update)
@@ -122,7 +122,7 @@ export class WSSharedDoc extends Y.Doc {
      * @param {{ added: Array<number>, updated: Array<number>, removed: Array<number> }} changes
      * @param {Object | null} conn Origin is the connection that made the change
      */
-    const awarenessChangeHandler = ({ added, updated, removed }, conn) => {
+    const awarenessChangeIntegrator = ({ added, updated, removed }, conn) => {
       const changedClients = added.concat(updated, removed)
       if (conn !== null) {
         const connControlledIDs = /** @type {Set<number>} */ (this.conns.get(conn))
@@ -140,11 +140,11 @@ export class WSSharedDoc extends Y.Doc {
         send(this, c, buff)
       })
     }
-    this.awareness.on('update', awarenessChangeHandler)
-    this.on('update', /** @type {any} */ (updateHandler))
+    this.awareness.on('update', awarenessChangeIntegrator)
+    this.on('update', /** @type {any} */ (updateIntegrator))
     if (isCallbackSet) {
       this.on('update', (_update, _origin, doc) => {
-        debouncer(() => callbackHandler(/** @type {WSSharedDoc} */ (doc)))
+        debouncer(() => callbackIntegrator(/** @type {WSSharedDoc} */ (doc)))
       })
     }
     this.whenInitialized = contentInitializor(this)

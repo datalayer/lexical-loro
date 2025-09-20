@@ -10,7 +10,7 @@ export const isCallbackSet = !!CALLBACK_URL
 /**
  * @param {import('./utils.ts').WSSharedDoc} doc
  */
-export const callbackHandler = (doc) => {
+export const callbackIntegrator = (doc) => {
   const room = doc.name
   const dataToSend = {
     room,

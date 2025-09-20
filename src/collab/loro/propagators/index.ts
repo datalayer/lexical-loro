@@ -1,5 +1,5 @@
 /**
- * Lexical Node Mutators for Loro Tree Collaboration
+ * Lexical Node Propagator for Loro Tree Collaboration
  * 
  * This module exports mutator functions for all Lexical node types
  * to enable bidirectional synchronization with Loro Tree Loro.
@@ -9,27 +9,27 @@ import { ElementNode, NodeKey } from 'lexical';
 import { Binding } from '../Bindings';
 import { LoroTree } from 'loro-crdt/bundler/loro_wasm';
 
-// Root Node Mutators
-export * from './RootNodeMutators';
+// Root Node Propagator
+export * from './RootNodePropagator';
 
-// Line Break Node Mutators  
-export * from './LineBreakNodeMutators';
+// Line Break Node Propagator  
+export * from './LineBreakNodePropagator';
 
-// Element Node Mutators
-export * from './ElementNodeMutators';
+// Element Node Propagator
+export * from './ElementNodePropagator';
 
-// Text Node Mutators
-export * from './TextNodeMutators';
+// Text Node Propagator
+export * from './TextNodePropagator';
 
-// Decorator Node Mutators
-export * from './DecoratorNodeMutators';
+// Decorator Node Propagator
+export * from './DecoratorNodePropagator';
 
 // Main mutator functions for delegation
-export { mutateRootNode } from './RootNodeMutators';
-export { mutateLineBreakNode } from './LineBreakNodeMutators';
-export { mutateElementNode } from './ElementNodeMutators';
-export { mutateTextNode } from './TextNodeMutators';
-export { mutateDecoratorNode } from './DecoratorNodeMutators';
+export { mutateRootNode } from './RootNodePropagator';
+export { mutateLineBreakNode } from './LineBreakNodePropagator';
+export { mutateElementNode } from './ElementNodePropagator';
+export { mutateTextNode } from './TextNodePropagator';
+export { mutateDecoratorNode } from './DecoratorNodePropagator';
 
 /**
  * Type definitions for mutator options

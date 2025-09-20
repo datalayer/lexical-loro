@@ -313,13 +313,13 @@ export function createBinding(
       const elementType = data.elementType || 'no-type';
       const nodeInfo = `TreeID(${treeId.slice(0, 8)}...) → ${lexicalKey} [${elementType}]`;
       
-      const clickHandler = `onclick="window.debugLoro.inspectNode('${treeId}')"`;
+      const clickIntegrator = `onclick="window.debugLoro.inspectNode('${treeId}')"`;
       const nodeColor = data.isRoot ? '#00ff88' : '#00ffaa';
       const cursor = 'cursor: pointer; text-decoration: underline;';
       
       // Create proper tree structure with indentation
       const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ');
-      let result = `<div style="color: ${nodeColor}; ${cursor}" ${clickHandler}>${prefix}${connector}${nodeInfo}</div>`;
+      let result = `<div style="color: ${nodeColor}; ${cursor}" ${clickIntegrator}>${prefix}${connector}${nodeInfo}</div>`;
       
       const children = rootNode.children();
       if (children && children.length > 0) {
