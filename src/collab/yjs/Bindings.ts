@@ -180,20 +180,81 @@ export function createBinding(
       const treeHTML = (window as any).debugYjs.generateTreeHTML(binding.root);
       
       const debugDiv = document.getElementById('debug-yjs') || document.createElement('div');
+      const existingDiv = document.getElementById('debug-yjs');
+      
+      // Preserve current position if panel already exists
+      let currentLeft = '10px';
+      let currentTop = '700px';
+      if (existingDiv) {
+        currentLeft = existingDiv.style.left || '10px';
+        currentTop = existingDiv.style.top || '700px';
+      }
+      
       debugDiv.id = 'debug-yjs';
-      debugDiv.style.cssText = 'position: fixed; top: 700px; left: 10px; background: rgba(0,100,0,0.9); color: white; padding: 15px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
+      debugDiv.style.cssText = `position: fixed; top: ${currentTop}; left: ${currentLeft}; background: rgba(0,100,0,0.9); color: white; padding: 0; border-radius: 8px; font-family: "Courier New", monospace; font-size: 11px; z-index: 9999; max-width: 500px; max-height: 80vh; box-shadow: 0 4px 8px rgba(0,0,0,0.3); border: 1px solid #51cf66; user-select: none;`;
+      
+      // Add drag functionality if not already added
+      if (!debugDiv.classList.contains('draggable-initialized')) {
+        debugDiv.classList.add('draggable-initialized');
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let startLeft = 0;
+        let startTop = 0;
+        
+        debugDiv.addEventListener('mousedown', (e: MouseEvent) => {
+          // Only start drag if clicking on the header area
+          const target = e.target as HTMLElement;
+          const dragHandle = debugDiv.querySelector('.debug-drag-handle') as HTMLElement;
+          if (!dragHandle || !dragHandle.contains(target)) return;
+          
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          const rect = debugDiv.getBoundingClientRect();
+          startLeft = rect.left;
+          startTop = rect.top;
+          
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          e.preventDefault();
+        });
+        
+        function onMouseMove(e: MouseEvent) {
+          if (!isDragging) return;
+          
+          const deltaX = e.clientX - startX;
+          const deltaY = e.clientY - startY;
+          const newLeft = Math.max(0, Math.min(window.innerWidth - debugDiv.offsetWidth, startLeft + deltaX));
+          const newTop = Math.max(0, Math.min(window.innerHeight - debugDiv.offsetHeight, startTop + deltaY));
+          
+          debugDiv.style.left = newLeft + 'px';
+          debugDiv.style.top = newTop + 'px';
+        }
+        
+        function onMouseUp() {
+          isDragging = false;
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        }
+      }
+      
       debugDiv.innerHTML = `
-        <div style="color: #51cf66; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px;">🟢 YJS STRUCTURE (v2)</div>
-        <div style="color: #74c0fc; margin-bottom: 8px;">Root children: ${binding.root._children.length}</div>
-        <div style="color: #ffd43b; margin-bottom: 10px;">Time: ${new Date().toLocaleTimeString()}</div>
-        <div style="border-top: 1px solid #444; padding-top: 8px;">
-          ${treeHTML}
+        <div class="debug-drag-handle" style="color: #51cf66; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #444; padding: 15px 15px 5px 15px; cursor: move; background: linear-gradient(90deg, rgba(81,207,102,0.1), transparent);">
+          🟢 YJS STRUCTURE <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
         </div>
-        <div style="margin-top: 10px; font-size: 10px; color: #888;">
-          <span onclick="window.debugYjs.addDebugToPage()" style="color: #74c0fc; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
-          <span onclick="window.debugYjs.verifyStructure()" style="color: #00ff88; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
-          <span onclick="window.debugYjs.logStructure()" style="color: #ffd43b; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
-          <span onclick="document.getElementById('debug-yjs').remove()" style="color: #51cf66; cursor: pointer; text-decoration: underline;">❌ Close</span>
+        <div style="padding: 0 15px 15px 15px; overflow-y: auto; max-height: calc(80vh - 50px);">
+          <div style="color: #74c0fc; margin-bottom: 8px;">Root children: ${binding.root._children.length}</div>
+          <div style="color: #ffd43b; margin-bottom: 10px;">Time: ${new Date().toLocaleTimeString()}</div>
+          <div style="border-top: 1px solid #444; padding-top: 8px;">
+            ${treeHTML}
+          </div>
+          <div style="margin-top: 10px; font-size: 10px; color: #888;">
+            <span onclick="window.debugYjs.addDebugToPage()" style="color: #74c0fc; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
+            <span onclick="window.debugYjs.verifyStructure()" style="color: #00ff88; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
+            <span onclick="window.debugYjs.logStructure()" style="color: #ffd43b; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
+            <span onclick="document.getElementById('debug-yjs').remove()" style="color: #51cf66; cursor: pointer; text-decoration: underline;">❌ Close</span>
+          </div>
         </div>
       `;
       document.body.appendChild(debugDiv);

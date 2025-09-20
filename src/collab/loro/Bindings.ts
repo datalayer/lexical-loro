@@ -455,7 +455,7 @@ export function createBinding(
       
       debugDiv.innerHTML = `
         <div class="debug-drag-handle" style="color: #00ff88; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding: 15px 15px 5px 15px; cursor: move; background: linear-gradient(90deg, rgba(0,255,136,0.1), transparent);">
-          🟢 LORO TREE (v1) <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
+          🟢 LORO TREE <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
         </div>
         <div style="padding: 0 15px 15px 15px; overflow-y: auto; max-height: calc(80vh - 50px);">
           <div style="color: #00ffaa; margin-bottom: 8px;">Total nodes: ${nodes.length}</div>

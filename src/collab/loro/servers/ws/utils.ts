@@ -246,7 +246,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         console.log(`[Server] Client requesting snapshot for doc: ${doc.name} (Request ID: ${requestId})`)
         
         // Log tree structure before creating snapshot
-//        logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
+        logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
         
         const snapshot = doc.doc.export({ mode: 'snapshot' })
         console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)

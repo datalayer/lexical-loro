@@ -55,7 +55,7 @@ export default function DatalayerPlugin(): JSX.Element | null {
     <>
       <button onClick={() => {reloadState(editor);}}>Reload State</button>
       <button onClick={() => {addParagraph(editor);}}>Add Paragraph</button>
-      <button onClick={() => {first100Keys(editor);}}>First 100 keys</button>
+      <button onClick={() => {first100Keys(editor);}}>100 First keys</button>
     </>
   );
 }
