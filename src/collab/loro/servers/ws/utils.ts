@@ -36,30 +36,55 @@ const logTreeStructure = (doc: LoroDoc, context: string) => {
     try {
       const tree = doc.getTree('tree')
       if (tree) {
-        console.log(`[Server] Tree container found`)
-
-        // Get nodes using correct method
-        if (typeof tree.getNodes === 'function') {
-          const nodes = tree.getNodes()
-          console.log(`[Server] Tree nodes:`, JSON.stringify(nodes, null, 2))
-        } else {
-          console.log(`[Server] Tree container methods:`, Object.getOwnPropertyNames(tree))
+        const nodes = tree.nodes()
+        console.log(`[Server] Total nodes in tree: ${nodes.length}`)
+        
+        // Helper function to recursively log tree structure
+        const logTreeStructureRecursive = (node: any, prefix: string = '', isLast: boolean = true, depth: number = 0) => {
+          const data = Object.fromEntries(node.data.entries())
+          const treeId = node.id
+          const elementType = data.elementType || 'no-type'
+          
+          const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ')
+          const nodeInfo = `TreeID(${treeId.slice(0, 8)}...) [${elementType}]`
+          
+          console.log(`[Server] ${prefix}${connector}${nodeInfo}`)
+          
+          const children = node.children()
+          if (children && children.length > 0) {
+            children.forEach((child: any, index: number) => {
+              const isLastChild = index === children.length - 1
+              const childPrefix = prefix + (depth === 0 ? '' : (isLast ? '    ' : '│   '))
+              logTreeStructureRecursive(child, childPrefix, isLastChild, depth + 1)
+            })
+          }
         }
         
-        // Try to get root nodes or traverse tree
-        if (typeof tree.toArray === 'function') {
-          const array = tree.toArray()
-          console.log(`[Server] Tree as array:`, JSON.stringify(array, null, 2))
+        // Find and display all root nodes
+        const rootNodes = nodes.filter((node: any) => {
+          const parent = node.parent()
+          const data = Object.fromEntries(node.data.entries())
+          return !parent || data.isRoot
+        })
+        
+        console.log(`[Server] Root nodes: ${rootNodes.length}`)
+        console.log('')
+        
+        if (rootNodes.length === 0) {
+          console.log('[Server] ⚠️  No root nodes found!')
+        } else {
+          rootNodes.forEach((root, index) => {
+            const isLastRoot = index === rootNodes.length - 1
+            logTreeStructureRecursive(root, '', isLastRoot, 0)
+          })
         }
+        
       } else {
         console.log(`[Server] No tree container found`)
       }
     } catch (treeError) {
       console.log(`[Server] Error accessing tree container:`, treeError.message)
     }
-    
-    // Log doc methods to understand the API
-    console.log(`[Server] LoroDoc methods:`, Object.getOwnPropertyNames(doc))
     
     // Try export with different modes for debugging
     try {
@@ -82,21 +107,24 @@ const logTreeStructure = (doc: LoroDoc, context: string) => {
  */
 let persistence = null
 if (typeof persistenceDir === 'string') {
-  console.log('Persisting documents to "' + persistenceDir + '"')
-  // @ts-ignore
-  // Note: Using simplified persistence for Loro - replace with actual Loro-compatible persistence
-  persistence = {
-    provider: null, // Replace with Loro-compatible persistence provider
-    bindState: async (docName, doc: WSSharedDoc) => {
-      // TODO: Implement Loro document persistence
-      // For now, just log the operation
-      console.warn(`TODO Binding state for document: ${docName}`)
-    },
-    writeState: async (docName, doc: WSSharedDoc) => {
-      // TODO: Implement Loro document state writing
-      console.warn(`TODO Writing state for document: ${docName}`)
-    }
-  }
+  console.log('Persistence directory configured: "' + persistenceDir + '" but Loro persistence not yet implemented')
+  // TODO: Implement actual Loro document persistence
+  // For now, disable persistence to keep documents in memory
+  console.log('Disabling persistence - documents will be kept in memory only')
+  persistence = null
+  
+  // Uncomment and implement when ready for actual persistence:
+  // persistence = {
+  //   provider: null, // Replace with Loro-compatible persistence provider
+  //   bindState: async (docName, doc: WSSharedDoc) => {
+  //     // TODO: Implement Loro document persistence loading
+  //     console.warn(`Loading state for document: ${docName}`)
+  //   },
+  //   writeState: async (docName, doc: WSSharedDoc) => {
+  //     // TODO: Implement Loro document state writing
+  //     console.warn(`Saving state for document: ${docName}`)
+  //   }
+  // }
 }
 
 /**
@@ -248,10 +276,21 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Log tree structure before creating snapshot
         logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
         
-        const snapshot = doc.doc.export({ mode: 'snapshot' })
-        console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)
-        // Send binary snapshot data directly instead of wrapped message
-        conn.send(snapshot)
+        try {
+          const snapshot = doc.doc.export({ mode: 'snapshot' })
+          console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)
+          
+          // Verify the snapshot contains expected content
+          const tree = doc.doc.getTree('tree')
+          const nodes = tree.nodes()
+          console.log(`[Server] Snapshot contains ${nodes.length} nodes from server document`)
+          
+          // Send binary snapshot data directly instead of wrapped message
+          conn.send(snapshot)
+        } catch (snapshotError) {
+          console.error(`[Server] ERROR creating/sending snapshot:`, snapshotError.message)
+          console.error(`[Server] Stack:`, snapshotError.stack)
+        }
         break
 
       case messageEphemeral:
@@ -285,7 +324,8 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
       case messageUpdate:
         // Apply the Loro update to the document.
         const updateBytes = new Uint8Array(messageData.update)
-        doc.doc.import(updateBytes)
+        const i = doc.doc.import(updateBytes)
+        logTreeStructure(doc.doc, `After applying update from client ${conn.id || 'unknown'}`)
         // Create properly formatted message for broadcasting
         // Send the update to all other connections
         let broadcastCount = 0
@@ -330,13 +370,20 @@ const closeConn = (doc, conn) => {
       })
     }
     console.log(`Remaining connections for document ${doc.name}: ${doc.conns.size}`)
-    if (doc.conns.size === 0 && persistence !== null) {
-      // if persisted, we store state and cleanup document
-      persistence.writeState(doc.name, doc).then(() => {
-        // Cleanup WSSharedDoc resources (no destroy method needed for Loro)
-        console.log(`[Server] Cleaning up document: ${doc.name}`)
-      })
-      docs.delete(doc.name)
+    if (doc.conns.size === 0) {
+      if (persistence !== null) {
+        // if persisted, we store state and cleanup document
+        console.log(`[Server] Persisting document ${doc.name} before cleanup`)
+        persistence.writeState(doc.name, doc).then(() => {
+          // Cleanup WSSharedDoc resources (no destroy method needed for Loro)
+          console.log(`[Server] Document ${doc.name} persisted and cleaned up`)
+        })
+        docs.delete(doc.name)
+      } else {
+        // No persistence configured - keep document in memory for reconnections
+        console.log(`[Server] No persistence configured - keeping document ${doc.name} in memory for future connections`)
+        logTreeStructure(doc.doc, `Document ${doc.name} structure before keeping in memory`)
+      }
     }
   }
   conn.close()
@@ -391,12 +438,23 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   {
     // Send initial snapshot to new client
     // Log tree structure before creating initial snapshot
-//    logTreeStructure(doc.doc, `Before creating initial snapshot for new client`)
+    logTreeStructure(doc.doc, `Before creating initial snapshot for new client ${conn.id}`)
     
-    const snapshot = doc.doc.export({ mode: 'snapshot' })
-    console.log(`[Server] Sending initial snapshot to new client: ${snapshot.length} bytes`)
-    // Send binary snapshot data directly instead of wrapped message
-    conn.send(snapshot)
+    try {
+      const snapshot = doc.doc.export({ mode: 'snapshot' })
+      console.log(`[Server] Sending initial snapshot to new client: ${snapshot.length} bytes`)
+      
+      // Verify the snapshot contains expected content
+      const tree = doc.doc.getTree('tree')
+      const nodes = tree.nodes()
+      console.log(`[Server] Initial snapshot contains ${nodes.length} nodes from server document`)
+      
+      // Send binary snapshot data directly instead of wrapped message
+      conn.send(snapshot)
+    } catch (snapshotError) {
+      console.error(`[Server] ERROR creating/sending initial snapshot:`, snapshotError.message)
+      console.error(`[Server] Stack:`, snapshotError.stack)
+    }
     
     // Send current ephemeral state if any
     const ephemeralUpdate = doc.ephemeralStore.encodeAll()

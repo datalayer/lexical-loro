@@ -329,7 +329,7 @@ lexical                                            lexical
 
 ## TO DO
 
-Rename Mutator / Handler to Integrator / Propagator
+Rename Mutator / Handler to Propagator / Integrator
 
 ## Examples
 
