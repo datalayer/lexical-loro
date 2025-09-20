@@ -73,7 +73,7 @@ const logTreeStructure = (doc: LoroDoc, context: string) => {
     }
     
   } catch (error) {
-    console.error(`[Server] Error logging tree structure:`, error)
+    console.warn(`[Server] Error logging tree structure:`, error)
   }
 }
 
@@ -152,7 +152,7 @@ const sendMessage = (doc: WSSharedDoc, conn, message: LoroWebSocketMessage) => {
 //    console.log(`Sending message to ${conn.id || 'unknown'}`)
     conn.send(JSON.stringify(message), {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
-    console.error(e);
+    console.warn(e);
     closeConn(doc, conn);
   }
 }
@@ -168,7 +168,7 @@ const sendMessageBinary = (doc: WSSharedDoc, conn, message: Uint8Array) => {
 //    console.log(`Sending message to ${conn.id || 'unknown'}`)
     conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
   } catch (e) {
-    console.error(e);
+    console.warn(e);
     closeConn(doc, conn);
   }
 }
@@ -191,7 +191,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         const decoder = new TextDecoder()
         messageStr = decoder.decode(message)
       } catch (decodeError) {
-        console.error(`[Server] messageListener - Failed to decode ArrayBuffer as string, treating as binary Loro update`)
+        console.warn(`[Server] messageListener - Failed to decode ArrayBuffer as string, treating as binary Loro update`)
         // If decoding fails, treat as raw binary Loro update
         const updateBytes = new Uint8Array(message)
         doc.doc.import(updateBytes)
@@ -208,7 +208,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         const decoder = new TextDecoder()
         messageStr = decoder.decode(message);
       } catch (decodeError) {
-        console.error(`[Server] messageListener - Failed to decode Uint8Array as string, treating as binary Loro update`)
+        console.warn(`[Server] messageListener - Failed to decode Uint8Array as string, treating as binary Loro update`)
         // If decoding fails, treat as raw binary Loro update
         doc.doc.import(message);
         // Broadcast the update to other connections
@@ -220,7 +220,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         return
       }
     } else {
-      console.error(`[Server] messageListener - Unknown message type:`, typeof message)
+      console.warn(`[Server] messageListener - Unknown message type:`, typeof message)
       return
     }
     
@@ -231,8 +231,8 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
     try {
       messageData = JSON.parse(messageStr) as LoroWebSocketMessage
     } catch (parseError) {
-      console.error(`[Server] messageListener - JSON parse error:`, parseError.message)
-      console.error(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
+      console.warn(`[Server] messageListener - JSON parse error:`, parseError.message)
+      console.warn(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
       return
     }
 
@@ -261,7 +261,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           doc.lastEphemeralSender = conn
           doc.ephemeralStore.apply(ephemeralBytes)
         } catch (ephemeralError) {
-          console.error('messageEphemeral - ERROR applying ephemeral update')
+          console.warn('messageEphemeral - ERROR applying ephemeral update')
           // Clear sender reference on error
           doc.lastEphemeralSender = null
         }
@@ -278,7 +278,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           }
           sendMessage(doc, conn, ephemeralResponse)
         } catch (error) {
-            console.error('[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:')
+            console.warn('[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:')
         }
         break
 
@@ -304,9 +304,9 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         
     }
   } catch (err) {
-    console.error(err)
-    // Note: LoroDoc doesn't have emit method, using console.error instead
-    console.error('Message handling error:', err)
+    console.warn(err)
+    // Note: LoroDoc doesn't have emit method, using console.warn instead
+    console.warn('Message handling error:', err)
   }
 }
 
@@ -472,7 +472,7 @@ export class WSSharedDoc {
           // Clear the sender reference after broadcast
           this.lastEphemeralSender = null
         } catch (broadcastError) {
-          console.error(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
+          console.warn(`[Server] ephemeralChangeHandler - ERROR broadcasting:`, {
             error: broadcastError.message,
             stack: broadcastError.stack
           })

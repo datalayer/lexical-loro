@@ -64,9 +64,7 @@ export function initializeLoroDocWithLexicalContent(doc: LoroDoc): void {
   tree.enableFractionalIndex(0.001);
   
   // Convert the initial Lexical JSON to Loro tree structure
-  lexicalToLoroTree(INITIAL_LEXICAL_JSON, tree);
-  
-  console.log('🌳 Initialized Loro document with initial Lexical content');
+  lexicalToLoroTree(INITIAL_LEXICAL_JSON, tree);  
 }
 
 /**
@@ -107,7 +105,6 @@ export function shouldInitializeLoroDoc(doc: LoroDoc): boolean {
       for (const root of roots) {
         const data = Object.fromEntries(root.data.entries());
         if (data.elementType === 'root') {
-          console.log('🌳 Found existing root with content, skipping initialization');
           return false;
         }
       }

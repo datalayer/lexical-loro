@@ -28,7 +28,6 @@ interface TreeDiff {
 export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
   
   handle(diff: TreeDiff, binding: Binding, provider: Provider): void {
-    console.log('🌳 Handling TreeDiff:', diff);
     
     // Batch all changes in a single editor update
     binding.editor.update(() => {
@@ -38,7 +37,6 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
 
     // Internal method that can be called when already inside editor.update()
   handleInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
-    console.log(`🌳 Processing ${diff.diff.length} operations`);
     // Sort operations: deletes first, then creates (element nodes before text), then moves
     const operations = [...diff.diff];
     operations.sort((a, b) => {
@@ -62,11 +60,6 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       }
       
       return 0; // Keep original order for same priority
-    });
-    
-    console.log(`🌳 Processing ${operations.length} operations in dependency order`);
-    operations.forEach((op, index) => {
-      console.log(`🌳 Operation ${index + 1}: ${op.action} ${op.target} (parent: ${op.parent})`);
     });
     
     operations.forEach(operation => {
@@ -103,11 +96,9 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         if (elementType === 'root' || !elementType) {
           const root = $getRoot();
           binding.nodeMapper.setMapping(root.getKey(), operation.target);
-          console.log(`🌳 Skipping root node creation but ensured root mapping: ${root.getKey()} → ${operation.target}`);
           return;
         }
         // If nodeKey is "0" but it's not actually a root element, continue with normal processing
-        console.log(`🌳 NodeKey "0" detected but elementType is "${elementType}" - treating as regular node`);
       }
       
       // Check if node already exists and if it's the same TreeID
@@ -115,18 +106,14 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       if (existingNode) {
         const existingTreeID = binding.nodeMapper.getTreeIdByLexicalKey(nodeKey);
         if (existingTreeID === operation.target) {
-          console.log(`🌳 Node ${nodeKey} already exists for same TreeID, preserving`);
           return;
         } else {
-          console.log(`🌳 Key collision: ${nodeKey} exists for TreeID ${existingTreeID}, but creating for ${operation.target}`);
           // Don't reuse existing keys for different TreeIDs - let Lexical generate a fresh one
           nodeKey = undefined; // Let createLexicalNodeFromLoro generate a fresh key
-          console.log(`🌳 Will generate fresh key for TreeID: ${operation.target}`);
         }
       }
 
       // Create Lexical node from Loro data
-      console.log(`🌳 Creating Lexical node for TreeID: ${operation.target}, NodeKey: ${nodeKey}`);
       const lexicalNode = createLexicalNodeFromLoro(
         operation.target,
         binding.tree,
@@ -134,12 +121,8 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       );
 
       if (!lexicalNode) {
-        console.warn(`🌳 Failed to create Lexical node for ${operation.target}`);
         return;
       }
-
-      console.log(`🌳 Successfully created Lexical node: ${lexicalNode.getKey()} (type: ${lexicalNode.getType()}) for TreeID: ${operation.target}`);
-      console.log(`🌳 Operation details - parent: ${operation.parent}, index: ${operation.index}`);
 
       // Find parent node
       let parentNode: ElementNode;
@@ -147,56 +130,32 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
         const parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
         
-        console.log(`🌳 Parent lookup - TreeID: ${operation.parent} → LexicalKey: ${parentKey} → Node: ${parentLexicalNode?.getType()}`);
-        console.log(`🌳 DEBUG: Current node type: ${lexicalNode.getType()}, parent type: ${parentLexicalNode?.getType()}`);
-        
         if (parentLexicalNode && $isElementNode(parentLexicalNode)) {
           parentNode = parentLexicalNode;
-          console.log(`🌳 Using parent node: ${parentNode.getKey()} (${parentNode.getType()})`);
         } else {
-          // If the expected parent is not an element node, this is likely a mapping issue
-          if (parentLexicalNode) {
-            console.error(`🌳 MAPPING ERROR: Parent ${operation.parent} maps to ${parentLexicalNode.getType()} instead of element!`);
-          } else {
-            console.error(`🌳 MISSING PARENT: Parent ${operation.parent} not found in mapping`);
-          }
-          
           // For text nodes, we MUST have a proper parent element
           if (lexicalNode.getType() === 'text') {
-            console.error(`🌳 SKIPPING: Cannot insert text node without proper parent element`);
             return;
           }
           
           parentNode = $getRoot();
-          console.log(`🌳 Using root as fallback parent`);
         }
       } else {
         parentNode = $getRoot();
-        console.log(`🌳 No parent specified, using root`);
-        console.log(`🌳 WARNING: About to insert ${lexicalNode.getType()} into root - this may fail!`);
       }
 
       // Normal insertion
       if (operation.index !== undefined) {
-        console.log(`🌳 Inserting ${lexicalNode.getKey()} at index ${operation.index} in parent ${parentNode.getKey()}`);
         parentNode.splice(operation.index, 0, [lexicalNode]);
       } else {
-        console.log(`🌳 Appending ${lexicalNode.getKey()} to parent ${parentNode.getKey()}`);
         parentNode.append(lexicalNode);
       }
 
       // Set up mapping
-      console.log(`🌳 Setting up mapping: ${lexicalNode.getKey()} ↔ ${operation.target}`);
       binding.nodeMapper.setMapping(lexicalNode.getKey(), operation.target);
-      
-      // Verify mapping was set correctly
-      const verifyKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.target);
-      console.log(`🌳 Mapping verification: TreeID ${operation.target} → ${verifyKey} (expected: ${lexicalNode.getKey()})`);
-      
-      console.log(`🌳 Created node ${lexicalNode.getKey()} for ${operation.target}`);
-      
+
     } catch (error) {
-      console.error(`🌳 Error creating node for ${operation.target}:`, error);
+      console.warn(`🌳 Error creating node for ${operation.target}:`, error);
     }
   }
 
@@ -224,15 +183,12 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
         const parentNode = parentKey ? $getNodeByKey(parentKey) : null;
         
-        console.log(`🌳 Move operation - parent TreeID: ${operation.parent} → key: ${parentKey} → node: ${parentNode?.getType()}`);
-        
         if (parentNode && $isElementNode(parentNode)) {
           newParent = parentNode;
         } else {
           // For text nodes, we can't move them to root - skip this move operation
           // The node is already in the correct position from our create fix
           if (nodeToMove.getType() === 'text') {
-            console.log(`🌳 Skipping move of text node ${lexicalKey} - text nodes cannot be moved to root`);
             return;
           }
           newParent = $getRoot();
@@ -240,7 +196,6 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       } else {
         // For text nodes without a parent, skip the move
         if (nodeToMove.getType() === 'text') {
-          console.log(`🌳 Skipping move of text node ${lexicalKey} - no valid parent`);
           return;
         }
         newParent = $getRoot();
@@ -255,10 +210,8 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         newParent.append(nodeToMove);
       }
 
-      console.log(`🌳 Moved node ${lexicalKey} to new position`);
-      
     } catch (error) {
-      console.error(`🌳 Error moving node ${operation.target}:`, error);
+      console.warn(`🌳 Error moving node ${operation.target}:`, error);
     }
   }
 
@@ -286,14 +239,12 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       // Clean up mapping
       binding.nodeMapper.deleteMapping(lexicalKey);
       
-      console.log(`🌳 Deleted node ${lexicalKey} for ${operation.target}`);
-      
     } catch (error) {
       // Handle the case where Loro is trying to delete an already deleted node
       if (error.message && error.message.includes('is deleted or does not exist')) {
         console.log(`🌳 Node ${operation.target} already deleted (normal during restructuring):`, error.message);
       } else {
-        console.error(`🌳 Error deleting node ${operation.target}:`, error);
+        console.warn(`🌳 Error deleting node ${operation.target}:`, error);
       }
     }
   }

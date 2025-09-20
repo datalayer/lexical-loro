@@ -48,7 +48,6 @@ export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    console.log(`📋 List insert at ${change.index}: ${change.value}`);
 
     // This typically represents insertion of child nodes in an ElementNode
     // The actual node creation should be handled by TreeDiffHandler
@@ -56,7 +55,6 @@ export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
     
     // For now, log the operation - specific implementation would depend on
     // the context of which list/container this change applies to
-    console.log(`📋 List insertion handled by tree structure changes`);
   }
 
   private handleDelete(
@@ -64,13 +62,11 @@ export class ListDiffHandler implements BaseDiffHandler<ListDiff> {
     binding: Binding, 
     provider: Provider
   ): void {
-    console.log(`📋 List delete at ${change.index}, length: ${change.length}`);
 
     // This typically represents removal of child nodes from an ElementNode
     // The actual node deletion should be handled by TreeDiffHandler
     // This handler focuses on the ordering and position updates
     
-    console.log(`📋 List deletion handled by tree structure changes`);
   }
 
   private handleRetain(

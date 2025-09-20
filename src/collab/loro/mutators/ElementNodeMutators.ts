@@ -97,16 +97,13 @@ export function updateElementNodeInLoro(
     
     // CRITICAL: Prevent cycle moves - a node cannot be its own parent
     if (parentId && treeNode.id === parentId) {
-      console.error(`🚨 CYCLE MOVE DETECTED: Node ${treeNode.id} cannot be its own parent! Skipping move operation.`);
+      console.warn(`🚨 CYCLE MOVE DETECTED: Node ${treeNode.id} cannot be its own parent! Skipping move operation.`);
       return;
     }
     
     // Debug: Check if the parent exists and its children count
     const parentNode = parentId ? tree.getNodeByID(parentId) : null;
     const parentChildCount = parentNode ? parentNode.children.length : tree.roots().length;
-    
-    console.log(`🔄 Moving node ${treeNode.id} to parent ${parentId} at index ${index}`);
-    console.log(`🔄 Parent has ${parentChildCount} children, trying to move to index ${index}`);
     
     // Check if the node is already a child of the target parent
     const currentParent = treeNode.parent();
@@ -115,23 +112,16 @@ export function updateElementNodeInLoro(
     if (index !== undefined) {
       let adjustedIndex = index;
       
-      if (isAlreadyChild) {
-        // If moving within the same parent, the index calculation is different
-        // because the node will first be removed, reducing the child count by 1
-        console.log(`🔄 Node is already child of target parent, adjusting index calculation`);
-      } else {
+      if (!isAlreadyChild) {
         // Moving to a new parent - check bounds against current child count
         if (index > parentChildCount) {
-          console.log(`🔄 Index ${index} > parent child count ${parentChildCount}, using parent child count`);
           adjustedIndex = parentChildCount;
         }
       }
       
-      console.log(`🔄 Final move: ${treeNode.id} to parent ${parentId} at index ${adjustedIndex}`);
       tree.move(treeNode.id, parentId, adjustedIndex);
     } else {
       // No specific index, append to end
-      console.log(`🔄 Appending ${treeNode.id} to end of parent ${parentId}`);
       tree.move(treeNode.id, parentId, parentChildCount);
     }
   }
@@ -142,7 +132,7 @@ export function updateElementNodeInLoro(
   try {
     treeNode.data.set('lastUpdated', Date.now());
   } catch (error) {
-    console.log(`🔄 ElementNode ${treeNode.id} container deleted during timestamp update (normal during operations):`, error.message);
+    console.warn(`🔄 ElementNode ${treeNode.id} container deleted during timestamp update (normal during operations):`, error.message);
   }
 }
 
@@ -352,8 +342,6 @@ export function mutateElementNode(
 ): void {
   const { tree, peerId } = options;
 
-  console.log(`🏗️ ElementNode mutation: ${mutation} for key: ${nodeKey}`);
-
   switch (mutation) {
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
@@ -371,12 +359,9 @@ export function mutateElementNode(
           parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
           index = currentNode.getIndexWithinParent();
           
-          // Debug logging to catch cycle move issues
-          console.log(`🔧 UPDATE ElementNode ${nodeKey}: parent=${parent?.getKey()}, parentId=${parentId}`);
           if (parentId) {
             const ownTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
             if (ownTreeId === parentId) {
-              console.error(`🚨 DETECTED CYCLE: Node ${nodeKey} has itself as parent! ownTreeId=${ownTreeId}, parentId=${parentId}`);
               parentId = undefined; // Prevent cycle
             }
           }
@@ -384,24 +369,10 @@ export function mutateElementNode(
           // Determine element type
           elementType = currentNode.getType(); // 'paragraph', 'heading', etc.
           
-          console.log(`🏗️ Creating ElementNode ${nodeKey}: type=${elementType} (parent: ${parent?.getKey() || 'none'}, index: ${index})`);
-          
-          // Debug logging for table elements
-          if (elementType.includes('table')) {
-            console.log(`🔧 Creating table element: ${nodeKey} [${elementType}]`, {
-              parentKey: parent?.getKey() || 'no-parent',
-              parentType: parent?.getType() || 'N/A',
-              parentId: parentId || 'no-parent-id',
-              index,
-              hasParentMapping: parent ? mapper.hasLexicalMapping(parent.getKey()) : false
-            });
-          }
-          
           // If parent exists but doesn't have mapping yet, defer parent assignment
           if (parent && !parentId) {
             // Store the node creation but defer parent assignment
             parentId = undefined; // Create as orphan temporarily
-            console.log(`⏳ Deferring parent assignment for ${nodeKey} [${elementType}] - parent ${parent.getKey()} not mapped yet`);
           }
         
           // Collect metadata (format, style, direction, etc.)
@@ -425,7 +396,6 @@ export function mutateElementNode(
         // If this node was created without a parent, schedule a retry to fix parent assignment
         if (parent && !parentId) {
           setTimeout(() => {
-            console.log(`🔄 Retrying parent assignment for ${nodeKey} [${elementType}]`);
             const mapper = getNodeMapper();
             const retryParentId = mapper.getTreeIdByLexicalKey(parent.getKey());
             if (retryParentId) {
@@ -433,10 +403,7 @@ export function mutateElementNode(
               const loroNode = mapper.getLoroNodeByLexicalKey(nodeKey);
               if (loroNode && tree.has(loroNode.id)) {
                 tree.move(loroNode.id, retryParentId, index);
-                console.log(`✅ Successfully assigned parent ${retryParentId} to ${nodeKey}`);
               }
-            } else {
-              console.log(`❌ Parent still not available for ${nodeKey} after retry`);
             }
           }, 10); // Small delay to allow parent to be created
         }
@@ -465,16 +432,6 @@ export function mutateElementNode(
           // Get element type and metadata
           elementType = currentNode.getType();
           
-          // Debug logging for table elements
-          if (elementType.includes('table')) {
-            console.log(`🔧 Updating table element: ${nodeKey} [${elementType}]`, {
-              parentKey: parent?.getKey() || 'no-parent',
-              parentType: parent?.getType() || 'N/A',
-              parentId: parentId || 'no-parent-id',
-              index,
-              hasParentMapping: parent ? mapper.hasLexicalMapping(parent.getKey()) : false
-            });
-          }
           if (typeof currentNode.getFormat === 'function') {
             metadata.format = currentNode.getFormat();
           }

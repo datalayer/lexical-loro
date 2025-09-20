@@ -81,7 +81,6 @@ export function $diffTextContentAndApplyDelta(
   prevText: string,
   nextText: string,
 ): void {
-  console.log(`🔄 $diffTextContentAndApplyDelta: Key=${key}, "${prevText}" → "${nextText}"`);
   
   const selection = $getSelection();
   let cursorOffset = nextText.length;
@@ -94,16 +93,13 @@ export function $diffTextContentAndApplyDelta(
       // This prevents errors when text is split or content changes significantly
       cursorOffset = Math.min(anchor.offset, nextText.length);
       
-      console.log(`🔄 Cursor adjustment for key ${key}: anchor.offset=${anchor.offset}, nextText.length=${nextText.length}, adjusted=${cursorOffset}`);
     }
   }
 
   const diff = simpleDiffWithCursor(prevText, nextText, cursorOffset);
-  console.log(`🔄 Computed diff: index=${diff.index}, remove=${diff.remove}, insert="${diff.insert}"`);
   
   const beforeSplice = textNode.getTextContent();
   textNode.spliceText(diff.index, diff.remove, diff.insert);
   const afterSplice = textNode.getTextContent();
   
-  console.log(`🔄 Text splice result: "${beforeSplice}" → "${afterSplice}"`);
 }

@@ -52,7 +52,7 @@ const callbackRequest = (url, timeout, data) => {
     req.abort()
   })
   req.on('error', (e) => {
-    console.error('Callback request error.', e)
+    console.warn('Callback request error.', e)
     req.abort()
   })
   req.write(data)

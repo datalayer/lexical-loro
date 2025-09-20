@@ -38,7 +38,6 @@ export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroT
   
   processLexicalNode(parsedJson.root, tree, rootTreeNode);
   
-  console.log('🌳 Successfully converted Lexical JSON to Loro tree');
   return rootTreeId;
 }
 
@@ -50,7 +49,6 @@ function processLexicalNode(
   tree: LoroTree,
   treeNode: LoroTreeNode
 ): void {
-  console.log(`🌳 Processing node: ${lexicalNode.type} (${treeNode.id})`);
 
   // Store the lexical data in the tree node
   const nodeData = treeNode.data;

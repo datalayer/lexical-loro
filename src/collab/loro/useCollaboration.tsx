@@ -349,9 +349,6 @@ function initializeEditor(
               break;
             }
           }
-        } else {
-          // Don't create default content - let it come from Loro tree sync
-          console.log('🌳 Skipping default paragraph creation - content will come from Loro sync');
         }
       }
     },

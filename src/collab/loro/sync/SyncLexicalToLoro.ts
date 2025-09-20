@@ -42,16 +42,12 @@ export function syncLexicalToLoro(
       mutatedNodes.forEach((nodeMap, Klass) => {
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
-            console.log(`🔄 Processing container ${targetClass.name}: ${nodeKey} (${mutation})`);
-            
             if (isClassExtending(Klass, RootNode)) {
               mutateRootNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, ElementNode)) {
               mutateElementNode(update, mutation, nodeKey, mutatorOptions);
             }
-            
-            binding.doc.commit({ origin: binding.doc.peerIdStr })
           });
         }
       });
@@ -62,8 +58,6 @@ export function syncLexicalToLoro(
       mutatedNodes.forEach((nodeMap, Klass) => {
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
-            console.log(`🔄 Processing child ${targetClass.name}: ${nodeKey} (${mutation})`);
-            
             if (isClassExtending(Klass, TextNode)) {
               mutateTextNode(update, mutation, nodeKey, mutatorOptions);
             }
@@ -75,12 +69,12 @@ export function syncLexicalToLoro(
             } else {
               throw new Error(`Unsupported node type for key: ${nodeKey}, mutation: ${mutation}. Node class: ${Klass.name}`);
             }
-            
-            binding.doc.commit({ origin: binding.doc.peerIdStr })
           });
         }
       });
     });
+
+    binding.doc.commit({ origin: binding.doc.peerIdStr })
 
   }
 

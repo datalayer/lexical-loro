@@ -70,7 +70,7 @@ class AwarenessAdapter implements ProviderAwareness {
       const state = this.ephemeralStore.get(localKey)
       return state ? state as UserState : null
     } catch (error) {
-      console.error(`[Client] AwarenessAdapter.getLocalState() - ephemeralStore.get() FAILED:`, {
+      console.warn(`[Client] AwarenessAdapter.getLocalState() - ephemeralStore.get() FAILED:`, {
         error: error.message,
         stack: error.stack,
         localKey,
@@ -103,7 +103,7 @@ class AwarenessAdapter implements ProviderAwareness {
     try {
       this.ephemeralStore.set(localKey, state as any)
     } catch (error) {
-      console.error(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() FAILED:`, {
+      console.warn(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() FAILED:`, {
         error: error.message,
         stack: error.stack,
         localKey,
@@ -170,7 +170,7 @@ messageHandlers[messageQueryEphemeral] = (
     
     return JSON.stringify(response)
   } catch (error) {
-    console.error('Error in messageQueryEphemeral handler:', error.message)
+    console.warn('Error in messageQueryEphemeral handler:', error.message)
     return null
   }
 }
@@ -216,7 +216,7 @@ messageHandlers[messageEphemeral] = (
     try {
       provider.ephemeralStore.apply(ephemeralBytes)
     } catch (applyError) {
-      console.error(`[Client] messageHandlers[messageEphemeral] - WASM apply() failed:`, {
+      console.warn(`[Client] messageHandlers[messageEphemeral] - WASM apply() failed:`, {
         error: applyError.message,
         ephemeralLength: ephemeralBytes.length,
         ephemeralSample: Array.from(ephemeralBytes.slice(0, 20))
@@ -224,7 +224,7 @@ messageHandlers[messageEphemeral] = (
       
       // If this is a WASM memory error, don't attempt any more ephemeral operations
       if (applyError.message && applyError.message.includes('memory access out of bounds')) {
-        console.error(`[Client] messageHandlers[messageEphemeral] - CRITICAL: WASM memory corruption in apply(). Stopping ephemeral processing.`)
+        console.warn(`[Client] messageHandlers[messageEphemeral] - CRITICAL: WASM memory corruption in apply(). Stopping ephemeral processing.`)
         return null
       }
       
@@ -233,7 +233,7 @@ messageHandlers[messageEphemeral] = (
     
     return null
   } catch (error) {
-    console.error(`[Client] messageHandlers[messageEphemeral] - ERROR in ephemeral message handler:`, {
+    console.warn(`[Client] messageHandlers[messageEphemeral] - ERROR in ephemeral message handler:`, {
       error: error.message,
       stack: error.stack,
       messageLength: message.ephemeral?.length,
@@ -274,7 +274,7 @@ messageHandlers[messageUpdate] = (
     
     return null // No response needed
   } catch (error) {
-    console.error(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
+    console.warn(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
     return null
   }
 }
@@ -301,7 +301,7 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
       if (messageHandler) {
         return messageHandler(provider, message, emitSynced)
       } else {
-        console.error('Unknown message type:', message.type)
+        console.warn('Unknown message type:', message.type)
         return null
       }
       */
@@ -313,7 +313,7 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
       }
       return null // No response needed for binary updates
     } catch (error) {
-      console.error('Failed to process binary Loro update:', error)
+      console.warn('Failed to process binary Loro update:', error)
       return null
     }
   }
@@ -324,11 +324,11 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
       if (messageHandler) {
         return messageHandler(provider, message, emitSynced)
       } else {
-        console.error('Unknown message type:', message.type)
+        console.warn('Unknown message type:', message.type)
         return null
       }
     } catch (error) {
-      console.error('Failed to process JSON message:', error)
+      console.warn('Failed to process JSON message:', error)
       return null
     }
   }
@@ -339,16 +339,16 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
       if (messageHandler) {
         return messageHandler(provider, message, emitSynced)
       } else {
-        console.error('Unknown message type:', message.type)
+        console.warn('Unknown message type:', message.type)
         return null
       }
     } catch (error) {
-      console.error('Failed to process object message:', error)
+      console.warn('Failed to process object message:', error)
       return null
     }
   }
   
-  console.error('Unknown message format:', typeof data)
+  console.warn('Unknown message format:', typeof data)
   return null
 }
 
@@ -397,7 +397,7 @@ const sendMessage = (ws: WebSocket, message: LoroWebSocketMessage) => {
       const m = JSON.stringify(message);
       ws.send(m)
     } catch (error) {
-      console.error('Failed to send message over WebSocket:', error)
+      console.warn('Failed to send message over WebSocket:', error)
     }
   } else {
     console.warn('WebSocket not open, cannot send message')
@@ -479,7 +479,7 @@ const setupWS = (provider) => {
           }
           sendMessage(ws, ephemeralMessage)
         } catch (error) {
-          console.error(`[Client] setupWS - MAJOR ERROR in ephemeral process:`, {
+          console.warn(`[Client] setupWS - MAJOR ERROR in ephemeral process:`, {
             error: error.message,
             stack: error.stack,
             localStateKeys: Object.keys(localState),
@@ -607,7 +607,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       }
       
     } catch (error) {
-      console.error(`[Client] WebsocketProvider constructor - ERROR setting up EphemeralStore:`, {
+      console.warn(`[Client] WebsocketProvider constructor - ERROR setting up EphemeralStore:`, {
         error: error.message,
         stack: error.stack,
         docId
@@ -700,7 +700,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           broadcastMessage(this, ephemeralMessage)
           
         } catch (error) {
-          console.error(`[Client] _ephemeralUpdateHandler - ERROR:`, error.message)
+          console.warn(`[Client] _ephemeralUpdateHandler - ERROR:`, error.message)
           // Fallback: skip this update rather than crash
         }
       }
@@ -713,7 +713,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           const userKey = `user-${peerId}`
           this.ephemeralStore.delete(userKey)
         } catch (error) {
-          console.error(`[Client] Process exit - Could not clear user state:`, error.message)
+          console.warn(`[Client] Process exit - Could not clear user state:`, error.message)
         }
       }
     }
@@ -743,11 +743,11 @@ export class WebsocketProvider extends ObservableV2<any> {
             console.warn(`[WEBSOCKET-PROVIDER] No incremental update available - versions might be the same`);
           }
         } catch (error) {
-          console.error(`[WEBSOCKET-PROVIDER] Error exporting incremental update:`, error);
+          console.warn(`[WEBSOCKET-PROVIDER] Error exporting incremental update:`, error);
         }
       });
     } catch (error) {
-      console.error(`[Client] ERROR setting up Loro document subscription:`, error);
+      console.warn(`[Client] ERROR setting up Loro document subscription:`, error);
     }
     
     this._checkInterval = (setInterval(() => {
@@ -804,7 +804,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         const userKey = `user-${peerId}`
         this.ephemeralStore.delete(userKey)
       } catch (error) {
-        console.error(`[Client] WebsocketProvider.destroy - Could not clear user state:`, error.message)
+        console.warn(`[Client] WebsocketProvider.destroy - Could not clear user state:`, error.message)
       }
     }
     // Note: LoroDoc doesn't have event listeners to remove
@@ -843,7 +843,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         bc.publish(this.bcChannel, JSON.stringify(ephemeralMessage), this)
         
       } catch (error) {
-        console.error('Error broadcasting ephemeral state in connectBc:', error.message)
+        console.warn('Error broadcasting ephemeral state in connectBc:', error.message)
       }
     }
   }
@@ -864,7 +864,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       broadcastMessage(this, ephemeralMessage)
       
     } catch (error) {
-      console.error('Error broadcasting disconnect in disconnectBc:', error.message)
+      console.warn('Error broadcasting disconnect in disconnectBc:', error.message)
     }
     if (this.bcconnected) {
       bc.unsubscribe(this.bcChannel, this._bcSubscriber)
