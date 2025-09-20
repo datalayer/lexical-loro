@@ -95,6 +95,12 @@ export function updateElementNodeInLoro(
     // Note: For moving, we need access to tree - this might need to be handled differently
     const { tree } = options!;
     
+    // CRITICAL: Prevent cycle moves - a node cannot be its own parent
+    if (parentId && treeNode.id === parentId) {
+      console.error(`🚨 CYCLE MOVE DETECTED: Node ${treeNode.id} cannot be its own parent! Skipping move operation.`);
+      return;
+    }
+    
     // Debug: Check if the parent exists and its children count
     const parentNode = parentId ? tree.getNodeByID(parentId) : null;
     const parentChildCount = parentNode ? parentNode.children.length : tree.roots().length;
@@ -346,6 +352,8 @@ export function mutateElementNode(
 ): void {
   const { tree, peerId } = options;
 
+  console.log(`🏗️ ElementNode mutation: ${mutation} for key: ${nodeKey}`);
+
   switch (mutation) {
     case 'created': {
       const currentNode = update.editorState._nodeMap.get(nodeKey);
@@ -362,9 +370,21 @@ export function mutateElementNode(
           const mapper = getNodeMapper();
           parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
           index = currentNode.getIndexWithinParent();
+          
+          // Debug logging to catch cycle move issues
+          console.log(`🔧 UPDATE ElementNode ${nodeKey}: parent=${parent?.getKey()}, parentId=${parentId}`);
+          if (parentId) {
+            const ownTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
+            if (ownTreeId === parentId) {
+              console.error(`🚨 DETECTED CYCLE: Node ${nodeKey} has itself as parent! ownTreeId=${ownTreeId}, parentId=${parentId}`);
+              parentId = undefined; // Prevent cycle
+            }
+          }
         
           // Determine element type
           elementType = currentNode.getType(); // 'paragraph', 'heading', etc.
+          
+          console.log(`🏗️ Creating ElementNode ${nodeKey}: type=${elementType} (parent: ${parent?.getKey() || 'none'}, index: ${index})`);
           
           // Debug logging for table elements
           if (elementType.includes('table')) {

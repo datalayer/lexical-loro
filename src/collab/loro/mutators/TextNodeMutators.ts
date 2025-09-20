@@ -428,6 +428,8 @@ export function mutateTextNode(
           const format = currentNode.getFormat();
           const mode = currentNode.getMode();
           
+          console.log(`📝 Creating TextNode ${nodeKey}: "${textContent}" (parent: ${parent?.getKey() || 'none'}, index: ${index})`);
+          
           // Export node data as JSON object within editor context where node methods are available
           let lexicalNodeJSON: any = undefined;
           try {
@@ -452,6 +454,8 @@ export function mutateTextNode(
           const textContent = currentNode.getTextContent();
           const format = currentNode.getFormat();
           const mode = currentNode.getMode();
+          
+          console.log(`📝 Updating TextNode ${nodeKey}: "${textContent}"`);
           
           // Export node data as JSON object within editor context where node methods are available
           let lexicalNodeJSON: any = undefined;

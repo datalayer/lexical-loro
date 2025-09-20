@@ -97,11 +97,18 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
       
       // Skip root node creation - root is handled during initial setup
       // But ensure the root mapping exists
+      // Only treat as root if it's actually a root-type node in Loro
       if (nodeKey === "0") {
-        const root = $getRoot();
-        binding.nodeMapper.setMapping(root.getKey(), operation.target);
-        console.log(`🌳 Skipping root node creation but ensured root mapping: ${root.getKey()} → ${operation.target}`);
-        return;
+        const treeNode = binding.tree.getNodeByID(operation.target);
+        const elementType = treeNode?.data.get('elementType');
+        if (elementType === 'root' || !elementType) {
+          const root = $getRoot();
+          binding.nodeMapper.setMapping(root.getKey(), operation.target);
+          console.log(`🌳 Skipping root node creation but ensured root mapping: ${root.getKey()} → ${operation.target}`);
+          return;
+        }
+        // If nodeKey is "0" but it's not actually a root element, continue with normal processing
+        console.log(`🌳 NodeKey "0" detected but elementType is "${elementType}" - treating as regular node`);
       }
       
       // Check if node already exists and if it's the same TreeID
@@ -170,7 +177,7 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         console.log(`🌳 WARNING: About to insert ${lexicalNode.getType()} into root - this may fail!`);
       }
 
-      // Insert the node
+      // Normal insertion
       if (operation.index !== undefined) {
         console.log(`🌳 Inserting ${lexicalNode.getKey()} at index ${operation.index} in parent ${parentNode.getKey()}`);
         parentNode.splice(operation.index, 0, [lexicalNode]);
@@ -218,12 +225,25 @@ export class TreeDiffHandler implements BaseDiffHandler<TreeDiff> {
         const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
         const parentNode = parentKey ? $getNodeByKey(parentKey) : null;
         
+        console.log(`🌳 Move operation - parent TreeID: ${operation.parent} → key: ${parentKey} → node: ${parentNode?.getType()}`);
+        
         if (parentNode && $isElementNode(parentNode)) {
           newParent = parentNode;
         } else {
+          // For text nodes, we can't move them to root - skip this move operation
+          // The node is already in the correct position from our create fix
+          if (nodeToMove.getType() === 'text') {
+            console.log(`🌳 Skipping move of text node ${lexicalKey} - text nodes cannot be moved to root`);
+            return;
+          }
           newParent = $getRoot();
         }
       } else {
+        // For text nodes without a parent, skip the move
+        if (nodeToMove.getType() === 'text') {
+          console.log(`🌳 Skipping move of text node ${lexicalKey} - no valid parent`);
+          return;
+        }
         newParent = $getRoot();
       }
 
