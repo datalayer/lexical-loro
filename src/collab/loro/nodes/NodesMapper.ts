@@ -93,7 +93,7 @@ export class NodeMapper {
     }
 
     // If no mapping exists, we can't create a Lexical node here
-    // The caller should handle Lexical node creation
+    // The caller should integrate Lexical node creation
     return null;
   }
 

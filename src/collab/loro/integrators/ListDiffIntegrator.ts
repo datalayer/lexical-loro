@@ -17,24 +17,24 @@ interface ListDiff {
  */
 export class ListDiffIntegrator implements BaseDiffIntegrator<ListDiff> {
   
-  handle(diff: ListDiff, binding: Binding, provider: Provider): void {
+  integrate(diff: ListDiff, binding: Binding, provider: Provider): void {
     console.log('📋 Handling ListDiff:', diff);
-    this.handleInternal(diff, binding, provider);
+    this.integrateInternal(diff, binding, provider);
   }
 
   // Internal method for use when already inside editor.update()
-  handleInternal(diff: ListDiff, binding: Binding, provider: Provider): void {
+  integrateInternal(diff: ListDiff, binding: Binding, provider: Provider): void {
     if (diff.diff) {
       diff.diff.forEach((change: any) => {
         switch (change.type) {
           case 'insert':
-            this.handleInsert(change, binding, provider);
+            this.integrateInsert(change, binding, provider);
             break;
           case 'delete':
-            this.handleDelete(change, binding, provider);
+            this.integrateDelete(change, binding, provider);
             break;
           case 'retain':
-            this.handleRetain(change, binding, provider);
+            this.integrateRetain(change, binding, provider);
             break;
           default:
             console.warn(`📋 Unknown list change type: ${change.type}`);
@@ -43,33 +43,33 @@ export class ListDiffIntegrator implements BaseDiffIntegrator<ListDiff> {
     }
   }
 
-  private handleInsert(
+  private integrateInsert(
     change: { index: number; value: any }, 
     binding: Binding, 
     provider: Provider
   ): void {
 
     // This typically represents insertion of child nodes in an ElementNode
-    // The actual node creation should be handled by TreeDiffIntegrator
-    // This handler focuses on the ordering and position updates
+    // The actual node creation should be integrated by TreeDiffIntegrator
+    // This integrater focuses on the ordering and position updates
     
     // For now, log the operation - specific implementation would depend on
     // the context of which list/container this change applies to
   }
 
-  private handleDelete(
+  private integrateDelete(
     change: { index: number; length: number }, 
     binding: Binding, 
     provider: Provider
   ): void {
 
     // This typically represents removal of child nodes from an ElementNode
-    // The actual node deletion should be handled by TreeDiffIntegrator
-    // This handler focuses on the ordering and position updates
+    // The actual node deletion should be integrated by TreeDiffIntegrator
+    // This integrater focuses on the ordering and position updates
     
   }
 
-  private handleRetain(
+  private integrateRetain(
     change: { index?: number; length?: number; attributes?: any }, 
     binding: Binding, 
     provider: Provider

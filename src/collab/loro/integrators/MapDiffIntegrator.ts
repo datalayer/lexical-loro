@@ -16,64 +16,64 @@ interface MapDiff {
  */
 export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
   
-  handle(diff: MapDiff, binding: Binding, provider: Provider): void {
+  integrate(diff: MapDiff, binding: Binding, provider: Provider): void {
 
     // Handle updated properties
     if (diff.updated) {
       Object.entries(diff.updated).forEach(([key, value]) => {
-        this.handlePropertyUpdate(key, value, binding, provider);
+        this.integratePropertyUpdate(key, value, binding, provider);
       });
     }
 
     // Handle deleted properties
     if (diff.deleted) {
       diff.deleted.forEach((key: string) => {
-        this.handlePropertyDelete(key, binding, provider);
+        this.integratePropertyDelete(key, binding, provider);
       });
     }
   }
 
-  // Enhanced handle method with TreeID context
-  handleWithContext(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
+  // Enhanced integrate method with TreeID context
+  integrateWithContext(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
 
-    this.handleWithContextInternal(diff, treeId, binding, provider);
+    this.integrateWithContextInternal(diff, treeId, binding, provider);
   }
 
   // Internal method for use when already inside editor.update()
-  handleInternal(diff: MapDiff, binding: Binding, provider: Provider): void {
+  integrateInternal(diff: MapDiff, binding: Binding, provider: Provider): void {
     // Handle updated properties
     if (diff.updated) {
       Object.entries(diff.updated).forEach(([key, value]) => {
-        this.handlePropertyUpdate(key, value, binding, provider);
+        this.integratePropertyUpdate(key, value, binding, provider);
       });
     }
 
     // Handle deleted properties
     if (diff.deleted) {
       diff.deleted.forEach((key: string) => {
-        this.handlePropertyDelete(key, binding, provider);
+        this.integratePropertyDelete(key, binding, provider);
       });
     }
   }
 
   // Internal method for use when already inside editor.update() with context
-  handleWithContextInternal(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
+  integrateWithContextInternal(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
     // Handle updated properties with TreeID context
     if (diff.updated) {
       Object.entries(diff.updated).forEach(([key, value]) => {
-        this.handlePropertyUpdateWithContextInternal(key, value, treeId, binding, provider);
+        this.integratePropertyUpdateWithContextInternal(key, value, treeId, binding, provider);
       });
     }
 
     // Handle deleted properties
     if (diff.deleted) {
       diff.deleted.forEach((key: string) => {
-        this.handlePropertyDelete(key, binding, provider);
+        this.integratePropertyDelete(key, binding, provider);
       });
     }
   }
 
-  private handlePropertyUpdateWithContext(
+  private integratePropertyUpdateWithContext(
     key: string, 
     value: any, 
     treeId: TreeID,
@@ -84,10 +84,10 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
     // Handle specific property updates with TreeID context
     switch (key) {
       case 'lexical':
-        this.handleLexicalDataUpdateWithContext(value, treeId, binding);
+        this.integrateLexicalDataUpdateWithContext(value, treeId, binding);
         break;
       case 'textContent':
-        // Text content updates should be handled via lexical data updates
+        // Text content updates should be integrated via lexical data updates
         break;
       case 'elementType':
         // Element type changes are rare, mostly for debugging
@@ -98,7 +98,7 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
   }
 
   // Internal version for use when already inside editor.update()
-  private handlePropertyUpdateWithContextInternal(
+  private integratePropertyUpdateWithContextInternal(
     key: string, 
     value: any, 
     treeId: TreeID,
@@ -120,11 +120,11 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
         
         const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeId as TreeID);
         if (lexicalKey) {
-          this.handleLexicalDataUpdateInternal(value, lexicalKey, actualTreeId as TreeID);
+          this.integrateLexicalDataUpdateInternal(value, lexicalKey, actualTreeId as TreeID);
         }
         break;
       case 'textContent':
-        // Text content updates should be handled via lexical data updates
+        // Text content updates should be integrated via lexical data updates
         break;
       case 'elementType':
         // Element type changes are rare, mostly for debugging
@@ -135,7 +135,7 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
     }
   }
 
-  private handlePropertyUpdate(
+  private integratePropertyUpdate(
     key: string, 
     value: any, 
     binding: Binding, 
@@ -147,7 +147,7 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
         // Use targeted update only - the broad heuristic causes scrambling
         break;
       case 'textContent':
-        // Text content updates should be handled via lexical data updates
+        // Text content updates should be integrated via lexical data updates
         break;
       case 'elementType':
         // Element type changes are rare, mostly for debugging
@@ -158,7 +158,7 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
     }
   }
 
-  private handlePropertyDelete(
+  private integratePropertyDelete(
     key: string, 
     binding: Binding, 
     provider: Provider
@@ -174,7 +174,7 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
     }
   }
 
-  private handleLexicalDataUpdateWithContext(
+  private integrateLexicalDataUpdateWithContext(
     lexicalData: any,
     treeId: TreeID | string,
     binding: Binding,
@@ -199,13 +199,13 @@ export class MapDiffIntegrator implements BaseDiffIntegrator<MapDiff> {
 
     if (lexicalData && typeof lexicalData === 'object') {
       binding.editor.update(() => {
-        this.handleLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeId as TreeID);
+        this.integrateLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeId as TreeID);
       });
     }
   }
 
   // Internal method for use when already inside editor.update()
-  private handleLexicalDataUpdateInternal(lexicalData: any, lexicalKey: string, treeId: TreeID): void {
+  private integrateLexicalDataUpdateInternal(lexicalData: any, lexicalKey: string, treeId: TreeID): void {
     const targetType = lexicalData.type || lexicalData.__type;
     
     const targetNode = $getNodeByKey(lexicalKey);

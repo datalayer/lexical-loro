@@ -25,16 +25,16 @@ export * from './TextNodePropagator';
 export * from './DecoratorNodePropagator';
 
 // Main mutator functions for delegation
-export { mutateRootNode } from './RootNodePropagator';
-export { mutateLineBreakNode } from './LineBreakNodePropagator';
-export { mutateElementNode } from './ElementNodePropagator';
-export { mutateTextNode } from './TextNodePropagator';
-export { mutateDecoratorNode } from './DecoratorNodePropagator';
+export { propagateRootNode } from './RootNodePropagator';
+export { propagateLineBreakNode } from './LineBreakNodePropagator';
+export { propagateElementNode } from './ElementNodePropagator';
+export { propagateTextNode } from './TextNodePropagator';
+export { propagateDecoratorNode } from './DecoratorNodePropagator';
 
 /**
  * Type definitions for mutator options
  */
-export interface BaseMutatorOptions {
+export interface BasePropagatorOptions {
   binding: Binding;
   tree: LoroTree;
   peerId: number;
@@ -43,13 +43,13 @@ export interface BaseMutatorOptions {
 /**
  * Unified mutator interface for all node types
  */
-export interface NodeMutator<T = any> {
+export interface NodePropagator<T = any> {
   create: (nodeKey: NodeKey, ...args: any[]) => string; // TreeID
   update: (nodeKey: NodeKey, ...args: any[]) => void;
-  delete: (nodeKey: NodeKey, options: BaseMutatorOptions) => void;
-  createFromLoro: (treeId: string, parentNode: ElementNode, index?: number, options?: BaseMutatorOptions) => T | null;
-  updateFromLoro: (treeId: string, lexicalNode: T, newParentNode?: ElementNode, newIndex?: number, options?: BaseMutatorOptions) => void;
-  deleteFromLoro: (treeId: string, lexicalNode: T, options?: BaseMutatorOptions) => void;
+  delete: (nodeKey: NodeKey, options: BasePropagatorOptions) => void;
+  createFromLoro: (treeId: string, parentNode: ElementNode, index?: number, options?: BasePropagatorOptions) => T | null;
+  updateFromLoro: (treeId: string, lexicalNode: T, newParentNode?: ElementNode, newIndex?: number, options?: BasePropagatorOptions) => void;
+  deleteFromLoro: (treeId: string, lexicalNode: T, options?: BasePropagatorOptions) => void;
 }
 
 /**

@@ -92,7 +92,7 @@ export function updateElementNodeInLoro(
   
   // Move the node if parent or position changed
   if (parentId !== undefined || index !== undefined) {
-    // Note: For moving, we need access to tree - this might need to be handled differently
+    // Note: For moving, we need access to tree - this might need to be propagated differently
     const { tree } = options!;
     
     // CRITICAL: Prevent cycle moves - a node cannot be its own parent
@@ -126,8 +126,8 @@ export function updateElementNodeInLoro(
     }
   }
       
-  // The exported Lexical node data is already handled by the mapper
-  // No additional JSON export needed since mapper handles exportJSON automatically
+  // The exported Lexical node data is already propagated by the mapper
+  // No additional JSON export needed since mapper propagates exportJSON automatically
   
   try {
     treeNode.data.set('lastUpdated', Date.now());
@@ -332,9 +332,9 @@ export function syncElementNodeChildrenInLoro(
 }
 
 /**
- * Main mutate method for ElementNode - handles all mutation types
+ * Main propagate method for ElementNode - propagates all mutation types
  */
-export function mutateElementNode(
+export function propagateElementNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: NodeKey,

@@ -433,7 +433,7 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
   conn.on('pong', () => {
     pongReceived = true
   })
-  // put the following in a variables in a block so the interval handlers don't keep in in
+  // put the following in a variables in a block so the interval integraters don't keep in in
   // scope
   {
     // Send initial snapshot to new client

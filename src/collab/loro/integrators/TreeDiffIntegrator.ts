@@ -22,21 +22,21 @@ interface TreeDiff {
 }
 
 /**
- * Simplified tree diff handler that trusts Loro's CRDT conflict resolution
+ * Simplified tree diff integrater that trusts Loro's CRDT conflict resolution
  * and applies operations directly without complex filtering or context classification
  */
 export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
   
-  handle(diff: TreeDiff, binding: Binding, provider: Provider): void {
+  integrate(diff: TreeDiff, binding: Binding, provider: Provider): void {
     
     // Batch all changes in a single editor update
     binding.editor.update(() => {
-      this.handleInternal(diff, binding, provider);
+      this.integrateInternal(diff, binding, provider);
     });
   }
 
     // Internal method that can be called when already inside editor.update()
-  handleInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
+  integrateInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
     // Sort operations: deletes first, then creates (element nodes before text), then moves
     const operations = [...diff.diff];
     operations.sort((a, b) => {
@@ -65,13 +65,13 @@ export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
     operations.forEach(operation => {
       switch (operation.action) {
         case 'create':
-          this.handleCreate(operation, binding, provider);
+          this.integrateCreate(operation, binding, provider);
           break;
         case 'move':
-          this.handleMove(operation, binding, provider);
+          this.integrateMove(operation, binding, provider);
           break;
         case 'delete':
-          this.handleDelete(operation, binding, provider);
+          this.integrateDelete(operation, binding, provider);
           break;
         default:
           console.warn(`🌳 Unknown tree operation: ${operation.action}`);
@@ -79,7 +79,7 @@ export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
     });
   }
 
-  private handleCreate(
+  private integrateCreate(
     operation: { target: TreeID; parent?: TreeID; index?: number }, 
     binding: Binding, 
     provider: Provider
@@ -87,7 +87,7 @@ export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
     try {
       let { nodeKey } = parseTreeID(operation.target);
       
-      // Skip root node creation - root is handled during initial setup
+      // Skip root node creation - root is integrated during initial setup
       // But ensure the root mapping exists
       // Only treat as root if it's actually a root-type node in Loro
       if (nodeKey === "0") {
@@ -159,7 +159,7 @@ export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
     }
   }
 
-  private handleMove(
+  private integrateMove(
     operation: { target: TreeID; parent?: TreeID; index?: number },
     binding: Binding,
     provider: Provider
@@ -215,7 +215,7 @@ export class TreeDiffIntegrator implements BaseDiffIntegrator<TreeDiff> {
     }
   }
 
-  private handleDelete(
+  private integrateDelete(
     operation: { target: TreeID },
     binding: Binding,
     provider: Provider

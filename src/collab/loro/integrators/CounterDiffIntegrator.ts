@@ -13,22 +13,22 @@ interface CounterDiff {
  */
 export class CounterDiffIntegrator implements BaseDiffIntegrator<CounterDiff> {
   
-  handle(diff: CounterDiff, binding: Binding, provider: Provider): void {
-    this.handleInternal(diff, binding, provider);
+  integrate(diff: CounterDiff, binding: Binding, provider: Provider): void {
+    this.integrateInternal(diff, binding, provider);
   }
 
   // Internal method for use when already inside editor.update()
-  handleInternal(diff: CounterDiff, binding: Binding, provider: Provider): void {
+  integrateInternal(diff: CounterDiff, binding: Binding, provider: Provider): void {
     if (diff.increment !== undefined) {
-      this.handleIncrement(diff.increment, binding, provider);
+      this.integrateIncrement(diff.increment, binding, provider);
     }
 
     if (diff.value !== undefined) {
-      this.handleSetValue(diff.value, binding, provider);
+      this.integrateSetValue(diff.value, binding, provider);
     }
   }
 
-  private handleIncrement(
+  private integrateIncrement(
     increment: number, 
     binding: Binding, 
     provider: Provider
@@ -44,7 +44,7 @@ export class CounterDiffIntegrator implements BaseDiffIntegrator<CounterDiff> {
     // used in basic text editing scenarios
   }
 
-  private handleSetValue(
+  private integrateSetValue(
     value: number, 
     binding: Binding, 
     provider: Provider

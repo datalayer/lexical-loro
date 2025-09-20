@@ -2,14 +2,14 @@ import { Binding } from '../Bindings';
 import { Provider } from '../State';
 
 /**
- * Base interface for all diff handlers
+ * Base interface for all diff integraters
  */
 export interface BaseDiffIntegrator<T = any> {
   /**
    * Handle the diff event
-   * @param diff The diff event to handle
+   * @param diff The diff event to integrate
    * @param binding The binding instance
    * @param provider The provider instance
    */
-  handle(diff: T, binding: Binding, provider: Provider): void;
+  integrate(diff: T, binding: Binding, provider: Provider): void;
 }

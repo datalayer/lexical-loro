@@ -133,8 +133,8 @@ export function updateTextNodeInLoro(
     return;
   }
   
-  // The exported Lexical node data is already handled by the mapper
-  // No additional JSON export needed since mapper handles exportJSON automatically
+  // The exported Lexical node data is already propagated by the mapper
+  // No additional JSON export needed since mapper propagates exportJSON automatically
 }
 
 /**
@@ -362,9 +362,9 @@ export function applyTextFormatInLoro(
 }
 
 /**
- * Main mutate method for TextNode - handles all mutation types
+ * Main propagate method for TextNode - propagates all mutation types
  */
-export function mutateTextNode(
+export function propagateTextNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: NodeKey,
@@ -447,7 +447,7 @@ export function mutateTextNode(
           try {
             lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to export node JSON in mutateTextNode created:', error);
+            console.warn('Failed to export node JSON in propagateTextNode created:', error);
           }
           
           return { parent, parentId, index, textContent, format, mode, lexicalNodeJSON };
@@ -545,7 +545,7 @@ export function mutateTextNode(
           try {
             lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to export node JSON in mutateTextNode updated:', error);
+            console.warn('Failed to export node JSON in propagateTextNode updated:', error);
           }
           
           return { textContent, format, mode, lexicalNodeJSON };

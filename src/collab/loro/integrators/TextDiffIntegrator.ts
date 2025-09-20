@@ -18,23 +18,23 @@ interface TextDiff {
  */
 export class TextDiffIntegrator implements BaseDiffIntegrator<TextDiff> {
   
-  handle(diff: TextDiff, binding: Binding, provider: Provider): void {
-    this.handleInternal(diff, binding, provider);
+  integrate(diff: TextDiff, binding: Binding, provider: Provider): void {
+    this.integrateInternal(diff, binding, provider);
   }
 
   // Internal method for use when already inside editor.update()
-  handleInternal(diff: TextDiff, binding: Binding, provider: Provider): void {
+  integrateInternal(diff: TextDiff, binding: Binding, provider: Provider): void {
     if (diff.diff) {
       diff.diff.forEach((change: any) => {
         switch (change.type) {
           case 'insert':
-            this.handleTextInsert(change, binding, provider);
+            this.integrateTextInsert(change, binding, provider);
             break;
           case 'delete':
-            this.handleTextDelete(change, binding, provider);
+            this.integrateTextDelete(change, binding, provider);
             break;
           case 'retain':
-            this.handleTextRetain(change, binding, provider);
+            this.integrateTextRetain(change, binding, provider);
             break;
           default:
             console.warn(`📝 Unknown text change type: ${change.type}`);
@@ -43,20 +43,20 @@ export class TextDiffIntegrator implements BaseDiffIntegrator<TextDiff> {
     }
   }
 
-  private handleTextInsert(
+  private integrateTextInsert(
     change: { index: number; value: string }, 
     binding: Binding, 
     provider: Provider
   ): void {
 
-    // To handle text insertion, we need to know which TextNode this applies to
+    // To integrate text insertion, we need to know which TextNode this applies to
     // This information should come from the event context or be tracked separately
     
     // For now, this is a placeholder - in a complete implementation,
     // we would need to identify the target TextNode and update it
   }
 
-  private handleTextDelete(
+  private integrateTextDelete(
     change: { index: number; length: number }, 
     binding: Binding, 
     provider: Provider
@@ -65,7 +65,7 @@ export class TextDiffIntegrator implements BaseDiffIntegrator<TextDiff> {
     // Similar to insert, we need target node context for text deletion
   }
 
-  private handleTextRetain(
+  private integrateTextRetain(
     change: { index?: number; length?: number; attributes?: any }, 
     binding: Binding, 
     provider: Provider
@@ -82,7 +82,7 @@ export class TextDiffIntegrator implements BaseDiffIntegrator<TextDiff> {
     provider: Provider
   ): void {
 
-    // Text formatting in Lexical is typically handled through TextNode format property
+    // Text formatting in Lexical is typically integrated through TextNode format property
     // This would need to be coordinated with the specific TextNode being modified
     
     // Example formatting attributes might include:

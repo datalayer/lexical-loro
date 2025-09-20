@@ -21,7 +21,7 @@ export function createLexicalNodeFromLoro(
 
   const treeNode = loroTree.getNodeByID(treeId);
   
-  // First try nodeData passed from TreeDiff handler (has immediate lexical data)
+  // First try nodeData passed from TreeDiff integrater (has immediate lexical data)
   let lexicalData = nodeDataFromDiff?.lexical;
   
   // Fallback to tree node data
@@ -81,7 +81,7 @@ export function createLexicalNodeFromLoro(
     }
   }
   
-  // Note: DO NOT set __parent manually - let Lexical handle parent-child relationships
+  // Note: DO NOT set __parent manually - let Lexical integrate parent-child relationships
   // through proper $ methods like append(), insertBefore(), etc.
 
   // Apply properties from the deserialized data if available

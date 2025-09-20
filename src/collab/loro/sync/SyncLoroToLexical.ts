@@ -4,14 +4,14 @@ import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
-// Import the new diff handlers
+// Import the new diff integraters
 import { TreeDiffIntegrator } from '../integrators/TreeDiffIntegrator';
 import { MapDiffIntegrator } from '../integrators/MapDiffIntegrator';
 import { ListDiffIntegrator } from '../integrators/ListDiffIntegrator';
 import { TextDiffIntegrator } from '../integrators/TextDiffIntegrator';
 import { CounterDiffIntegrator } from '../integrators/CounterDiffIntegrator';
 
-// Create singleton instances of the diff handlers (created once, reused across calls)
+// Create singleton instances of the diff integraters (created once, reused across calls)
 const treeIntegrator = new TreeDiffIntegrator();
 const mapIntegrator = new MapDiffIntegrator();
 const listIntegrator = new ListDiffIntegrator();
@@ -36,34 +36,34 @@ export function syncLoroToLexical(
       $setSelection(null);
     }
     
-    // Process Loro events and apply them to Lexical using the appropriate handlers
+    // Process Loro events and apply them to Lexical using the appropriate integraters
     eventBatch.events.forEach((event, index) => {
       
       switch (event.diff.type) {
         case 'tree':
           // Call internal method that doesn't wrap in editor.update()
-          treeIntegrator.handleInternal(event.diff as any, binding, provider);
+          treeIntegrator.integrateInternal(event.diff as any, binding, provider);
           break;
 
         case 'map':
           // Call internal method that doesn't wrap in editor.update()
           if (event.target) {
-            mapIntegrator.handleWithContextInternal(event.diff as any, event.target, binding, provider);
+            mapIntegrator.integrateWithContextInternal(event.diff as any, event.target, binding, provider);
           } else {
-            mapIntegrator.handleInternal(event.diff as any, binding, provider);
+            mapIntegrator.integrateInternal(event.diff as any, binding, provider);
           }
           break;
 
         case 'list':
-          listIntegrator.handleInternal(event.diff as any, binding, provider);
+          listIntegrator.integrateInternal(event.diff as any, binding, provider);
           break;
 
         case 'text':
-          textIntegrator.handleInternal(event.diff as any, binding, provider);
+          textIntegrator.integrateInternal(event.diff as any, binding, provider);
           break;
 
         case 'counter':
-          counterIntegrator.handleInternal(event.diff as any, binding, provider);
+          counterIntegrator.integrateInternal(event.diff as any, binding, provider);
           break;
 
         default:

@@ -59,7 +59,7 @@ class AwarenessAdapter implements ProviderAwareness {
     this.ephemeralStore.subscribe((event) => {
       // Emit update events when ephemeral state changes
       const updateIntegrators = this.eventIntegrators.get('update') || []
-      updateIntegrators.forEach(handler => handler())
+      updateIntegrators.forEach(integrater => integrater())
     })
   }
 
@@ -136,18 +136,18 @@ class AwarenessAdapter implements ProviderAwareness {
   }
 
   off(type: 'update', cb: () => void): void {
-    const handlers = this.eventIntegrators.get(type)
-    if (handlers) {
-      const index = handlers.indexOf(cb)
+    const integraters = this.eventIntegrators.get(type)
+    if (integraters) {
+      const index = integraters.indexOf(cb)
       if (index !== -1) {
-        handlers.splice(index, 1)
+        integraters.splice(index, 1)
       }
     }
   }
 }
 
 /**
- * Message handlers for different Loro message types
+ * Message integraters for different Loro message types
  */
 const messageIntegrators: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
 
@@ -170,7 +170,7 @@ messageIntegrators[messageQueryEphemeral] = (
     
     return JSON.stringify(response)
   } catch (error) {
-    console.warn('Error in messageQueryEphemeral handler:', error.message)
+    console.warn('Error in messageQueryEphemeral integrater:', error.message)
     return null
   }
 }
@@ -233,7 +233,7 @@ messageIntegrators[messageEphemeral] = (
     
     return null
   } catch (error) {
-    console.warn(`[Client] messageIntegrators[messageEphemeral] - ERROR in ephemeral message handler:`, {
+    console.warn(`[Client] messageIntegrators[messageEphemeral] - ERROR in ephemeral message integrater:`, {
       error: error.message,
       stack: error.stack,
       messageLength: message.ephemeral?.length,
@@ -672,7 +672,7 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {any} origin
      */
     this._updateIntegrator = (update: Uint8Array) => {
-      // This handler is only called for local changes that need to be broadcast
+      // This integrater is only called for local changes that need to be broadcast
       const updateMessage: LoroUpdateMessage = {
         type: 'update',
         update: Array.from(update),
@@ -681,7 +681,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       
       broadcastMessage(this, updateMessage)
     }
-    // Document update handler - called when Loro emits document change events
+    // Document update integrater - called when Loro emits document change events
     /**
      * @param {EphemeralStoreEvent} event - EphemeralStoreEvent with added, updated, removed arrays
      */

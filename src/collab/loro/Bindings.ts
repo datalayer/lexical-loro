@@ -419,7 +419,7 @@ export function createBinding(
         debugDiv.addEventListener('mousedown', (e: MouseEvent) => {
           // Only start drag if clicking on the header area
           const target = e.target as HTMLElement;
-          const dragHandle = debugDiv.querySelector('.debug-drag-handle') as HTMLElement;
+          const dragHandle = debugDiv.querySelector('.debug-drag-integrate') as HTMLElement;
           if (!dragHandle || !dragHandle.contains(target)) return;
           
           isDragging = true;
@@ -454,7 +454,7 @@ export function createBinding(
       }
       
       debugDiv.innerHTML = `
-        <div class="debug-drag-handle" style="color: #00ff88; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding: 15px 15px 5px 15px; cursor: move; background: linear-gradient(90deg, rgba(0,255,136,0.1), transparent);">
+        <div class="debug-drag-integrate" style="color: #00ff88; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding: 15px 15px 5px 15px; cursor: move; background: linear-gradient(90deg, rgba(0,255,136,0.1), transparent);">
           🟢 LORO TREE <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
         </div>
         <div style="padding: 0 15px 15px 15px; overflow-y: auto; max-height: calc(80vh - 50px);">

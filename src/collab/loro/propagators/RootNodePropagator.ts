@@ -62,7 +62,7 @@ export function createRootNodeInLoro(
   rootTreeNode.data.set('elementType', 'root');
   rootTreeNode.data.set('createdAt', Date.now());
   
-  // The exported Lexical node data is already handled by the mapper
+  // The exported Lexical node data is already propagated by the mapper
   // Return the TreeID from the node's ID
   return rootTreeNode.id;
 }
@@ -136,7 +136,7 @@ export function updateRootNodeFromLoro(
   treeId: TreeID,
   options: RootNodeMutatorOptions
 ): void {
-  // Root node updates are typically handled at the document level
+  // Root node updates are typically propagated at the document level
   // Most changes to root would be indirect (children changes)
   console.log('Root node update from Loro:', treeId);
 }
@@ -166,9 +166,9 @@ export function isRootNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
 }
 
 /**
- * Main mutate method for RootNode - handles all mutation types
+ * Main propagate method for RootNode - propagates all mutation types
  */
-export function mutateRootNode(
+export function propagateRootNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: NodeKey,

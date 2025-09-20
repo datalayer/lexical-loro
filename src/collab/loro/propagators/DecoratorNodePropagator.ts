@@ -61,7 +61,7 @@ export function createDecoratorNodeInLoro(
   treeNode.data.set('elementType', 'decorator');
   treeNode.data.set('createdAt', Date.now());
   
-  // The exported Lexical node data is already handled by the mapper
+  // The exported Lexical node data is already propagated by the mapper
   // Return the TreeID from the node's ID
   return treeNode.id;
 }
@@ -118,7 +118,7 @@ export function deleteDecoratorNodeInLoro(
 ): void {
   const mapper = getNodeMapper();
   
-  // Use the mapper's delete method which handles TreeID lookup internally
+  // Use the mapper's delete method which propagates TreeID lookup internally
   mapper.deleteMapping(nodeKey);
 }
 
@@ -149,7 +149,7 @@ export function createDecoratorNodeFromLoro(
   let decoratorNode: DecoratorNode<any>;
   
   if (lexicalData && typeof lexicalData === 'object') {
-    // For DecoratorNode, we need to handle this case appropriately
+    // For DecoratorNode, we need to propagate this case appropriately
     // But DecoratorNodes are complex and might need special handling
     console.warn(`DecoratorNode creation from JSON object not fully implemented for TreeID: ${treeId}`);
     return null;
@@ -329,9 +329,9 @@ class GenericDecoratorNode extends DecoratorNode<any> {
 }
 
 /**
- * Main mutate method for DecoratorNode - handles all mutation types
+ * Main propagate method for DecoratorNode - propagates all mutation types
  */
-export function mutateDecoratorNode(
+export function propagateDecoratorNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: NodeKey,
@@ -368,7 +368,7 @@ export function mutateDecoratorNode(
           try {
             lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to export node data in mutateDecoratorNode created:', error);
+            console.warn('Failed to export node data in propagateDecoratorNode created:', error);
           }
           
           return { parentId, index, decoratorType, decoratorData, metadata, lexicalNodeJSON };
@@ -407,7 +407,7 @@ export function mutateDecoratorNode(
           try {
             lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to export node data in mutateDecoratorNode updated:', error);
+            console.warn('Failed to export node data in propagateDecoratorNode updated:', error);
           }
           
           return { parentId, index, decoratorType, decoratorData, metadata, lexicalNodeJSON };

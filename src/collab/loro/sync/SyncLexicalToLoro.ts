@@ -1,11 +1,11 @@
 import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode } from 'lexical';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
-import { mutateRootNode } from '../propagators/RootNodePropagator';
-import { mutateLineBreakNode } from '../propagators/LineBreakNodePropagator';
-import { mutateElementNode } from '../propagators/ElementNodePropagator';
-import { mutateTextNode } from '../propagators/TextNodePropagator';
-import { mutateDecoratorNode } from '../propagators/DecoratorNodePropagator';
+import { propagateRootNode } from '../propagators/RootNodePropagator';
+import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
+import { propagateElementNode } from '../propagators/ElementNodePropagator';
+import { propagateTextNode } from '../propagators/TextNodePropagator';
+import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, toKeyNodeNumber } from '../utils/Utils';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
@@ -43,10 +43,10 @@ export function syncLexicalToLoro(
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
             if (isClassExtending(Klass, RootNode)) {
-              mutateRootNode(update, mutation, nodeKey, mutatorOptions);
+              propagateRootNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, ElementNode)) {
-              mutateElementNode(update, mutation, nodeKey, mutatorOptions);
+              propagateElementNode(update, mutation, nodeKey, mutatorOptions);
             }
           });
         }
@@ -59,13 +59,13 @@ export function syncLexicalToLoro(
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
             if (isClassExtending(Klass, TextNode)) {
-              mutateTextNode(update, mutation, nodeKey, mutatorOptions);
+              propagateTextNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, LineBreakNode)) {
-              mutateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
+              propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, DecoratorNode)) {
-              mutateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
+              propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
             } else {
               throw new Error(`Unsupported node type for key: ${nodeKey}, mutation: ${mutation}. Node class: ${Klass.name}`);
             }

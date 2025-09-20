@@ -52,7 +52,7 @@ export function createLineBreakNodeInLoro(
   treeNode.data.set('elementType', 'linebreak');
   treeNode.data.set('createdAt', Date.now());
   
-  // The exported Lexical node data is already handled by the mapper
+  // The exported Lexical node data is already propagated by the mapper
   // Return the TreeID from the node's ID
   return treeNode.id;
 }
@@ -105,7 +105,7 @@ export function deleteLineBreakNodeInLoro(
 ): void {
   const mapper = getNodeMapper();
   
-  // Use the mapper's delete method which handles TreeID lookup internally
+  // Use the mapper's delete method which propagates TreeID lookup internally
   mapper.deleteMapping(nodeKey);
 }
 
@@ -215,9 +215,9 @@ export function getLineBreakNodeDataFromTree(treeId: TreeID, tree: LoroTree): an
 }
 
 /**
- * Main mutate method for LineBreakNode - handles all mutation types
+ * Main propagate method for LineBreakNode - propagates all mutation types
  */
-export function mutateLineBreakNode(
+export function propagateLineBreakNode(
   update: UpdateListenerPayload,
   mutation: 'created' | 'updated' | 'destroyed',
   nodeKey: NodeKey,
@@ -242,7 +242,7 @@ export function mutateLineBreakNode(
           try {
             lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to export node JSON in mutateLineBreakNode created:', error);
+            console.warn('Failed to export node JSON in propagateLineBreakNode created:', error);
           }
           
           return { parentId, index, lexicalNodeJSON };
@@ -269,7 +269,7 @@ export function mutateLineBreakNode(
           try {
             lexicalNodeJSON = currentNode.exportJSON();
           } catch (error) {
-            console.warn('Failed to export node data in mutateLineBreakNode updated:', error);
+            console.warn('Failed to export node data in propagateLineBreakNode updated:', error);
           }
           
           return { parentId, index, lexicalNodeJSON };
