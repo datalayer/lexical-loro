@@ -2,12 +2,12 @@ import { LoroDoc, TreeID } from 'loro-crdt';
 import { $getSelection, $isRangeSelection, LexicalNode, NodeKey, TextNode } from 'lexical';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
-const DEFAULT_TREE_NAME = 'tree';
+export const DEFAULT_TREE_NAME = 'tree';
 
 /**
  * Ensure doc has a LoroTree instance
  */
-export function createLoroTree(doc: LoroDoc, treeName = DEFAULT_TREE_NAME) {
+export function getLoroTree(doc: LoroDoc, treeName = DEFAULT_TREE_NAME) {
   const tree = doc.getTree(treeName);
   // Enable fractional index for ordered siblings (useful for maintaining order)
   // tree.enableFractionalIndex(0.001);

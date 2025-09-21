@@ -5,10 +5,8 @@ import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
 import { propagateElementNode } from '../propagators/ElementNodePropagator';
 import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
-import { isClassExtending, toKeyNodeNumber } from '../utils/Utils';
+import { isClassExtending } from '../utils/Utils';
 import { scheduleAsyncCommit } from '../Bindings';
-import { bind } from 'lodash-es';
-// import { Provider } from '../State';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
 export function syncLexicalToLoro(

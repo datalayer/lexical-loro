@@ -3,7 +3,7 @@ import {Klass, LexicalNode} from 'lexical';
 import type {LoroDoc, LoroTree} from 'loro-crdt';
 import invariant from '../utils/invariant';
 import type {Cursor} from './sync/SyncCursors';
-import { createLoroTree } from './utils/Utils';
+import { getLoroTree } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
 
@@ -44,7 +44,7 @@ export function createBinding(
   );
   
   // Initialize the tree - content will come from server snapshot via sync
-  const tree = createLoroTree(doc);
+  const tree = getLoroTree(doc);
   console.log('📄 Loro tree initialized, content will be populated via server sync');
   
   const binding: Binding = {
