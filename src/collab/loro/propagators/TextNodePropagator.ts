@@ -60,16 +60,24 @@ export function createTextNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     try {
       // Store complete lexical JSON without the key
+      let cleanedData;
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
+        const { key, __key, ...cleaned } = lexicalNodeJSON;
+        cleanedData = cleaned;
       } else {
-        treeNode.data.set('lexical', lexicalNodeJSON);
+        cleanedData = lexicalNodeJSON;
       }
+      
+      // Get the document from the binding
+      const doc = options.binding.doc;
+      const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+      lexicalMap.set('data', cleanedData);
+      
+      console.log(`🔄 [TextNodePropagator] CREATE stored lexical data for TreeID ${treeNode.id}, nodeKey ${nodeKey}, text: "${cleanedData.text || cleanedData.__text || 'N/A'}"`);
     } catch (error) {
       console.warn('Failed to store lexical node JSON for TextNode:', error);
     }
@@ -107,16 +115,24 @@ export function updateTextNodeInLoro(
   // Note: Container validation is done in each try-catch block below since
   // the container can be deleted between operations
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     try {
       // Store complete lexical JSON without the key
+      let cleanedData;
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
+        const { key, __key, ...cleaned } = lexicalNodeJSON;
+        cleanedData = cleaned;
       } else {
-        treeNode.data.set('lexical', lexicalNodeJSON);
+        cleanedData = lexicalNodeJSON;
       }
+      
+      // Get the document from the binding
+      const doc = options.binding.doc;
+      const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+      lexicalMap.set('data', cleanedData);
+      
+      console.log(`🔄 [TextNodePropagator] UPDATE stored lexical data for TreeID ${treeNode.id}, nodeKey ${nodeKey}, text: "${cleanedData.text || cleanedData.__text || 'N/A'}"`);
     } catch (error) {
       // This is expected during text operations when nodes get deleted/recreated
       console.warn(`📝 TextNode ${nodeKey} container was deleted during update, skipping (normal during text operations):`, error.message);
@@ -168,8 +184,10 @@ export function createTextNodeFromLoro(
     return null;
   }
   
-  // Get LexicalNodeData (JSON object format only)
-  const lexicalData = treeNode.data.get('lexical');
+  // Get LexicalNodeData from separate map
+  const doc = options!.binding.doc;
+  const lexicalMap = doc.getMap(`lexical-${treeId}`);
+  const lexicalData = lexicalMap.get('data');
   let textNode: TextNode;
   
   if (lexicalData && typeof lexicalData === 'object') {

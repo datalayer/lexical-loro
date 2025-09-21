@@ -41,11 +41,13 @@ export function createLineBreakNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
-    // Store complete lexical JSON without the key
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     const { key, ...cleanedData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedData);
+    // Get the document from the binding
+    const doc = options.binding.doc;
+    const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+    lexicalMap.set('data', cleanedData);
   }
   
   // Store only essential metadata
@@ -79,11 +81,13 @@ export function updateLineBreakNodeInLoro(
   
   const treeId = treeNode.id;
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
-    // Store complete lexical JSON without the key
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     const { key, ...cleanedData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedData);
+    // Get the document from the binding
+    const doc = options.binding.doc;
+    const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+    lexicalMap.set('data', cleanedData);
   }
   
   // Move the node if parent or position changed
@@ -127,8 +131,10 @@ export function createLineBreakNodeFromLoro(
   const treeNode = tree.getNodeByID(treeId);
   let lineBreakNode: LineBreakNode;
   
-  // Get LexicalNodeData (JSON object format only)
-  const lexicalData = treeNode?.data.get('lexical');
+  // Get LexicalNodeData from separate map
+  const doc = options!.binding.doc;
+  const lexicalMap = doc.getMap(`lexical-${treeId}`);
+  const lexicalData = lexicalMap.get('data');
   
   if (lexicalData && typeof lexicalData === 'object') {
     // lexicalData is a direct JSON object - LineBreak nodes are simple

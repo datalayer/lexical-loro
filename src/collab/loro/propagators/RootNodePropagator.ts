@@ -43,16 +43,22 @@ export function createRootNodeInLoro(
     0 // always at index 0
   );
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     try {
       // Store complete lexical JSON without the key
+      let cleanedData;
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
-        rootTreeNode.data.set('lexical', cleanedData);
+        const { key, __key, ...cleaned } = lexicalNodeJSON;
+        cleanedData = cleaned;
       } else {
-        rootTreeNode.data.set('lexical', lexicalNodeJSON);
+        cleanedData = lexicalNodeJSON;
       }
+      
+      // Get the document from the binding
+      const doc = options.binding.doc;
+      const lexicalMap = doc.getMap(`lexical-${rootTreeNode.id}`);
+      lexicalMap.set('data', cleanedData);
     } catch (error) {
       console.warn('Failed to store lexical node JSON for RootNode:', error);
     }
@@ -80,16 +86,22 @@ export function updateRootNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     try {
       // Store complete lexical JSON without the key
+      let cleanedData;
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
+        const { key, __key, ...cleaned } = lexicalNodeJSON;
+        cleanedData = cleaned;
       } else {
-        treeNode.data.set('lexical', lexicalNodeJSON);
+        cleanedData = lexicalNodeJSON;
       }
+      
+      // Get the document from the binding
+      const doc = options.binding.doc;
+      const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+      lexicalMap.set('data', cleanedData);
     } catch (error) {
       console.warn('Failed to store lexical node JSON for RootNode update:', error);
     }

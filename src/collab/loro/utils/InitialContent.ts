@@ -64,7 +64,7 @@ export function initializeLoroDocWithLexicalContent(doc: LoroDoc): void {
   tree.enableFractionalIndex(0.001);
   
   // Convert the initial Lexical JSON to Loro tree structure
-  lexicalToLoroTree(INITIAL_LEXICAL_JSON, tree);  
+  lexicalToLoroTree(INITIAL_LEXICAL_JSON, tree, doc);  
 }
 
 /**

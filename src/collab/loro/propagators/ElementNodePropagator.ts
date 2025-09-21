@@ -46,11 +46,13 @@ export function createElementNodeInLoro(
   // Use mapper to get or create the tree node (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined, parentId, index);
   
-  // Store complete lexical node data as JSON object (without the key) if provided
-  if (lexicalNodeJSON) {
-    // Remove the key from lexical node data and store the cleaned object
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     const { key, ...cleanedLexicalData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedLexicalData);
+    // Get the document from the binding
+    const doc = options.binding.doc;
+    const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+    lexicalMap.set('data', cleanedLexicalData);
   }
   
   // Store only essential metadata (elementType for debug panel)
@@ -78,11 +80,13 @@ export function updateElementNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as JSON object (without the key) if provided
-  if (lexicalNodeJSON) {
-    // Remove the key from lexical node data and store the cleaned object
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     const { key, ...cleanedLexicalData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedLexicalData);
+    // Get the document from the binding
+    const doc = options.binding.doc;
+    const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+    lexicalMap.set('data', cleanedLexicalData);
   }
   
   // Update only essential metadata
@@ -167,8 +171,10 @@ export function createElementNodeFromLoro(
     return null;
   }
   
-  // Get LexicalNodeData (JSON object format only)
-  const lexicalData = treeNode.data.get('lexical');
+  // Get LexicalNodeData from separate map
+  const doc = options!.binding.doc;
+  const lexicalMap = doc.getMap(`lexical-${treeId}`);
+  const lexicalData = lexicalMap.get('data');
   let elementNode: ElementNode;
   
   if (lexicalData && typeof lexicalData === 'object') {

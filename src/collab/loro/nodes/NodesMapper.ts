@@ -14,9 +14,11 @@ export class NodeMapper {
   private loroToLexical = new Map<TreeID, NodeKey>();
   
   private tree: LoroTree;
+  private binding: Binding;
 
   constructor(binding: Binding) {
     this.tree = binding.tree;
+    this.binding = binding;
   }
 
   /**
@@ -200,6 +202,14 @@ export class NodeMapper {
     const treeId = this.lexicalToLoro.get(nodeKey);
     if (treeId) {
       this.removeMapping(nodeKey, treeId);
+      
+      // Clean up the separate lexical map for this node
+      try {
+        const lexicalMap = this.binding.doc.getMap(`lexical-${treeId}`);
+        lexicalMap.clear();
+      } catch (error) {
+        // Map might not exist, which is fine
+      }
       
       // Delete the tree node
       if (this.tree.has(treeId)) {

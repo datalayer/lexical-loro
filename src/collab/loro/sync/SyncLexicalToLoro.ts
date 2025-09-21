@@ -58,7 +58,6 @@ export function syncLexicalToLoro(
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
             if (isClassExtending(Klass, TextNode)) {
-              console.log('----DLA 0', mutation )
               propagateTextNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, LineBreakNode)) {

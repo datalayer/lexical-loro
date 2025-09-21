@@ -1,4 +1,4 @@
-import { Loro, LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
+import { TreeID, LoroTree, LoroTreeNode, LoroDoc } from 'loro-crdt';
 
 
 /**
@@ -16,10 +16,10 @@ interface LexicalJSON {
 }
 
 /**
- * Convert a Lexical JSON structure to a Loro tree
+ * Convert Lexical JSON to Loro tree structure
  * This is used to initialize a Loro tree from existing Lexical content
  */
-export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroTree): TreeID {
+export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroTree, doc?: LoroDoc): TreeID {
   let parsedJson: LexicalJSON;
   
   if (typeof lexicalJson === 'string') {
@@ -36,7 +36,7 @@ export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroT
   const rootTreeNode = tree.createNode();
   const rootTreeID = rootTreeNode.id;
   
-  processLexicalNode(parsedJson.root, tree, rootTreeNode);
+  processLexicalNode(parsedJson.root, tree, rootTreeNode, doc);
   
   return rootTreeID;
 }
@@ -47,7 +47,8 @@ export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroT
 function processLexicalNode(
   lexicalNode: LexicalNodeJSON,
   tree: LoroTree,
-  treeNode: LoroTreeNode
+  treeNode: LoroTreeNode,
+  doc?: LoroDoc
 ): void {
 
   // Store the lexical data in the tree node
@@ -56,15 +57,32 @@ function processLexicalNode(
     // Store element type for quick access
     nodeData.set('elementType', lexicalNode.type);
     
-    // Store lexical node data directly as JSON object
-    const lexicalNodeData = createLexicalNodeFromJSON(lexicalNode);
-    const lexicalNodeJSON = lexicalNodeData.lexicalNode.exportJSON();
-    // Remove key if it exists to avoid duplication (TreeID serves as the key)
-    if ('__key' in lexicalNodeJSON) {
-      const { __key, ...cleanedData } = lexicalNodeJSON;
-      nodeData.set('lexical', cleanedData);
+    // Store lexical node data in separate map if doc is available
+    if (doc) {
+      const lexicalNodeData = createLexicalNodeFromJSON(lexicalNode);
+      const lexicalNodeJSON = lexicalNodeData.lexicalNode.exportJSON();
+      // Remove key if it exists to avoid duplication (TreeID serves as the key)
+      let cleanedData;
+      if ('__key' in lexicalNodeJSON) {
+        const { __key, ...cleaned } = lexicalNodeJSON;
+        cleanedData = cleaned;
+      } else {
+        cleanedData = lexicalNodeJSON;
+      }
+      
+      // Store in separate map
+      const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+      lexicalMap.set('data', cleanedData);
     } else {
-      nodeData.set('lexical', lexicalNodeJSON);
+      // Fallback to old method if no doc provided
+      const lexicalNodeData = createLexicalNodeFromJSON(lexicalNode);
+      const lexicalNodeJSON = lexicalNodeData.lexicalNode.exportJSON();
+      if ('__key' in lexicalNodeJSON) {
+        const { __key, ...cleanedData } = lexicalNodeJSON;
+        nodeData.set('lexical', cleanedData);
+      } else {
+        nodeData.set('lexical', lexicalNodeJSON);
+      }
     }
   }
 
@@ -73,7 +91,7 @@ function processLexicalNode(
     lexicalNode.children.forEach((child, childIndex) => {
       // Create child node under current node
       const childTreeNode = tree.createNode(treeNode.id, childIndex);
-      processLexicalNode(child, tree, childTreeNode);
+      processLexicalNode(child, tree, childTreeNode, doc);
     });
   }
 }

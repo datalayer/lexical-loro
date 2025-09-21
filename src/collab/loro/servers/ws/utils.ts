@@ -325,7 +325,37 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Apply the Loro update to the document.
         const updateBytes = new Uint8Array(messageData.update)
         const i = doc.doc.import(updateBytes)
-        // logTreeStructure(doc.doc, `After applying update from client ${conn.id || 'unknown'}`)
+        
+        // Log what was updated
+        try {
+          const tree = doc.doc.getTree('tree')
+          const treeNodes = tree.nodes()
+          console.log(`📡 [Server] Applied update: ${updateBytes.length} bytes, tree nodes: ${treeNodes.length}`)
+          
+          // Check a few lexical maps to see if they contain text data
+          let lexicalMapCount = 0
+          treeNodes.slice(0, 5).forEach(node => {
+            try {
+              const lexicalMap = doc.doc.getMap(`lexical-${node.id}`)
+              const data = lexicalMap.get('data') as any
+              if (data) {
+                lexicalMapCount++
+                if (data.text !== undefined) {
+                  console.log(`📡 [Server] Lexical map lexical-${node.id}: text="${data.text}", type=${data.type}`)
+                }
+              }
+            } catch (mapError) {
+              // Map might not exist yet
+            }
+          })
+          
+          if (lexicalMapCount > 0) {
+            console.log(`📡 [Server] Found ${lexicalMapCount} lexical maps with data`)
+          }
+        } catch (logError) {
+          console.warn(`[Server] Error logging update details:`, logError.message)
+        }
+        
         // Create properly formatted message for broadcasting
         // Send the update to all other connections
         let broadcastCount = 0

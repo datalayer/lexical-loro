@@ -50,11 +50,13 @@ export function createDecoratorNodeInLoro(
     index
   );
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
-    // Store complete lexical JSON without the key
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     const { key, ...cleanedData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedData);
+    // Get the document from the binding
+    const doc = options.binding.doc;
+    const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+    lexicalMap.set('data', cleanedData);
   }
   
   // Store only essential metadata
@@ -90,11 +92,13 @@ export function updateDecoratorNodeInLoro(
   const { tree } = options!;
   const treeId = treeNode.id;
   
-  // Store complete lexical node data as clean JSON if provided
-  if (lexicalNodeJSON) {
-    // Store complete lexical JSON without the key
+  // Store complete lexical node data in separate map if provided
+  if (lexicalNodeJSON && options) {
     const { key, ...cleanedData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedData);
+    // Get the document from the binding
+    const doc = options.binding.doc;
+    const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
+    lexicalMap.set('data', cleanedData);
   }
   
   // All decorator information is now contained in lexical data object
@@ -144,8 +148,10 @@ export function createDecoratorNodeFromLoro(
     return null;
   }
   
-  // Get LexicalNodeData (JSON object format only)
-  const lexicalData = treeNode.data.get('lexical');
+  // Get LexicalNodeData from separate map
+  const doc = options!.binding.doc;
+  const lexicalMap = doc.getMap(`lexical-${treeId}`);
+  const lexicalData = lexicalMap.get('data');
   let decoratorNode: DecoratorNode<any>;
   
   if (lexicalData && typeof lexicalData === 'object') {
