@@ -72,6 +72,7 @@ export function syncLexicalToLoro(
     });
     
     binding.doc.commit({ origin: binding.doc.peerIdStr })
+    binding.doc.free();
 
   }
 

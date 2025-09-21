@@ -13,6 +13,9 @@ export class NodeMapper {
   // Maps Loro TreeID to Lexical NodeKey
   private loroToLexical = new Map<TreeID, NodeKey>();
   
+  // Cache for tracking created lexical maps
+  private lexicalMaps = new Set<string>();
+  
   private tree: LoroTree;
   private binding: Binding;
 
@@ -156,21 +159,8 @@ export class NodeMapper {
     // Store basic metadata
     treeNode.data.set('createdAt', Date.now());
     
-    // Store complete lexical node data if lexical node is provided
-    if (lexicalNode) {
-      try {
-        const lexicalNodeJSON = lexicalNode.exportJSON();
-        // Remove key if it exists to avoid duplication (TreeID serves as the key)
-        if ('key' in lexicalNodeJSON) {
-          const { key, ...cleanedData } = lexicalNodeJSON;
-          treeNode.data.set('lexical', cleanedData);
-        } else {
-          treeNode.data.set('lexical', lexicalNodeJSON);
-        }
-      } catch (error) {
-        console.warn('Failed to export lexical node JSON in NodesMapper:', error);
-      }
-    }
+    // Note: Lexical node data is now stored in separate maps (lexical-${treeId})
+    // via the NodePropagators, not in the tree node data
 
     // Create bidirectional mapping
     this.createMapping(nodeKey, treeId);
@@ -205,7 +195,7 @@ export class NodeMapper {
       
       // Clean up the separate lexical map for this node
       try {
-        const lexicalMap = this.binding.doc.getMap(`lexical-${treeId}`);
+        const lexicalMap = this.getLexicalMapForTreeId(treeId);
         lexicalMap.clear();
       } catch (error) {
         // Map might not exist, which is fine
@@ -255,6 +245,30 @@ export class NodeMapper {
   clearMappings(): void {
     this.lexicalToLoro.clear();
     this.loroToLexical.clear();
+    this.lexicalMaps.clear();
+  }
+
+  /**
+   * Track a lexical map creation
+   */
+  trackLexicalMap(mapName: string): void {
+    this.lexicalMaps.add(mapName);
+  }
+
+  /**
+   * Get all tracked lexical maps
+   */
+  getTrackedLexicalMaps(): string[] {
+    return Array.from(this.lexicalMaps);
+  }
+
+  /**
+   * Get lexical map for a tree node
+   */
+  getLexicalMapForTreeId(treeId: TreeID): any {
+    const mapName = `lexical-${treeId}`;
+    this.trackLexicalMap(mapName);
+    return this.binding.doc.getMap(mapName);
   }
 
   /**

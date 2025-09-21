@@ -58,6 +58,12 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
 
   // Internal method for use when already inside editor.update() with context
   integrateWithContextInternal(diff: MapDiff, treeId: any, binding: Binding, provider: Provider): void {
+    // Check if this is a lexical map update
+    if (typeof treeId === 'string' && (treeId.includes('lexical-') && (treeId.startsWith('lexical-') || treeId.includes(':root-lexical-')))) {
+      this.integrateLexicalMapUpdate(treeId, diff, binding);
+      return;
+    }
+
     // Handle updated properties with TreeID context
     if (diff.updated) {
       Object.entries(diff.updated).forEach(([key, value]) => {
@@ -236,6 +242,90 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         if (lexicalData.style !== undefined) {
           textNode.setStyle(lexicalData.style);
         }
+      }
+    }
+  }
+
+  /**
+   * Handle updates to separate lexical maps (lexical-${treeId})
+   * Migrated from SyncLoroToLexical handleLexicalMapUpdate
+   */
+  private integrateLexicalMapUpdate(targetStr: string, diff: MapDiff, binding: Binding): void {
+    // Extract TreeID from lexical map name (lexical-${treeId} or cid:root-lexical-${treeId})
+    let treeIdMatch = targetStr.match(/^lexical-(.+)$/);
+    if (!treeIdMatch) {
+      // Try the cid:root-lexical- pattern
+      treeIdMatch = targetStr.match(/^cid:root-lexical-(.+?):/);
+      if (!treeIdMatch) {
+        console.warn(`🗂️ [MapIntegrator] Invalid lexical map target: ${targetStr}`);
+        return;
+      }
+    }
+    
+    const treeId = treeIdMatch[1];
+    
+    // Find the corresponding Lexical node
+    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(treeId as any);
+    
+    if (!lexicalKey) {
+      console.warn(`🗂️ [MapIntegrator] No Lexical key found for TreeID: ${treeId}`);
+      return;
+    }
+    
+    const lexicalNode = $getNodeByKey(lexicalKey);
+    
+    if (!lexicalNode) {
+      console.warn(`🗂️ [MapIntegrator] No Lexical node found for key: ${lexicalKey}`);
+      return;
+    }
+
+    // Handle updated properties in the lexical map
+    if (diff.updated && diff.updated.data) {
+      const lexicalData = diff.updated.data as any;
+      
+      // Apply the lexical data to the node
+      try {
+        // For text nodes, update the text content using Lexical's proper API
+        if (lexicalData.type === 'text' && lexicalNode.getType() === 'text') {
+          const textNode = lexicalNode as any;
+          const currentText = textNode.getTextContent();
+          const newText = lexicalData.text || '';
+          
+          if (currentText !== newText) {
+            // Use Lexical's setTextContent method to properly update the text
+            textNode.setTextContent(newText);
+          }
+        } else {
+          console.warn(`🗂️ [MapIntegrator] Not a text node or type mismatch - lexicalData.type: ${lexicalData.type}, node.type: ${lexicalNode.getType()}`);
+        }
+        
+        // Apply other properties from lexical data (only those that are settable)
+        if (typeof lexicalData === 'object') {
+          // Define which properties are safe to set on Lexical nodes
+          const settableProperties = ['format', 'mode', 'style'];
+          
+          Object.keys(lexicalData).forEach(key => {
+            if (settableProperties.includes(key)) {
+              try {
+                // Use proper Lexical methods when available
+                const setterMethod = `set${key.charAt(0).toUpperCase() + key.slice(1)}`;
+                if (typeof (lexicalNode as any)[setterMethod] === 'function') {
+                  (lexicalNode as any)[setterMethod](lexicalData[key]);
+                } else {
+                  // For TextNode, format can be set directly
+                  if (key === 'format' && lexicalNode.getType() === 'text') {
+                    (lexicalNode as any).__format = lexicalData[key];
+                  }
+                }
+              } catch (error) {
+                console.warn(`🗂️ [MapIntegrator] Failed to set property ${key}:`, error);
+              }
+            }
+          });
+        }
+        
+      } catch (error) {
+        console.warn(`🗂️ [MapIntegrator] Failed to apply lexical data to node ${lexicalKey}:`, error);
       }
     }
   }

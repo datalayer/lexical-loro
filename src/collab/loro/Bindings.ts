@@ -131,6 +131,46 @@ export function createBinding(
       console.log('Peer ID:', binding.doc.peerIdStr);
       console.log('Client ID:', binding.clientID);
       
+      // Get document state to analyze maps
+      const docState = binding.doc.toJSON();
+      const allMapKeys = Object.keys(docState).filter(key => key.startsWith('lexical-'));
+      console.log('Lexical maps:', allMapKeys.length);
+      
+      // Check which maps correspond to existing tree nodes
+      const treeNodeIds = new Set(nodes.map(node => node.id));
+      const expectedMapNames = new Set(nodes.map(node => `lexical-${node.id}`));
+      
+      console.log('\n🗺️ MAP ANALYSIS:');
+      console.log('Expected maps (from tree nodes):', expectedMapNames.size);
+      console.log('Actual maps found:', allMapKeys.length);
+      
+      const orphanedMaps = allMapKeys.filter(mapKey => !expectedMapNames.has(mapKey));
+      const missingMaps = Array.from(expectedMapNames).filter(expected => !allMapKeys.includes(expected));
+      
+      if (orphanedMaps.length > 0) {
+        console.log('⚠️ ORPHANED MAPS (maps without corresponding tree nodes):');
+        orphanedMaps.forEach(mapKey => {
+          const treeId = mapKey.replace('lexical-', '');
+          const mapData = docState[mapKey];
+          const isEmpty = !mapData || Object.keys(mapData).length === 0;
+          console.log(`  - ${mapKey} (TreeID: ${treeId}) - ${isEmpty ? 'Empty' : 'Has data'}`);
+          if (!isEmpty) {
+            console.log(`    Data keys: ${Object.keys(mapData).join(', ')}`);
+          }
+        });
+      }
+      
+      if (missingMaps.length > 0) {
+        console.log('⚠️ MISSING MAPS (tree nodes without maps):');
+        missingMaps.forEach(expected => {
+          console.log(`  - ${expected}`);
+        });
+      }
+      
+      if (orphanedMaps.length === 0 && missingMaps.length === 0) {
+        console.log('✅ All maps correspond to existing tree nodes');
+      }
+      
       // Check mapping consistency
       const mapper = binding.nodeMapper;
       console.log('\n📍 Node Mappings:');
@@ -282,6 +322,22 @@ export function createBinding(
         } else {
           console.log('⚠️ No valid lexical key found for this Loro node (key:', lexicalKey, ')');
         }
+        
+        // Show associated Loro map
+        try {
+          const lexicalMap = binding.doc.getMap(`lexical-${node.id}`);
+          const mapData = Object.fromEntries(lexicalMap.entries());
+          console.log('🗺️ Associated Loro Map:');
+          console.log('  Map Name:', `lexical-${node.id}`);
+          console.log('  Map Keys:', Object.keys(mapData));
+          if (Object.keys(mapData).length > 0) {
+            console.log('  Map Data:', mapData);
+          } else {
+            console.log('  Map Status: Empty or not yet created');
+          }
+        } catch (e) {
+          console.log('❌ Failed to fetch Loro map:', e);
+        }
       } else {
         console.warn(`Node with TreeID "${treeId}" not found`);
       }
@@ -333,6 +389,81 @@ export function createBinding(
       }
       
       return result;
+    },
+    analyzeMaps: () => {
+      const binding = (window as any).debugLoro.binding as Binding;
+      if (!binding) return console.log('❌ Loro Binding not available');
+      
+      console.log('🔍 DETAILED MAP ANALYSIS:');
+      const tree = binding.tree;
+      const nodes = tree.nodes();
+      const docState = binding.doc.toJSON();
+      const allMapKeys = Object.keys(docState).filter(key => key.startsWith('lexical-'));
+      
+      console.log(`Tree nodes: ${nodes.length}`);
+      console.log(`Lexical maps: ${allMapKeys.length}`);
+      
+      // Get lexical editor state for comparison
+      const editorState = binding.editor.getEditorState();
+      const lexicalNodeCount = editorState.read(() => {
+        return Object.keys(editorState._nodeMap).length;
+      });
+      console.log(`Lexical editor nodes: ${lexicalNodeCount}`);
+      
+      console.log('\n📋 ALL MAPS DETAILED:');
+      allMapKeys.forEach(mapKey => {
+        const treeId = mapKey.replace('lexical-', '');
+        const mapData = docState[mapKey];
+        const hasTreeNode = nodes.some(node => node.id === treeId);
+        const isEmpty = !mapData || Object.keys(mapData).length === 0;
+        
+        console.log(`\n🗺️ ${mapKey}:`);
+        console.log(`  TreeID: ${treeId}`);
+        console.log(`  Has corresponding tree node: ${hasTreeNode}`);
+        console.log(`  Map empty: ${isEmpty}`);
+        
+        if (!isEmpty && mapData) {
+          console.log(`  Map keys: ${Object.keys(mapData).join(', ')}`);
+          if (mapData.data) {
+            const data = mapData.data;
+            console.log(`  Lexical type: ${data.type || 'unknown'}`);
+            console.log(`  Lexical text: ${data.text || data.__text || 'N/A'}`);
+          }
+        }
+        
+        if (hasTreeNode) {
+          const treeNode = nodes.find(node => node.id === treeId);
+          const nodeData = Object.fromEntries(treeNode.data.entries());
+          console.log(`  Tree node type: ${nodeData.elementType || 'unknown'}`);
+          
+          // Check if there's a lexical key mapping
+          const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(treeId as any);
+          console.log(`  Mapped lexical key: ${lexicalKey || 'none'}`);
+          
+          // Check if lexical node exists in editor
+          if (lexicalKey) {
+            const lexicalExists = editorState.read(() => {
+              return editorState._nodeMap.has(lexicalKey);
+            });
+            console.log(`  Lexical node exists in editor: ${lexicalExists}`);
+          }
+        } else {
+          console.log(`  ⚠️ ORPHANED MAP - no corresponding tree node`);
+        }
+      });
+      
+      console.log('\n🎯 SUMMARY:');
+      const orphanedCount = allMapKeys.filter(mapKey => {
+        const treeId = mapKey.replace('lexical-', '');
+        return !nodes.some(node => node.id === treeId);
+      }).length;
+      
+      console.log(`Orphaned maps: ${orphanedCount}`);
+      console.log(`Valid maps: ${allMapKeys.length - orphanedCount}`);
+      
+      if (orphanedCount > 0) {
+        console.log('\n💡 RECOMMENDATION: Orphaned maps should be cleaned up to avoid memory leaks');
+      }
     },
     addDebugToPage: () => {
       const binding = (window as any).debugLoro.binding as Binding;
@@ -460,6 +591,10 @@ export function createBinding(
         <div style="padding: 0 15px 15px 15px; overflow-y: auto; max-height: calc(80vh - 50px);">
           <div style="color: #00ffaa; margin-bottom: 8px;">Total nodes: ${nodes.length}</div>
           <div style="color: #00ff66; margin-bottom: 8px;">Peer ID: ${binding.doc.peerIdStr.slice(0, 8)}...</div>
+          <div style="color: #ffaa00; margin-bottom: 8px;">Lexical maps: ${(() => {
+            const docState = binding.doc.toJSON();
+            return Object.keys(docState).filter(key => key.startsWith('lexical-')).length;
+          })()}</div>
           <div style="color: #00ffdd; margin-bottom: 10px;">Time: ${new Date().toLocaleTimeString()}</div>
           <div style="border-top: 1px solid #444; padding-top: 8px; line-height: 1.4; font-family: 'Courier New', monospace;">
             ${treeHTML}
@@ -467,6 +602,7 @@ export function createBinding(
           <div style="margin-top: 10px; font-size: 10px; color: #666;">
             <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
             <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
+            <span onclick="window.debugLoro.analyzeMaps()" style="color: #ff8800; cursor: pointer; text-decoration: underline;">🗺️ Maps</span> | 
             <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
             <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;">❌ Close</span>
           </div>
