@@ -134,18 +134,18 @@ class AwarenessAdapter implements ProviderAwareness {
   }
 
   off(type: 'update', cb: () => void): void {
-    const integraters = this.eventIntegrators.get(type)
-    if (integraters) {
-      const index = integraters.indexOf(cb)
+    const integrators = this.eventIntegrators.get(type)
+    if (integrators) {
+      const index = integrators.indexOf(cb)
       if (index !== -1) {
-        integraters.splice(index, 1)
+        integrators.splice(index, 1)
       }
     }
   }
 }
 
 /**
- * Message integraters for different Loro message types
+ * Message integrators for different Loro message types
  */
 const messageIntegrators: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
 

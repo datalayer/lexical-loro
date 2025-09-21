@@ -2,7 +2,7 @@ import { Binding } from '../Bindings';
 import { Provider } from '../State';
 
 /**
- * Base interface for all diff integraters
+ * Base interface for all diff integrators
  */
 export interface BaseIntegrator<T = any> {
   /**

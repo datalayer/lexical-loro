@@ -4,14 +4,14 @@ import { Binding } from '../Bindings';
 import { Provider } from '../State';
 import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
-// Import the new diff integraters
+// Import the new diff integrators
 import { TreeIntegrator } from '../integrators/TreeIntegrator';
 import { MapIntegrator } from '../integrators/MapIntegrator';
 import { ListIntegrator } from '../integrators/ListIntegrator';
 import { TextIntegrator } from '../integrators/TextIntegrator';
 import { CounterIntegrator } from '../integrators/CounterIntegrator';
 
-// Create singleton instances of the diff integraters (created once, reused across calls)
+// Create singleton instances of the diff integrators (created once, reused across calls)
 const treeIntegrator = new TreeIntegrator();
 const mapIntegrator = new MapIntegrator();
 const listIntegrator = new ListIntegrator();
@@ -36,7 +36,7 @@ export function syncLoroToLexical(
       $setSelection(null);
     }
     
-    // Process Loro events and apply them to Lexical using the appropriate integraters
+    // Process Loro events and apply them to Lexical using the appropriate integrators
     eventBatch.events.forEach((event, index) => {
       
       switch (event.diff.type) {
