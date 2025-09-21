@@ -378,23 +378,23 @@ export function propagateTextNode(
       
       // Check if this node already exists in Loro
       const mapper = getNodeMapper();
-      const existingTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
-      if (existingTreeId && currentNode && $isTextNode(currentNode)) {
+      const existingTreeID = mapper.getTreeIDByLexicalKey(nodeKey);
+      if (existingTreeID && currentNode && $isTextNode(currentNode)) {
         // Check if the existing text node has the correct parent relationship
         const { currentParentId, expectedParentId } = update.editorState.read(() => {
           const parent = currentNode.getParent();
-          const expectedParentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const expectedParentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           
           // Get the current parent from Loro tree
           let currentParentId: string | undefined;
           try {
-            const treeNode = tree.getNodeByID(existingTreeId);
+            const treeNode = tree.getNodeByID(existingTreeID);
             if (treeNode) {
               const parentNode = treeNode.parent();
               currentParentId = parentNode ? parentNode.id.toString() : undefined;
             }
           } catch (error) {
-            console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeId}:`, error);
+            console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeID}:`, error);
           }
           
           return { currentParentId, expectedParentId };
@@ -405,14 +405,14 @@ export function propagateTextNode(
         } else {
           
           // Get the actual TreeNode and its ID before deleting
-          let actualTreeId = existingTreeId;
+          let actualTreeID = existingTreeID;
           try {
-            const treeNode = tree.getNodeByID(existingTreeId);
+            const treeNode = tree.getNodeByID(existingTreeID);
             if (treeNode) {
-              actualTreeId = treeNode.id;
+              actualTreeID = treeNode.id;
             }
           } catch (error) {
-            console.warn(`📝 Could not get TreeNode for ${existingTreeId} during creation:`, error);
+            console.warn(`📝 Could not get TreeNode for ${existingTreeID} during creation:`, error);
           }
           
           // Clear the old mapping first to avoid conflicts
@@ -420,11 +420,11 @@ export function propagateTextNode(
           
           // Then delete the TreeNode from Loro tree
           try {
-            if (tree.has(actualTreeId)) {
-              tree.delete(actualTreeId);
+            if (tree.has(actualTreeID)) {
+              tree.delete(actualTreeID);
             }
           } catch (error) {
-            console.warn(`📝 Failed to delete TreeNode ${actualTreeId} during creation:`, error);
+            console.warn(`📝 Failed to delete TreeNode ${actualTreeID} during creation:`, error);
           }
         }
       }
@@ -435,7 +435,7 @@ export function propagateTextNode(
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           
           const index = currentNode.getIndexWithinParent();
           const textContent = currentNode.getTextContent();
@@ -464,23 +464,23 @@ export function propagateTextNode(
         
         // First, check if this TextNode's parent has changed (like during double Enter)
         const mapper = getNodeMapper();
-        const existingTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
+        const existingTreeID = mapper.getTreeIDByLexicalKey(nodeKey);
         
-        if (existingTreeId) {
+        if (existingTreeID) {
           const { currentParentId, expectedParentId, parent } = update.editorState.read(() => {
             const parent = currentNode.getParent();
-            const expectedParentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+            const expectedParentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
             
             // Get the current parent from Loro tree
             let currentParentId: string | undefined;
             try {
-              const treeNode = tree.getNodeByID(existingTreeId);
+              const treeNode = tree.getNodeByID(existingTreeID);
               if (treeNode) {
                 const parentNode = treeNode.parent();
                 currentParentId = parentNode ? parentNode.id.toString() : undefined;
               }
             } catch (error) {
-              console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeId} during update:`, error);
+              console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeID} during update:`, error);
             }
             
             return { currentParentId, expectedParentId, parent };
@@ -489,14 +489,14 @@ export function propagateTextNode(
           if (currentParentId !== expectedParentId) {
             
             // Get the actual TreeNode and its ID before deleting
-            let actualTreeId = existingTreeId;
+            let actualTreeID = existingTreeID;
             try {
-              const treeNode = tree.getNodeByID(existingTreeId);
+              const treeNode = tree.getNodeByID(existingTreeID);
               if (treeNode) {
-                actualTreeId = treeNode.id;
+                actualTreeID = treeNode.id;
               }
             } catch (error) {
-              console.warn(`📝 Could not get TreeNode for ${existingTreeId}:`, error);
+              console.warn(`📝 Could not get TreeNode for ${existingTreeID}:`, error);
             }
             
             // Clear the old mapping first to avoid conflicts
@@ -504,16 +504,16 @@ export function propagateTextNode(
             
             // Then delete the TreeNode from Loro tree
             try {
-              if (tree.has(actualTreeId)) {
-                tree.delete(actualTreeId);
+              if (tree.has(actualTreeID)) {
+                tree.delete(actualTreeID);
               }
             } catch (error) {
-              console.warn(`📝 Failed to delete TreeNode ${actualTreeId} during update:`, error);
+              console.warn(`📝 Failed to delete TreeNode ${actualTreeID} during update:`, error);
             }
             
             // Now recreate the TextNode with the new parent (treat as "created")
             const { parentId, index, textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
-              const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+              const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
               const index = currentNode.getIndexWithinParent();
               const textContent = currentNode.getTextContent();
               const format = currentNode.getFormat();

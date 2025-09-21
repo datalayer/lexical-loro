@@ -23,8 +23,6 @@ export interface LoroUpdateMessage {
   docId: string
 }
 
-
-
 export interface EphemeralMessage {
   type: 'ephemeral'
   ephemeral: number[]
@@ -543,7 +541,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   snapshotLoaded = false
   _checkInterval = null
   _resyncInterval = null
-  _updateIntegrator = null
+  _updateHandler = null
   _ephemeralUpdateIntegrator = null
   _exitIntegrator = null
   _bcSubscriber = null
@@ -671,7 +669,7 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {Uint8Array} update
      * @param {any} origin
      */
-    this._updateIntegrator = (update: Uint8Array) => {
+    this._updateHandler = (update: Uint8Array) => {
       // This integrater is only called for local changes that need to be broadcast
       const updateMessage: LoroUpdateMessage = {
         type: 'update',
@@ -727,6 +725,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     
     // Use Loro's native event system to listen for document changes
     try {
+      /*
       this.doc.subscribe((event: LoroEventBatch) => {
         try {
           const afterCommitVersion = this.doc.version()
@@ -736,12 +735,20 @@ export class WebsocketProvider extends ObservableV2<any> {
           });
 
           if (update.length > 0) {
-            this._updateIntegrator(update);
+            this._updateHandler(update);
             // Update the last exported version to current version
             this._lastExportedVersion = afterCommitVersion
           } else {
             console.warn(`[WEBSOCKET-PROVIDER] No incremental update available - versions might be the same`);
           }
+        } catch (error) {
+          console.warn(`[WEBSOCKET-PROVIDER] Error exporting incremental update:`, error);
+        }
+      });
+      */
+      this.doc.subscribeLocalUpdates((update: Uint8Array) => {
+        try {
+          this._updateHandler(update);
         } catch (error) {
           console.warn(`[WEBSOCKET-PROVIDER] Error exporting incremental update:`, error);
         }
@@ -894,6 +901,6 @@ export class WebsocketProvider extends ObservableV2<any> {
    * @param {Uint8Array} update The update bytes from LoroDoc
    */
   sendUpdate (update: Uint8Array) {
-    this._updateIntegrator(update, null)
+    this._updateHandler(update, null)
   }
 }

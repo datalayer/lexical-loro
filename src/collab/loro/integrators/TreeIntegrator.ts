@@ -104,7 +104,7 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
       // Check if node already exists and if it's the same TreeID
       const existingNode = $getNodeByKey(nodeKey);
       if (existingNode) {
-        const existingTreeID = binding.nodeMapper.getTreeIdByLexicalKey(nodeKey);
+        const existingTreeID = binding.nodeMapper.getTreeIDByLexicalKey(nodeKey);
         if (existingTreeID === operation.target) {
           return;
         } else {

@@ -1,17 +1,16 @@
 import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode } from 'lexical';
 import { Binding } from '../Bindings';
-import { Provider } from '../State';
 import { propagateRootNode } from '../propagators/RootNodePropagator';
 import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
 import { propagateElementNode } from '../propagators/ElementNodePropagator';
 import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, toKeyNodeNumber } from '../utils/Utils';
+// import { Provider } from '../State';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
 export function syncLexicalToLoro(
   binding: Binding,
-  provider: Provider,
   update: UpdateListenerPayload
 ) {
   const { mutatedNodes } = update;
@@ -36,7 +35,7 @@ export function syncLexicalToLoro(
     
     const containerClasses = [RootNode, ElementNode];
     const childClasses = [TextNode, LineBreakNode, DecoratorNode];
-    
+
     // Process containers first to ensure parent mappings exist
     containerClasses.forEach(targetClass => {
       mutatedNodes.forEach((nodeMap, Klass) => {
@@ -59,6 +58,7 @@ export function syncLexicalToLoro(
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
             if (isClassExtending(Klass, TextNode)) {
+              console.log('----DLA 0', mutation )
               propagateTextNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, LineBreakNode)) {
@@ -66,14 +66,12 @@ export function syncLexicalToLoro(
             }
             else if (isClassExtending(Klass, DecoratorNode)) {
               propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
-            } else {
-              throw new Error(`Unsupported node type for key: ${nodeKey}, mutation: ${mutation}. Node class: ${Klass.name}`);
             }
           });
         }
       });
     });
-
+    
     binding.doc.commit({ origin: binding.doc.peerIdStr })
 
   }

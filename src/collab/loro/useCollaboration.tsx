@@ -5,9 +5,7 @@ import {createPortal} from 'react-dom';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
 import {
-  $createParagraphNode,
   $getRoot,
-  $getSelection,
   BLUR_COMMAND,
   CAN_REDO_COMMAND,
   CAN_UNDO_COMMAND,
@@ -132,7 +130,6 @@ export function useCollaboration(
         if (update.tags.has(SKIP_COLLAB_TAG) === false) {
           syncLexicalToLoro(
             binding,
-            provider,
             update,
           );
         }

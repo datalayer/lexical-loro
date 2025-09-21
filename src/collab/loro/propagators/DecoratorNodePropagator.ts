@@ -349,7 +349,7 @@ export function propagateDecoratorNode(
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
           // Get decorator type and data
@@ -388,7 +388,7 @@ export function propagateDecoratorNode(
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
           // Get updated decorator type and data

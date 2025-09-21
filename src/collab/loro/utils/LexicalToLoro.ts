@@ -34,11 +34,11 @@ export function lexicalToLoroTree(lexicalJson: string | LexicalJSON, tree: LoroT
 
   // Start with the root node - create it without a parent
   const rootTreeNode = tree.createNode();
-  const rootTreeId = rootTreeNode.id;
+  const rootTreeID = rootTreeNode.id;
   
   processLexicalNode(parsedJson.root, tree, rootTreeNode);
   
-  return rootTreeId;
+  return rootTreeID;
 }
 
 /**

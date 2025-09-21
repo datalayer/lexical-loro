@@ -42,31 +42,31 @@ export class NodeMapper {
   getLoroNodeByLexicalKey(
     nodeKey: NodeKey, 
     lexicalNode?: LexicalNode,
-    parentTreeId?: TreeID,
+    parentTreeID?: TreeID,
     index?: number
   ): LoroTreeNode {
     // Check if mapping already exists
-    const existingTreeId = this.lexicalToLoro.get(nodeKey);
-    if (existingTreeId && this.tree.has(existingTreeId)) {
-      return this.tree.getNodeByID(existingTreeId)!;
+    const existingTreeID = this.lexicalToLoro.get(nodeKey);
+    if (existingTreeID && this.tree.has(existingTreeID)) {
+      return this.tree.getNodeByID(existingTreeID)!;
     }
 
     // Get parent TreeID from Lexical node if not provided
-    if (!parentTreeId && lexicalNode) {
+    if (!parentTreeID && lexicalNode) {
       const lexicalParent = lexicalNode.getParent();
       if (lexicalParent) {
         const parentKey = lexicalParent.getKey();
-        parentTreeId = this.lexicalToLoro.get(parentKey);
+        parentTreeID = this.lexicalToLoro.get(parentKey);
         
         // If parent doesn't exist in Loro, create it first
-        if (!parentTreeId) {
+        if (!parentTreeID) {
           const parentLoroNode = this.getLoroNodeByLexicalKey(
             parentKey,
             lexicalParent,
             undefined,
             undefined
           );
-          parentTreeId = parentLoroNode.id;
+          parentTreeID = parentLoroNode.id;
         }
       }
     }
@@ -77,8 +77,8 @@ export class NodeMapper {
     }
 
     // Create new tree node if it doesn't exist
-    const newTreeId = this.createLoroNode(nodeKey, lexicalNode, parentTreeId, index);
-    return this.tree.getNodeByID(newTreeId)!;
+    const newTreeID = this.createLoroNode(nodeKey, lexicalNode, parentTreeID, index);
+    return this.tree.getNodeByID(newTreeID)!;
   }
 
   /**
@@ -134,20 +134,20 @@ export class NodeMapper {
   private createLoroNode(
     nodeKey: NodeKey,
     lexicalNode?: LexicalNode,
-    parentTreeId?: TreeID,
+    parentTreeID?: TreeID,
     index?: number
   ): TreeID {
     // Create the tree node first
-    const treeNode = this.tree.createNode(parentTreeId, index);
+    const treeNode = this.tree.createNode(parentTreeID, index);
     
     // Get the TreeID from the created node
     const treeId: TreeID = treeNode.id;
     
     // Debug logging for parent relationship issues
-    if (parentTreeId) {
+    if (parentTreeID) {
       const actualParent = treeNode.parent();
-      if (!actualParent || actualParent.id !== parentTreeId) {
-        console.warn(`⚠️  Parent relationship not set correctly for ${nodeKey}: expected ${parentTreeId}, got ${actualParent?.id || 'None'}`);
+      if (!actualParent || actualParent.id !== parentTreeID) {
+        console.warn(`⚠️  Parent relationship not set correctly for ${nodeKey}: expected ${parentTreeID}, got ${actualParent?.id || 'None'}`);
       }
     }
     
@@ -211,7 +211,7 @@ export class NodeMapper {
   /**
    * Get TreeID by Lexical NodeKey (without creating if not found)
    */
-  getTreeIdByLexicalKey(nodeKey: NodeKey): TreeID | undefined {
+  getTreeIDByLexicalKey(nodeKey: NodeKey): TreeID | undefined {
     return this.lexicalToLoro.get(nodeKey);
   }
 
@@ -267,10 +267,10 @@ export class NodeMapper {
       if (!this.hasLexicalMapping(nodeKey)) {
         // Create tree node for unmapped Lexical nodes
         const parent = lexicalNode.getParent();
-        const parentTreeId = parent ? this.lexicalToLoro.get(parent.getKey()) : undefined;
+        const parentTreeID = parent ? this.lexicalToLoro.get(parent.getKey()) : undefined;
         const index = lexicalNode.getIndexWithinParent();
         
-        this.createLoroNode(nodeKey, lexicalNode, parentTreeId, index);
+        this.createLoroNode(nodeKey, lexicalNode, parentTreeID, index);
       }
     });
   }
@@ -307,10 +307,10 @@ export function getNodeMapper(): NodeMapper {
 export function getLoroNodeByLexicalKey(
   nodeKey: NodeKey,
   lexicalNode?: LexicalNode,
-  parentTreeId?: TreeID,
+  parentTreeID?: TreeID,
   index?: number
 ): LoroTreeNode {
-  return getNodeMapper().getLoroNodeByLexicalKey(nodeKey, lexicalNode, parentTreeId, index);
+  return getNodeMapper().getLoroNodeByLexicalKey(nodeKey, lexicalNode, parentTreeID, index);
 }
 
 /**

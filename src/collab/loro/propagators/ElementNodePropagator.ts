@@ -356,12 +356,12 @@ export function propagateElementNode(
           parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           index = currentNode.getIndexWithinParent();
           
           if (parentId) {
-            const ownTreeId = mapper.getTreeIdByLexicalKey(nodeKey);
-            if (ownTreeId === parentId) {
+            const ownTreeID = mapper.getTreeIDByLexicalKey(nodeKey);
+            if (ownTreeID === parentId) {
               parentId = undefined; // Prevent cycle
             }
           }
@@ -397,7 +397,7 @@ export function propagateElementNode(
         if (parent && !parentId) {
           setTimeout(() => {
             const mapper = getNodeMapper();
-            const retryParentId = mapper.getTreeIdByLexicalKey(parent.getKey());
+            const retryParentId = mapper.getTreeIDByLexicalKey(parent.getKey());
             if (retryParentId) {
               // Move the node to its correct parent now that the parent exists
               const loroNode = mapper.getLoroNodeByLexicalKey(nodeKey);
@@ -426,7 +426,7 @@ export function propagateElementNode(
           parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           index = currentNode.getIndexWithinParent();
         
           // Get element type and metadata

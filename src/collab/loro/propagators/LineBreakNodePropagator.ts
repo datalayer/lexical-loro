@@ -234,7 +234,7 @@ export function propagateLineBreakNode(
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
           // Export node data as JSON object within editor context where node methods are available
@@ -261,7 +261,7 @@ export function propagateLineBreakNode(
           const parent = currentNode.getParent();
           // Get parentId from the mapper instead of constructing it manually
           const mapper = getNodeMapper();
-          const parentId = parent ? mapper.getTreeIdByLexicalKey(parent.getKey()) : undefined;
+          const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           const index = currentNode.getIndexWithinParent();
           
           // Export node data within editor context where node methods are available

@@ -110,17 +110,17 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
     switch (key) {
       case 'lexical':
         // Extract TreeID and call internal method directly (already inside editor.update())
-        let actualTreeId = treeId;
+        let actualTreeID = treeId;
         if (typeof treeId === 'string' && treeId.startsWith('cid:')) {
           const parts = treeId.split(':');
           if (parts.length >= 3) {
-            actualTreeId = parts[1] as TreeID;
+            actualTreeID = parts[1] as TreeID;
           }
         }
         
-        const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeId as TreeID);
+        const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeID as TreeID);
         if (lexicalKey) {
-          this.integrateLexicalDataUpdateInternal(value, lexicalKey, actualTreeId as TreeID);
+          this.integrateLexicalDataUpdateInternal(value, lexicalKey, actualTreeID as TreeID);
         }
         break;
       case 'textContent':
@@ -183,23 +183,23 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
     // Extract the actual TreeID from container ID format
     // Container ID format: "cid:6@7648424808278730813:Map"
     // TreeID format: "6@7648424808278730813"
-    let actualTreeId = treeId;
+    let actualTreeID = treeId;
     if (typeof treeId === 'string' && treeId.startsWith('cid:')) {
       const parts = treeId.split(':');
       if (parts.length >= 3) {
-        actualTreeId = parts[1]; // Extract "6@7648424808278730813" from "cid:6@7648424808278730813:Map"
+        actualTreeID = parts[1]; // Extract "6@7648424808278730813" from "cid:6@7648424808278730813:Map"
       }
     }
 
     // Use the TreeID to find the specific Lexical node
-    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeId as TreeID);
+    const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeID as TreeID);
     if (!lexicalKey) {
       return;
     }
 
     if (lexicalData && typeof lexicalData === 'object') {
       binding.editor.update(() => {
-        this.integrateLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeId as TreeID);
+        this.integrateLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeID as TreeID);
       });
     }
   }
