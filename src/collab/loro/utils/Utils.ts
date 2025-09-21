@@ -10,7 +10,7 @@ const DEFAULT_TREE_NAME = 'tree';
 export function createLoroTree(doc: LoroDoc, treeName = DEFAULT_TREE_NAME) {
   const tree = doc.getTree(treeName);
   // Enable fractional index for ordered siblings (useful for maintaining order)
-  tree.enableFractionalIndex(0.001);
+  // tree.enableFractionalIndex(0.001);
 	return tree;
 }
 
@@ -52,7 +52,7 @@ export function isClassExtending(Klass: any, BaseClass: any): boolean {
 	}
 	
 	// Check prototype chain for inheritance
-	if (Klass.prototype && BaseClass.isPrototypeOf(Klass)) {
+	if (Klass.prototype && Object.prototype.isPrototypeOf.call(BaseClass, Klass)) {
 		return true;
 	}
 	

@@ -48,8 +48,8 @@ export function createElementNodeInLoro(
   
   // Store complete lexical node data as JSON object (without the key) if provided
   if (lexicalNodeJSON) {
-    // Remove the key from lexical node data and store the cleaned object
-    const { key, ...cleanedLexicalData } = lexicalNodeJSON;
+    // Remove all key-related fields from lexical node data and store the cleaned object
+    const { key, __key, lexicalKey, ...cleanedLexicalData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedLexicalData);
   }
   
@@ -78,10 +78,9 @@ export function updateElementNodeInLoro(
   // Get the existing tree node using the mapper (don't pass lexicalNode to avoid context issues)
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
   
-  // Store complete lexical node data as JSON object (without the key) if provided
+  // Store the lexical node data if provided
   if (lexicalNodeJSON) {
-    // Remove the key from lexical node data and store the cleaned object
-    const { key, ...cleanedLexicalData } = lexicalNodeJSON;
+    const { key, __key, lexicalKey, ...cleanedLexicalData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedLexicalData);
   }
   
@@ -299,7 +298,6 @@ export function getElementNodeDataFromTree(treeId: TreeID, tree: LoroTree): any 
   return {
     nodeType: 'element',
     elementType: treeNode.data.get('elementType'),
-    lexicalKey: treeNode.data.get('lexicalKey'),
     format: treeNode.data.get('format'),
     style: treeNode.data.get('style'),
     direction: treeNode.data.get('direction'),
@@ -348,7 +346,8 @@ export function propagateElementNode(
       if (currentNode && $isElementNode(currentNode)) {
         // Export node data and collect metadata within editor context
         let parent: any, parentId: TreeID | undefined, index: number;
-        let elementType: string, metadata: Record<string, any> = {};
+        let elementType: string;
+        const metadata: Record<string, any> = {};
         let lexicalNodeJSON: any;
         
         update.editorState.read(() => {
@@ -416,7 +415,8 @@ export function propagateElementNode(
       if (currentNode && $isElementNode(currentNode)) {
         // Use editorState.read() to safely access node methods
         let parent: any, parentId: TreeID | undefined, index: number;
-        let elementType: string, metadata: Record<string, any> = {};
+        let elementType: string;
+        const metadata: Record<string, any> = {};
         
         // Export node data and collect metadata within editor context
         let lexicalNodeJSON: any;

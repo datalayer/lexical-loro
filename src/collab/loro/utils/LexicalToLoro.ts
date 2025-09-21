@@ -59,9 +59,9 @@ function processLexicalNode(
     // Store lexical node data directly as JSON object
     const lexicalNodeData = createLexicalNodeFromJSON(lexicalNode);
     const lexicalNodeJSON = lexicalNodeData.lexicalNode.exportJSON();
-    // Remove key if it exists to avoid duplication (TreeID serves as the key)
-    if ('__key' in lexicalNodeJSON) {
-      const { __key, ...cleanedData } = lexicalNodeJSON;
+    // Remove all key-related fields to avoid duplication (TreeID serves as the key)
+    if ('__key' in lexicalNodeJSON || 'key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+      const { __key, key, lexicalKey, ...cleanedData } = lexicalNodeJSON as any;
       nodeData.set('lexical', cleanedData);
     } else {
       nodeData.set('lexical', lexicalNodeJSON);

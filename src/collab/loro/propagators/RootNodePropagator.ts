@@ -46,9 +46,9 @@ export function createRootNodeInLoro(
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
     try {
-      // Store complete lexical JSON without the key
-      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
+      // Store complete lexical JSON without all key-related fields
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+        const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
         rootTreeNode.data.set('lexical', cleanedData);
       } else {
         rootTreeNode.data.set('lexical', lexicalNodeJSON);
@@ -83,9 +83,9 @@ export function updateRootNodeInLoro(
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
     try {
-      // Store complete lexical JSON without the key
-      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
+      // Store complete lexical JSON without all key-related fields
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+        const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
       } else {
         treeNode.data.set('lexical', lexicalNodeJSON);

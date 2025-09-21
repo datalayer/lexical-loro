@@ -52,8 +52,8 @@ export function createDecoratorNodeInLoro(
   
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
-    // Store complete lexical JSON without the key
-    const { key, ...cleanedData } = lexicalNodeJSON;
+    // Store complete lexical JSON without all key-related fields
+    const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedData);
   }
   
@@ -92,8 +92,8 @@ export function updateDecoratorNodeInLoro(
   
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
-    // Store complete lexical JSON without the key
-    const { key, ...cleanedData } = lexicalNodeJSON;
+    // Store complete lexical JSON without all key-related fields
+    const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedData);
   }
   
@@ -267,7 +267,6 @@ export function getDecoratorNodeDataFromTree(treeId: TreeID, tree: LoroTree): an
   return {
     nodeType: 'decorator',
     decoratorType: treeNode.data.get('decoratorType'),
-    lexicalKey: treeNode.data.get('lexicalKey'),
     decoratorData,
     createdAt: treeNode.data.get('createdAt'),
     lastUpdated: treeNode.data.get('lastUpdated'),

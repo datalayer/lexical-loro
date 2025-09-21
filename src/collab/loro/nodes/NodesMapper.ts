@@ -158,9 +158,9 @@ export class NodeMapper {
     if (lexicalNode) {
       try {
         const lexicalNodeJSON = lexicalNode.exportJSON();
-        // Remove key if it exists to avoid duplication (TreeID serves as the key)
-        if ('key' in lexicalNodeJSON) {
-          const { key, ...cleanedData } = lexicalNodeJSON;
+        // Remove all key-related fields to avoid duplication (TreeID serves as the key)
+        if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+          const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON as any;
           treeNode.data.set('lexical', cleanedData);
         } else {
           treeNode.data.set('lexical', lexicalNodeJSON);
@@ -250,29 +250,21 @@ export class NodeMapper {
   /**
    * Synchronize existing tree nodes with Lexical editor state
    * This should be called during initialization to establish mappings
+   * 
+   * Note: Since lexicalKey is no longer persisted in tree node data,
+   * this method now relies on the TreeIntegrator to create mappings
+   * as nodes are integrated from Loro tree operations.
    */
   syncExistingNodes(editorState: EditorState): void {
-    // Iterate through all tree nodes and establish mappings
-    this.tree.nodes().forEach((treeNode) => {
-      const lexicalKey = treeNode.data.get('lexicalKey') as NodeKey;
-      if (lexicalKey && editorState._nodeMap.has(lexicalKey)) {
-        // Recreate mapping if both nodes exist
-        const treeId = treeNode.id;
-        this.createMapping(lexicalKey, treeId);
-      }
-    });
-
-    // Iterate through Lexical nodes and create tree nodes for unmapped ones
-    editorState._nodeMap.forEach((lexicalNode, nodeKey) => {
-      if (!this.hasLexicalMapping(nodeKey)) {
-        // Create tree node for unmapped Lexical nodes
-        const parent = lexicalNode.getParent();
-        const parentTreeID = parent ? this.lexicalToLoro.get(parent.getKey()) : undefined;
-        const index = lexicalNode.getIndexWithinParent();
-        
-        this.createLoroNode(nodeKey, lexicalNode, parentTreeID, index);
-      }
-    });
+    // Since we no longer persist lexicalKey in tree node data,
+    // we cannot automatically establish mappings from existing tree nodes.
+    // 
+    // Instead, mappings will be established through:
+    // 1. TreeIntegrator processing tree diffs during initialization
+    // 2. Normal collaboration flow as nodes are created/updated
+    // 
+    // This method is kept for compatibility but is now a no-op.
+    console.log('📍 syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
   }
 }
 

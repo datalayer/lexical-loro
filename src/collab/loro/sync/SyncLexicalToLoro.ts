@@ -6,6 +6,7 @@ import { propagateElementNode } from '../propagators/ElementNodePropagator';
 import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, toKeyNodeNumber } from '../utils/Utils';
+import { bind } from 'lodash-es';
 // import { Provider } from '../State';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
@@ -58,7 +59,6 @@ export function syncLexicalToLoro(
         if (isClassExtending(Klass, targetClass)) {
           nodeMap.forEach((mutation, nodeKey) => {
             if (isClassExtending(Klass, TextNode)) {
-              console.log('----DLA 0', mutation )
               propagateTextNode(update, mutation, nodeKey, mutatorOptions);
             }
             else if (isClassExtending(Klass, LineBreakNode)) {
@@ -71,8 +71,8 @@ export function syncLexicalToLoro(
         }
       });
     });
-    
-    binding.doc.commit({ origin: binding.doc.peerIdStr })
+
+    binding.doc.commit({ origin: binding.doc.peerIdStr });
 
   }
 

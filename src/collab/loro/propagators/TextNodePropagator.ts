@@ -64,8 +64,8 @@ export function createTextNodeInLoro(
   if (lexicalNodeJSON) {
     try {
       // Store complete lexical JSON without the key
-      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+        const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
       } else {
         treeNode.data.set('lexical', lexicalNodeJSON);
@@ -111,8 +111,8 @@ export function updateTextNodeInLoro(
   if (lexicalNodeJSON) {
     try {
       // Store complete lexical JSON without the key
-      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON) {
-        const { key, __key, ...cleanedData } = lexicalNodeJSON;
+      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+        const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
       } else {
         treeNode.data.set('lexical', lexicalNodeJSON);
@@ -303,7 +303,6 @@ export function getTextNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
   
   return {
     nodeType: 'text',
-    lexicalKey: treeNode.data.get('lexicalKey'),
     textContent: treeNode.data.get('textContent'),
     format: treeNode.data.get('format'),
     mode: treeNode.data.get('mode'),
