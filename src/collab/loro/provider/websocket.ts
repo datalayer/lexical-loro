@@ -670,9 +670,6 @@ export class WebsocketProvider extends ObservableV2<any> {
      * @param {any} origin
      */
     this._updateHandler = (update: Uint8Array) => {
-      // This integrater is only called for local changes that need to be broadcast
-      console.log(`🌐 [WEBSOCKET-PROVIDER] _updateHandler called with ${update.length} bytes, broadcasting to server`);
-      
       const updateMessage: LoroUpdateMessage = {
         type: 'update',
         update: Array.from(update),
@@ -750,7 +747,6 @@ export class WebsocketProvider extends ObservableV2<any> {
       */
       this.doc.subscribeLocalUpdates((update: Uint8Array) => {
         try {
-          console.log(`🌐 [WEBSOCKET-PROVIDER] Local update detected: ${update.length} bytes`);
           this._updateHandler(update);
         } catch (error) {
           console.warn(`[WEBSOCKET-PROVIDER] Error exporting incremental update:`, error);

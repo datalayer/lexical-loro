@@ -390,7 +390,6 @@ const closeConn = (doc, conn) => {
     /**
      * @type {Set<string>}
      */
-    // @ts-ignore
     const controlledKeys = doc.conns.get(conn)
     doc.conns.delete(conn)
     // Remove ephemeral state controlled by this connection

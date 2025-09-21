@@ -29,14 +29,6 @@ export function createLexicalNodeFromLoro(
     const doc = binding.doc;
     const lexicalMap = doc.getMap(`lexical-${treeId}`);
     lexicalData = lexicalMap.get('data');
-    
-    if (lexicalData) {
-      console.log(`🏭 [NodeFactory] Read lexical data from separate map for TreeID ${treeId}, type: ${lexicalData.type || lexicalData.__type}, text: "${lexicalData.text || lexicalData.__text || 'N/A'}"`);
-    } else {
-      console.log(`🏭 [NodeFactory] No lexical data found in separate map for TreeID ${treeId}`);
-    }
-  } else {
-    console.log(`🏭 [NodeFactory] Using lexical data from TreeDiff for TreeID ${treeId}, type: ${lexicalData.type || lexicalData.__type}`);
   }
   
   let nodeType: string;

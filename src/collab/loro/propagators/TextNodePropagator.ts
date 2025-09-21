@@ -77,7 +77,6 @@ export function createTextNodeInLoro(
       const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
       lexicalMap.set('data', cleanedData);
       
-      console.log(`🔄 [TextNodePropagator] CREATE stored lexical data for TreeID ${treeNode.id}, nodeKey ${nodeKey}, text: "${cleanedData.text || cleanedData.__text || 'N/A'}"`);
     } catch (error) {
       console.warn('Failed to store lexical node JSON for TextNode:', error);
     }
@@ -132,7 +131,6 @@ export function updateTextNodeInLoro(
       const lexicalMap = doc.getMap(`lexical-${treeNode.id}`);
       lexicalMap.set('data', cleanedData);
       
-      console.log(`🔄 [TextNodePropagator] UPDATE stored lexical data for TreeID ${treeNode.id}, nodeKey ${nodeKey}, text: "${cleanedData.text || cleanedData.__text || 'N/A'}"`);
     } catch (error) {
       // This is expected during text operations when nodes get deleted/recreated
       console.warn(`📝 TextNode ${nodeKey} container was deleted during update, skipping (normal during text operations):`, error.message);

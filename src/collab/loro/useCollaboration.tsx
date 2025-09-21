@@ -105,27 +105,11 @@ export function useCollaboration(
     awareness.on('update', onAwarenessUpdate);
 
     const onLoroUpdates = (eventBatch: LoroEventBatch) => {
-      console.log(`🎯 [useCollaboration] onLoroUpdates triggered`);
-      console.log(`🎯 [useCollaboration] Event batch origin:`, eventBatch.origin);
-      console.log(`🎯 [useCollaboration] Current editor peerIdStr:`, binding.doc.peerIdStr);
-      console.log(`🎯 [useCollaboration] Should sync (origin !== peerIdStr):`, eventBatch.origin !== binding.doc.peerIdStr);
-      console.log(`🎯 [useCollaboration] Events:`, eventBatch.events.map(e => ({
-        type: e.diff.type,
-        target: e.target?.toString(),
-        path: e.path
-      })));
-      
-      // Log full event details for debugging
-      eventBatch.events.forEach((event, index) => {
-        console.log(`🎯 [useCollaboration] Event ${index + 1}:`, JSON.stringify(event, null, 2));
-      });
       
       // Only skip if the origin is from this specific editor's changes.
       // We set 'lexical-edit' as origin when making changes from this editor.
       // So we should skip only if the origin is 'lexical-edit' (our own changes).
-
       if (eventBatch.origin !== binding.doc.peerIdStr) {
-        console.log(`🎯 [useCollaboration] Processing update from another peer`);
         // Check if this change is from the undo manager
         // const isFromUndoManger = origin instanceof UndoManager;
         const isFromUndoManager = false;
@@ -136,8 +120,6 @@ export function useCollaboration(
           isFromUndoManager,
           syncCursorPositionsFn,
         );
-      } else {
-        console.log(`🎯 [useCollaboration] Skipping own changes`);
       }
     };
     // This updates the local editor state when we receive updates from other clients.

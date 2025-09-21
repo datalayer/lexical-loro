@@ -18,7 +18,6 @@ interface ListDiff {
 export class ListIntegrator implements BaseIntegrator<ListDiff> {
   
   integrate(diff: ListDiff, binding: Binding, provider: Provider): void {
-    console.log('📋 Handling ListDiff:', diff);
     this.integrateInternal(diff, binding, provider);
   }
 
