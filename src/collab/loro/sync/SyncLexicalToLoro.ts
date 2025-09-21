@@ -6,6 +6,7 @@ import { propagateElementNode } from '../propagators/ElementNodePropagator';
 import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, toKeyNodeNumber } from '../utils/Utils';
+import { scheduleAsyncCommit } from '../Bindings';
 import { bind } from 'lodash-es';
 // import { Provider } from '../State';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
@@ -72,7 +73,9 @@ export function syncLexicalToLoro(
       });
     });
 
-    binding.doc.commit({ origin: binding.doc.peerIdStr });
+    // Schedule an async commit instead of immediate synchronous commit
+    // This reduces latency for large documents by debouncing commits
+    scheduleAsyncCommit(binding);
 
   }
 

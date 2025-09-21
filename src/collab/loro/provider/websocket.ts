@@ -47,7 +47,7 @@ export type LoroWebSocketMessage = LoroUpdateMessage | EphemeralMessage | QueryE
 class AwarenessAdapter implements ProviderAwareness {
   private ephemeralStore: EphemeralStore
   private localClientId: number
-  private eventIntegrators: Map<string, (() => void)[]> = new Map()
+  private eventHandlers: Map<string, (() => void)[]> = new Map()
 
   constructor(ephemeralStore: EphemeralStore) {
     this.ephemeralStore = ephemeralStore
@@ -56,8 +56,8 @@ class AwarenessAdapter implements ProviderAwareness {
     // Subscribe to ephemeral store changes and emit awareness updates
     this.ephemeralStore.subscribe((event) => {
       // Emit update events when ephemeral state changes
-      const updateIntegrators = this.eventIntegrators.get('update') || []
-      updateIntegrators.forEach(integrater => integrater())
+      const updateHandlers = this.eventHandlers.get('update') || []
+      updateHandlers.forEach(integrater => integrater())
     })
   }
 
@@ -127,14 +127,14 @@ class AwarenessAdapter implements ProviderAwareness {
   }
 
   on(type: 'update', cb: () => void): void {
-    if (!this.eventIntegrators.has(type)) {
-      this.eventIntegrators.set(type, [])
+    if (!this.eventHandlers.has(type)) {
+      this.eventHandlers.set(type, [])
     }
-    this.eventIntegrators.get(type)!.push(cb)
+    this.eventHandlers.get(type)!.push(cb)
   }
 
   off(type: 'update', cb: () => void): void {
-    const integrators = this.eventIntegrators.get(type)
+    const integrators = this.eventHandlers.get(type)
     if (integrators) {
       const index = integrators.indexOf(cb)
       if (index !== -1) {
@@ -147,11 +147,11 @@ class AwarenessAdapter implements ProviderAwareness {
 /**
  * Message integrators for different Loro message types
  */
-const messageIntegrators: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
+const messageHandlers: Record<string, (provider: WebsocketProvider, message: any, emitSynced: boolean) => string | null> = {}
 
 
 
-messageIntegrators[messageQueryEphemeral] = (
+messageHandlers[messageQueryEphemeral] = (
   provider: WebsocketProvider,
   message: QueryEphemeralMessage,
   _emitSynced: boolean
@@ -173,9 +173,7 @@ messageIntegrators[messageQueryEphemeral] = (
   }
 }
 
-
-
-messageIntegrators[messageEphemeral] = (
+messageHandlers[messageEphemeral] = (
   provider: WebsocketProvider,
   message: EphemeralMessage,
   _emitSynced: boolean
@@ -183,19 +181,19 @@ messageIntegrators[messageEphemeral] = (
   try {
     // Validate message data before processing
     if (!message.ephemeral || message.ephemeral.length === 0) {
-      console.warn(`[Client] messageIntegrators[messageEphemeral] - Skipping empty ephemeral data`)
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Skipping empty ephemeral data`)
       return null
     }
     
     // Reject obviously corrupted data (too small, common corrupt patterns)
     if (message.ephemeral.length < 8) {
-      console.warn(`[Client] messageIntegrators[messageEphemeral] - Rejecting suspiciously small ephemeral data:`, message.ephemeral.length)
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Rejecting suspiciously small ephemeral data:`, message.ephemeral.length)
       return null
     }
     
     // Additional validation - check for specific known bad patterns
     if (message.ephemeral.length === 1) {
-      console.warn(`[Client] messageIntegrators[messageEphemeral] - Rejecting single-byte ephemeral data (likely corrupted):`, message.ephemeral)
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Rejecting single-byte ephemeral data (likely corrupted):`, message.ephemeral)
       return null
     }
     
@@ -203,7 +201,7 @@ messageIntegrators[messageEphemeral] = (
     // Ephemeral data should have a structured format - single random bytes are invalid
     const firstBytes = message.ephemeral.slice(0, 4)
     if (firstBytes.every(b => b === 0) || firstBytes.every(b => b === 255)) {
-      console.warn(`[Client] messageIntegrators[messageEphemeral] - Rejecting ephemeral data with suspicious pattern:`, firstBytes)
+      console.warn(`[Client] messageHandlers[messageEphemeral] - Rejecting ephemeral data with suspicious pattern:`, firstBytes)
       return null
     }
     
@@ -214,7 +212,7 @@ messageIntegrators[messageEphemeral] = (
     try {
       provider.ephemeralStore.apply(ephemeralBytes)
     } catch (applyError) {
-      console.warn(`[Client] messageIntegrators[messageEphemeral] - WASM apply() failed:`, {
+      console.warn(`[Client] messageHandlers[messageEphemeral] - WASM apply() failed:`, {
         error: applyError.message,
         ephemeralLength: ephemeralBytes.length,
         ephemeralSample: Array.from(ephemeralBytes.slice(0, 20))
@@ -222,7 +220,7 @@ messageIntegrators[messageEphemeral] = (
       
       // If this is a WASM memory error, don't attempt any more ephemeral operations
       if (applyError.message && applyError.message.includes('memory access out of bounds')) {
-        console.warn(`[Client] messageIntegrators[messageEphemeral] - CRITICAL: WASM memory corruption in apply(). Stopping ephemeral processing.`)
+        console.warn(`[Client] messageHandlers[messageEphemeral] - CRITICAL: WASM memory corruption in apply(). Stopping ephemeral processing.`)
         return null
       }
       
@@ -231,7 +229,7 @@ messageIntegrators[messageEphemeral] = (
     
     return null
   } catch (error) {
-    console.warn(`[Client] messageIntegrators[messageEphemeral] - ERROR in ephemeral message integrater:`, {
+    console.warn(`[Client] messageHandlers[messageEphemeral] - ERROR in ephemeral message integrater:`, {
       error: error.message,
       stack: error.stack,
       messageLength: message.ephemeral?.length,
@@ -242,7 +240,7 @@ messageIntegrators[messageEphemeral] = (
   }
 }
 
-messageIntegrators[messageUpdate] = (
+messageHandlers[messageUpdate] = (
   provider: WebsocketProvider,
   message: LoroUpdateMessage,
   emitSynced: boolean
@@ -295,9 +293,9 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
       const decoder = new TextDecoder()
       const jsonString = decoder.decode(data)
       const message = JSON.parse(jsonString) as LoroWebSocketMessage
-      const messageIntegrator = messageIntegrators[message.type]
-      if (messageIntegrator) {
-        return messageIntegrator(provider, message, emitSynced)
+      const messageHandler = messageHandlers[message.type]
+      if (messageHandler) {
+        return messageHandler(provider, message, emitSynced)
       } else {
         console.warn('Unknown message type:', message.type)
         return null
@@ -318,9 +316,9 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
   else if (typeof data === 'string') {
     try {
       const message = JSON.parse(data) as LoroWebSocketMessage
-      const messageIntegrator = messageIntegrators[message.type]      
-      if (messageIntegrator) {
-        return messageIntegrator(provider, message, emitSynced)
+      const messageHandler = messageHandlers[message.type]
+      if (messageHandler) {
+        return messageHandler(provider, message, emitSynced)
       } else {
         console.warn('Unknown message type:', message.type)
         return null
@@ -333,9 +331,9 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
   else if (typeof data === 'object' && data !== null) {
     try {
       const message = data as LoroWebSocketMessage
-      const messageIntegrator = messageIntegrators[message.type]      
-      if (messageIntegrator) {
-        return messageIntegrator(provider, message, emitSynced)
+      const messageHandler = messageHandlers[message.type]
+      if (messageHandler) {
+        return messageHandler(provider, message, emitSynced)
       } else {
         console.warn('Unknown message type:', message.type)
         return null
@@ -534,7 +532,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   bcChannel = ''
   maxBackoffTime = 2500
   wsUnsuccessfulReconnects = 0
-  messageIntegrators = []
+  messageHandlers = []
   _synced = false
   wsLastMessageReceived = 0
   shouldConnect = false

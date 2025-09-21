@@ -178,7 +178,7 @@ const sendMessage = (doc: WSSharedDoc, conn, message: LoroWebSocketMessage) => {
   }
   try {
 //    console.log(`Sending message to ${conn.id || 'unknown'}`)
-    conn.send(JSON.stringify(message), {}, err => { err != null && closeConn(doc, conn) })
+    conn.send(JSON.stringify(message), {}, err => { if (err != null) closeConn(doc, conn) })
   } catch (e) {
     console.warn(e);
     closeConn(doc, conn);
@@ -194,7 +194,7 @@ const sendMessageBinary = (doc: WSSharedDoc, conn, message: Uint8Array) => {
   }
   try {
 //    console.log(`Sending message to ${conn.id || 'unknown'}`)
-    conn.send(message, {}, err => { err != null && closeConn(doc, conn) })
+    conn.send(message, {}, err => { if (err != null) closeConn(doc, conn) })
   } catch (e) {
     console.warn(e);
     closeConn(doc, conn);
@@ -360,7 +360,6 @@ const closeConn = (doc, conn) => {
     /**
      * @type {Set<string>}
      */
-    // @ts-ignore
     const controlledKeys = doc.conns.get(conn)
     doc.conns.delete(conn)
     // Remove ephemeral state controlled by this connection

@@ -22,6 +22,9 @@ export type Binding = {
   nodeProperties: Map<string, Array<string>>;
   excludedProperties: ExcludedProperties;
   nodeMapper: NodeMapper;
+  // Async commit properties
+  commitTimeout?: NodeJS.Timeout | null;
+  pendingCommit?: boolean;
 };
 
 export type ExcludedProperties = Map<Klass<LexicalNode>, Set<string>>;
@@ -57,6 +60,9 @@ export function createBinding(
     id,
     nodeProperties: new Map(),
     nodeMapper: null as any, // Will be initialized below
+    // Initialize async commit properties
+    commitTimeout: null,
+    pendingCommit: false,
   };
 
   // Initialize the NodeMapper with the binding
@@ -485,4 +491,57 @@ export function createBinding(
   }, 2000); // Slightly later than Y.js to avoid overlap
 
   return binding;
+}
+
+/**
+ * Schedules an asynchronous commit for the binding to reduce latency with large documents.
+ * Uses debouncing to prevent excessive commits during rapid mutations.
+ * 
+ * @param binding - The binding to commit
+ * @param delay - Debounce delay in milliseconds (default: 100ms)
+ */
+export function scheduleAsyncCommit(binding: Binding, delay: number = 500): void {
+  // Clear any existing timeout
+  if (binding.commitTimeout) {
+    clearTimeout(binding.commitTimeout);
+  }
+  
+  // Mark that we have pending changes
+  binding.pendingCommit = true;
+  
+  // Schedule the commit after the specified delay
+  binding.commitTimeout = setTimeout(() => {
+    if (binding.pendingCommit) {
+      try {
+        // Perform the actual commit
+        binding.doc.commit({ origin: binding.doc.peerIdStr });
+        console.log('🔄 Async commit completed for binding:', binding.id);
+      } catch (error) {
+        console.error('❌ Async commit failed for binding:', binding.id, error);
+      }
+      
+      // Reset pending state
+      binding.pendingCommit = false;
+    }
+    binding.commitTimeout = null;
+  }, delay);
+}
+
+/**
+ * Forces an immediate commit if there are pending changes.
+ * Useful for ensuring changes are committed before important operations.
+ * 
+ * @param binding - The binding to commit
+ */
+export function flushPendingCommit(binding: Binding): void {
+  if (binding.commitTimeout) {
+    clearTimeout(binding.commitTimeout);
+    binding.commitTimeout = null;
+  }
+  
+  if (binding.pendingCommit) {
+    binding.doc.commit({ origin: binding.doc.peerIdStr });
+    binding.pendingCommit = false;
+    console.log('🔄 Forced commit completed for binding:', binding.id);
+  }
 }
