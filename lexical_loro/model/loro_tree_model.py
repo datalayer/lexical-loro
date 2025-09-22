@@ -59,6 +59,7 @@ import time
 import asyncio
 from typing import Dict, Any, List, Optional, Callable, Union
 from enum import Enum
+import websockets
 import loro
 from loro import LoroDoc, LoroTree, ExportMode, EphemeralStore
 
@@ -121,6 +122,12 @@ class LoroTreeModel:
         # Collaboration state
         self._ephemeral_store: Optional[EphemeralStore] = None
         self._subscription_id: Optional[str] = None
+        
+        # WebSocket client state
+        self.websocket_url: str = "ws://localhost:3002"
+        self.websocket: Optional[websockets.WebSocketClientProtocol] = None
+        self.websocket_connected: bool = False
+        self._websocket_task: Optional[asyncio.Task] = None
         
         logger.info(f"Initialized LoroTreeModel for document: {doc_id}")
 
@@ -584,3 +591,150 @@ class LoroTreeModel:
                 
         except Exception as e:
             logger.error(f"Failed to handle broadcast event: {e}")
+
+    # ============================================================================
+    # WebSocket Client Methods
+    # ============================================================================
+
+    async def connect_to_websocket_server(self) -> None:
+        """Connect to the WebSocket server as a client and request snapshot"""
+        try:
+            document_url = f"{self.websocket_url}/{self.doc_id}"
+            logger.info(f"🔌 LoroTreeModel connecting to {document_url}")
+            
+            self.websocket = await websockets.connect(document_url)
+            self.websocket_connected = True
+            logger.info(f"✅ LoroTreeModel connected to WebSocket server for doc: {self.doc_id}")
+            
+            # Request initial snapshot
+            await self._request_snapshot()
+            
+            # Start listening for messages
+            self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to connect to WebSocket server: {e}")
+            self.websocket_connected = False
+
+    async def disconnect_from_websocket_server(self) -> None:
+        """Disconnect from the WebSocket server"""
+        try:
+            if self._websocket_task:
+                self._websocket_task.cancel()
+                self._websocket_task = None
+            
+            if self.websocket:
+                await self.websocket.close()
+                self.websocket = None
+            
+            self.websocket_connected = False
+            logger.info(f"🔌 LoroTreeModel disconnected from WebSocket server for doc: {self.doc_id}")
+            
+        except Exception as e:
+            logger.error(f"Error disconnecting from WebSocket server: {e}")
+
+    async def _request_snapshot(self) -> None:
+        """Request snapshot from the WebSocket server"""
+        if not self.websocket or not self.websocket_connected:
+            logger.warning("Cannot request snapshot: not connected to WebSocket server")
+            return
+        
+        try:
+            message = {
+                "type": "query-snapshot",
+                "docId": self.doc_id
+            }
+            
+            await self.websocket.send(json.dumps(message))
+            logger.info(f"📸 Requested snapshot for document: {self.doc_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to request snapshot: {e}")
+
+    async def _listen_for_websocket_messages(self) -> None:
+        """Listen for messages from the WebSocket server"""
+        if not self.websocket:
+            return
+            
+        try:
+            async for message in self.websocket:
+                try:
+                    data = json.loads(message)
+                    await self._handle_websocket_message(data)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse WebSocket message: {e}")
+                except Exception as e:
+                    logger.error(f"Error handling WebSocket message: {e}")
+                    
+        except websockets.exceptions.ConnectionClosed:
+            logger.info(f"WebSocket connection closed for doc: {self.doc_id}")
+            self.websocket_connected = False
+        except Exception as e:
+            logger.error(f"Error in WebSocket message listener: {e}")
+            self.websocket_connected = False
+
+    async def _handle_websocket_message(self, data: Dict[str, Any]) -> None:
+        """Handle incoming WebSocket message"""
+        message_type = data.get("type", "")
+        
+        if message_type == "update":
+            await self._handle_update_message(data)
+        elif message_type == "snapshot":
+            await self._handle_snapshot_message(data)
+        else:
+            logger.debug(f"Received unknown WebSocket message type: {message_type}")
+
+    async def _handle_snapshot_message(self, data: Dict[str, Any]) -> None:
+        """Handle snapshot message from WebSocket server"""
+        try:
+            snapshot_data = data.get("snapshot")
+            if snapshot_data:
+                # Import snapshot into Loro document
+                self.doc.import_bytes(bytes(snapshot_data))
+                logger.info(f"📸 Applied snapshot for document: {self.doc_id}")
+                
+                # Update tree reference and synchronize mappings
+                self.tree = self.doc.get_tree(self.tree_name)
+                self.mapper.sync_existing_nodes()
+                
+                # Mark as initialized if we got valid content
+                if not self._is_initialized:
+                    self._is_initialized = True
+                    logger.info(f"🎯 Document {self.doc_id} initialized from WebSocket snapshot")
+                    
+        except Exception as e:
+            logger.error(f"Failed to handle snapshot message: {e}")
+
+    async def _handle_update_message(self, data: Dict[str, Any]) -> None:
+        """Handle update message from WebSocket server"""
+        try:
+            update_data = data.get("update")
+            if update_data:
+                # Apply update to Loro document
+                self.doc.import_bytes(bytes(update_data))
+                logger.debug(f"📝 Applied update for document: {self.doc_id}")
+                
+                # Refresh tree reference
+                self.tree = self.doc.get_tree(self.tree_name)
+                
+        except Exception as e:
+            logger.error(f"Failed to handle update message: {e}")
+
+    async def send_update_to_websocket_server(self, update_bytes: bytes) -> None:
+        """Send update to WebSocket server"""
+        if not self.websocket or not self.websocket_connected:
+            logger.warning("Cannot send update: not connected to WebSocket server")
+            return
+            
+        try:
+            message = {
+                "type": "update",
+                "docId": self.doc_id,
+                "update": list(update_bytes)
+            }
+            
+            await self.websocket.send(json.dumps(message))
+            logger.debug(f"📤 Sent update to WebSocket server for doc: {self.doc_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to send update to WebSocket server: {e}")

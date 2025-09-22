@@ -45,3 +45,5 @@ lexical_loro/__version__.py
 .models
 
 __tests__/*.json
+
+documents

@@ -31,13 +31,11 @@ import logging
 from typing import Any, Dict, Optional, List
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import socketserver
-from urllib.parse import urlparse, parse_qs
-import threading
+from urllib.parse import urlparse
+import loro
 
 import click
-from mcp import types
 from mcp.server import Server
-from mcp.server.stdio import stdio_server
 
 from ..model.tree_document_manager import TreeDocumentManager
 from ..model.loro_tree_model import LoroTreeModel
@@ -191,6 +189,9 @@ async def get_document(doc_id: str) -> Dict[str, Any]:
         if not model:
             model = manager.create_document(doc_id)
         
+        # Ensure WebSocket connection for collaborative sync
+        await _ensure_websocket_connection(model)
+        
         # Convert Loro tree to Lexical JSON format
         lexical_json = _loro_tree_to_lexical_json(model)
         
@@ -232,8 +233,11 @@ async def append_paragraph(doc_id: str, text: str) -> Dict[str, Any]:
         if not model:
             model = manager.create_document(doc_id)
         
+        # Ensure WebSocket connection for collaborative sync
+        await _ensure_websocket_connection(model)
+        
         # Add paragraph node to tree
-        node_id = _add_paragraph_to_tree(model, text)
+        node_id = await _add_paragraph_to_tree(model, text)
         
         return {
             "success": True,
@@ -252,18 +256,33 @@ async def append_paragraph(doc_id: str, text: str) -> Dict[str, Any]:
 ###############################################################################
 # Private Helper Functions (tree operations)
 
+async def _ensure_websocket_connection(model: LoroTreeModel) -> None:
+    """Ensure the model is connected to the WebSocket server for collaborative sync"""
+    try:
+        if not model.websocket_connected:
+            logger.info(f"🔌 Connecting model to WebSocket server for doc: {model.doc_id}")
+            await model.connect_to_websocket_server()
+            
+            # Wait a moment for the connection to stabilize and receive snapshot
+            await asyncio.sleep(0.5)
+            
+            logger.info(f"✅ Model connected to WebSocket server for doc: {model.doc_id}")
+        else:
+            logger.debug(f"🔗 Model already connected to WebSocket server for doc: {model.doc_id}")
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to ensure WebSocket connection for doc {model.doc_id}: {e}")
+        # Don't raise - allow operations to continue even without collaboration
+
 def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
     """Convert Loro tree to Lexical JSON format"""
     try:
-        # Use existing converter if available
-        if hasattr(model, 'to_lexical_json'):
-            return model.to_lexical_json()
+        # Use the model's export method if initialized
+        if hasattr(model, 'export_to_lexical_state') and model._is_initialized:
+            return model.export_to_lexical_state()
         
-        # Fallback: basic conversion
-        root_tree = model.get_tree()
-        root_id = root_tree.id()
-        
-        # Create basic Lexical structure
+        # Fallback: basic conversion for uninitialized models
+        logger.warning(f"Model {model.doc_id} not fully initialized, returning empty Lexical structure")
         return {
             "root": {
                 "children": [],
@@ -289,20 +308,39 @@ def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
             }
         }
 
-def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
-    """Add a paragraph node to the Loro tree"""
+async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
+    """Add a paragraph node to the Loro tree and sync with WebSocket server"""
     try:
-        root_tree = model.get_tree()
+        # Use the model's tree operations if available
+        if hasattr(model, 'add_block_to_tree'):
+            # Use the model's proper tree operations
+            paragraph_data = {
+                "type": "paragraph",
+                "children": [{"type": "text", "text": text}]
+            }
+            node_id = model.add_block_to_tree(None, paragraph_data, -1)  # Add at end
+        else:
+            # Fallback to direct tree operations
+            root_tree = model.get_tree()
+            paragraph_id = root_tree.create_at(0)  # Add at end
+            
+            # Set paragraph metadata
+            tree_meta = root_tree.get_meta(paragraph_id)
+            tree_meta.set("type", "paragraph")
+            tree_meta.set("text", text)
+            node_id = paragraph_id
         
-        # Create paragraph node
-        paragraph_id = root_tree.create_at(0)  # Add at end
+        # Send update to WebSocket server if connected
+        if model.websocket_connected:
+            try:
+                # Export the update and send to WebSocket server
+                update_bytes = model.doc.export(loro.ExportMode.Update())
+                await model.send_update_to_websocket_server(update_bytes)
+                logger.debug(f"📤 Sent paragraph update to WebSocket server for doc: {model.doc_id}")
+            except Exception as e:
+                logger.warning(f"Failed to send update to WebSocket server: {e}")
         
-        # Set paragraph metadata
-        tree_meta = root_tree.get_meta(paragraph_id)
-        tree_meta.set("type", "paragraph")
-        tree_meta.set("text", text)
-        
-        return paragraph_id
+        return node_id
         
     except Exception as e:
         logger.error(f"Error adding paragraph to tree: {e}")

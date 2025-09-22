@@ -116,7 +116,7 @@ export default function DatalayerPlugin(): JSX.Element | null {
           id: Date.now(),
           method: 'append_paragraph',
           params: {
-            doc_id: 'default',
+            doc_id: 'playground/0/main',
             text: paragraphText
           }
         })
