@@ -91,22 +91,27 @@ class MCPHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         """Handle JSON-RPC requests"""
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
-        
-        self.send_header('Access-Control-Allow-Origin', '*')
-        
         try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            
             request = json.loads(post_data.decode())
+            logger.info(f"Received JSON-RPC request: {request}")
             response = asyncio.run(self.handle_json_rpc(request))
+            logger.info(f"Sending JSON-RPC response: {response}")
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(response).encode())
         except Exception as e:
             logger.error(f"Error handling request: {e}")
-            self.send_error(500)
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
 
     async def handle_json_rpc(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Handle JSON-RPC 2.0 requests"""

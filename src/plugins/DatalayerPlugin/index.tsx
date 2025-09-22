@@ -62,9 +62,110 @@ export default function DatalayerPlugin(): JSX.Element | null {
     }
   };
 
-  // Fetch tools on component mount
+  // MCP tool execution functions
+  const executeGetDocument = async () => {
+    try {
+      console.log('🔍 Executing get_document MCP tool...');
+      
+      const response = await fetch('http://localhost:3001/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'get_document',
+          params: {
+            doc_id: 'playground/0/main'
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('📄 get_document result:', data);
+      
+      if (data.result) {
+        console.log('✅ Document retrieved successfully:', data.result);
+      } else if (data.error) {
+        console.error('❌ MCP error:', data.error);
+      }
+    } catch (error) {
+      console.error('💥 Error executing get_document:', error);
+    }
+  };
+
+  const executeAppendParagraph = async () => {
+    try {
+      const timestamp = new Date().toISOString();
+      const paragraphText = `New paragraph added at ${timestamp}`;
+      
+      console.log('✏️ Executing append_paragraph MCP tool with text:', paragraphText);
+      
+      const response = await fetch('http://localhost:3001/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'append_paragraph',
+          params: {
+            doc_id: 'default',
+            text: paragraphText
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('📝 append_paragraph result:', data);
+      
+      if (data.result) {
+        console.log('✅ Paragraph appended successfully:', data.result);
+      } else if (data.error) {
+        console.error('❌ MCP error:', data.error);
+      }
+    } catch (error) {
+      console.error('💥 Error executing append_paragraph:', error);
+    }
+  };
+
+  // Handle tool selection and execution
+  const handleToolChange = (toolName: string) => {
+    setSelectedTool(toolName);
+    
+    if (toolName === 'get_document') {
+      executeGetDocument();
+    } else if (toolName === 'append_paragraph') {
+      executeAppendParagraph();
+    }
+  };
+
+  // Set hardcoded tools instead of fetching from server
   useEffect(() => {
-    fetchMCPTools();
+    const hardcodedTools: MCPTool[] = [
+      { 
+        name: 'get_document', 
+        description: 'Get document content in Lexical JSON format',
+        parameters: {}
+      },
+      { 
+        name: 'append_paragraph', 
+        description: 'Append a new paragraph with timestamp to the document',
+        parameters: {}
+      }
+    ];
+    setMcpTools(hardcodedTools);
+    console.log('🔧 Hardcoded MCP tools loaded:', hardcodedTools);
   }, []);
 
   const reloadState = (editor: LexicalEditor) => {
@@ -125,7 +226,7 @@ export default function DatalayerPlugin(): JSX.Element | null {
         <select 
           id="mcp-tools-select"
           value={selectedTool} 
-          onChange={(e) => setSelectedTool(e.target.value)}
+          onChange={(e) => handleToolChange(e.target.value)}
           disabled={isLoadingTools}
           style={{ 
             padding: '4px 8px', 
