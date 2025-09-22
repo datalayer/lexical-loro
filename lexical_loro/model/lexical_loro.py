@@ -161,15 +161,25 @@ class LoroTreeModel:
                 "node_count": len(list(self.tree.nodes()))
             })
             
-            logger.info(f"Initialized document {self.doc_id} with root tree ID: {self.root_tree_id}")
+            logger.info(f"🚀 Initialized document {self.doc_id} with root tree ID: {self.root_tree_id}")
+            
+            # Log initial document structure
+            try:
+                initial_state = self.export_to_lexical_state(log_structure=True)
+                self._log_document_structure(initial_state, "INITIALIZATION")
+            except Exception as log_error:
+                logger.error(f"Failed to log initial document structure: {log_error}")
             
         except Exception as e:
             logger.error(f"Failed to initialize from lexical state: {e}")
             raise
 
-    def export_to_lexical_state(self) -> Dict[str, Any]:
+    def export_to_lexical_state(self, log_structure: bool = False) -> Dict[str, Any]:
         """
         Export current tree state to Lexical JSON format
+        
+        Args:
+            log_structure: Whether to log document structure for debugging
         
         Returns:
             Lexical state as dictionary
@@ -182,6 +192,11 @@ class LoroTreeModel:
         
         try:
             lexical_state = self.converter.export_to_lexical_state(self.root_tree_id)
+            
+            # Add detailed logging for document structure if requested
+            if log_structure:
+                self._log_document_structure(lexical_state, "EXPORT")
+            
             logger.debug(f"Exported document {self.doc_id} to lexical state")
             return lexical_state
         except Exception as e:
@@ -274,11 +289,12 @@ class LoroTreeModel:
             
             # Create tree node
             if index is not None:
-                child_tree_node = self.tree.create_at(index, parent_tree_node)
+                child_tree_node = self.tree.create_at(index, parent_tree_node.id)
             else:
                 # Append at end
-                child_count = len(list(parent_tree_node.children()))
-                child_tree_node = self.tree.create_at(child_count, parent_tree_node)
+                existing_children = self.tree.children(parent_tree_node.id)
+                child_count = len(existing_children) if existing_children else 0
+                child_tree_node = self.tree.create_at(child_count, parent_tree_node.id)
             
             # Store block data
             child_meta = self.tree.get_meta(child_tree_node)
@@ -292,6 +308,13 @@ class LoroTreeModel:
             tree_id = str(child_tree_node)
             self.mapper.create_mapping(new_key, tree_id)
             
+            # Process children if they exist
+            if "children" in block_data and isinstance(block_data["children"], list):
+                for child_index, child_data in enumerate(block_data["children"]):
+                    if isinstance(child_data, dict) and "type" in child_data:
+                        # Recursively add child nodes
+                        self.add_block_to_tree(new_key, child_data, child_index)
+            
             self._modification_count += 1
             
             # Emit event
@@ -303,7 +326,15 @@ class LoroTreeModel:
                 "index": index
             })
             
-            logger.debug(f"Added block to tree: {new_key} (type: {block_data['type']})")
+            logger.info(f"✏️ Added block to tree: {new_key} (type: {block_data['type']}) to parent: {parent_key}")
+            
+            # Log document structure after manual addition
+            try:
+                current_state = self.export_to_lexical_state(log_structure=True)
+                self._log_document_structure(current_state, "ADD_BLOCK")
+            except Exception as log_error:
+                logger.error(f"Failed to log document structure after add_block: {log_error}")
+                
             return new_key
             
         except Exception as e:
@@ -331,7 +362,7 @@ class LoroTreeModel:
                 raise ValueError(f"Node with key {node_key} not found")
             
             # Update element type if provided
-            node_meta = self.tree.get_meta(tree_node)
+            node_meta = self.tree.get_meta(tree_node.id)
             if "type" in new_data:
                 node_meta.insert("elementType", new_data["type"])
             
@@ -348,7 +379,14 @@ class LoroTreeModel:
                 "new_data": new_data
             })
             
-            logger.debug(f"Updated tree node: {node_key}")
+            logger.info(f"🔄 Updated tree node: {node_key} (type: {new_data.get('type', 'unknown')})")
+            
+            # Log document structure after manual update
+            try:
+                current_state = self.export_to_lexical_state(log_structure=True)
+                self._log_document_structure(current_state, "UPDATE_NODE")
+            except Exception as log_error:
+                logger.error(f"Failed to log document structure after update_node: {log_error}")
             
         except Exception as e:
             logger.error(f"Failed to update tree node: {e}")
@@ -392,7 +430,14 @@ class LoroTreeModel:
                 "tree_id": tree_id
             })
             
-            logger.debug(f"Removed tree node: {node_key}")
+            logger.info(f"🗑️ Removed tree node: {node_key}")
+            
+            # Log document structure after manual removal
+            try:
+                current_state = self.export_to_lexical_state(log_structure=True)
+                self._log_document_structure(current_state, "REMOVE_NODE")
+            except Exception as log_error:
+                logger.error(f"Failed to log document structure after remove_node: {log_error}")
             
         except Exception as e:
             logger.error(f"Failed to remove tree node: {e}")
@@ -413,9 +458,12 @@ class LoroTreeModel:
             if not tree_node:
                 return None
             
-            node_meta = self.tree.get_meta(tree_node)
-            element_type = node_meta.get("elementType")
-            lexical_data = node_meta.get("lexical", {})
+            node_meta = self.tree.get_meta(tree_node.id)
+            element_type_obj = node_meta.get("elementType")
+            element_type = element_type_obj.value if element_type_obj else None
+            
+            lexical_data_obj = node_meta.get("lexical")
+            lexical_data = lexical_data_obj.value if lexical_data_obj else {}
             
             # Combine element type with lexical data
             result = {"type": element_type, **lexical_data}
@@ -440,8 +488,9 @@ class LoroTreeModel:
         
         try:
             for tree_node in self.tree.nodes():
-                node_meta = self.tree.get_meta(tree_node)
-                element_type = node_meta.get("elementType")
+                node_meta = self.tree.get_meta(tree_node.id)
+                element_type_obj = node_meta.get("elementType")
+                element_type = element_type_obj.value if element_type_obj else None
                 
                 if element_type == node_type:
                     tree_id = str(tree_node)
@@ -454,6 +503,35 @@ class LoroTreeModel:
         except Exception as e:
             logger.error(f"Failed to find nodes by type: {e}")
             return []
+
+    def get_root_lexical_key(self) -> Optional[str]:
+        """
+        Get the Lexical key for the root node
+        
+        Returns:
+            Root node's Lexical key or None if not found
+        """
+        if not self._is_initialized or not self.root_tree_id:
+            return None
+        
+        try:
+            # Get the root node's Lexical key from the mapper
+            root_key = self.mapper.get_lexical_key_by_tree_id(self.root_tree_id)
+            if root_key:
+                logger.debug(f"Found root key: {root_key} for tree ID: {self.root_tree_id}")
+                return root_key
+            
+            # If no mapping exists, it might be because the export hasn't been called yet
+            # Export once to establish the mapping, then get the key
+            logger.debug(f"No root key mapping found, exporting to establish mapping...")
+            lexical_state = self.converter.export_to_lexical_state(self.root_tree_id)
+            root_key = lexical_state.get("root", {}).get("__key")
+            logger.debug(f"Established root key: {root_key}")
+            return root_key
+            
+        except Exception as e:
+            logger.error(f"Failed to get root lexical key: {e}")
+            return None
 
     def get_document_stats(self) -> Dict[str, Any]:
         """
@@ -597,25 +675,42 @@ class LoroTreeModel:
     # WebSocket Client Methods
     # ============================================================================
 
-    async def connect_to_websocket_server(self) -> None:
-        """Connect to the WebSocket server as a client and request snapshot"""
-        try:
-            document_url = f"{self.websocket_url}/{self.doc_id}"
-            logger.info(f"🔌 LoroTreeModel connecting to {document_url}")
-            
-            self.websocket = await websockets.connect(document_url)
-            self.websocket_connected = True
-            logger.info(f"✅ LoroTreeModel connected to WebSocket server for doc: {self.doc_id}")
-            
-            # Request initial snapshot
-            await self._request_snapshot()
-            
-            # Start listening for messages
-            self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to connect to WebSocket server: {e}")
-            self.websocket_connected = False
+    async def connect_to_websocket_server(self, max_retries: int = 5) -> None:
+        """Connect to the WebSocket server as a client and request snapshot with retry logic"""
+        retry_count = 0
+        base_delay = 1.0  # Start with 1 second delay
+        
+        while retry_count <= max_retries:
+            try:
+                document_url = f"{self.websocket_url}/{self.doc_id}"
+                logger.info(f"🔌 LoroTreeModel connecting to {document_url} (attempt {retry_count + 1}/{max_retries + 1})")
+                
+                self.websocket = await websockets.connect(document_url)
+                self.websocket_connected = True
+                logger.info(f"✅ MCP SERVER: Connected to WebSocket server for doc: {self.doc_id}")
+                
+                # Request initial snapshot
+                await self._request_snapshot()
+                
+                # Start listening for messages
+                self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
+                logger.info(f"🎧 MCP SERVER: Listening for real-time updates from editor for doc: {self.doc_id}")
+                return  # Success, exit retry loop
+                
+            except Exception as e:
+                retry_count += 1
+                self.websocket_connected = False
+                
+                if retry_count <= max_retries:
+                    # Calculate exponential backoff delay
+                    delay = base_delay * (2 ** (retry_count - 1))
+                    logger.warning(f"❌ Failed to connect to WebSocket server (attempt {retry_count}): {e}")
+                    logger.info(f"🔄 Retrying in {delay:.1f} seconds...")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(f"❌ Failed to connect to WebSocket server after {max_retries + 1} attempts: {e}")
+                    logger.info("💡 Make sure the WebSocket server is running on port 3002")
+                    break
 
     async def disconnect_from_websocket_server(self) -> None:
         """Disconnect from the WebSocket server"""
@@ -670,9 +765,22 @@ class LoroTreeModel:
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"WebSocket connection closed for doc: {self.doc_id}")
             self.websocket_connected = False
+            # Try to reconnect automatically
+            await self._reconnect_websocket()
         except Exception as e:
             logger.error(f"Error in WebSocket message listener: {e}")
             self.websocket_connected = False
+            # Try to reconnect automatically
+            await self._reconnect_websocket()
+
+    async def _reconnect_websocket(self) -> None:
+        """Attempt to reconnect to WebSocket server"""
+        logger.info(f"🔄 Attempting to reconnect WebSocket for doc: {self.doc_id}")
+        await asyncio.sleep(2)  # Wait before reconnecting
+        try:
+            await self.connect_to_websocket_server(max_retries=3)
+        except Exception as e:
+            logger.error(f"Failed to reconnect WebSocket: {e}")
 
     async def _handle_websocket_message(self, data: Dict[str, Any]) -> None:
         """Handle incoming WebSocket message"""
@@ -690,9 +798,11 @@ class LoroTreeModel:
         try:
             snapshot_data = data.get("snapshot")
             if snapshot_data:
+                logger.info(f"📸 MCP SERVER: Receiving initial snapshot from WebSocket server for document: {self.doc_id}")
+                
                 # Import snapshot into Loro document
                 self.doc.import_bytes(bytes(snapshot_data))
-                logger.info(f"📸 Applied snapshot for document: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: Applied initial snapshot for document: {self.doc_id}")
                 
                 # Update tree reference and synchronize mappings
                 self.tree = self.doc.get_tree(self.tree_name)
@@ -701,7 +811,15 @@ class LoroTreeModel:
                 # Mark as initialized if we got valid content
                 if not self._is_initialized:
                     self._is_initialized = True
-                    logger.info(f"🎯 Document {self.doc_id} initialized from WebSocket snapshot")
+                    logger.info(f"🎯 MCP SERVER: Document {self.doc_id} initialized from WebSocket snapshot - ready for real-time collaboration!")
+                
+                # Log initial document structure
+                try:
+                    current_state = self.export_to_lexical_state(log_structure=True)
+                    self._log_document_structure(current_state, "INITIAL_SNAPSHOT")
+                    logger.info(f"📊 MCP SERVER: Initial document {self.doc_id} has {len(current_state.get('root', {}).get('children', []))} root children")
+                except Exception as log_error:
+                    logger.error(f"Failed to log initial document structure: {log_error}")
                     
         except Exception as e:
             logger.error(f"Failed to handle snapshot message: {e}")
@@ -711,12 +829,22 @@ class LoroTreeModel:
         try:
             update_data = data.get("update")
             if update_data:
+                logger.info(f"🔄 MCP SERVER: Receiving real-time update from editor for document: {self.doc_id}")
+                
                 # Apply update to Loro document
                 self.doc.import_bytes(bytes(update_data))
-                logger.debug(f"📝 Applied update for document: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: Applied WebSocket update for document: {self.doc_id}")
                 
                 # Refresh tree reference
                 self.tree = self.doc.get_tree(self.tree_name)
+                
+                # Log current document structure after update
+                try:
+                    current_state = self.export_to_lexical_state(log_structure=True)
+                    self._log_document_structure(current_state, "WEBSOCKET_UPDATE")
+                    logger.info(f"📊 MCP SERVER: Document {self.doc_id} now has {len(current_state.get('root', {}).get('children', []))} root children")
+                except Exception as log_error:
+                    logger.error(f"Failed to log document structure after WebSocket update: {log_error}")
                 
         except Exception as e:
             logger.error(f"Failed to handle update message: {e}")
@@ -739,3 +867,51 @@ class LoroTreeModel:
             
         except Exception as e:
             logger.error(f"Failed to send update to WebSocket server: {e}")
+
+    def _log_document_structure(self, lexical_state: Dict[str, Any], operation: str) -> None:
+        """
+        Log detailed document structure for debugging
+        
+        Args:
+            lexical_state: The lexical JSON state
+            operation: The operation that triggered this logging (e.g., 'EXPORT', 'WEBSOCKET_UPDATE')
+        """
+        try:
+            if not lexical_state or 'root' not in lexical_state:
+                logger.warning(f"📋 [{operation}] Document {self.doc_id}: NO ROOT FOUND in lexical state")
+                return
+                
+            root = lexical_state['root']
+            children = root.get('children', [])
+            child_count = len(children)
+            
+            logger.info(f"📋 [{operation}] Document {self.doc_id} structure:")
+            logger.info(f"  └─ Root type: {root.get('type', 'unknown')}")
+            logger.info(f"  └─ Root key: {root.get('__key', 'no-key')}")
+            logger.info(f"  └─ Children count: {child_count}")
+            
+            # Log details of each child
+            for i, child in enumerate(children):
+                child_type = child.get('type', 'unknown')
+                child_key = child.get('__key', 'no-key')
+                child_children = child.get('children', [])
+                child_text = ""
+                
+                # Extract text content if available
+                if child_type == 'paragraph' and child_children:
+                    text_nodes = [c for c in child_children if c.get('type') == 'text']
+                    if text_nodes:
+                        child_text = f" (text: '{text_nodes[0].get('text', '')}')"
+                
+                logger.info(f"    └─ Child[{i}]: {child_type} (key: {child_key}, children: {len(child_children)}){child_text}")
+                
+                # Log grandchildren for debugging
+                for j, grandchild in enumerate(child_children[:3]):  # Limit to first 3 for brevity
+                    gc_type = grandchild.get('type', 'unknown')
+                    gc_key = grandchild.get('__key', 'no-key')
+                    gc_text = grandchild.get('text', '') if gc_type == 'text' else ''
+                    gc_text_preview = f" '{gc_text[:50]}{'...' if len(gc_text) > 50 else ''}'" if gc_text else ''
+                    logger.info(f"      └─ GrandChild[{j}]: {gc_type} (key: {gc_key}){gc_text_preview}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to log document structure: {e}")

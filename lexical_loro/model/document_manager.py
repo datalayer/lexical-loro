@@ -680,6 +680,14 @@ class TreeDocumentManager:
     def _start_background_tasks(self) -> None:
         """Start background tasks for auto-save and cleanup"""
         try:
+            # Check if we have an event loop
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No running event loop, we'll start tasks when one becomes available
+                logger.info("No running event loop found, background tasks will start when event loop is available")
+                return
+            
             # Start cleanup task
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
             
@@ -690,6 +698,23 @@ class TreeDocumentManager:
             
         except Exception as e:
             logger.error(f"Failed to start background tasks: {e}")
+
+    async def start_background_tasks_async(self) -> None:
+        """Start background tasks in an async context"""
+        if hasattr(self, '_cleanup_task') and not self._cleanup_task.done():
+            return  # Already started
+        
+        try:
+            # Start cleanup task
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+            
+            # Start auto-save task
+            self._auto_save_task = asyncio.create_task(self._auto_save_loop())
+            
+            logger.info("Started background tasks for document management (async)")
+            
+        except Exception as e:
+            logger.error(f"Failed to start background tasks (async): {e}")
 
     async def _cleanup_loop(self) -> None:
         """Background task for cleaning up inactive documents"""

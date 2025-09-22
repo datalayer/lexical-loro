@@ -148,7 +148,7 @@ class MCPHandler(BaseHTTPRequestHandler):
 ###############################################################################
 # Initialization
 
-def get_or_create_document_manager():
+async def get_or_create_document_manager():
     """Get or create the global document manager instance"""
     global document_manager
     
@@ -159,7 +159,11 @@ def get_or_create_document_manager():
             auto_save_interval=30,
             max_cached_documents=50
         )
-        logger.info("TreeDocumentManager created successfully")
+        
+        # Start background tasks in async context
+        await document_manager.start_background_tasks_async()
+        
+        logger.info("TreeDocumentManager created successfully with background tasks")
     
     return document_manager
 
@@ -182,12 +186,15 @@ async def get_document(doc_id: str) -> Dict[str, Any]:
         logger.info(f"Getting document: {doc_id}")
         
         # Get document manager
-        manager = get_or_create_document_manager()
+        manager = await get_or_create_document_manager()
         
-        # Create or get document
+        # Get existing document or create if not found
         model = manager.get_document(doc_id)
         if not model:
+            logger.info(f"Document {doc_id} not found, creating new document")
             model = manager.create_document(doc_id)
+        else:
+            logger.info(f"Found existing document: {doc_id}")
         
         # Ensure WebSocket connection for collaborative sync
         await _ensure_websocket_connection(model)
@@ -226,12 +233,15 @@ async def append_paragraph(doc_id: str, text: str) -> Dict[str, Any]:
         logger.info(f"Appending paragraph to document: {doc_id}")
         
         # Get document manager
-        manager = get_or_create_document_manager()
+        manager = await get_or_create_document_manager()
         
-        # Create or get document  
+        # Get existing document or create if not found
         model = manager.get_document(doc_id)
         if not model:
+            logger.info(f"Document {doc_id} not found, creating new document")
             model = manager.create_document(doc_id)
+        else:
+            logger.info(f"Found existing document: {doc_id}")
         
         # Ensure WebSocket connection for collaborative sync
         await _ensure_websocket_connection(model)
@@ -279,7 +289,24 @@ def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
     try:
         # Use the model's export method if initialized
         if hasattr(model, 'export_to_lexical_state') and model._is_initialized:
-            return model.export_to_lexical_state()
+            lexical_json = model.export_to_lexical_state(log_structure=True)
+            
+            # Log what MCP server is returning to client
+            root = lexical_json.get('root', {})
+            children = root.get('children', [])
+            logger.info(f"🔄 MCP SERVER RETURNING: Document {model.doc_id} with {len(children)} root children")
+            for i, child in enumerate(children):
+                child_type = child.get('type', 'unknown')
+                child_key = child.get('__key', 'no-key')
+                child_children = child.get('children', [])
+                text_preview = ""
+                if child_type == 'paragraph' and child_children:
+                    text_nodes = [c for c in child_children if c.get('type') == 'text']
+                    if text_nodes:
+                        text_preview = f" - '{text_nodes[0].get('text', '')[:50]}'"
+                logger.info(f"  └─ Child[{i}]: {child_type} (key: {child_key}, {len(child_children)} children){text_preview}")
+            
+            return lexical_json
         
         # Fallback: basic conversion for uninitialized models
         logger.warning(f"Model {model.doc_id} not fully initialized, returning empty Lexical structure")
@@ -313,12 +340,25 @@ async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
     try:
         # Use the model's tree operations if available
         if hasattr(model, 'add_block_to_tree'):
+            # Get the root key using the optimized method
+            root_key = model.get_root_lexical_key() if hasattr(model, 'get_root_lexical_key') else None
+            
+            if not root_key:
+                # Fallback to export if the method doesn't exist
+                lexical_state = model.export_to_lexical_state()
+                root_key = lexical_state.get("root", {}).get("__key")
+                
+            if not root_key:
+                raise ValueError("Cannot find root key in document")
+            
+            logger.info(f"📝 Adding paragraph to root with key: {root_key}")
+            
             # Use the model's proper tree operations
             paragraph_data = {
                 "type": "paragraph",
                 "children": [{"type": "text", "text": text}]
             }
-            node_id = model.add_block_to_tree(None, paragraph_data, -1)  # Add at end
+            node_id = model.add_block_to_tree(root_key, paragraph_data, None)  # Add at end
         else:
             # Fallback to direct tree operations
             root_tree = model.get_tree()

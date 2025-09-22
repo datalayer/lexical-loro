@@ -39,8 +39,7 @@ KEY DESIGN PRINCIPLES:
 
 import logging
 from typing import Dict, Optional, Set
-import loro
-from loro import LoroDoc, LoroTree, TreeNode
+from loro import LoroDoc, TreeNode
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +67,29 @@ class TreeNodeMapper:
         
         # Track nodes that need cleanup
         self._pending_cleanup: Set[str] = set()
+
+    def _find_node_by_id(self, tree_id: str) -> Optional[TreeNode]:
+        """
+        Find a tree node by its TreeID
+        
+        Args:
+            tree_id: String representation of TreeID to find
+            
+        Returns:
+            TreeNode if found, None otherwise
+            
+        Raises:
+            Exception: If tree_id not found
+        """
+        target_id = str(tree_id)  # Ensure string format
+        
+        # Iterate through all nodes to find matching ID
+        for node in self.tree.get_nodes(False):  # with_deleted=False
+            if str(node.id) == target_id:
+                return node
+        
+        # Node not found
+        raise Exception(f"TreeNode with ID {tree_id} not found in tree")
 
     def create_mapping(self, lexical_key: str, tree_id: str) -> None:
         """
@@ -157,7 +179,7 @@ class TreeNodeMapper:
         existing_tree_id = self.lexical_to_loro.get(lexical_key)
         if existing_tree_id:
             try:
-                return self.tree.get_node_by_id(existing_tree_id)
+                return self._find_node_by_id(existing_tree_id)
             except Exception as e:
                 logger.warning(f"Tree node {existing_tree_id} not found, removing stale mapping: {e}")
                 self.remove_mapping(lexical_key=lexical_key)
@@ -192,7 +214,7 @@ class TreeNodeMapper:
         if generate_key_if_missing:
             # Verify tree node exists
             try:
-                tree_node = self.tree.get_node_by_id(tree_id)
+                tree_node = self._find_node_by_id(tree_id)
                 if tree_node:
                     new_key = self._generate_lexical_key()
                     self.create_mapping(new_key, tree_id)
@@ -276,7 +298,7 @@ class TreeNodeMapper:
             tree_id = str(tree_node)
             
             # Store node data
-            node_meta = self.tree.get_meta(tree_node)
+            node_meta = self.tree.get_meta(tree_node.id)
             if "type" in lexical_node_data:
                 node_meta.insert("elementType", lexical_node_data["type"])
             
