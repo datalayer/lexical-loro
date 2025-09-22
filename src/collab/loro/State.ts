@@ -20,7 +20,7 @@ export const CONNECTED_COMMAND: LexicalCommand<boolean> =
 export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> =
   createCommand('TOGGLE_CONNECT_COMMAND');
 
-export type ProviderAwareness = {
+export type AwarenessProvider = {
   getLocalState: () => UserState | null;
   getStates: () => Map<number, UserState>;
   off: (type: 'update', cb: () => void) => void;
@@ -30,7 +30,7 @@ export type ProviderAwareness = {
 };
 
 export type Provider = {
-  awareness: ProviderAwareness;
+  awareness: AwarenessProvider;
   connect(): void | Promise<void>;
   disconnect(): void;
   off(type: 'sync', cb: (isSynced: boolean) => void): void;

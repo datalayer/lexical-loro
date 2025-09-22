@@ -1,11 +1,11 @@
-import { LoroDoc, EphemeralStore, EphemeralStoreEvent, LoroEventBatch, VersionVector } from 'loro-crdt'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent, VersionVector } from 'loro-crdt'
 import { ObservableV2 } from 'lib0/observable'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
 import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
-import type { UserState, ProviderAwareness } from '../State'
+import type { UserState, AwarenessProvider } from '../State'
 
 // @todo - this should depend on ephemeral timeout
 const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
@@ -44,7 +44,7 @@ export type LoroWebSocketMessage = LoroUpdateMessage | EphemeralMessage | QueryE
 /**
  * Awareness adapter that wraps EphemeralStore to provide awareness-like API
  */
-class AwarenessAdapter implements ProviderAwareness {
+class AwarenessAdapter implements AwarenessProvider {
   private ephemeralStore: EphemeralStore
   private localClientId: number
   private eventHandlers: Map<string, (() => void)[]> = new Map()
