@@ -77,7 +77,7 @@ class LexicalTreeConverter:
         self.tree_name = tree_name
         self.tree = self.doc.get_tree(tree_name)
 
-    def _find_node_by_id(self, tree_id: str) -> Optional[TreeNode]:
+    def _find_node_by_id(self, tree_id) -> Any:
         """
         Find a tree node by its TreeID
         
@@ -85,7 +85,7 @@ class LexicalTreeConverter:
             tree_id: String representation of TreeID to find
             
         Returns:
-            TreeNode if found, None otherwise
+            TreeNode object
             
         Raises:
             Exception: If tree_id not found
@@ -93,7 +93,7 @@ class LexicalTreeConverter:
         target_id = str(tree_id)  # Ensure string format
         
         # Iterate through all nodes to find matching ID
-        for node in self.tree.get_nodes(False):  # with_deleted=False
+        for node in self.tree.get_nodes(False):  # Returns TreeNode objects
             if str(node.id) == target_id:
                 return node
         
@@ -158,15 +158,15 @@ class LexicalTreeConverter:
         """
         # Find root node
         if root_tree_id is None:
-            # Find first node without parent (root node)
-            all_nodes = list(self.tree.nodes())
+            # Find first node without parent (root node) using TreeNode objects
+            all_nodes = list(self.tree.get_nodes(False))  # Get TreeNode objects
             if not all_nodes:
                 raise ValueError("Tree is empty")
             
             # Find root node (node without parent)
             root_node = None
             for node in all_nodes:
-                if node.parent() is None:
+                if node.parent is None:  # TreeNode has .parent attribute
                     root_node = node
                     break
             
@@ -277,8 +277,11 @@ class LexicalTreeConverter:
         # Convert TreeIDs to TreeNodes and sort by index
         child_nodes = []
         for child_id in child_ids:
-            child_node = self._find_node_by_id(str(child_id))
-            child_nodes.append(child_node)
+            # Find the TreeNode that matches this TreeID
+            for node in self.tree.get_nodes(False):
+                if str(node.id) == str(child_id):
+                    child_nodes.append(node)
+                    break
         
         # Sort children by index to maintain order
         child_nodes.sort(key=lambda node: node.index if node.index is not None else 0)

@@ -872,10 +872,10 @@ class LoroTreeModel:
                 logger.error(f"❌ MCP SERVER: Failed to log document structure after binary snapshot: {log_error}")
                 # Try alternative approach to check document content
                 try:
-                    all_nodes = list(self.tree.nodes())
+                    all_nodes = list(self.tree.nodes())  # Returns TreeID objects
                     logger.info(f"🔍 MCP SERVER: Tree inspection - total nodes: {len(all_nodes)}")
                     if all_nodes:
-                        logger.info(f"🔍 MCP SERVER: First few nodes: {[str(node.id()) for node in all_nodes[:5]]}")
+                        logger.info(f"🔍 MCP SERVER: First few nodes: {[str(node) for node in all_nodes[:5]]}")
                     else:
                         logger.info(f"🔍 MCP SERVER: Tree is indeed empty - might be a timing issue or empty document")
                 except Exception as inspect_error:

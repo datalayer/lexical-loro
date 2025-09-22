@@ -6,7 +6,7 @@ Matches the TypeScript lexicalToLoroTree implementation for consistent initializ
 import json
 import random
 import string
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from loro import LoroDoc, LoroTree
 from ..constants import DEFAULT_TREE_NAME
 
