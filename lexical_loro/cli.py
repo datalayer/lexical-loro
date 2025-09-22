@@ -9,11 +9,11 @@ CLI for pure WebSocket relay server
 import asyncio
 import logging
 import click
-from .server import LoroWebSocketServer
+from .websocket.server import LoroWebSocketServer
 
 
 @click.command()
-@click.option("--port", "-p", default=8081, help="Port to run the server on (default: 8081)")
+@click.option("--port", "-p", default=3002, help="Port to run the server on (default: 3002)")
 @click.option("--host", "-h", default="localhost", help="Host to bind to (default: localhost)")
 @click.option("--log-level", "-l", default="INFO", 
               type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),

@@ -4,10 +4,9 @@ import asyncio
 import json
 import logging
 import time
-from typing import Dict, Set, Union
 from dataclasses import dataclass, asdict
 import websockets
-from websockets.server import WebSocketServerProtocol, serve
+from websockets.server import serve
 from loro import LoroDoc, ExportMode
 from ..constants import DEFAULT_TREE_NAME
 from .lexical_converter import initialize_loro_doc_with_lexical_content, should_initialize_loro_doc
@@ -335,6 +334,40 @@ async def start_server(host: str = "localhost", port: int = 3002):
     logger.info(f"Tree WebSocket server running on ws://{host}:{port}")
     
     return server
+
+
+class LoroWebSocketServer:
+    """WebSocket server class for CLI compatibility"""
+    
+    def __init__(self, host: str = "localhost", port: int = 3002, autosave_interval_sec: int = 60):
+        self.host = host
+        self.port = port
+        self.autosave_interval_sec = autosave_interval_sec  # Not used in current implementation but kept for API compatibility
+        self.server = None
+        
+    async def start(self):
+        """Start the WebSocket server"""
+        logger.info(f"Starting LoroWebSocketServer on {self.host}:{self.port}")
+        
+        # Clear any cached documents from previous runs
+        clear_docs()
+        
+        async def handler(websocket, path):
+            await setup_ws_connection(websocket, path)
+        
+        self.server = await serve(handler, self.host, self.port)
+        logger.info(f"LoroWebSocketServer running on ws://{self.host}:{self.port}")
+        
+        # Keep the server running
+        await self.server.wait_closed()
+        
+    async def stop(self):
+        """Stop the WebSocket server"""
+        if self.server:
+            logger.info("Stopping LoroWebSocketServer...")
+            self.server.close()
+            await self.server.wait_closed()
+
 
 def main():
     logging.basicConfig(
