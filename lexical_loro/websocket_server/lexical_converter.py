@@ -3,7 +3,6 @@ Lexical to Loro Tree converter for Python
 Matches the TypeScript lexicalToLoroTree implementation for consistent initialization
 """
 
-import json
 import random
 import string
 from typing import Dict, Any

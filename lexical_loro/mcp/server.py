@@ -349,43 +349,60 @@ def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
 async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
     """Add a paragraph node to the Loro tree and sync with WebSocket server"""
     try:
-        # Use the model's tree operations if available
-        if hasattr(model, 'add_block_to_tree'):
-            # Get the root key using the optimized method
-            root_key = model.get_root_lexical_key() if hasattr(model, 'get_root_lexical_key') else None
-            
-            if not root_key:
-                # Fallback to export if the method doesn't exist
-                lexical_state = model.export_to_lexical_state()
-                root_key = lexical_state.get("root", {}).get("__key")
+        # Work directly with TreeIDs since we're in a tree-based system
+        tree = model.tree
+        
+        # Find the root node - it should be the first node without a parent
+        root_node = None
+        for node in tree.get_nodes(False):
+            if node.parent is None:
+                root_node = node
+                break
                 
-            if not root_key:
-                raise ValueError("Cannot find root key in document")
+        if not root_node:
+            raise ValueError("Cannot find root node in document tree")
             
-            logger.info(f"📝 Adding paragraph to root with key: {root_key}")
-            
-            # Use the model's proper tree operations
-            paragraph_data = {
-                "type": "paragraph",
-                "children": [{"type": "text", "text": text}]
-            }
-            node_id = model.add_block_to_tree(root_key, paragraph_data, None)  # Add at end
-        else:
-            # Fallback to direct tree operations
-            root_tree = model.get_tree()
-            paragraph_id = root_tree.create_at(0)  # Add at end
-            
-            # Set paragraph metadata
-            tree_meta = root_tree.get_meta(paragraph_id)
-            tree_meta.set("type", "paragraph")
-            tree_meta.set("text", text)
-            node_id = paragraph_id
+        logger.info(f"📝 Adding paragraph to root TreeID: {root_node.id}")
+        
+        # Get current children count to append at the end
+        existing_children = tree.children(root_node.id)
+        child_count = len(list(existing_children)) if existing_children else 0
+        
+        # Create paragraph node
+        paragraph_id = tree.create_at(child_count, root_node.id)
+        paragraph_meta = tree.get_meta(paragraph_id)
+        paragraph_meta.insert("elementType", "paragraph")
+        paragraph_meta.insert("lexical", {
+            "type": "paragraph",
+            "format": "",
+            "indent": 0,
+            "textFormat": 0,
+            "textStyle": ""
+        })
+        
+        # Create text child node
+        text_id = tree.create_at(0, paragraph_id)
+        text_meta = tree.get_meta(text_id)
+        text_meta.insert("elementType", "text")
+        text_meta.insert("lexical", {
+            "type": "text",
+            "text": text,
+            "format": 0,
+            "style": "",
+            "mode": 0,
+            "detail": 0
+        })
+        
+        # Commit the changes
+        model.doc.commit()
+        
+        node_id = paragraph_id
         
         # Send update to WebSocket server if connected
         if model.websocket_connected:
             try:
                 # Export the update and send to WebSocket server
-                update_bytes = model.doc.export(loro.ExportMode.Update())
+                update_bytes = model.doc.export(loro.ExportMode.Update)
                 await model.send_update_to_websocket_server(update_bytes)
                 logger.debug(f"📤 Sent paragraph update to WebSocket server for doc: {model.doc_id}")
             except Exception as e:
