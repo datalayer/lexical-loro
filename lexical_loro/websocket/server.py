@@ -80,10 +80,10 @@ MESSAGE_QUERY_EPHEMERAL = 'query-ephemeral'
 def default_load_model(doc_id: str) -> Optional[str]:
     """
     Default load_model implementation - loads from local .models folder or
-    returns initial content.
+    returns initial content. Handles subdirectories for doc_ids with slashes.
     
     Args:
-        doc_id: Document ID to load
+        doc_id: Document ID to load (may contain slashes for subdirectories)
         
     Returns:
         Content string from saved file, or initial content for new models
@@ -91,6 +91,7 @@ def default_load_model(doc_id: str) -> Optional[str]:
     try:
         # Check if a saved model exists
         models_dir = Path(".models")
+        # Convert doc_id to path, handling slashes as subdirectories
         model_file = models_dir / f"{doc_id}.json"
         
         if model_file.exists():
@@ -111,9 +112,10 @@ def default_load_model(doc_id: str) -> Optional[str]:
 def default_save_model(doc_id: str, lexical_json: str) -> bool:
     """
     Default save_model implementation - saves to local .models folder.
+    Handles subdirectories for doc_ids with slashes.
     
     Args:
-        doc_id: Document ID
+        doc_id: Document ID (may contain slashes for subdirectories)
         lexical_json: Lexical JSON content as string to save
         
     Returns:
@@ -124,8 +126,11 @@ def default_save_model(doc_id: str, lexical_json: str) -> bool:
         models_dir = Path(".models")
         models_dir.mkdir(exist_ok=True)
         
-        # Save model as JSON file
+        # Convert doc_id to path, handling slashes as subdirectories
         model_file = models_dir / f"{doc_id}.json"
+        
+        # Create parent directories if they don't exist
+        model_file.parent.mkdir(parents=True, exist_ok=True)
         
         with open(model_file, 'w', encoding='utf-8') as f:
             f.write(lexical_json)
@@ -727,7 +732,7 @@ def main():
         server = LoroWebSocketServer(
             host="localhost",
             port=3002,
-            autosave_interval_sec=60,
+            autosave_interval_sec=5,
             # load_model=custom_load_model,
             # save_model=custom_save_model
         )
