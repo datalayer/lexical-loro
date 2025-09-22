@@ -73,9 +73,9 @@ export function syncLexicalToLoro(
 
     // Schedule an async commit instead of immediate synchronous commit
     // This reduces latency for large documents by debouncing commits
-    // scheduleAsyncCommit(binding);
+    scheduleAsyncCommit(binding);
 
-    binding.doc.commit({ origin: binding.doc.peerIdStr });
+    // binding.doc.commit({ origin: binding.doc.peerIdStr });
 
   }
 
