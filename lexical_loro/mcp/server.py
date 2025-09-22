@@ -28,6 +28,7 @@ MCP Integration:
 import asyncio
 import json
 import logging
+import threading
 from typing import Any, Dict, Optional, List
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import socketserver
@@ -43,8 +44,13 @@ from ..model.lexical_loro import LoroTreeModel
 logger = logging.getLogger(__name__)
 
 ###############################################################################
-# Global document manager instance
+# Global document manager instance - PERSISTENT across requests
 document_manager: Optional[TreeDocumentManager] = None
+document_manager_initialized = False
+
+# Global persistent event loop for WebSocket operations
+global_event_loop: Optional[asyncio.AbstractEventLoop] = None
+background_thread: Optional[threading.Thread] = None
 
 # Create MCP server instance
 server = Server("lexical-loro")
@@ -95,7 +101,7 @@ class MCPHandler(BaseHTTPRequestHandler):
             
             request = json.loads(post_data.decode())
             logger.info(f"Received JSON-RPC request: {request}")
-            response = asyncio.run(self.handle_json_rpc(request))
+            response = run_in_persistent_loop(self.handle_json_rpc(request))  # CRITICAL FIX: Use persistent event loop
             logger.info(f"Sending JSON-RPC response: {response}")
             
             self.send_response(200)
@@ -146,14 +152,56 @@ class MCPHandler(BaseHTTPRequestHandler):
             }
 
 ###############################################################################
+# Global Event Loop Management
+
+def start_global_event_loop():
+    """Start a persistent event loop in a background thread for WebSocket operations"""
+    global global_event_loop, background_thread
+    
+    if global_event_loop is not None:
+        return  # Already started
+    
+    def run_event_loop():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        global global_event_loop
+        global_event_loop = loop
+        logger.info("🔄 MCP SERVER: Started persistent event loop for WebSocket operations")
+        try:
+            loop.run_forever()
+        except Exception as e:
+            logger.error(f"❌ MCP SERVER: Event loop error: {e}")
+        finally:
+            logger.info("🔄 MCP SERVER: Persistent event loop stopped")
+    
+    background_thread = threading.Thread(target=run_event_loop, daemon=True)
+    background_thread.start()
+    
+    # Wait for loop to be ready
+    import time
+    while global_event_loop is None:
+        time.sleep(0.01)
+    
+    logger.info("✅ MCP SERVER: Global event loop ready for WebSocket operations")
+
+def run_in_persistent_loop(coro):
+    """Run a coroutine in the persistent event loop"""
+    if global_event_loop is None:
+        start_global_event_loop()
+    
+    # Submit the coroutine to the persistent event loop
+    future = asyncio.run_coroutine_threadsafe(coro, global_event_loop)
+    return future.result()  # Wait for completion
+
+###############################################################################
 # Initialization
 
 async def get_or_create_document_manager():
-    """Get or create the global document manager instance"""
-    global document_manager
+    """Get or create the global document manager instance - PERSISTENT across requests"""
+    global document_manager, document_manager_initialized
     
-    if document_manager is None:
-        logger.info("Creating TreeDocumentManager...")
+    if document_manager is None or not document_manager_initialized:
+        logger.info("🔧 MCP SERVER: Creating PERSISTENT TreeDocumentManager (will maintain WebSocket connections)...")
         document_manager = TreeDocumentManager(
             base_path="./documents",
             auto_save_interval=30,
@@ -162,8 +210,12 @@ async def get_or_create_document_manager():
         
         # Start background tasks in async context
         await document_manager.start_background_tasks_async()
+        document_manager_initialized = True
         
-        logger.info("TreeDocumentManager created successfully with background tasks")
+        logger.info("✅ MCP SERVER: PERSISTENT TreeDocumentManager created - WebSocket connections will be maintained across requests")
+        logger.info("✅ MCP SERVER: Document manager will NOT be garbage collected between HTTP requests")
+    else:
+        logger.info("🔄 MCP SERVER: Reusing existing PERSISTENT document manager - WebSocket connections maintained")
     
     return document_manager
 
@@ -304,6 +356,9 @@ async def _ensure_websocket_connection(model: LoroTreeModel) -> None:
         else:
             logger.info(f"🔗 MCP SERVER: *** ALREADY CONNECTED *** - Model already connected to WebSocket server for doc: {model.doc_id}")
             logger.info(f"🔗 MCP SERVER: Connection details - websocket_connected: {model.websocket_connected}, has_websocket: {model.websocket is not None}")
+            logger.info(f"🔗 MCP SERVER: REUSING existing connection (PERSISTENT document manager prevents disconnection)")
+            logger.info(f"🔗 MCP SERVER: Keepalive task running: {model._keepalive_task is not None and not model._keepalive_task.done()}")
+            logger.info(f"🔗 MCP SERVER: Monitor task running: {model._monitor_task is not None and not model._monitor_task.done()}")
             
     except Exception as e:
         logger.error(f"❌ MCP SERVER: *** WEBSOCKET CONNECTION FAILED *** for doc {model.doc_id}: {e}")
@@ -451,13 +506,16 @@ def main(host: str, port: int, documents_path: str, log_level: str):
     logger.info(f"Starting Lexical-Loro MCP server on {host}:{port}")
     logger.info(f"Documents path: {documents_path}")
     
-    # Initialize global document manager with custom path
-    global document_manager
+    # Initialize PERSISTENT global document manager with custom path
+    global document_manager, document_manager_initialized
+    logger.info("🔧 MCP SERVER CLI: Initializing PERSISTENT document manager...")
     document_manager = TreeDocumentManager(
         base_path=documents_path,
         auto_save_interval=30,
         max_cached_documents=50
     )
+    document_manager_initialized = True
+    logger.info("✅ MCP SERVER CLI: PERSISTENT document manager initialized - WebSocket connections will persist across requests")
     
     # Create and run HTTP server
     server = ThreadedHTTPServer((host, port), MCPHandler)

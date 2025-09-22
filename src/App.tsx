@@ -191,7 +191,7 @@ function App(): JSX.Element {
       ? undefined
       : $prepopulatedRichText,
     html: {import: buildImportMap()},
-    namespace: 'Playground',
+    namespace: 'Lexical Loro Playground',
     nodes: [...PlaygroundNodes],
     onError: (error: Error) => {
       throw error;
