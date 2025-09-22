@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 from lexical_loro.websocket.server import get_doc, clear_docs
-from lexical_loro.websocket.lexical_converter import loro_tree_to_lexical_json
+from lexical_loro.model.lexical_converter import loro_tree_to_lexical_json
 
 def test_operations():
     """Test operations that create tree content."""

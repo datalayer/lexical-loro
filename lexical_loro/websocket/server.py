@@ -11,7 +11,7 @@ import websockets
 from websockets.server import serve
 from loro import LoroDoc, ExportMode
 from ..constants import DEFAULT_TREE_NAME
-from .lexical_converter import (
+from ..model.lexical_converter import (
     initialize_loro_doc_with_lexical_content, 
     should_initialize_loro_doc, 
     loro_tree_to_lexical_json,

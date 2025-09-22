@@ -3,7 +3,7 @@
 
 import logging
 from loro import LoroDoc
-from lexical_loro.websocket.lexical_converter import initialize_loro_doc_with_lexical_content
+from lexical_loro.model.lexical_converter import initialize_loro_doc_with_lexical_content
 
 # Enable logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

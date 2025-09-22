@@ -53,11 +53,66 @@ KEY DESIGN PRINCIPLES:
 
 import json
 import logging
+import random
+import string
 from typing import Dict, Any, List, Optional, Union
 import loro
 from loro import LoroDoc, LoroTree, TreeNode
+from ..constants import DEFAULT_TREE_NAME
 
 logger = logging.getLogger(__name__)
+
+# Python equivalent of INITIAL_LEXICAL_JSON from TypeScript
+INITIAL_LEXICAL_JSON = {
+    "root": {
+        "children": [
+            {
+                "children": [
+                    {
+                        "detail": 0,
+                        "format": 0,
+                        "mode": "normal",
+                        "style": "",
+                        "text": "Lexical with Loro",
+                        "type": "text",
+                        "version": 1
+                    }
+                ],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": "heading",
+                "version": 1,
+                "tag": "h1"
+            },
+            {
+                "children": [
+                    {
+                        "detail": 0,
+                        "format": 0,
+                        "mode": "normal", 
+                        "style": "",
+                        "text": "Type something...",
+                        "type": "text",
+                        "version": 1
+                    }
+                ],
+                "direction": None,
+                "format": "",
+                "indent": 0,
+                "type": "paragraph",
+                "version": 1,
+                "textFormat": 0,
+                "textStyle": ""
+            }
+        ],
+        "direction": None,
+        "format": "",
+        "indent": 0,
+        "type": "root",
+        "version": 1
+    }
+}
 
 
 class LexicalTreeConverter:
@@ -351,3 +406,189 @@ class LexicalTreeConverter:
             "node_types": type_counts,
             "tree_name": self.tree_name
         }
+
+
+# Utility functions for compatibility with websocket server API
+def lexical_to_loro_tree(lexical_json: Dict[str, Any], doc_or_tree, logger=None) -> str:
+    """
+    Convert a Lexical JSON structure to a Loro tree (compatibility function)
+    
+    Args:
+        lexical_json: Lexical state as dictionary
+        doc_or_tree: LoroDoc or LoroTree instance
+        logger: Optional logger instance
+        
+    Returns:
+        Root tree node ID as string
+    """
+    # Handle both LoroDoc and LoroTree inputs for compatibility
+    if hasattr(doc_or_tree, 'get_tree'):
+        # It's a LoroDoc
+        doc = doc_or_tree
+        converter = LexicalTreeConverter(doc, "temp")
+    else:
+        # It's a LoroTree
+        doc = doc_or_tree.doc()
+        converter = LexicalTreeConverter(doc, "temp")
+        converter.tree = doc_or_tree  # Use the provided tree directly
+    
+    return converter.import_from_lexical_state(lexical_json)
+
+
+def loro_tree_to_lexical_json(doc: LoroDoc, logger=None) -> str:
+    """
+    Convert a Loro tree document to Lexical JSON format (compatibility function)
+    
+    Args:
+        doc: LoroDoc instance
+        logger: Optional logger instance
+        
+    Returns:
+        Lexical JSON as string
+    """
+    try:
+        converter = LexicalTreeConverter(doc, DEFAULT_TREE_NAME)
+        lexical_state = converter.export_to_lexical_state()
+        return json.dumps(lexical_state, indent=2)
+    except Exception as e:
+        if logger:
+            logger.error(f"❌ [Converter] Error converting Loro tree to Lexical JSON: {e}")
+        return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
+
+
+def initialize_loro_doc_with_lexical_content(doc: LoroDoc, logger=None) -> None:
+    """
+    Initialize a new Loro document with the initial Lexical content
+    
+    Args:
+        doc: LoroDoc instance
+        logger: Optional logger instance
+    """
+    if logger:
+        logger.debug(f"[Converter] Initializing Loro document with Lexical content")
+    
+    converter = LexicalTreeConverter(doc, DEFAULT_TREE_NAME)
+    tree = converter.tree
+    tree.enable_fractional_index(1)
+    
+    if logger:
+        logger.debug(f"[Converter] Enabled fractional index, starting conversion...")
+    
+    # Convert the initial Lexical JSON to Loro tree structure
+    root_id = converter.import_from_lexical_state(INITIAL_LEXICAL_JSON)
+    
+    if logger:
+        # Log the final tree structure
+        try:
+            all_nodes = tree.nodes()
+            roots = tree.roots
+            logger.debug(f"[Converter] Final tree statistics:")
+            logger.debug(f"[Converter]   Total nodes: {len(all_nodes)}")
+            logger.debug(f"[Converter]   Root nodes: {len(roots)}")
+            logger.debug(f"[Converter]   Main root ID: {root_id}")
+            
+            for i, tree_id in enumerate(all_nodes[:5]):  # First 5 tree IDs
+                logger.debug(f"[Converter]   Node {i}: TreeID {tree_id}")
+                        
+        except Exception as e:
+            logger.warning(f"[Converter] Error logging tree structure: {e}")
+
+
+def should_initialize_loro_doc(doc: LoroDoc) -> bool:
+    """
+    Check if a Loro document should be initialized
+    
+    Args:
+        doc: LoroDoc instance
+        
+    Returns:
+        True if document should be initialized, False otherwise
+    """
+    tree = doc.get_tree(DEFAULT_TREE_NAME)
+    
+    try:
+        all_nodes = tree.nodes()
+        roots = tree.roots
+        
+        # Only initialize if there are truly no nodes
+        is_empty = len(all_nodes) == 0
+        
+        # Additional check: look for any existing root nodes with content
+        if not is_empty:
+            try:
+                for root_id in roots:
+                    meta_map = tree.get_meta(root_id)
+                    element_type_obj = meta_map.get('elementType')
+                    if element_type_obj and str(element_type_obj) == 'root':
+                        return False
+            except Exception:
+                pass
+        
+        return is_empty
+    except Exception:
+        return False
+
+
+def process_lexical_node(lexical_node: Dict[str, Any], tree, tree_id, logger=None, depth: int = 0) -> None:
+    """
+    Recursively process a Lexical node and add it to the Loro tree
+    
+    Uses Loro 1.6.0 API:
+    - tree_id is TreeID object
+    - tree.get_meta(tree_id) returns LoroMap for metadata storage
+    - tree.create_at(index, parent_id) creates child nodes
+    
+    Args:
+        lexical_node: Lexical node data as dictionary
+        tree: LoroTree instance 
+        tree_id: TreeID object
+        logger: Logger instance
+        depth: Current recursion depth
+    """
+    indent = "  " * depth
+    if logger:
+        logger.debug(f"[Converter] {indent}Processing node type '{lexical_node.get('type', 'unknown')}' at tree ID: {tree_id}")
+    
+    try:
+        # Store the lexical data using Loro 1.6.0 metadata API
+        meta_map = tree.get_meta(tree_id)
+        
+        # Store element type for quick access (matching TypeScript pattern)
+        meta_map.insert('elementType', lexical_node.get('type', ''))
+        
+        # Store lexical node data directly (no need for complex conversion)
+        # Remove key-related fields to avoid duplication (TreeID serves as the key)
+        cleaned_data = {k: v for k, v in lexical_node.items() 
+                       if k not in ['__key', 'key', 'lexicalKey', 'children']}
+        
+        # Store cleaned lexical data
+        meta_map.insert('lexical', cleaned_data)
+        
+        if logger:
+            logger.debug(f"[Converter] {indent}Stored node data - type: {lexical_node.get('type')}, lexical keys: {list(cleaned_data.keys())}")
+            if 'text' in lexical_node:
+                logger.debug(f"[Converter] {indent}Text content: '{lexical_node['text']}'")
+    
+    except Exception as e:
+        if logger:
+            logger.error(f"[Converter] {indent}Error storing node data: {e}")
+        raise
+    
+    # Process children if they exist
+    if 'children' in lexical_node and isinstance(lexical_node['children'], list):
+        if logger:
+            logger.debug(f"[Converter] {indent}Processing {len(lexical_node['children'])} children")
+        
+        for child_index, child in enumerate(lexical_node['children']):
+            try:
+                # Create child node using Loro 1.6.0 API: create_at(index, parent_id)
+                child_tree_id = tree.create_at(child_index, tree_id)
+                
+                if logger:
+                    logger.debug(f"[Converter] {indent}Created child node {child_index} with ID: {child_tree_id}")
+                
+                process_lexical_node(child, tree, child_tree_id, logger, depth + 1)
+            except Exception as e:
+                if logger:
+                    logger.error(f"[Converter] {indent}Error processing child {child_index}: {e}")
+                raise
