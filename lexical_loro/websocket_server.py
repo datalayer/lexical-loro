@@ -61,15 +61,15 @@ import websockets
 from websockets.server import WebSocketServerProtocol, serve
 
 try:
-    from .model.tree_document_manager import TreeDocumentManager
-    from .model.loro_tree_model import LoroTreeModel
+    from .model.document_manager import TreeDocumentManager
+    from .model.loro_model import LoroTreeModel
 except ImportError:
     # When running directly as a script, use absolute imports
     import sys
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from lexical_loro.model.tree_document_manager import TreeDocumentManager
-    from lexical_loro.model.loro_tree_model import LoroTreeModel
+    from lexical_loro.model.document_manager import TreeDocumentManager
+    from lexical_loro.model.loro_model import LoroTreeModel
 
 logger = logging.getLogger(__name__)
 

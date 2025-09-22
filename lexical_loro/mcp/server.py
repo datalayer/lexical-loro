@@ -37,8 +37,8 @@ import loro
 import click
 from mcp.server import Server
 
-from ..model.tree_document_manager import TreeDocumentManager
-from ..model.loro_tree_model import LoroTreeModel
+from ..model.document_manager import TreeDocumentManager
+from ..model.lexical_loro import LoroTreeModel
 
 logger = logging.getLogger(__name__)
 

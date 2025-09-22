@@ -63,8 +63,8 @@ import websockets
 import loro
 from loro import LoroDoc, LoroTree, ExportMode, EphemeralStore
 
-from .lexical_tree_converter import LexicalTreeConverter
-from .tree_node_mapper import TreeNodeMapper
+from .lexical_converter import LexicalTreeConverter
+from .node_mapper import TreeNodeMapper
 
 logger = logging.getLogger(__name__)
 

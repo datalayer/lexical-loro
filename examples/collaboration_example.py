@@ -9,7 +9,7 @@ This example demonstrates how to use LexicalModel for simulating real-time
 collaboration between multiple users using Loro's CRDT capabilities.
 """
 
-from lexical_loro.model.lexical_model import LexicalModel
+from lexical_loro.model.lexical_loro import LexicalModel
 import json
 
 def main():

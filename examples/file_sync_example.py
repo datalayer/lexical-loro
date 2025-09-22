@@ -11,7 +11,7 @@ including saving, loading, and updating models on disk.
 
 import os
 import tempfile
-from lexical_loro.model.lexical_model import LexicalModel
+from lexical_loro.model.lexical_loro import LexicalModel
 
 def main():
     print("💾 LexicalModel File-based Sync Example")

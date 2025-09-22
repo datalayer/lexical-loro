@@ -47,7 +47,7 @@ from pathlib import Path
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .loro_tree_model import LoroTreeModel, TreeEventType
+from .lexical_loro import LoroTreeModel, TreeEventType
 
 logger = logging.getLogger(__name__)
 

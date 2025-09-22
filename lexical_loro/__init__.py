@@ -5,7 +5,7 @@
 Lexical Loro - Python package for Lexical + Loro CRDT integration
 """
 
-from .model.loro_tree_model import LoroTreeModel
-from .model.tree_document_manager import TreeDocumentManager
+from .model.lexical_loro import LoroTreeModel
+from .model.document_manager import TreeDocumentManager
 
 __all__ = ["LoroTreeModel", "TreeDocumentManager"]

@@ -11,7 +11,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from lexical_loro.model.lexical_model import LexicalModel
+from lexical_loro.model.lexical_loro import LexicalModel
 
 def test_ephemeral_integration_demo():
     """Demonstrate that EphemeralStoreEvent integration is working"""

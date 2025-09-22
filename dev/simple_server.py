@@ -17,7 +17,7 @@ import asyncio
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from lexical_loro.model.lexical_model import LexicalModel
+    from lexical_loro.model.lexical_loro import LexicalModel
 
 # Simulate the simplified server structure
 class SimplifiedServer:
@@ -35,7 +35,7 @@ class SimplifiedServer:
         """Get or create a LexicalModel for the given doc_id"""
         if doc_id not in self.lexical_models:
             # Import here to avoid circular dependencies in demo
-            from lexical_loro.model.lexical_model import LexicalModel
+            from lexical_loro.model.lexical_loro import LexicalModel
             
             # Create with some initial content for demo
             initial_content = {

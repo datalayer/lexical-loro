@@ -9,7 +9,7 @@ This example demonstrates how to use LexicalModel for in-memory document creatio
 and manipulation without any file persistence.
 """
 
-from lexical_loro.model.lexical_model import LexicalModel
+from lexical_loro.model.lexical_loro import LexicalModel
 
 def main():
     print("🚀 LexicalModel Memory-only Example")

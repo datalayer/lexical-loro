@@ -9,7 +9,7 @@ Debug test to identify container naming issue
 
 import json
 import loro
-from lexical_loro.model.lexical_model import LexicalModel
+from lexical_loro.model.lexical_loro import LexicalModel
 
 def test_container_issue():
     print("=== Testing Container Issue ===\n")
