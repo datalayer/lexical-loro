@@ -3,18 +3,14 @@
 
 from .server import (
     main,
-    LexicalMCPServer,
-    set_document_manager,
-    get_document_manager,
-    mcp,
-    document_manager,
+    get_or_create_document_manager,
+    get_document,
+    append_paragraph,
 )
 
 __all__ = [
     "main",
-    "LexicalMCPServer", 
-    "set_document_manager",
-    "get_document_manager",
-    "mcp",
-    "document_manager",
+    "get_or_create_document_manager",
+    "get_document",
+    "append_paragraph",
 ]
