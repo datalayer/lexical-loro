@@ -144,6 +144,8 @@ async def message_listener(conn, doc, message):
             await handle_query_ephemeral(conn, doc, message_data)
         elif message_type == MESSAGE_UPDATE:
             await handle_update(conn, doc, message_data)
+        elif message_type == "keepalive":
+            await handle_keepalive(conn, doc, message_data)
         else:
             logger.warning(f"[Server] Unknown message type: {message_type}")
             
@@ -196,7 +198,45 @@ async def handle_query_ephemeral(conn, doc, message_data):
         await conn.send(json.dumps(asdict(response)))
         
     except Exception as e:
-        logger.error(f"[Server] Error handling query-ephemeral: {e}")
+        logger.error(f"[Server] Error handling query ephemeral: {e}")
+        doc.last_ephemeral_sender = None
+
+async def handle_keepalive(conn, doc, message_data):
+    """Handle keepalive messages from MCP clients"""
+    try:
+        ping_id = message_data.get("ping_id", "unknown")
+        timestamp = message_data.get("timestamp", "unknown")
+        reason = message_data.get("reason", "regular_keepalive")
+        error_info = message_data.get("error", None)
+        
+        logger.info(f"💓 [Server] *** RECEIVED KEEPALIVE #{ping_id} *** from conn-{conn.remote_address[0]}:{conn.remote_address[1]} for doc: {doc.name}")
+        logger.info(f"💓 [Server] Keepalive timestamp: {timestamp}")
+        logger.info(f"💓 [Server] Keepalive reason: {reason}")
+        logger.info(f"💓 [Server] Current server time: {time.time()}")
+        
+        if error_info:
+            logger.warning(f"💓 [Server] Keepalive indicated client error: {error_info}")
+        
+        # Send a keepalive response back to acknowledge
+        keepalive_response = {
+            "type": "keepalive_ack",
+            "doc_id": doc.name,
+            "ping_id": ping_id,
+            "server_timestamp": time.time(),
+            "acknowledged": True
+        }
+        
+        logger.info(f"💓 [Server] *** SENDING KEEPALIVE ACK #{ping_id} *** to conn-{conn.remote_address[0]}:{conn.remote_address[1]}")
+        logger.info(f"💓 [Server] ACK message: {keepalive_response}")
+        
+        await conn.send(json.dumps(keepalive_response))
+        
+        logger.info(f"✅ [Server] *** KEEPALIVE ACK #{ping_id} SENT *** - connection maintained")
+        
+    except Exception as e:
+        logger.error(f"💔 [Server] Error handling keepalive: {e}")
+        logger.error(f"💔 [Server] Keepalive message data: {message_data}")
+        # Don't propagate error - keepalive failure shouldn't break the connection
 
 async def handle_update(conn, doc, message_data):
     try:
@@ -214,9 +254,18 @@ async def handle_update(conn, doc, message_data):
         logger.info(f"[Server] Sender connection: {conn}")
         logger.info(f"[Server] All connections: {list(doc.conns.keys())}")
         
+        # Create a copy of connections to avoid "dictionary changed size during iteration" error
+        connections_copy = list(doc.conns.keys())
+        logger.info(f"[Server] Created connections copy with {len(connections_copy)} connections")
+        
         broadcast_count = 0
-        for c in doc.conns:
+        for c in connections_copy:
             logger.info(f"[Server] Checking connection {c} (sender: {c == conn})")
+            # Check if connection is still in the active connections (might have been removed)
+            if c not in doc.conns:
+                logger.info(f"⚠️ [Server] Connection {c} no longer active, skipping")
+                continue
+                
             if c != conn:
                 logger.info(f"🚀 [Server] Broadcasting update to different connection: {c}")
                 try:

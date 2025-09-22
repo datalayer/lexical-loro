@@ -9,7 +9,7 @@ import unittest
 import json
 from typing import Dict, Any
 import loro
-from lexical_loro.websocket_server.lexical_converter import lexical_to_loro_tree, INITIAL_LEXICAL_JSON, process_lexical_node
+from lexical_loro.websocket.lexical_converter import lexical_to_loro_tree, INITIAL_LEXICAL_JSON, process_lexical_node
 
 
 class TestLexicalConverter(unittest.TestCase):

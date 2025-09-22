@@ -57,6 +57,7 @@ import json
 import logging
 import time
 import asyncio
+import threading
 from typing import Dict, Any, List, Optional, Callable, Union
 from enum import Enum
 import websockets
@@ -686,7 +687,15 @@ class LoroTreeModel:
                 document_url = f"{self.websocket_url}/{self.doc_id}"
                 logger.info(f"🔌 LoroTreeModel connecting to {document_url} (attempt {retry_count + 1}/{max_retries + 1})")
                 
-                self.websocket = await websockets.connect(document_url)
+                # Connect with aggressive timeout settings to keep connection alive
+                self.websocket = await websockets.connect(
+                    document_url,
+                    ping_interval=15,      # Send ping every 15 seconds (more frequent)
+                    ping_timeout=5,        # Wait 5 seconds for pong response (faster detection)  
+                    close_timeout=10,      # Wait 10 seconds for close handshake
+                    max_size=2**23,        # 8MB max message size
+                    compression=None       # Disable compression for speed
+                )
                 self.websocket_connected = True
                 logger.info(f"✅ MCP SERVER: *** WEBSOCKET CONNECTION ESTABLISHED *** for doc: {self.doc_id}")
                 logger.info(f"✅ MCP SERVER: Connected to: {document_url}")
@@ -702,9 +711,14 @@ class LoroTreeModel:
                 logger.info(f"🎧 MCP SERVER: Message listener task created and started")
                 
                 # Start keepalive ping to prevent connection timeout
-                logger.info(f"💓 MCP SERVER: *** STARTING KEEPALIVE PING *** for doc: {self.doc_id}")
+                logger.info(f"🎧 MCP SERVER: *** STARTING KEEPALIVE PING *** for doc: {self.doc_id}")
                 self._keepalive_task = asyncio.create_task(self._keepalive_ping())
                 logger.info(f"💓 MCP SERVER: Keepalive ping task started")
+                
+                # Start connection monitor
+                logger.info(f"🔍 MCP SERVER: *** STARTING CONNECTION MONITOR *** for doc: {self.doc_id}")
+                self._monitor_task = asyncio.create_task(self._monitor_connection())
+                logger.info(f"🔍 MCP SERVER: Connection monitor task started")
                 
                 # Set up local update subscription for automatic propagation
                 logger.info(f"🔔 MCP SERVER: *** SETTING UP LOCAL UPDATE SUBSCRIPTION *** for doc: {self.doc_id}")
@@ -741,6 +755,10 @@ class LoroTreeModel:
                 self._keepalive_task.cancel()
                 self._keepalive_task = None
             
+            if hasattr(self, '_monitor_task') and self._monitor_task:
+                self._monitor_task.cancel()
+                self._monitor_task = None
+            
             if self.websocket:
                 await self.websocket.close()
                 self.websocket = None
@@ -775,17 +793,32 @@ class LoroTreeModel:
             logger.warning(f"⚠️ MCP SERVER: Cannot listen for messages - no WebSocket connection for doc: {self.doc_id}")
             return
             
-        logger.info(f"🎧 MCP SERVER: Starting to listen for WebSocket messages for doc: {self.doc_id}")
+        logger.info(f"🎧 MCP SERVER: *** STARTING WEBSOCKET MESSAGE LISTENER *** for doc: {self.doc_id}")
         logger.info(f"🎧 MCP SERVER: WebSocket URL: {self.websocket_url}/{self.doc_id}")
         logger.info(f"🎧 MCP SERVER: Connection object: {self.websocket}")
         logger.info(f"🎧 MCP SERVER: Connection state: {self.websocket.state if self.websocket else 'None'}")
+        logger.info(f"🎧 MCP SERVER: Thread ID: {threading.get_ident()}")
+        logger.info(f"🎧 MCP SERVER: Async loop: {asyncio.current_task()}")
         
         try:
             logger.info(f"🎧 MCP SERVER: *** ENTERING WEBSOCKET LISTEN LOOP *** for doc: {self.doc_id}")
             logger.info(f"🎧 MCP SERVER: About to start async for loop on websocket messages...")
+            logger.info(f"🎧 MCP SERVER: Loop entry timestamp: {time.time()}")
             
             message_count = 0
+            heartbeat_count = 0
+            last_heartbeat = time.time()
+            
+            # Add a heartbeat to verify the loop is actually running
+            logger.info(f"💗 MCP SERVER: *** MESSAGE LISTENER HEARTBEAT #{heartbeat_count} *** - Waiting for messages...")
+            
             async for message in self.websocket:
+                # Log heartbeat every 5 seconds to confirm listener is alive
+                current_time = time.time()
+                if current_time - last_heartbeat > 5:
+                    heartbeat_count += 1
+                    logger.info(f"💗 MCP SERVER: *** LISTENER HEARTBEAT #{heartbeat_count} *** - Still listening for doc: {self.doc_id}")
+                    last_heartbeat = current_time
                 message_count += 1
                 logger.info(f"🚨 MCP SERVER: *** WEBSOCKET MESSAGE #{message_count} RECEIVED *** for doc: {self.doc_id}")
                 logger.info(f"🚨 MCP SERVER: Timestamp: {time.time()}")
@@ -860,24 +893,133 @@ class LoroTreeModel:
         """Send periodic ping to keep WebSocket connection alive"""
         logger.info(f"💓 MCP SERVER: Keepalive ping started for doc: {self.doc_id}")
         
+        ping_counter = 0
         while self.websocket_connected and self.websocket:
             try:
-                await asyncio.sleep(15)  # Ping every 15 seconds
+                await asyncio.sleep(5)  # Ping every 5 seconds (even more frequent)
+                ping_counter += 1
                 
                 if self.websocket and self.websocket_connected:
-                    logger.info(f"💓 MCP SERVER: Sending keepalive ping for doc: {self.doc_id}")
-                    await self.websocket.ping()
-                    logger.info(f"✅ MCP SERVER: Keepalive ping sent successfully for doc: {self.doc_id}")
+                    logger.info(f"💓 MCP SERVER: *** SENDING KEEPALIVE PING #{ping_counter} *** for doc: {self.doc_id}")
+                    logger.info(f"💓 MCP SERVER: WebSocket state: {self.websocket.state if hasattr(self.websocket, 'state') else 'unknown'}")
+                    logger.info(f"💓 MCP SERVER: Connection status: {self.websocket_connected}")
+                    logger.info(f"💓 MCP SERVER: Timestamp: {time.time()}")
+                    
+                    # Try both ping() method and keepalive message
+                    try:
+                        # First try the WebSocket ping() method with short timeout
+                        logger.info(f"💓 MCP SERVER: *** ATTEMPTING WEBSOCKET PING #{ping_counter} *** for doc: {self.doc_id}")
+                        logger.info(f"💓 MCP SERVER: Ping timestamp: {time.time()}")
+                        logger.info(f"💓 MCP SERVER: WebSocket object: {self.websocket}")
+                        logger.info(f"💓 MCP SERVER: WebSocket closed status: {getattr(self.websocket, 'closed', 'unknown')}")
+                        
+                        pong_waiter = await self.websocket.ping()
+                        logger.info(f"✅ MCP SERVER: *** WEBSOCKET PING SENT #{ping_counter} *** - awaiting pong response...")
+                        logger.info(f"✅ MCP SERVER: Pong waiter object: {pong_waiter}")
+                        
+                        await asyncio.wait_for(pong_waiter, timeout=2.0)
+                        logger.info(f"🎉 MCP SERVER: *** WEBSOCKET PING-PONG SUCCESS #{ping_counter} *** for doc: {self.doc_id}")
+                        logger.info(f"🎉 MCP SERVER: Round-trip successful at timestamp: {time.time()}")
+                        
+                    except asyncio.TimeoutError:
+                        logger.error(f"⚠️ MCP SERVER: *** PING TIMEOUT #{ping_counter} *** after 2s for doc: {self.doc_id}")
+                        logger.error(f"⚠️ MCP SERVER: WebSocket may be unresponsive, trying keepalive message...")
+                        
+                        # Fallback to keepalive message
+                        keepalive_msg = {
+                            "type": "keepalive",
+                            "doc_id": self.doc_id,
+                            "timestamp": time.time(),
+                            "ping_id": ping_counter,
+                            "reason": "ping_timeout_fallback"
+                        }
+                        logger.info(f"📤 MCP SERVER: *** SENDING KEEPALIVE MESSAGE #{ping_counter} *** for doc: {self.doc_id}")
+                        logger.info(f"📤 MCP SERVER: Keepalive message: {keepalive_msg}")
+                        
+                        await self.websocket.send(json.dumps(keepalive_msg))
+                        logger.info(f"✅ MCP SERVER: *** KEEPALIVE MESSAGE SENT #{ping_counter} *** for doc: {self.doc_id}")
+                        
+                    except Exception as ping_error:
+                        logger.error(f"❌ MCP SERVER: *** PING FAILED #{ping_counter} *** for doc: {self.doc_id}: {ping_error}")
+                        logger.error(f"❌ MCP SERVER: Ping error type: {type(ping_error)}")
+                        logger.error(f"❌ MCP SERVER: Trying keepalive message as fallback...")
+                        
+                        # Fallback to keepalive message
+                        keepalive_msg = {
+                            "type": "keepalive", 
+                            "doc_id": self.doc_id,
+                            "timestamp": time.time(),
+                            "ping_id": ping_counter,
+                            "reason": "ping_error_fallback",
+                            "error": str(ping_error)
+                        }
+                        logger.info(f"📤 MCP SERVER: *** SENDING KEEPALIVE MESSAGE #{ping_counter} *** for doc: {self.doc_id}")
+                        logger.info(f"📤 MCP SERVER: Keepalive message: {keepalive_msg}")
+                        
+                        try:
+                            await self.websocket.send(json.dumps(keepalive_msg))
+                            logger.info(f"✅ MCP SERVER: *** KEEPALIVE MESSAGE SENT #{ping_counter} *** for doc: {self.doc_id}")
+                        except Exception as send_error:
+                            logger.error(f"💥 MCP SERVER: *** KEEPALIVE SEND FAILED #{ping_counter} *** for doc: {self.doc_id}: {send_error}")
+                            logger.error(f"💥 MCP SERVER: Connection appears to be broken, will exit keepalive loop")
+                            self.websocket_connected = False
+                            break
+                        
                 else:
-                    logger.warning(f"💔 MCP SERVER: WebSocket disconnected, stopping keepalive for doc: {self.doc_id}")
+                    logger.warning(f"💔 MCP SERVER: *** WEBSOCKET DISCONNECTED *** - stopping keepalive for doc: {self.doc_id}")
+                    logger.warning(f"💔 MCP SERVER: websocket: {self.websocket is not None}")
+                    logger.warning(f"💔 MCP SERVER: websocket_connected: {self.websocket_connected}")
                     break
                     
             except Exception as e:
-                logger.error(f"💔 MCP SERVER: Keepalive ping failed for doc {self.doc_id}: {e}")
+                logger.error(f"💔 MCP SERVER: Keepalive ping #{ping_counter} failed for doc {self.doc_id}: {e}")
                 logger.error(f"💔 MCP SERVER: Connection likely closed, stopping keepalive")
                 break
                 
-        logger.info(f"💔 MCP SERVER: Keepalive ping stopped for doc: {self.doc_id}")
+        logger.info(f"💔 MCP SERVER: Keepalive ping stopped for doc: {self.doc_id} after {ping_counter} pings")
+
+    async def _monitor_connection(self) -> None:
+        """Monitor WebSocket connection state and attempt reconnection if needed"""
+        logger.info(f"🔍 MCP SERVER: Connection monitor started for doc: {self.doc_id}")
+        
+        monitor_counter = 0
+        while self.websocket_connected and self.websocket:
+            try:
+                await asyncio.sleep(3)  # Check every 3 seconds
+                monitor_counter += 1
+                
+                if self.websocket:
+                    connection_state = getattr(self.websocket, 'state', 'unknown')
+                    logger.info(f"🔍 MCP SERVER: *** CONNECTION CHECK #{monitor_counter} *** for doc: {self.doc_id}")
+                    logger.info(f"🔍 MCP SERVER: WebSocket state: {connection_state}")
+                    logger.info(f"🔍 MCP SERVER: websocket_connected: {self.websocket_connected}")
+                    
+                    # Check if connection is closed or closing
+                    if hasattr(self.websocket, 'closed') and self.websocket.closed:
+                        logger.error(f"💔 MCP SERVER: *** CONNECTION DETECTED AS CLOSED *** #{monitor_counter}")
+                        logger.error(f"💔 MCP SERVER: Will attempt reconnection...")
+                        self.websocket_connected = False
+                        break
+                    elif str(connection_state) in ['CLOSED', 'CLOSING']:
+                        logger.error(f"💔 MCP SERVER: *** CONNECTION CLOSING/CLOSED *** #{monitor_counter} - state: {connection_state}")
+                        logger.error(f"💔 MCP SERVER: Will attempt reconnection...")
+                        self.websocket_connected = False
+                        break
+                    else:
+                        logger.info(f"✅ MCP SERVER: Connection healthy #{monitor_counter} - state: {connection_state}")
+                        
+            except Exception as e:
+                logger.error(f"💔 MCP SERVER: Connection monitor error #{monitor_counter}: {e}")
+                logger.error(f"💔 MCP SERVER: Assuming connection failed, will reconnect")
+                self.websocket_connected = False
+                break
+                
+        logger.info(f"🔍 MCP SERVER: Connection monitor stopped for doc: {self.doc_id} after {monitor_counter} checks")
+        
+        # Attempt reconnection if we detected a problem
+        if not self.websocket_connected:
+            logger.info(f"🔄 MCP SERVER: *** TRIGGERING RECONNECTION *** for doc: {self.doc_id}")
+            await self._reconnect_websocket()
 
     async def _reconnect_websocket(self) -> None:
         """Attempt to reconnect to WebSocket server"""
@@ -1001,6 +1143,8 @@ class LoroTreeModel:
         elif message_type == "snapshot":
             logger.info(f"📸 MCP SERVER: Handling JSON SNAPSHOT message for doc: {self.doc_id}")
             await self._handle_snapshot_message(data)
+        elif message_type == "keepalive_ack":
+            await self._handle_keepalive_ack(data)
         else:
             logger.warning(f"❓ MCP SERVER: Received unknown WebSocket message type '{message_type}' for doc: {self.doc_id}")
             logger.warning(f"❓ MCP SERVER: Message data: {data}")
@@ -1110,6 +1254,34 @@ class LoroTreeModel:
             
         except Exception as e:
             logger.error(f"Failed to send update to WebSocket server: {e}")
+
+    async def _handle_keepalive_ack(self, data: Dict[str, Any]) -> None:
+        """Handle keepalive acknowledgment from WebSocket server"""
+        try:
+            ping_id = data.get("ping_id", "unknown")
+            server_timestamp = data.get("server_timestamp", "unknown")
+            acknowledged = data.get("acknowledged", False)
+            
+            logger.info(f"💓 MCP SERVER: *** RECEIVED KEEPALIVE ACK #{ping_id} *** for doc: {self.doc_id}")
+            logger.info(f"💓 MCP SERVER: Server timestamp: {server_timestamp}")
+            logger.info(f"💓 MCP SERVER: Acknowledged: {acknowledged}")
+            logger.info(f"💓 MCP SERVER: Client timestamp: {time.time()}")
+            
+            if server_timestamp != "unknown":
+                try:
+                    roundtrip_time = time.time() - float(server_timestamp)
+                    logger.info(f"💓 MCP SERVER: *** KEEPALIVE ROUND-TRIP TIME: {roundtrip_time:.3f}s ***")
+                except (ValueError, TypeError):
+                    logger.warning(f"💓 MCP SERVER: Could not calculate round-trip time from server timestamp: {server_timestamp}")
+            
+            if acknowledged:
+                logger.info(f"✅ MCP SERVER: *** KEEPALIVE #{ping_id} ACKNOWLEDGED *** - connection is healthy")
+            else:
+                logger.warning(f"⚠️ MCP SERVER: *** KEEPALIVE #{ping_id} NOT ACKNOWLEDGED *** - potential issue")
+            
+        except Exception as e:
+            logger.error(f"💔 MCP SERVER: Error handling keepalive ACK: {e}")
+            logger.error(f"💔 MCP SERVER: ACK data: {data}")
 
     def _setup_local_update_subscription(self) -> None:
         """Set up subscription to automatically propagate local document changes to WebSocket server"""
