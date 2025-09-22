@@ -79,11 +79,11 @@ export function syncLexicalToLoro(
     // scheduleAsyncCommit(binding);
 
     // Option 3 - Schedule an async commit instead of immediate synchronous commit
-    // This reduces latency for large documents by debouncing commits
+    // This reduces latency for large documents by debouncing commits.
+    
     const doCommit = () => requestIdleCallback(() => {
        binding.doc.commit({ origin: binding.doc.peerIdStr });
     }, { timeout: 2000 });
-
     doCommit();
 
     // Sync cursor positions after all node mutations are processed.

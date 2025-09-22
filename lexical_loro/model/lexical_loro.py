@@ -688,20 +688,31 @@ class LoroTreeModel:
                 
                 self.websocket = await websockets.connect(document_url)
                 self.websocket_connected = True
-                logger.info(f"✅ MCP SERVER: Successfully connected to WebSocket server for doc: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: *** WEBSOCKET CONNECTION ESTABLISHED *** for doc: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: Connected to: {document_url}")
                 
                 # Request initial snapshot
-                logger.info(f"📞 MCP SERVER: Requesting initial snapshot from WebSocket server for doc: {self.doc_id}")
+                logger.info(f"📞 MCP SERVER: *** REQUESTING INITIAL SNAPSHOT *** for doc: {self.doc_id}")
                 await self._request_snapshot()
+                logger.info(f"📞 MCP SERVER: Snapshot request sent, waiting for response...")
                 
                 # Start listening for messages
-                logger.info(f"🎧 MCP SERVER: Starting message listener task for doc: {self.doc_id}")
+                logger.info(f"🎧 MCP SERVER: *** STARTING MESSAGE LISTENER *** for doc: {self.doc_id}")
                 self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
+                logger.info(f"🎧 MCP SERVER: Message listener task created and started")
+                
+                # Start keepalive ping to prevent connection timeout
+                logger.info(f"💓 MCP SERVER: *** STARTING KEEPALIVE PING *** for doc: {self.doc_id}")
+                self._keepalive_task = asyncio.create_task(self._keepalive_ping())
+                logger.info(f"💓 MCP SERVER: Keepalive ping task started")
                 
                 # Set up local update subscription for automatic propagation
+                logger.info(f"🔔 MCP SERVER: *** SETTING UP LOCAL UPDATE SUBSCRIPTION *** for doc: {self.doc_id}")
                 self._setup_local_update_subscription()
+                logger.info(f"🔔 MCP SERVER: Local update subscription configured")
                 
-                logger.info(f"✅ MCP SERVER: WebSocket connection, message listener, and local update subscription established for doc: {self.doc_id}")
+                logger.info(f"🎯 MCP SERVER: *** ALL WEBSOCKET SETUP COMPLETE *** for doc: {self.doc_id}")
+                logger.info(f"🎯 MCP SERVER: Now ready to receive updates from editor and send updates to WebSocket server")
                 return  # Success, exit retry loop
                 
             except Exception as e:
@@ -725,6 +736,10 @@ class LoroTreeModel:
             if self._websocket_task:
                 self._websocket_task.cancel()
                 self._websocket_task = None
+            
+            if hasattr(self, '_keepalive_task') and self._keepalive_task:
+                self._keepalive_task.cancel()
+                self._keepalive_task = None
             
             if self.websocket:
                 await self.websocket.close()
@@ -761,38 +776,108 @@ class LoroTreeModel:
             return
             
         logger.info(f"🎧 MCP SERVER: Starting to listen for WebSocket messages for doc: {self.doc_id}")
+        logger.info(f"🎧 MCP SERVER: WebSocket URL: {self.websocket_url}/{self.doc_id}")
+        logger.info(f"🎧 MCP SERVER: Connection object: {self.websocket}")
+        logger.info(f"🎧 MCP SERVER: Connection state: {self.websocket.state if self.websocket else 'None'}")
         
         try:
+            logger.info(f"🎧 MCP SERVER: *** ENTERING WEBSOCKET LISTEN LOOP *** for doc: {self.doc_id}")
+            logger.info(f"🎧 MCP SERVER: About to start async for loop on websocket messages...")
+            
+            message_count = 0
             async for message in self.websocket:
+                message_count += 1
+                logger.info(f"🚨 MCP SERVER: *** WEBSOCKET MESSAGE #{message_count} RECEIVED *** for doc: {self.doc_id}")
+                logger.info(f"🚨 MCP SERVER: Timestamp: {time.time()}")
+                logger.info(f"🚨 MCP SERVER: Raw message type: {type(message)}")
+                logger.info(f"🚨 MCP SERVER: Raw message length: {len(message) if hasattr(message, '__len__') else 'unknown'}")
+                if isinstance(message, str):
+                    logger.info(f"🚨 MCP SERVER: String message preview: {message[:100]}{'...' if len(message) > 100 else ''}")
+                elif isinstance(message, bytes):
+                    logger.info(f"🚨 MCP SERVER: Binary message preview: {message[:50]}{'...' if len(message) > 50 else ''}")
+                logger.info(f"🔔 MCP SERVER: *** NEW WEBSOCKET MESSAGE RECEIVED *** for doc: {self.doc_id}")
+                logger.info(f"🔔 MCP SERVER: Connection status check - websocket_connected: {self.websocket_connected}")
+                logger.info(f"🔔 MCP SERVER: WebSocket object status: {self.websocket is not None}")
+                logger.info(f"🔔 MCP SERVER: Message type: {type(message)}, length: {len(message) if hasattr(message, '__len__') else 'unknown'}")
+                
                 try:
                     # Handle both binary and text messages
                     if isinstance(message, bytes):
                         # This is binary Loro snapshot data
+                        logger.info(f"📥 MCP SERVER: ===== PROCESSING BINARY MESSAGE =====")
                         logger.info(f"📥 MCP SERVER: Received BINARY message: {len(message)} bytes for doc: {self.doc_id}")
                         logger.info(f"📥 MCP SERVER: Binary data preview: {message[:50]}{'...' if len(message) > 50 else ''}")
                         await self._handle_binary_snapshot(message)
+                        logger.info(f"✅ MCP SERVER: ===== BINARY MESSAGE PROCESSED =====")
                     else:
                         # This is JSON text message
+                        logger.info(f"📥 MCP SERVER: ===== PROCESSING TEXT MESSAGE =====")
                         logger.info(f"📥 MCP SERVER: Received TEXT message for doc: {self.doc_id}: {message[:200]}{'...' if len(message) > 200 else ''}")
                         data = json.loads(message)
+                        logger.info(f"📥 MCP SERVER: Parsed JSON data - type: {data.get('type', 'unknown')}")
                         await self._handle_websocket_message(data)
+                        logger.info(f"✅ MCP SERVER: ===== TEXT MESSAGE PROCESSED =====")
                 except json.JSONDecodeError as e:
                     logger.error(f"❌ MCP SERVER: Failed to parse WebSocket JSON message for doc {self.doc_id}: {e}")
                     logger.error(f"❌ MCP SERVER: Raw message: {message}")
                 except Exception as e:
                     logger.error(f"❌ MCP SERVER: Error handling WebSocket message for doc {self.doc_id}: {e}")
                     logger.error(f"❌ MCP SERVER: Message type: {type(message)}, content: {message}")
+                    import traceback
+                    logger.error(f"❌ MCP SERVER: Full traceback: {traceback.format_exc()}")
+                
+                logger.info(f"🔔 MCP SERVER: *** MESSAGE #{message_count} HANDLING COMPLETE *** for doc: {self.doc_id}")
+                logger.info(f"🔔 MCP SERVER: Connection still active: {self.websocket_connected}")
+                logger.info(f"🔔 MCP SERVER: Waiting for next message... (processed {message_count} so far)")
                     
-        except websockets.exceptions.ConnectionClosed:
-            logger.info(f"WebSocket connection closed for doc: {self.doc_id}")
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"💔 MCP SERVER: *** WEBSOCKET CONNECTION CLOSED *** for doc: {self.doc_id}")
+            logger.error(f"💔 MCP SERVER: Connection closed exception: {e}")
+            logger.error(f"💔 MCP SERVER: Connection was closed by server or network issue")
+            logger.error(f"💔 MCP SERVER: Total messages processed before close: {message_count}")
             self.websocket_connected = False
+            self.websocket = None
             # Try to reconnect automatically
+            logger.info(f"🔄 MCP SERVER: Attempting automatic reconnection...")
             await self._reconnect_websocket()
         except Exception as e:
-            logger.error(f"Error in WebSocket message listener: {e}")
+            logger.error(f"❌ MCP SERVER: *** WEBSOCKET LISTENER ERROR *** for doc: {self.doc_id}: {e}")
+            logger.error(f"❌ MCP SERVER: Total messages processed before error: {message_count}")
+            import traceback
+            logger.error(f"❌ MCP SERVER: Full error traceback: {traceback.format_exc()}")
             self.websocket_connected = False
+            self.websocket = None
             # Try to reconnect automatically
+            logger.info(f"🔄 MCP SERVER: Attempting reconnection after error...")
             await self._reconnect_websocket()
+            
+        logger.info(f"🏁 MCP SERVER: *** WEBSOCKET LISTEN LOOP EXITED *** for doc: {self.doc_id}")
+        logger.info(f"🏁 MCP SERVER: Total messages processed: {message_count}")
+        logger.info(f"🏁 MCP SERVER: Final connection status: {self.websocket_connected}")
+        logger.info(f"🏁 MCP SERVER: Loop exit timestamp: {time.time()}")
+
+    async def _keepalive_ping(self) -> None:
+        """Send periodic ping to keep WebSocket connection alive"""
+        logger.info(f"💓 MCP SERVER: Keepalive ping started for doc: {self.doc_id}")
+        
+        while self.websocket_connected and self.websocket:
+            try:
+                await asyncio.sleep(15)  # Ping every 15 seconds
+                
+                if self.websocket and self.websocket_connected:
+                    logger.info(f"💓 MCP SERVER: Sending keepalive ping for doc: {self.doc_id}")
+                    await self.websocket.ping()
+                    logger.info(f"✅ MCP SERVER: Keepalive ping sent successfully for doc: {self.doc_id}")
+                else:
+                    logger.warning(f"💔 MCP SERVER: WebSocket disconnected, stopping keepalive for doc: {self.doc_id}")
+                    break
+                    
+            except Exception as e:
+                logger.error(f"💔 MCP SERVER: Keepalive ping failed for doc {self.doc_id}: {e}")
+                logger.error(f"💔 MCP SERVER: Connection likely closed, stopping keepalive")
+                break
+                
+        logger.info(f"💔 MCP SERVER: Keepalive ping stopped for doc: {self.doc_id}")
 
     async def _reconnect_websocket(self) -> None:
         """Attempt to reconnect to WebSocket server"""
@@ -954,28 +1039,58 @@ class LoroTreeModel:
     async def _handle_update_message(self, data: Dict[str, Any]) -> None:
         """Handle update message from WebSocket server"""
         try:
+            logger.info(f"🔄 MCP SERVER: ===== PROCESSING UPDATE MESSAGE =====")
+            logger.info(f"🔄 MCP SERVER: Message data keys: {list(data.keys())}")
+            
             update_data = data.get("update")
             if update_data:
+                logger.info(f"🔄 MCP SERVER: *** UPDATE DATA FOUND ***")
+                logger.info(f"🔄 MCP SERVER: Update data type: {type(update_data)}")
+                logger.info(f"🔄 MCP SERVER: Update data length: {len(update_data) if hasattr(update_data, '__len__') else 'unknown'}")
                 logger.info(f"🔄 MCP SERVER: Receiving real-time update from editor for document: {self.doc_id}")
                 
+                # Log document state BEFORE applying update
+                try:
+                    before_state = self.export_to_lexical_state()
+                    before_children_count = len(before_state.get('root', {}).get('children', []))
+                    logger.info(f"📊 MCP SERVER: BEFORE UPDATE - Document {self.doc_id} has {before_children_count} root children")
+                except Exception as before_log_error:
+                    logger.error(f"Failed to log document state before update: {before_log_error}")
+                
                 # Apply update to Loro document
-                # Apply update to document
+                logger.info(f"🔄 MCP SERVER: Applying update to Loro document...")
                 self.doc.import_(bytes(update_data))
-                logger.info(f"✅ MCP SERVER: Applied WebSocket update for document: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: Successfully imported update bytes into Loro document")
                 
                 # Refresh tree reference
+                logger.info(f"🔄 MCP SERVER: Refreshing tree reference...")
                 self.tree = self.doc.get_tree(self.tree_name)
+                logger.info(f"✅ MCP SERVER: Tree reference refreshed")
                 
-                # Log current document structure after update
+                # Log document state AFTER applying update
                 try:
-                    current_state = self.export_to_lexical_state(log_structure=True)
-                    self._log_document_structure(current_state, "WEBSOCKET_UPDATE")
-                    logger.info(f"📊 MCP SERVER: Document {self.doc_id} now has {len(current_state.get('root', {}).get('children', []))} root children")
+                    after_state = self.export_to_lexical_state(log_structure=True)
+                    after_children_count = len(after_state.get('root', {}).get('children', []))
+                    logger.info(f"📊 MCP SERVER: AFTER UPDATE - Document {self.doc_id} now has {after_children_count} root children")
+                    
+                    if after_children_count != before_children_count:
+                        logger.info(f"🎯 MCP SERVER: *** DOCUMENT CONTENT CHANGED *** from {before_children_count} to {after_children_count} children")
+                    else:
+                        logger.info(f"📝 MCP SERVER: Document structure unchanged, but content may have been modified within existing nodes")
+                    
+                    self._log_document_structure(after_state, "WEBSOCKET_UPDATE")
                 except Exception as log_error:
                     logger.error(f"Failed to log document structure after WebSocket update: {log_error}")
                 
+                logger.info(f"✅ MCP SERVER: ===== UPDATE MESSAGE PROCESSED SUCCESSFULLY =====")
+            else:
+                logger.warning(f"⚠️ MCP SERVER: No 'update' data found in message")
+                logger.warning(f"⚠️ MCP SERVER: Available keys: {list(data.keys())}")
+                
         except Exception as e:
-            logger.error(f"Failed to handle update message: {e}")
+            logger.error(f"❌ MCP SERVER: Failed to handle update message: {e}")
+            import traceback
+            logger.error(f"❌ MCP SERVER: Update handling traceback: {traceback.format_exc()}")
 
     async def send_update_to_websocket_server(self, update_bytes: bytes) -> None:
         """Send update to WebSocket server"""

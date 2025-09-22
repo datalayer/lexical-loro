@@ -1,6 +1,5 @@
 import { TreeID, LoroTree } from 'loro-crdt';
 import { LexicalNode, NodeKey } from 'lexical';
-import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 
 /**

@@ -92,9 +92,13 @@ def get_doc(docname: str):
 
 def close_conn(doc, conn):
     if conn in doc.conns:
-        logger.info(f"Closing connection for document: {doc.name}")
+        logger.info(f"💔 [Server] *** CONNECTION CLOSING *** for document: {doc.name}")
+        logger.info(f"💔 [Server] Closing connection: {conn}")
         del doc.conns[conn]
-        logger.info(f"Remaining connections for document {doc.name}: {len(doc.conns)}")
+        logger.info(f"💔 [Server] Remaining connections for document {doc.name}: {len(doc.conns)}")
+        logger.info(f"💔 [Server] Remaining connections list: {list(doc.conns.keys())}")
+    else:
+        logger.warning(f"⚠️ [Server] Tried to cleanup connection {conn} but it wasn't in doc.conns")
 
 async def message_listener(conn, doc, message):
     try:
@@ -205,14 +209,26 @@ async def handle_update(conn, doc, message_data):
             doc.doc.import_(update_bytes)
         
         # Broadcast to other connections
+        logger.info(f"[Server] *** STARTING BROADCAST TO OTHER CONNECTIONS ***")
+        logger.info(f"[Server] Total connections for doc '{doc.name}': {len(doc.conns)}")
+        logger.info(f"[Server] Sender connection: {conn}")
+        logger.info(f"[Server] All connections: {list(doc.conns.keys())}")
+        
         broadcast_count = 0
         for c in doc.conns:
+            logger.info(f"[Server] Checking connection {c} (sender: {c == conn})")
             if c != conn:
-                logger.info(f"Broadcasting update to connection")
-                await c.send(json.dumps(message_data))
-                broadcast_count += 1
+                logger.info(f"🚀 [Server] Broadcasting update to different connection: {c}")
+                try:
+                    await c.send(json.dumps(message_data))
+                    broadcast_count += 1
+                    logger.info(f"✅ [Server] Successfully sent update to connection {c}")
+                except Exception as send_error:
+                    logger.error(f"❌ [Server] Failed to send update to connection {c}: {send_error}")
+            else:
+                logger.info(f"⏭️ [Server] Skipping sender connection: {c}")
         
-        logger.info(f"Broadcasted to {broadcast_count} connections")
+        logger.info(f"[Server] *** BROADCAST COMPLETE *** - Sent to {broadcast_count} connections")
         
     except Exception as e:
         logger.error(f"[Server] Error handling update: {e}")
@@ -228,7 +244,9 @@ async def setup_ws_connection(conn, path: str):
     doc.conns[conn] = set()
     
     conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-    logger.info(f"New connection established: {conn_id} for document: {doc_name}")
+    logger.info(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
+    logger.info(f"🔗 [Server] Total connections now: {len(doc.conns)}")
+    logger.info(f"🔗 [Server] All connections: {list(doc.conns.keys())}")
     
     try:
         # Send initial snapshot using actual Loro document

@@ -273,26 +273,42 @@ async def append_paragraph(doc_id: str, text: str) -> Dict[str, Any]:
 async def _ensure_websocket_connection(model: LoroTreeModel) -> None:
     """Ensure the model is connected to the WebSocket server for collaborative sync"""
     try:
+        logger.info(f"🔍 MCP SERVER: Checking WebSocket connection status for doc: {model.doc_id}")
+        logger.info(f"🔍 MCP SERVER: Current websocket_connected status: {model.websocket_connected}")
+        logger.info(f"� MCP SERVER: WebSocket URL: {getattr(model, 'websocket_url', 'Not set')}")
+        
         if not model.websocket_connected:
-            logger.info(f"🔌 MCP SERVER: Connecting model to WebSocket server for doc: {model.doc_id}")
+            logger.info(f"🔌 MCP SERVER: *** INITIATING WEBSOCKET CONNECTION *** for doc: {model.doc_id}")
+            logger.info(f"🔌 MCP SERVER: About to call model.connect_to_websocket_server()...")
+            
             await model.connect_to_websocket_server()
             
+            logger.info(f"🔌 MCP SERVER: connect_to_websocket_server() completed")
+            logger.info(f"🔌 MCP SERVER: New connection status: {model.websocket_connected}")
+            
             # Wait a moment for the connection to stabilize and receive snapshot
+            logger.info(f"⏳ MCP SERVER: Waiting 0.5s for connection to stabilize...")
             await asyncio.sleep(0.5)
             
-            logger.info(f"✅ MCP SERVER: Model connected to WebSocket server for doc: {model.doc_id}")
+            logger.info(f"✅ MCP SERVER: *** WEBSOCKET CONNECTION ESTABLISHED *** for doc: {model.doc_id}")
+            logger.info(f"✅ MCP SERVER: Connection status: {model.websocket_connected}")
+            logger.info(f"✅ MCP SERVER: Has WebSocket object: {model.websocket is not None}")
+            logger.info(f"✅ MCP SERVER: Has message listener task: {model._websocket_task is not None}")
             
             # Check if we received initial data
             if model._is_initialized:
-                logger.info(f"📥 MCP SERVER: Document {model.doc_id} received initial snapshot data from WebSocket")
+                logger.info(f"📥 MCP SERVER: *** DOCUMENT INITIALIZED *** - {model.doc_id} received initial snapshot data from WebSocket")
             else:
-                logger.info(f"⏳ MCP SERVER: Document {model.doc_id} connected but no initial snapshot received yet")
+                logger.warning(f"⏳ MCP SERVER: *** DOCUMENT NOT INITIALIZED *** - {model.doc_id} connected but no initial snapshot received yet")
                 
         else:
-            logger.debug(f"🔗 MCP SERVER: Model already connected to WebSocket server for doc: {model.doc_id}")
+            logger.info(f"🔗 MCP SERVER: *** ALREADY CONNECTED *** - Model already connected to WebSocket server for doc: {model.doc_id}")
+            logger.info(f"🔗 MCP SERVER: Connection details - websocket_connected: {model.websocket_connected}, has_websocket: {model.websocket is not None}")
             
     except Exception as e:
-        logger.error(f"❌ MCP SERVER: Failed to ensure WebSocket connection for doc {model.doc_id}: {e}")
+        logger.error(f"❌ MCP SERVER: *** WEBSOCKET CONNECTION FAILED *** for doc {model.doc_id}: {e}")
+        import traceback
+        logger.error(f"❌ MCP SERVER: Connection failure traceback: {traceback.format_exc()}")
         # Don't raise - allow operations to continue even without collaboration
 
 def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
