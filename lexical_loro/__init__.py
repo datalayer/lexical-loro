@@ -5,7 +5,6 @@
 Lexical Loro - Python package for Lexical + Loro CRDT integration
 """
 
-from .server import LoroWebSocketServer, Client
 from .model.lexical_model import LexicalModel
 
-__all__ = ["LoroWebSocketServer", "Client", "LexicalModel"]
+__all__ = ["LexicalModel"]

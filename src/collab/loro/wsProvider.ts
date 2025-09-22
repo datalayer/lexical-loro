@@ -5,7 +5,7 @@ import { Provider } from './State';
 const url = new URL(window.location.href);
 const params = new URLSearchParams(url.search);
 const WEBSOCKET_ENDPOINT =
-  params.get('collabEndpoint') || 'ws://localhost:1235';
+  params.get('collabEndpoint') || 'ws://localhost:3002';
 const WEBSOCKET_SLUG = 'playground';
 const WEBSOCKET_ID = params.get('collabId') || '0';
 

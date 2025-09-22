@@ -24,7 +24,7 @@ requires-python = ">=3.8"
 dependencies = [
     "websockets>=12.0",
     "click>=8.0.0",
-    "loro>=0.18.0",
+    "loro>=1.6.0",
     "mcp>=1.10.1",
     "uvicorn>=0.23.1",
     "starlette>=0.27",
