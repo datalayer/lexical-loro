@@ -212,7 +212,7 @@ class TreeNodeMapper:
             logger.info(f"Syncing {len(all_tree_nodes)} existing tree nodes")
             
             for tree_node in all_tree_nodes:
-                tree_id = str(tree_node.id())
+                tree_id = str(tree_node)
                 
                 # Skip if already mapped
                 if tree_id in self.loro_to_lexical:
@@ -269,19 +269,20 @@ class TreeNodeMapper:
         try:
             # Create tree node
             if parent_tree_id is not None:
-                tree_node = self.tree.create(parent_tree_id, index or 0)
+                tree_node = self.tree.create_at(index or 0, parent_tree_id)
             else:
                 tree_node = self.tree.create()
             
-            tree_id = str(tree_node.id())
+            tree_id = str(tree_node)
             
             # Store node data
+            node_meta = self.tree.get_meta(tree_node)
             if "type" in lexical_node_data:
-                tree_node.data().set("elementType", lexical_node_data["type"])
+                node_meta.insert("elementType", lexical_node_data["type"])
             
             # Clean and store lexical data
             cleaned_data = self._clean_lexical_data(lexical_node_data)
-            tree_node.data().set("lexical", cleaned_data)
+            node_meta.insert("lexical", cleaned_data)
             
             # Create mapping
             self.create_mapping(lexical_key, tree_id)

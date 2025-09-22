@@ -112,7 +112,7 @@ class LexicalTreeConverter:
 
         # Create root node and process recursively
         root_tree_node = self.tree.create()
-        root_tree_id = str(root_tree_node.id())
+        root_tree_id = str(root_tree_node)
         
         self._process_lexical_node(root_node_data, root_tree_node)
         
@@ -162,7 +162,7 @@ class LexicalTreeConverter:
             "root": lexical_root
         }
         
-        logger.info(f"Exported tree to Lexical state from root ID: {root_node.id()}")
+        logger.info(f"Exported tree to Lexical state from root ID: {root_node}")
         return lexical_state
 
     def _clear_tree(self) -> None:
@@ -173,7 +173,7 @@ class LexicalTreeConverter:
             try:
                 node.delete()
             except Exception as e:
-                logger.warning(f"Failed to delete node {node.id()}: {e}")
+                logger.warning(f"Failed to delete node {node}: {e}")
 
     def _process_lexical_node(self, lexical_node: Dict[str, Any], tree_node: TreeNode) -> None:
         """
@@ -184,20 +184,21 @@ class LexicalTreeConverter:
             tree_node: Loro tree node to populate
         """
         # Store element type for quick access
-        tree_node.data().set("elementType", lexical_node["type"])
+        node_meta = self.tree.get_meta(tree_node)
+        node_meta.insert("elementType", lexical_node["type"])
         
         # Clean lexical data by removing key-related fields
         cleaned_lexical_data = self._clean_lexical_data(lexical_node)
         
         # Store cleaned lexical data
-        tree_node.data().set("lexical", cleaned_lexical_data)
+        node_meta.insert("lexical", cleaned_lexical_data)
         
         # Process children if they exist
         if "children" in lexical_node and isinstance(lexical_node["children"], list):
             for child_index, child_data in enumerate(lexical_node["children"]):
                 if isinstance(child_data, dict) and "type" in child_data:
                     # Create child node
-                    child_tree_node = self.tree.create(tree_node.id(), child_index)
+                    child_tree_node = self.tree.create_at(child_index, tree_node)
                     self._process_lexical_node(child_data, child_tree_node)
 
     def _export_tree_node(self, tree_node: TreeNode) -> Dict[str, Any]:
@@ -211,18 +212,18 @@ class LexicalTreeConverter:
             Lexical node data as dictionary
         """
         # Get stored lexical data
-        node_data = tree_node.data()
+        node_meta = self.tree.get_meta(tree_node)
         
         # Get element type
-        element_type = node_data.get("elementType")
+        element_type = node_meta.get("elementType")
         if element_type is None:
-            logger.warning(f"Node {tree_node.id()} missing elementType, using 'unknown'")
+            logger.warning(f"Node {tree_node} missing elementType, using 'unknown'")
             element_type = "unknown"
         
         # Get lexical data
-        lexical_data = node_data.get("lexical", {})
+        lexical_data = node_meta.get("lexical", {})
         if not isinstance(lexical_data, dict):
-            logger.warning(f"Node {tree_node.id()} has invalid lexical data, using empty dict")
+            logger.warning(f"Node {tree_node} has invalid lexical data, using empty dict")
             lexical_data = {}
         
         # Create base node structure
@@ -296,8 +297,8 @@ class LexicalTreeConverter:
         # Count nodes by type
         type_counts = {}
         for node in all_nodes:
-            node_data = node.data()
-            element_type = node_data.get("elementType", "unknown")
+            node_meta = self.tree.get_meta(node)
+            element_type = node_meta.get("elementType", "unknown")
             type_counts[element_type] = type_counts.get(element_type, 0) + 1
         
         return {

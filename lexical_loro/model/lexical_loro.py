@@ -106,7 +106,6 @@ class LoroTreeModel:
         
         # Initialize Loro document and tree
         self.doc = LoroDoc()
-        self.doc.set_peer_id(doc_id)
         self.tree = self.doc.get_tree(tree_name)
         
         # Initialize helper classes
@@ -275,21 +274,22 @@ class LoroTreeModel:
             
             # Create tree node
             if index is not None:
-                child_tree_node = self.tree.create(parent_tree_node.id(), index)
+                child_tree_node = self.tree.create_at(index, parent_tree_node)
             else:
                 # Append at end
                 child_count = len(list(parent_tree_node.children()))
-                child_tree_node = self.tree.create(parent_tree_node.id(), child_count)
+                child_tree_node = self.tree.create_at(child_count, parent_tree_node)
             
             # Store block data
-            child_tree_node.data().set("elementType", block_data["type"])
+            child_meta = self.tree.get_meta(child_tree_node)
+            child_meta.insert("elementType", block_data["type"])
             
             # Clean and store lexical data
             cleaned_data = self._clean_lexical_data(block_data)
-            child_tree_node.data().set("lexical", cleaned_data)
+            child_meta.insert("lexical", cleaned_data)
             
             # Create mapping
-            tree_id = str(child_tree_node.id())
+            tree_id = str(child_tree_node)
             self.mapper.create_mapping(new_key, tree_id)
             
             self._modification_count += 1
@@ -331,19 +331,20 @@ class LoroTreeModel:
                 raise ValueError(f"Node with key {node_key} not found")
             
             # Update element type if provided
+            node_meta = self.tree.get_meta(tree_node)
             if "type" in new_data:
-                tree_node.data().set("elementType", new_data["type"])
+                node_meta.insert("elementType", new_data["type"])
             
             # Clean and update lexical data
             cleaned_data = self._clean_lexical_data(new_data)
-            tree_node.data().set("lexical", cleaned_data)
+            node_meta.insert("lexical", cleaned_data)
             
             self._modification_count += 1
             
             # Emit event
             self._emit_event(TreeEventType.TREE_NODE_UPDATED, {
                 "lexical_key": node_key,
-                "tree_id": str(tree_node.id()),
+                "tree_id": str(tree_node),
                 "new_data": new_data
             })
             
@@ -373,7 +374,7 @@ class LoroTreeModel:
                 raise ValueError(f"Node with key {node_key} not found")
             
             # Prevent deletion of root node
-            tree_id = str(tree_node.id())
+            tree_id = str(tree_node)
             if tree_id == self.root_tree_id:
                 raise ValueError("Cannot delete root node")
             
@@ -412,9 +413,9 @@ class LoroTreeModel:
             if not tree_node:
                 return None
             
-            node_data = tree_node.data()
-            element_type = node_data.get("elementType")
-            lexical_data = node_data.get("lexical", {})
+            node_meta = self.tree.get_meta(tree_node)
+            element_type = node_meta.get("elementType")
+            lexical_data = node_meta.get("lexical", {})
             
             # Combine element type with lexical data
             result = {"type": element_type, **lexical_data}
@@ -439,11 +440,11 @@ class LoroTreeModel:
         
         try:
             for tree_node in self.tree.nodes():
-                node_data = tree_node.data()
-                element_type = node_data.get("elementType")
+                node_meta = self.tree.get_meta(tree_node)
+                element_type = node_meta.get("elementType")
                 
                 if element_type == node_type:
-                    tree_id = str(tree_node.id())
+                    tree_id = str(tree_node)
                     lexical_key = self.mapper.get_lexical_key_by_tree_id(tree_id)
                     if lexical_key:
                         matching_keys.append(lexical_key)
