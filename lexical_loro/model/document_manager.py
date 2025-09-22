@@ -48,6 +48,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .lexical_loro import LoroTreeModel, TreeEventType
+from ..constants import DEFAULT_TREE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +120,10 @@ class TreeDocumentManager:
             raise ValueError(f"Document {doc_id} already exists")
         
         try:
-            # Create new tree model
+            # Create new tree model with consistent tree name
             model = LoroTreeModel(
                 doc_id=doc_id,
+                tree_name=DEFAULT_TREE_NAME,  # Use shared constant
                 enable_collaboration=enable_collaboration,
                 event_handler=self._handle_document_event
             )
@@ -173,6 +175,58 @@ class TreeDocumentManager:
             logger.error(f"Failed to create document {doc_id}: {e}")
             raise
 
+    def create_document_for_websocket_sync(
+        self,
+        doc_id: str,
+        enable_collaboration: bool = True
+    ) -> LoroTreeModel:
+        """
+        Create a new empty document that will be populated by WebSocket sync
+        
+        Args:
+            doc_id: Unique document identifier
+            enable_collaboration: Whether to enable collaborative features
+            
+        Returns:
+            Created LoroTreeModel instance (not initialized)
+            
+        Raises:
+            ValueError: If document already exists
+        """
+        if doc_id in self._documents:
+            raise ValueError(f"Document {doc_id} already exists")
+        
+        try:
+            # Create new tree model without initialization
+            # Use consistent tree name matching all components
+            model = LoroTreeModel(
+                doc_id=doc_id,
+                tree_name=DEFAULT_TREE_NAME,  # Use shared constant
+                enable_collaboration=enable_collaboration,
+                event_handler=self._handle_document_event
+            )
+            
+            # Register document but don't initialize with content
+            # WebSocket will provide the actual content via snapshot
+            self._documents[doc_id] = model
+            self._document_access_times[doc_id] = time.time()
+            self._active_documents.add(doc_id)
+            
+            logger.info(f"Created empty document for WebSocket sync: {doc_id}")
+            
+            # Emit creation event
+            self._emit_event("document_created", {
+                "doc_id": doc_id,
+                "enable_collaboration": enable_collaboration,
+                "websocket_sync": True
+            })
+            
+            return model
+            
+        except Exception as e:
+            logger.error(f"Failed to create document for WebSocket sync {doc_id}: {e}")
+            raise
+
     def get_document(self, doc_id: str) -> Optional[LoroTreeModel]:
         """
         Get document by ID, loading from disk if necessary
@@ -202,6 +256,7 @@ class TreeDocumentManager:
                 # Create model and initialize with loaded content
                 model = LoroTreeModel(
                     doc_id=doc_id,
+                    tree_name=DEFAULT_TREE_NAME,  # Use shared constant
                     enable_collaboration=True,
                     event_handler=self._handle_document_event
                 )

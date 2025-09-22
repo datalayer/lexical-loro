@@ -2,7 +2,7 @@ import { LoroDoc, TreeID } from 'loro-crdt';
 import { $getSelection, $isRangeSelection, LexicalNode, NodeKey, TextNode } from 'lexical';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
-export const DEFAULT_TREE_NAME = 'tree';
+export const DEFAULT_TREE_NAME = 'lexical-tree';
 
 /**
  * Ensure doc has a LoroTree instance

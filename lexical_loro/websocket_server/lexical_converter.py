@@ -8,6 +8,7 @@ import random
 import string
 from typing import Dict, Any, List, Optional
 from loro import LoroDoc, LoroTree
+from ..constants import DEFAULT_TREE_NAME
 
 # Python equivalent of INITIAL_LEXICAL_JSON from TypeScript
 INITIAL_LEXICAL_JSON = {
@@ -201,7 +202,7 @@ def initialize_loro_doc_with_lexical_content(doc: LoroDoc, logger=None) -> None:
     if logger:
         logger.info(f"[Converter] Initializing Loro document with Lexical content")
     
-    tree = doc.get_tree('tree')
+    tree = doc.get_tree(DEFAULT_TREE_NAME)
     tree.enable_fractional_index(1)  # Use integer instead of float
     
     if logger:
@@ -237,7 +238,7 @@ def is_loro_document_empty(doc: LoroDoc) -> bool:
     """
     Check if a Loro document is empty (has no tree content)
     """
-    tree = doc.get_tree('tree')
+    tree = doc.get_tree(DEFAULT_TREE_NAME)
     
     try:
         # Get all root nodes (property, not method)
@@ -254,7 +255,7 @@ def should_initialize_loro_doc(doc: LoroDoc) -> bool:
     Check if a Loro document should be initialized (more robust check)
     This helps prevent race conditions where multiple clients try to initialize
     """
-    tree = doc.get_tree('tree')
+    tree = doc.get_tree(DEFAULT_TREE_NAME)
     
     try:
         all_nodes = tree.nodes()  # method

@@ -191,13 +191,17 @@ async def get_document(doc_id: str) -> Dict[str, Any]:
         # Get existing document or create if not found
         model = manager.get_document(doc_id)
         if not model:
-            logger.info(f"Document {doc_id} not found, creating new document")
-            model = manager.create_document(doc_id)
+            logger.info(f"📄 MCP SERVER: Document {doc_id} not found, creating empty document for WebSocket sync")
+            # Create empty model without initializing content - let WebSocket populate it
+            model = manager.create_document_for_websocket_sync(doc_id)
+            logger.info(f"✅ MCP SERVER: Empty document created for {doc_id}, now connecting to WebSocket for content")
         else:
-            logger.info(f"Found existing document: {doc_id}")
+            logger.info(f"📄 MCP SERVER: Found existing document: {doc_id}")
         
         # Ensure WebSocket connection for collaborative sync
+        logger.info(f"🔌 MCP SERVER: Ensuring WebSocket connection for document: {doc_id}")
         await _ensure_websocket_connection(model)
+        logger.info(f"✅ MCP SERVER: WebSocket connection established for document: {doc_id}")
         
         # Convert Loro tree to Lexical JSON format
         lexical_json = _loro_tree_to_lexical_json(model)
@@ -270,18 +274,25 @@ async def _ensure_websocket_connection(model: LoroTreeModel) -> None:
     """Ensure the model is connected to the WebSocket server for collaborative sync"""
     try:
         if not model.websocket_connected:
-            logger.info(f"🔌 Connecting model to WebSocket server for doc: {model.doc_id}")
+            logger.info(f"🔌 MCP SERVER: Connecting model to WebSocket server for doc: {model.doc_id}")
             await model.connect_to_websocket_server()
             
             # Wait a moment for the connection to stabilize and receive snapshot
             await asyncio.sleep(0.5)
             
-            logger.info(f"✅ Model connected to WebSocket server for doc: {model.doc_id}")
+            logger.info(f"✅ MCP SERVER: Model connected to WebSocket server for doc: {model.doc_id}")
+            
+            # Check if we received initial data
+            if model._is_initialized:
+                logger.info(f"📥 MCP SERVER: Document {model.doc_id} received initial snapshot data from WebSocket")
+            else:
+                logger.info(f"⏳ MCP SERVER: Document {model.doc_id} connected but no initial snapshot received yet")
+                
         else:
-            logger.debug(f"🔗 Model already connected to WebSocket server for doc: {model.doc_id}")
+            logger.debug(f"🔗 MCP SERVER: Model already connected to WebSocket server for doc: {model.doc_id}")
             
     except Exception as e:
-        logger.error(f"❌ Failed to ensure WebSocket connection for doc {model.doc_id}: {e}")
+        logger.error(f"❌ MCP SERVER: Failed to ensure WebSocket connection for doc {model.doc_id}: {e}")
         # Don't raise - allow operations to continue even without collaboration
 
 def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:

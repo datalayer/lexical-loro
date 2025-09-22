@@ -9,6 +9,7 @@ from dataclasses import dataclass, asdict
 import websockets
 from websockets.server import WebSocketServerProtocol, serve
 from loro import LoroDoc, ExportMode
+from ..constants import DEFAULT_TREE_NAME
 from .lexical_converter import initialize_loro_doc_with_lexical_content, should_initialize_loro_doc
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ class WSSharedDoc:
         # Initialize with proper Lexical content structure
         try:
             # Add debug logging for initialization check
-            tree = self.doc.get_tree("tree")
+            tree = self.doc.get_tree(DEFAULT_TREE_NAME)
             all_nodes = tree.nodes()  # method
             roots = tree.roots        # property
             logger.info(f"[Server] Document state check - nodes: {len(all_nodes)}, roots: {len(roots)}")
@@ -63,7 +64,7 @@ class WSSharedDoc:
             logger.error(f"[Server] Error initializing document with Lexical content: {e}")
             # Fallback to empty document
             try:
-                tree = self.doc.get_tree("tree")
+                tree = self.doc.get_tree(DEFAULT_TREE_NAME)
                 root_id = tree.create()
                 self.doc.commit()
                 logger.warning(f"[Server] Fallback: Created basic empty document")
@@ -155,7 +156,7 @@ async def handle_query_snapshot(conn, doc, message_data):
         logger.info(f"[Server] Sending snapshot response: {len(snapshot)} bytes")
         
         # Log tree structure for debugging
-        tree = doc.doc.get_tree("tree")
+        tree = doc.doc.get_tree(DEFAULT_TREE_NAME)
         nodes = tree.nodes()  # method call
         logger.info(f"[Server] Snapshot contains {len(nodes)} nodes from server document")
         

@@ -65,6 +65,7 @@ from loro import LoroDoc, LoroTree, ExportMode, EphemeralStore
 
 from .lexical_converter import LexicalTreeConverter
 from .node_mapper import TreeNodeMapper
+from ..constants import DEFAULT_TREE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class LoroTreeModel:
     def __init__(
         self,
         doc_id: str,
-        tree_name: str = "lexical",
+        tree_name: str = DEFAULT_TREE_NAME,
         enable_collaboration: bool = False,
         event_handler: Optional[Callable] = None
     ):
@@ -687,14 +688,16 @@ class LoroTreeModel:
                 
                 self.websocket = await websockets.connect(document_url)
                 self.websocket_connected = True
-                logger.info(f"✅ MCP SERVER: Connected to WebSocket server for doc: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: Successfully connected to WebSocket server for doc: {self.doc_id}")
                 
                 # Request initial snapshot
+                logger.info(f"📞 MCP SERVER: Requesting initial snapshot from WebSocket server for doc: {self.doc_id}")
                 await self._request_snapshot()
                 
                 # Start listening for messages
+                logger.info(f"🎧 MCP SERVER: Starting message listener task for doc: {self.doc_id}")
                 self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
-                logger.info(f"🎧 MCP SERVER: Listening for real-time updates from editor for doc: {self.doc_id}")
+                logger.info(f"✅ MCP SERVER: WebSocket connection and message listener established for doc: {self.doc_id}")
                 return  # Success, exit retry loop
                 
             except Exception as e:
@@ -742,25 +745,39 @@ class LoroTreeModel:
             }
             
             await self.websocket.send(json.dumps(message))
-            logger.info(f"📸 Requested snapshot for document: {self.doc_id}")
+            logger.info(f"📸 MCP SERVER: Requested initial snapshot for document: {self.doc_id}")
             
         except Exception as e:
-            logger.error(f"Failed to request snapshot: {e}")
+            logger.error(f"❌ MCP SERVER: Failed to request snapshot for document {self.doc_id}: {e}")
 
     async def _listen_for_websocket_messages(self) -> None:
         """Listen for messages from the WebSocket server"""
         if not self.websocket:
+            logger.warning(f"⚠️ MCP SERVER: Cannot listen for messages - no WebSocket connection for doc: {self.doc_id}")
             return
             
+        logger.info(f"🎧 MCP SERVER: Starting to listen for WebSocket messages for doc: {self.doc_id}")
+        
         try:
             async for message in self.websocket:
                 try:
-                    data = json.loads(message)
-                    await self._handle_websocket_message(data)
+                    # Handle both binary and text messages
+                    if isinstance(message, bytes):
+                        # This is binary Loro snapshot data
+                        logger.info(f"📥 MCP SERVER: Received BINARY message: {len(message)} bytes for doc: {self.doc_id}")
+                        logger.info(f"📥 MCP SERVER: Binary data preview: {message[:50]}{'...' if len(message) > 50 else ''}")
+                        await self._handle_binary_snapshot(message)
+                    else:
+                        # This is JSON text message
+                        logger.info(f"📥 MCP SERVER: Received TEXT message for doc: {self.doc_id}: {message[:200]}{'...' if len(message) > 200 else ''}")
+                        data = json.loads(message)
+                        await self._handle_websocket_message(data)
                 except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse WebSocket message: {e}")
+                    logger.error(f"❌ MCP SERVER: Failed to parse WebSocket JSON message for doc {self.doc_id}: {e}")
+                    logger.error(f"❌ MCP SERVER: Raw message: {message}")
                 except Exception as e:
-                    logger.error(f"Error handling WebSocket message: {e}")
+                    logger.error(f"❌ MCP SERVER: Error handling WebSocket message for doc {self.doc_id}: {e}")
+                    logger.error(f"❌ MCP SERVER: Message type: {type(message)}, content: {message}")
                     
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"WebSocket connection closed for doc: {self.doc_id}")
@@ -782,16 +799,122 @@ class LoroTreeModel:
         except Exception as e:
             logger.error(f"Failed to reconnect WebSocket: {e}")
 
+    async def _handle_binary_snapshot(self, binary_data: bytes) -> None:
+        """Handle binary snapshot data directly from WebSocket server"""
+        try:
+            logger.info(f"� MCP SERVER: ==== PROCESSING BINARY SNAPSHOT ====")
+            logger.info(f"📸 MCP SERVER: Binary snapshot size: {len(binary_data)} bytes for document: {self.doc_id}")
+            logger.info(f"📸 MCP SERVER: Document state BEFORE import - initialized: {self._is_initialized}")
+            
+            # Log current document state before import
+            try:
+                pre_state = self.export_to_lexical_state()
+                pre_children = len(pre_state.get('root', {}).get('children', []))
+                logger.info(f"📸 MCP SERVER: Pre-import document has {pre_children} children")
+            except Exception as e:
+                logger.info(f"📸 MCP SERVER: Could not get pre-import state: {e}")
+            
+            # Import binary snapshot directly into Loro document
+            logger.info(f"📸 MCP SERVER: Importing binary data into Loro document...")
+            self.doc.import_(binary_data)
+            logger.info(f"✅ MCP SERVER: Successfully imported binary snapshot into Loro document: {self.doc_id}")
+            
+            # Update tree reference and synchronize mappings
+            logger.info(f"🔄 MCP SERVER: Updating tree reference and syncing node mappings...")
+            self.tree = self.doc.get_tree(self.tree_name)
+            
+            # Check if tree has nodes after import
+            try:
+                all_nodes = list(self.tree.nodes())
+                logger.info(f"🔍 MCP SERVER: Tree now has {len(all_nodes)} nodes after binary import")
+                
+                if all_nodes:
+                    self.mapper.sync_existing_nodes()
+                    logger.info(f"✅ MCP SERVER: Tree reference updated and mappings synced")
+                else:
+                    logger.warning(f"⚠️ MCP SERVER: Tree appears empty after binary import - this may be expected for new documents")
+                    
+            except Exception as tree_check_error:
+                logger.error(f"❌ MCP SERVER: Error checking tree nodes: {tree_check_error}")
+            
+            # Mark as initialized if we got valid content
+            if not self._is_initialized:
+                self._is_initialized = True
+                logger.info(f"🎯 MCP SERVER: Document {self.doc_id} NOW INITIALIZED from binary WebSocket snapshot!")
+            else:
+                logger.info(f"🔄 MCP SERVER: Document {self.doc_id} was already initialized, updated with new snapshot")
+            
+            # Log document structure after applying snapshot (with better error handling)
+            try:
+                # Give a small delay to ensure tree is fully synchronized
+                await asyncio.sleep(0.1)
+                
+                current_state = self.export_to_lexical_state(log_structure=True)
+                self._log_document_structure(current_state, "BINARY_SNAPSHOT")
+                root_children = current_state.get('root', {}).get('children', [])
+                logger.info(f"📊 MCP SERVER: AFTER SNAPSHOT - Document {self.doc_id} now has {len(root_children)} root children")
+                
+                # Log the actual content received
+                for i, child in enumerate(root_children):
+                    child_type = child.get('type', 'unknown')
+                    child_key = child.get('__key', 'no-key')
+                    
+                    if child_type == 'heading':
+                        text_content = self._extract_text_from_node(child)
+                        logger.info(f"📊 MCP SERVER: Child[{i}]: {child_type} (key: {child_key}) - '{text_content}'")
+                    elif child_type == 'paragraph':
+                        text_content = self._extract_text_from_node(child)
+                        logger.info(f"📊 MCP SERVER: Child[{i}]: {child_type} (key: {child_key}) - '{text_content}'")
+                    else:
+                        logger.info(f"📊 MCP SERVER: Child[{i}]: {child_type} (key: {child_key})")
+                        
+            except Exception as log_error:
+                logger.error(f"❌ MCP SERVER: Failed to log document structure after binary snapshot: {log_error}")
+                # Try alternative approach to check document content
+                try:
+                    all_nodes = list(self.tree.nodes())
+                    logger.info(f"🔍 MCP SERVER: Tree inspection - total nodes: {len(all_nodes)}")
+                    if all_nodes:
+                        logger.info(f"🔍 MCP SERVER: First few nodes: {[str(node.id()) for node in all_nodes[:5]]}")
+                    else:
+                        logger.info(f"🔍 MCP SERVER: Tree is indeed empty - might be a timing issue or empty document")
+                except Exception as inspect_error:
+                    logger.error(f"❌ MCP SERVER: Could not inspect tree: {inspect_error}")
+            
+            logger.info(f"✅ MCP SERVER: ==== BINARY SNAPSHOT PROCESSING COMPLETE ====")
+                
+        except Exception as e:
+            logger.error(f"❌ MCP SERVER: Failed to handle binary snapshot for {self.doc_id}: {e}")
+            import traceback
+            logger.error(f"❌ MCP SERVER: Traceback: {traceback.format_exc()}")
+
+    def _extract_text_from_node(self, node: Dict[str, Any]) -> str:
+        """Extract text content from a node and its children"""
+        text_parts = []
+        
+        if node.get('type') == 'text' and 'text' in node:
+            text_parts.append(node['text'])
+        
+        if 'children' in node:
+            for child in node['children']:
+                text_parts.append(self._extract_text_from_node(child))
+        
+        return ''.join(text_parts)
+
     async def _handle_websocket_message(self, data: Dict[str, Any]) -> None:
-        """Handle incoming WebSocket message"""
+        """Handle incoming WebSocket JSON message"""
         message_type = data.get("type", "")
+        logger.info(f"📨 MCP SERVER: Processing JSON message type '{message_type}' for doc: {self.doc_id}")
         
         if message_type == "update":
+            logger.info(f"🔄 MCP SERVER: Handling UPDATE message for doc: {self.doc_id}")
             await self._handle_update_message(data)
         elif message_type == "snapshot":
+            logger.info(f"📸 MCP SERVER: Handling JSON SNAPSHOT message for doc: {self.doc_id}")
             await self._handle_snapshot_message(data)
         else:
-            logger.debug(f"Received unknown WebSocket message type: {message_type}")
+            logger.warning(f"❓ MCP SERVER: Received unknown WebSocket message type '{message_type}' for doc: {self.doc_id}")
+            logger.warning(f"❓ MCP SERVER: Message data: {data}")
 
     async def _handle_snapshot_message(self, data: Dict[str, Any]) -> None:
         """Handle snapshot message from WebSocket server"""
@@ -801,7 +924,7 @@ class LoroTreeModel:
                 logger.info(f"📸 MCP SERVER: Receiving initial snapshot from WebSocket server for document: {self.doc_id}")
                 
                 # Import snapshot into Loro document
-                self.doc.import_bytes(bytes(snapshot_data))
+                self.doc.import_(bytes(snapshot_data))
                 logger.info(f"✅ MCP SERVER: Applied initial snapshot for document: {self.doc_id}")
                 
                 # Update tree reference and synchronize mappings
@@ -832,7 +955,8 @@ class LoroTreeModel:
                 logger.info(f"🔄 MCP SERVER: Receiving real-time update from editor for document: {self.doc_id}")
                 
                 # Apply update to Loro document
-                self.doc.import_bytes(bytes(update_data))
+                # Apply update to document
+                self.doc.import_(bytes(update_data))
                 logger.info(f"✅ MCP SERVER: Applied WebSocket update for document: {self.doc_id}")
                 
                 # Refresh tree reference
