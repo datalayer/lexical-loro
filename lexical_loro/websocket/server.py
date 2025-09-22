@@ -14,7 +14,8 @@ from ..constants import DEFAULT_TREE_NAME
 from .lexical_converter import (
     initialize_loro_doc_with_lexical_content, 
     should_initialize_loro_doc, 
-    loro_tree_to_lexical_json
+    loro_tree_to_lexical_json,
+    lexical_to_loro_tree
 )
 
 logger = logging.getLogger(__name__)
@@ -79,14 +80,14 @@ MESSAGE_QUERY_EPHEMERAL = 'query-ephemeral'
 
 def default_load_model(doc_id: str) -> Optional[str]:
     """
-    Default load_model implementation - loads from local .models folder or
-    returns initial content. Handles subdirectories for doc_ids with slashes.
+    Default load_model implementation - loads from local .models folder.
+    Handles subdirectories for doc_ids with slashes.
     
     Args:
         doc_id: Document ID to load (may contain slashes for subdirectories)
         
     Returns:
-        Content string from saved file, or initial content for new models
+        Content string from saved file, or None if no saved file exists
     """
     try:
         # Check if a saved model exists
@@ -101,13 +102,13 @@ def default_load_model(doc_id: str) -> Optional[str]:
                     logger.debug(f"📂 [Persistence] Loaded existing model {doc_id} from {model_file}")
                     return content
         
-        # No existing file found, return initial content for new documents
-        logger.debug(f"✨ [Persistence] Creating new model {doc_id} with initial content")
-        return INITIAL_LEXICAL_JSON
+        # No existing file found, return None to indicate no persisted content
+        logger.debug(f"📂 [Persistence] No existing content found for '{doc_id}'")
+        return None
         
     except Exception as e:
-        logger.warning(f"⚠️ [Persistence] Error loading model {doc_id}: {e}, using initial content")
-        return INITIAL_LEXICAL_JSON
+        logger.warning(f"⚠️ [Persistence] Error loading model {doc_id}: {e}")
+        return None
 
 def default_save_model(doc_id: str, lexical_json: str) -> bool:
     """
@@ -164,30 +165,40 @@ class WSSharedDoc:
         self.doc = LoroDoc()
         
         # Load from persistence first
-        self._load_from_persistence()
+        content_loaded = self._load_from_persistence()
         
-        # Initialize with proper Lexical content structure if needed
-        try:
-            # Add debug logging for initialization check
-            tree = self.doc.get_tree(DEFAULT_TREE_NAME)
-            all_nodes = tree.nodes()  # method
-            roots = tree.roots        # property
-            logger.debug(f"[Server] Document state check - nodes: {len(all_nodes)}, roots: {len(roots)}")
-            
-            if should_initialize_loro_doc(self.doc):
-                logger.debug(f"[Server] Document is empty, initializing with Lexical content")
+        # Initialize with proper Lexical content structure if needed (only if no content was loaded)
+        if not content_loaded:
+            try:
+                logger.debug(f"[Server] No persisted content found, initializing with default Lexical content")
                 initialize_loro_doc_with_lexical_content(self.doc, logger)
                 self.doc.commit()
                 self.has_changes_since_save = True  # Mark as changed for initial save
-                logger.debug(f"[Server] Successfully initialized document with Lexical content")
+                logger.debug(f"[Server] Successfully initialized document with default Lexical content")
                 
                 # Verify initialization
+                tree = self.doc.get_tree(DEFAULT_TREE_NAME)
                 final_nodes = tree.nodes()  # method
                 final_roots = tree.roots     # property
                 logger.debug(f"[Server] After initialization - nodes: {len(final_nodes)}, roots: {len(final_roots)}")
-            else:
-                logger.debug(f"[Server] Document already has content, skipping initialization")
-                # Log what content exists
+                
+            except Exception as e:
+                logger.error(f"[Server] Error initializing document with Lexical content: {e}")
+                # Fallback to empty document
+                try:
+                    tree = self.doc.get_tree(DEFAULT_TREE_NAME)
+                    root_id = tree.create()
+                    self.doc.commit()
+                    self.has_changes_since_save = True
+                    logger.warning(f"[Server] Fallback: Created basic empty document")
+                except Exception as fallback_e:
+                    logger.error(f"[Server] Even fallback initialization failed: {fallback_e}")
+        else:
+            logger.debug(f"[Server] Document restored from persistence, skipping initialization")
+            # Log what content exists
+            try:
+                tree = self.doc.get_tree(DEFAULT_TREE_NAME)
+                roots = tree.roots
                 for i, root_id in enumerate(roots[:3]):  # First 3 roots
                     try:
                         meta_map = tree.get_meta(root_id)
@@ -195,17 +206,8 @@ class WSSharedDoc:
                         logger.debug(f"[Server] Existing root {i}: {root_id} -> type: {element_type}")
                     except Exception as e:
                         logger.debug(f"[Server] Error reading root {i}: {e}")
-        except Exception as e:
-            logger.error(f"[Server] Error initializing document with Lexical content: {e}")
-            # Fallback to empty document
-            try:
-                tree = self.doc.get_tree(DEFAULT_TREE_NAME)
-                root_id = tree.create()
-                self.doc.commit()
-                self.has_changes_since_save = True
-                logger.warning(f"[Server] Fallback: Created basic empty document")
-            except Exception as fallback_e:
-                logger.error(f"[Server] Even fallback initialization failed: {fallback_e}")
+            except Exception as e:
+                logger.debug(f"[Server] Error accessing restored document content: {e}")
         
         self.conns = {}
         self.ephemeral_store = {"data": {}}
@@ -213,15 +215,15 @@ class WSSharedDoc:
         logger.debug(f"[Server] Initialized document '{name}' with Loro tree structure")
     
     def _load_from_persistence(self):
-        """Load document content from persistence if available"""
+        """Load document content from persistence if available and convert to Loro tree structure"""
         try:
             logger.debug(f"📂 [Persistence] Loading document '{self.name}' from storage")
             
             # Load Lexical JSON content
             lexical_content = self.load_model(self.name)
-            if not lexical_content or lexical_content.strip() == INITIAL_LEXICAL_JSON.strip():
+            if not lexical_content:
                 logger.debug(f"📂 [Persistence] No existing content found for '{self.name}', will use initial content")
-                return
+                return False  # Indicate no content was loaded
             
             # Parse the JSON to validate it
             try:
@@ -229,15 +231,23 @@ class WSSharedDoc:
                 logger.debug(f"📂 [Persistence] Successfully loaded existing content for '{self.name}'")
                 
                 # Convert Lexical JSON back to Loro tree structure
-                # For now, we'll store the lexical content and let the normal initialization handle it
-                # TODO: Implement proper Lexical -> Loro conversion if needed
-                logger.debug(f"📂 [Persistence] Loaded content will be used during initialization")
+                tree = self.doc.get_tree(DEFAULT_TREE_NAME)
+                tree.enable_fractional_index(1)
+                
+                # Convert the loaded Lexical JSON to Loro tree
+                root_id = lexical_to_loro_tree(lexical_data, tree, logger)
+                self.doc.commit()
+                
+                logger.debug(f"📂 [Persistence] Successfully restored document '{self.name}' from persistence")
+                return True  # Indicate content was loaded and applied
                 
             except json.JSONDecodeError as e:
                 logger.warning(f"⚠️ [Persistence] Invalid JSON in stored content for '{self.name}': {e}")
+                return False
                 
         except Exception as e:
             logger.error(f"❌ [Persistence] Error loading document '{self.name}': {e}")
+            return False
     
     def save_to_persistence(self) -> bool:
         """Save current document state to persistence"""
