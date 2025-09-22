@@ -94,7 +94,7 @@ class TreeDocumentManager:
         # Start background tasks
         self._start_background_tasks()
         
-        logger.info(f"TreeDocumentManager initialized with base path: {self.base_path}")
+        logger.debug(f"TreeDocumentManager initialized with base path: {self.base_path}")
 
     def create_document(
         self,
@@ -160,7 +160,7 @@ class TreeDocumentManager:
             self._document_access_times[doc_id] = time.time()
             self._active_documents.add(doc_id)
             
-            logger.info(f"Created document: {doc_id}")
+            logger.debug(f"Created document: {doc_id}")
             
             # Emit creation event
             self._emit_event("document_created", {
@@ -212,7 +212,7 @@ class TreeDocumentManager:
             self._document_access_times[doc_id] = time.time()
             self._active_documents.add(doc_id)
             
-            logger.info(f"Created empty document for WebSocket sync: {doc_id}")
+            logger.debug(f"Created empty document for WebSocket sync: {doc_id}")
             
             # Emit creation event
             self._emit_event("document_created", {
@@ -267,7 +267,7 @@ class TreeDocumentManager:
                 self._documents[doc_id] = model
                 self._active_documents.add(doc_id)
                 
-                logger.info(f"Loaded document from disk: {doc_id}")
+                logger.debug(f"Loaded document from disk: {doc_id}")
                 
                 # Check if we need to clean up cache
                 self._cleanup_document_cache()
@@ -314,7 +314,7 @@ class TreeDocumentManager:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(lexical_state, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Saved document: {doc_id}")
+            logger.debug(f"Saved document: {doc_id}")
             
             # Emit save event
             self._emit_event("document_saved", {
@@ -355,9 +355,9 @@ class TreeDocumentManager:
                 file_path = self._get_document_path(doc_id)
                 if file_path.exists():
                     file_path.unlink()
-                    logger.info(f"Deleted document file: {file_path}")
+                    logger.debug(f"Deleted document file: {file_path}")
             
-            logger.info(f"Deleted document: {doc_id}")
+            logger.debug(f"Deleted document: {doc_id}")
             
             # Emit deletion event
             self._emit_event("document_deleted", {
@@ -506,7 +506,7 @@ class TreeDocumentManager:
             # Remove from active set but keep in cache
             self._active_documents.discard(doc_id)
             
-            logger.info(f"Closed document: {doc_id}")
+            logger.debug(f"Closed document: {doc_id}")
             
             # Emit close event
             self._emit_event("document_closed", {
@@ -668,7 +668,7 @@ class TreeDocumentManager:
         """
         Shutdown document manager gracefully
         """
-        logger.info("Shutting down TreeDocumentManager...")
+        logger.debug("Shutting down TreeDocumentManager...")
         
         try:
             # Cancel background tasks
@@ -693,7 +693,7 @@ class TreeDocumentManager:
             # Shutdown executor
             self._executor.shutdown(wait=True)
             
-            logger.info("TreeDocumentManager shutdown complete")
+            logger.debug("TreeDocumentManager shutdown complete")
             
         except Exception as e:
             logger.error(f"Error during TreeDocumentManager shutdown: {e}")
@@ -740,7 +740,7 @@ class TreeDocumentManager:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 # No running event loop, we'll start tasks when one becomes available
-                logger.info("No running event loop found, background tasks will start when event loop is available")
+                logger.debug("No running event loop found, background tasks will start when event loop is available")
                 return
             
             # Start cleanup task
@@ -749,7 +749,7 @@ class TreeDocumentManager:
             # Start auto-save task
             self._auto_save_task = asyncio.create_task(self._auto_save_loop())
             
-            logger.info("Started background tasks for document management")
+            logger.debug("Started background tasks for document management")
             
         except Exception as e:
             logger.error(f"Failed to start background tasks: {e}")
@@ -766,7 +766,7 @@ class TreeDocumentManager:
             # Start auto-save task
             self._auto_save_task = asyncio.create_task(self._auto_save_loop())
             
-            logger.info("Started background tasks for document management (async)")
+            logger.debug("Started background tasks for document management (async)")
             
         except Exception as e:
             logger.error(f"Failed to start background tasks (async): {e}")
@@ -778,7 +778,7 @@ class TreeDocumentManager:
                 await asyncio.sleep(60)  # Check every minute
                 self._cleanup_document_cache()
             except asyncio.CancelledError:
-                logger.info("Cleanup loop cancelled")
+                logger.debug("Cleanup loop cancelled")
                 break
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}")
@@ -797,7 +797,7 @@ class TreeDocumentManager:
                         logger.error(f"Auto-save failed for document {doc_id}: {e}")
                 
             except asyncio.CancelledError:
-                logger.info("Auto-save loop cancelled")
+                logger.debug("Auto-save loop cancelled")
                 break
             except Exception as e:
                 logger.error(f"Error in auto-save loop: {e}")
@@ -863,7 +863,7 @@ class TreeDocumentManager:
                 model._clear_document()
                 model.initialize_from_lexical_state(lexical_content)
             
-            logger.info(f"Imported Lexical document: {doc_id}")
+            logger.debug(f"Imported Lexical document: {doc_id}")
             return True
             
         except Exception as e:

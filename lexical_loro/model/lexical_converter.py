@@ -140,7 +140,7 @@ class LexicalTreeConverter:
         
         self._process_lexical_node(root_node_data, root_tree_node)
         
-        logger.info(f"Imported Lexical state to tree with root ID: {root_tree_id}")
+        logger.debug(f"Imported Lexical state to tree with root ID: {root_tree_id}")
         return root_tree_id
 
     def export_to_lexical_state(self, root_tree_id: Optional[str] = None) -> Dict[str, Any]:
@@ -186,7 +186,7 @@ class LexicalTreeConverter:
             "root": lexical_root
         }
         
-        logger.info(f"Exported tree to Lexical state from root ID: {root_node}")
+        logger.debug(f"Exported tree to Lexical state from root ID: {root_node}")
         return lexical_state
 
     def _clear_tree(self) -> None:

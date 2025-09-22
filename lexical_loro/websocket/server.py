@@ -97,11 +97,11 @@ def default_load_model(doc_id: str) -> Optional[str]:
             with open(model_file, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
                 if content:
-                    logger.info(f"📂 [Persistence] Loaded existing model {doc_id} from {model_file}")
+                    logger.debug(f"📂 [Persistence] Loaded existing model {doc_id} from {model_file}")
                     return content
         
         # No existing file found, return initial content for new documents
-        logger.info(f"✨ [Persistence] Creating new model {doc_id} with initial content")
+        logger.debug(f"✨ [Persistence] Creating new model {doc_id} with initial content")
         return INITIAL_LEXICAL_JSON
         
     except Exception as e:
@@ -130,7 +130,7 @@ def default_save_model(doc_id: str, lexical_json: str) -> bool:
         with open(model_file, 'w', encoding='utf-8') as f:
             f.write(lexical_json)
         
-        logger.info(f"💾 [Persistence] Saved model {doc_id} to {model_file}")
+        logger.debug(f"💾 [Persistence] Saved model {doc_id} to {model_file}")
         return True
         
     except Exception as e:
@@ -167,29 +167,29 @@ class WSSharedDoc:
             tree = self.doc.get_tree(DEFAULT_TREE_NAME)
             all_nodes = tree.nodes()  # method
             roots = tree.roots        # property
-            logger.info(f"[Server] Document state check - nodes: {len(all_nodes)}, roots: {len(roots)}")
+            logger.debug(f"[Server] Document state check - nodes: {len(all_nodes)}, roots: {len(roots)}")
             
             if should_initialize_loro_doc(self.doc):
-                logger.info(f"[Server] Document is empty, initializing with Lexical content")
+                logger.debug(f"[Server] Document is empty, initializing with Lexical content")
                 initialize_loro_doc_with_lexical_content(self.doc, logger)
                 self.doc.commit()
                 self.has_changes_since_save = True  # Mark as changed for initial save
-                logger.info(f"[Server] Successfully initialized document with Lexical content")
+                logger.debug(f"[Server] Successfully initialized document with Lexical content")
                 
                 # Verify initialization
                 final_nodes = tree.nodes()  # method
                 final_roots = tree.roots     # property
-                logger.info(f"[Server] After initialization - nodes: {len(final_nodes)}, roots: {len(final_roots)}")
+                logger.debug(f"[Server] After initialization - nodes: {len(final_nodes)}, roots: {len(final_roots)}")
             else:
-                logger.info(f"[Server] Document already has content, skipping initialization")
+                logger.debug(f"[Server] Document already has content, skipping initialization")
                 # Log what content exists
                 for i, root_id in enumerate(roots[:3]):  # First 3 roots
                     try:
                         meta_map = tree.get_meta(root_id)
                         element_type = meta_map.get('elementType', 'unknown')
-                        logger.info(f"[Server] Existing root {i}: {root_id} -> type: {element_type}")
+                        logger.debug(f"[Server] Existing root {i}: {root_id} -> type: {element_type}")
                     except Exception as e:
-                        logger.info(f"[Server] Error reading root {i}: {e}")
+                        logger.debug(f"[Server] Error reading root {i}: {e}")
         except Exception as e:
             logger.error(f"[Server] Error initializing document with Lexical content: {e}")
             # Fallback to empty document
@@ -205,28 +205,28 @@ class WSSharedDoc:
         self.conns = {}
         self.ephemeral_store = {"data": {}}
         self.last_ephemeral_sender = None
-        logger.info(f"[Server] Initialized document '{name}' with Loro tree structure")
+        logger.debug(f"[Server] Initialized document '{name}' with Loro tree structure")
     
     def _load_from_persistence(self):
         """Load document content from persistence if available"""
         try:
-            logger.info(f"📂 [Persistence] Loading document '{self.name}' from storage")
+            logger.debug(f"📂 [Persistence] Loading document '{self.name}' from storage")
             
             # Load Lexical JSON content
             lexical_content = self.load_model(self.name)
             if not lexical_content or lexical_content.strip() == INITIAL_LEXICAL_JSON.strip():
-                logger.info(f"📂 [Persistence] No existing content found for '{self.name}', will use initial content")
+                logger.debug(f"📂 [Persistence] No existing content found for '{self.name}', will use initial content")
                 return
             
             # Parse the JSON to validate it
             try:
                 lexical_data = json.loads(lexical_content)
-                logger.info(f"📂 [Persistence] Successfully loaded existing content for '{self.name}'")
+                logger.debug(f"📂 [Persistence] Successfully loaded existing content for '{self.name}'")
                 
                 # Convert Lexical JSON back to Loro tree structure
                 # For now, we'll store the lexical content and let the normal initialization handle it
                 # TODO: Implement proper Lexical -> Loro conversion if needed
-                logger.info(f"📂 [Persistence] Loaded content will be used during initialization")
+                logger.debug(f"📂 [Persistence] Loaded content will be used during initialization")
                 
             except json.JSONDecodeError as e:
                 logger.warning(f"⚠️ [Persistence] Invalid JSON in stored content for '{self.name}': {e}")
@@ -241,7 +241,7 @@ class WSSharedDoc:
                 logger.debug(f"⏭️ [Persistence] No changes to save for document '{self.name}'")
                 return True
             
-            logger.info(f"💾 [Persistence] Saving document '{self.name}' to storage")
+            logger.debug(f"💾 [Persistence] Saving document '{self.name}' to storage")
             
             # Convert current Loro tree to Lexical JSON
             lexical_json = loro_tree_to_lexical_json(self.doc, logger)
@@ -252,7 +252,7 @@ class WSSharedDoc:
             if success:
                 self.has_changes_since_save = False
                 self.last_save_time = time.time()
-                logger.info(f"✅ [Persistence] Successfully saved document '{self.name}'")
+                logger.debug(f"✅ [Persistence] Successfully saved document '{self.name}'")
             else:
                 logger.error(f"❌ [Persistence] Failed to save document '{self.name}'")
             
@@ -283,13 +283,13 @@ def set_persistence_functions(load_func: Optional[Callable[[str], Optional[str]]
     global global_load_model, global_save_model
     global_load_model = load_func or default_load_model
     global_save_model = save_func or default_save_model
-    logger.info(f"[Persistence] Updated global persistence functions")
+    logger.debug(f"[Persistence] Updated global persistence functions")
 
 def clear_docs():
     """Clear all cached documents - useful for server restarts"""
     global docs
     docs.clear()
-    logger.info(f"[Server] Cleared document cache")
+    logger.debug(f"[Server] Cleared document cache")
 
 def get_doc(docname: str):
     if docname not in docs:
@@ -299,7 +299,7 @@ def get_doc(docname: str):
 def save_all_docs() -> Dict[str, bool]:
     """Save all documents to persistence"""
     results = {}
-    logger.info(f"💾 [Persistence] Saving all {len(docs)} documents")
+    logger.debug(f"💾 [Persistence] Saving all {len(docs)} documents")
     
     for doc_name, doc in docs.items():
         try:
@@ -309,16 +309,16 @@ def save_all_docs() -> Dict[str, bool]:
             results[doc_name] = False
     
     saved_count = sum(1 for success in results.values() if success)
-    logger.info(f"✅ [Persistence] Saved {saved_count}/{len(docs)} documents")
+    logger.debug(f"✅ [Persistence] Saved {saved_count}/{len(docs)} documents")
     return results
 
 def close_conn(doc, conn):
     if conn in doc.conns:
-        logger.info(f"💔 [Server] *** CONNECTION CLOSING *** for document: {doc.name}")
-        logger.info(f"💔 [Server] Closing connection: {conn}")
+        logger.debug(f"💔 [Server] *** CONNECTION CLOSING *** for document: {doc.name}")
+        logger.debug(f"💔 [Server] Closing connection: {conn}")
         del doc.conns[conn]
-        logger.info(f"💔 [Server] Remaining connections for document {doc.name}: {len(doc.conns)}")
-        logger.info(f"💔 [Server] Remaining connections list: {list(doc.conns.keys())}")
+        logger.debug(f"💔 [Server] Remaining connections for document {doc.name}: {len(doc.conns)}")
+        logger.debug(f"💔 [Server] Remaining connections list: {list(doc.conns.keys())}")
     else:
         logger.warning(f"⚠️ [Server] Tried to cleanup connection {conn} but it wasn't in doc.conns")
 
@@ -333,7 +333,7 @@ async def message_listener(conn, doc, message):
             try:
                 message_str = message.decode('utf-8')
             except UnicodeDecodeError:
-                logger.info(f"[Server] Received binary Loro update: {len(message)} bytes")
+                logger.debug(f"[Server] Received binary Loro update: {len(message)} bytes")
                 # Apply the update to the document
                 doc.doc.import_(message)
                 # Mark document as changed for persistence
@@ -359,7 +359,7 @@ async def message_listener(conn, doc, message):
             return
         
         message_type = message_data.get("type", "")
-        logger.info(f"[Server] Received message type: {message_type} for doc: {doc.name}")
+        logger.debug(f"[Server] Received message type: {message_type} for doc: {doc.name}")
         
         if message_type == MESSAGE_QUERY_SNAPSHOT:
             await handle_query_snapshot(conn, doc, message_data)
@@ -380,16 +380,16 @@ async def message_listener(conn, doc, message):
 async def handle_query_snapshot(conn, doc, message_data):
     try:
         request_id = str(time.time())
-        logger.info(f"[Server] Client requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
+        logger.debug(f"[Server] Client requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
         
         # Export actual Loro document snapshot
         snapshot = doc.doc.export(ExportMode.Snapshot())
-        logger.info(f"[Server] Sending snapshot response: {len(snapshot)} bytes")
+        logger.debug(f"[Server] Sending snapshot response: {len(snapshot)} bytes")
         
         # Log tree structure for debugging
         tree = doc.doc.get_tree(DEFAULT_TREE_NAME)
         nodes = tree.nodes()  # method call
-        logger.info(f"[Server] Snapshot contains {len(nodes)} nodes from server document")
+        logger.debug(f"[Server] Snapshot contains {len(nodes)} nodes from server document")
         
         await conn.send(snapshot)
         
@@ -401,7 +401,7 @@ async def handle_query_snapshot(conn, doc, message_data):
 async def handle_ephemeral(conn, doc, message_data):
     try:
         ephemeral_data = message_data.get("ephemeral", [])
-        logger.info(f"[Server] Received ephemeral data: {len(ephemeral_data)} bytes")
+        logger.debug(f"[Server] Received ephemeral data: {len(ephemeral_data)} bytes")
         
         doc.last_ephemeral_sender = conn
         doc.ephemeral_store["data"]["last_update"] = ephemeral_data
@@ -434,10 +434,10 @@ async def handle_keepalive(conn, doc, message_data):
         reason = message_data.get("reason", "regular_keepalive")
         error_info = message_data.get("error", None)
         
-        logger.info(f"💓 [Server] *** RECEIVED KEEPALIVE #{ping_id} *** from conn-{conn.remote_address[0]}:{conn.remote_address[1]} for doc: {doc.name}")
-        logger.info(f"💓 [Server] Keepalive timestamp: {timestamp}")
-        logger.info(f"💓 [Server] Keepalive reason: {reason}")
-        logger.info(f"💓 [Server] Current server time: {time.time()}")
+        logger.debug(f"💓 [Server] *** RECEIVED KEEPALIVE #{ping_id} *** from conn-{conn.remote_address[0]}:{conn.remote_address[1]} for doc: {doc.name}")
+        logger.debug(f"💓 [Server] Keepalive timestamp: {timestamp}")
+        logger.debug(f"💓 [Server] Keepalive reason: {reason}")
+        logger.debug(f"💓 [Server] Current server time: {time.time()}")
         
         if error_info:
             logger.warning(f"💓 [Server] Keepalive indicated client error: {error_info}")
@@ -451,12 +451,12 @@ async def handle_keepalive(conn, doc, message_data):
             "acknowledged": True
         }
         
-        logger.info(f"💓 [Server] *** SENDING KEEPALIVE ACK #{ping_id} *** to conn-{conn.remote_address[0]}:{conn.remote_address[1]}")
-        logger.info(f"💓 [Server] ACK message: {keepalive_response}")
+        logger.debug(f"💓 [Server] *** SENDING KEEPALIVE ACK #{ping_id} *** to conn-{conn.remote_address[0]}:{conn.remote_address[1]}")
+        logger.debug(f"💓 [Server] ACK message: {keepalive_response}")
         
         await conn.send(json.dumps(keepalive_response))
         
-        logger.info(f"✅ [Server] *** KEEPALIVE ACK #{ping_id} SENT *** - connection maintained")
+        logger.debug(f"✅ [Server] *** KEEPALIVE ACK #{ping_id} SENT *** - connection maintained")
         
     except Exception as e:
         logger.error(f"💔 [Server] Error handling keepalive: {e}")
@@ -466,7 +466,7 @@ async def handle_keepalive(conn, doc, message_data):
 async def handle_update(conn, doc, message_data):
     try:
         update_data = message_data.get("update", [])
-        logger.info(f"[Server] Received update: {len(update_data)} bytes")
+        logger.debug(f"[Server] Received update: {len(update_data)} bytes")
         
         # Apply update to Loro document
         if update_data:
@@ -477,35 +477,35 @@ async def handle_update(conn, doc, message_data):
             logger.debug(f"💾 [Persistence] Marked document '{doc.name}' as changed")
         
         # Broadcast to other connections
-        logger.info(f"[Server] *** STARTING BROADCAST TO OTHER CONNECTIONS ***")
-        logger.info(f"[Server] Total connections for doc '{doc.name}': {len(doc.conns)}")
-        logger.info(f"[Server] Sender connection: {conn}")
-        logger.info(f"[Server] All connections: {list(doc.conns.keys())}")
+        logger.debug(f"[Server] *** STARTING BROADCAST TO OTHER CONNECTIONS ***")
+        logger.debug(f"[Server] Total connections for doc '{doc.name}': {len(doc.conns)}")
+        logger.debug(f"[Server] Sender connection: {conn}")
+        logger.debug(f"[Server] All connections: {list(doc.conns.keys())}")
         
         # Create a copy of connections to avoid "dictionary changed size during iteration" error
         connections_copy = list(doc.conns.keys())
-        logger.info(f"[Server] Created connections copy with {len(connections_copy)} connections")
+        logger.debug(f"[Server] Created connections copy with {len(connections_copy)} connections")
         
         broadcast_count = 0
         for c in connections_copy:
-            logger.info(f"[Server] Checking connection {c} (sender: {c == conn})")
+            logger.debug(f"[Server] Checking connection {c} (sender: {c == conn})")
             # Check if connection is still in the active connections (might have been removed)
             if c not in doc.conns:
-                logger.info(f"⚠️ [Server] Connection {c} no longer active, skipping")
+                logger.debug(f"⚠️ [Server] Connection {c} no longer active, skipping")
                 continue
                 
             if c != conn:
-                logger.info(f"🚀 [Server] Broadcasting update to different connection: {c}")
+                logger.debug(f"🚀 [Server] Broadcasting update to different connection: {c}")
                 try:
                     await c.send(json.dumps(message_data))
                     broadcast_count += 1
-                    logger.info(f"✅ [Server] Successfully sent update to connection {c}")
+                    logger.debug(f"✅ [Server] Successfully sent update to connection {c}")
                 except Exception as send_error:
                     logger.error(f"❌ [Server] Failed to send update to connection {c}: {send_error}")
             else:
-                logger.info(f"⏭️ [Server] Skipping sender connection: {c}")
+                logger.debug(f"⏭️ [Server] Skipping sender connection: {c}")
         
-        logger.info(f"[Server] *** BROADCAST COMPLETE *** - Sent to {broadcast_count} connections")
+        logger.debug(f"[Server] *** BROADCAST COMPLETE *** - Sent to {broadcast_count} connections")
         
     except Exception as e:
         logger.error(f"[Server] Error handling update: {e}")
@@ -521,14 +521,14 @@ async def setup_ws_connection(conn, path: str):
     doc.conns[conn] = set()
     
     conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-    logger.info(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
-    logger.info(f"🔗 [Server] Total connections now: {len(doc.conns)}")
-    logger.info(f"🔗 [Server] All connections: {list(doc.conns.keys())}")
+    logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
+    logger.debug(f"🔗 [Server] Total connections now: {len(doc.conns)}")
+    logger.debug(f"🔗 [Server] All connections: {list(doc.conns.keys())}")
     
     try:
         # Send initial snapshot using actual Loro document
         initial_snapshot = doc.doc.export(ExportMode.Snapshot())
-        logger.info(f"[Server] Sending initial snapshot to new client: {len(initial_snapshot)} bytes")
+        logger.debug(f"[Server] Sending initial snapshot to new client: {len(initial_snapshot)} bytes")
         await conn.send(initial_snapshot)
         
         ephemeral_data = list(doc.ephemeral_store["data"].get("last_update", []))
@@ -544,7 +544,7 @@ async def setup_ws_connection(conn, path: str):
             await message_listener(conn, doc, message)
             
     except websockets.exceptions.ConnectionClosed:
-        logger.info(f"WebSocket connection {conn_id} closed")
+        logger.debug(f"WebSocket connection {conn_id} closed")
     except Exception as e:
         logger.error(f"WebSocket connection error: {e}")
     finally:
@@ -552,7 +552,7 @@ async def setup_ws_connection(conn, path: str):
 
 async def start_server(host: str = "localhost", port: int = 3002, autosave_interval_sec: int = 60):
     """Start WebSocket server with persistence - legacy function"""
-    logger.info(f"Starting Loro WebSocket server on {host}:{port}")
+    logger.debug(f"Starting Loro WebSocket server on {host}:{port}")
     
     # Use the new server class
     server = LoroWebSocketServer(host, port, autosave_interval_sec)
@@ -580,10 +580,10 @@ class LoroWebSocketServer:
         
     async def start(self):
         """Start the WebSocket server"""
-        logger.info(f"🚀 Starting LoroWebSocketServer")
-        logger.info(f"   Host: {self.host}")
-        logger.info(f"   Port: {self.port}")
-        logger.info(f"   Auto-save interval: {self.autosave_interval_sec} seconds")
+        logger.debug(f"🚀 Starting LoroWebSocketServer")
+        logger.debug(f"   Host: {self.host}")
+        logger.debug(f"   Port: {self.port}")
+        logger.debug(f"   Auto-save interval: {self.autosave_interval_sec} seconds")
         
         self.running = True
         
@@ -594,12 +594,12 @@ class LoroWebSocketServer:
             await setup_ws_connection(websocket, path)
         
         self.server = await serve(handler, self.host, self.port)
-        logger.info(f"✅ LoroWebSocketServer running on ws://{self.host}:{self.port}")
+        logger.debug(f"✅ LoroWebSocketServer running on ws://{self.host}:{self.port}")
         
         # Start background autosave task
-        logger.info(f"🔄 Starting background services...")
+        logger.debug(f"🔄 Starting background services...")
         self._autosave_task = asyncio.create_task(self._autosave_models())
-        logger.info(f"   ✓ Auto-save service ({self.autosave_interval_sec}s interval)")
+        logger.debug(f"   ✓ Auto-save service ({self.autosave_interval_sec}s interval)")
         
         try:
             # Keep the server running
@@ -609,7 +609,7 @@ class LoroWebSocketServer:
         
     async def stop(self):
         """Stop the WebSocket server"""
-        logger.info("🛑 Stopping LoroWebSocketServer...")
+        logger.debug("🛑 Stopping LoroWebSocketServer...")
         self.running = False
         
         # Cancel autosave task
@@ -621,20 +621,20 @@ class LoroWebSocketServer:
                 pass
         
         # Perform final save of all documents
-        logger.info("💾 Performing final save of all documents...")
+        logger.debug("💾 Performing final save of all documents...")
         save_results = save_all_docs()
         saved_count = sum(1 for success in save_results.values() if success)
-        logger.info(f"✅ Final save completed: {saved_count}/{len(save_results)} documents saved")
+        logger.debug(f"✅ Final save completed: {saved_count}/{len(save_results)} documents saved")
         
         # Close server
         if self.server:
             self.server.close()
             await self.server.wait_closed()
-            logger.info("✅ WebSocket server stopped")
+            logger.debug("✅ WebSocket server stopped")
     
     async def _autosave_models(self):
         """Periodically auto-save all models at the configured interval"""
-        logger.info(f"🚀 Auto-save task started with interval: {self.autosave_interval_sec} seconds")
+        logger.debug(f"🚀 Auto-save task started with interval: {self.autosave_interval_sec} seconds")
         
         while self.running:
             try:
@@ -643,7 +643,7 @@ class LoroWebSocketServer:
                     logger.debug(f"🔍 Auto-save check: found {len(docs)} documents")
                     
                     if docs:
-                        logger.info(f"🔄 Auto-saving {len(docs)} documents...")
+                        logger.debug(f"🔄 Auto-saving {len(docs)} documents...")
                         saved_count = 0
                         unchanged_count = 0
                         
@@ -653,7 +653,7 @@ class LoroWebSocketServer:
                                     success = doc.save_to_persistence()
                                     if success:
                                         saved_count += 1
-                                        logger.info(f"💾 Auto-saved document: {doc_name}")
+                                        logger.debug(f"💾 Auto-saved document: {doc_name}")
                                     else:
                                         logger.warning(f"⚠️ Auto-save failed for document: {doc_name}")
                                 else:
@@ -663,19 +663,19 @@ class LoroWebSocketServer:
                                 logger.error(f"❌ Error auto-saving document {doc_name}: {e}")
                         
                         if saved_count > 0:
-                            logger.info(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                            logger.debug(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                         elif unchanged_count > 0:
                             logger.debug(f"ℹ️ Auto-save check: {unchanged_count} documents unchanged, none saved")
                     else:
                         logger.debug(f"🔍 No documents to auto-save")
                         
             except asyncio.CancelledError:
-                logger.info("🛑 Auto-save task cancelled")
+                logger.debug("🛑 Auto-save task cancelled")
                 break
             except Exception as e:
                 logger.error(f"❌ Error in auto-save loop: {e}")
         
-        logger.info("✅ Auto-save task stopped")
+        logger.debug("✅ Auto-save task stopped")
     
     def save_all_models(self) -> Dict[str, bool]:
         """
@@ -684,7 +684,7 @@ class LoroWebSocketServer:
         Returns:
             Dictionary mapping doc_id to save success status
         """
-        logger.info(f"💾 Manually saving {len(docs)} documents...")
+        logger.debug(f"💾 Manually saving {len(docs)} documents...")
         return save_all_docs()
 
 
@@ -735,14 +735,14 @@ def main():
         try:
             await server.start()
         except KeyboardInterrupt:
-            logger.info("🛑 Shutting down server...")
+            logger.debug("🛑 Shutting down server...")
         finally:
             await server.stop()
     
     try:
         asyncio.run(run_server())
     except KeyboardInterrupt:
-        logger.info("✅ Server shutdown complete")
+        logger.debug("✅ Server shutdown complete")
 
 if __name__ == "__main__":
     main()

@@ -231,7 +231,7 @@ class TreeNodeMapper:
         """
         try:
             all_tree_nodes = list(self.tree.nodes())
-            logger.info(f"Syncing {len(all_tree_nodes)} existing tree nodes")
+            logger.debug(f"Syncing {len(all_tree_nodes)} existing tree nodes")
             
             for tree_node in all_tree_nodes:
                 tree_id = str(tree_node)
@@ -254,7 +254,7 @@ class TreeNodeMapper:
         self.lexical_to_loro.clear()
         self.loro_to_lexical.clear()
         self._pending_cleanup.clear()
-        logger.info("Cleared all node mappings")
+        logger.debug("Cleared all node mappings")
 
     def get_mapping_stats(self) -> Dict[str, int]:
         """

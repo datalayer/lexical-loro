@@ -76,21 +76,21 @@ def lexical_to_loro_tree(lexical_json: Dict[str, Any], tree: LoroTree, logger=No
     - tree.create_at(index, parent_id) creates child nodes
     """
     if logger:
-        logger.info(f"[Converter] Starting conversion of Lexical JSON to Loro tree")
-        logger.info(f"[Converter] Input Lexical JSON keys: {list(lexical_json.keys())}")
+        logger.debug(f"[Converter] Starting conversion of Lexical JSON to Loro tree")
+        logger.debug(f"[Converter] Input Lexical JSON keys: {list(lexical_json.keys())}")
     
     # Start with the root node - create it without a parent
     # tree.create() returns TreeID in Loro 1.6.0
     root_tree_id = tree.create()
     if logger:
-        logger.info(f"[Converter] Created root tree node ID: {root_tree_id}")
+        logger.debug(f"[Converter] Created root tree node ID: {root_tree_id}")
     
     # Process the root node
     process_lexical_node(lexical_json["root"], tree, root_tree_id, logger)
     
     root_tree_id_str = str(root_tree_id)
     if logger:
-        logger.info(f"[Converter] Finished conversion, root tree ID: {root_tree_id_str}")
+        logger.debug(f"[Converter] Finished conversion, root tree ID: {root_tree_id_str}")
     
     return root_tree_id_str
 
@@ -112,7 +112,7 @@ def process_lexical_node(lexical_node: Dict[str, Any], tree: LoroTree, tree_id, 
     """
     indent = "  " * depth
     if logger:
-        logger.info(f"[Converter] {indent}Processing node type '{lexical_node.get('type', 'unknown')}' at tree ID: {tree_id}")
+        logger.debug(f"[Converter] {indent}Processing node type '{lexical_node.get('type', 'unknown')}' at tree ID: {tree_id}")
     
     try:
         # Store the lexical data using Loro 1.6.0 metadata API
@@ -130,9 +130,9 @@ def process_lexical_node(lexical_node: Dict[str, Any], tree: LoroTree, tree_id, 
         meta_map.insert('lexical', cleaned_data)
         
         if logger:
-            logger.info(f"[Converter] {indent}Stored node data - type: {lexical_node.get('type')}, lexical keys: {list(cleaned_data.keys())}")
+            logger.debug(f"[Converter] {indent}Stored node data - type: {lexical_node.get('type')}, lexical keys: {list(cleaned_data.keys())}")
             if 'text' in lexical_node:
-                logger.info(f"[Converter] {indent}Text content: '{lexical_node['text']}'")
+                logger.debug(f"[Converter] {indent}Text content: '{lexical_node['text']}'")
     
     except Exception as e:
         if logger:
@@ -142,7 +142,7 @@ def process_lexical_node(lexical_node: Dict[str, Any], tree: LoroTree, tree_id, 
     # Process children if they exist
     if 'children' in lexical_node and isinstance(lexical_node['children'], list):
         if logger:
-            logger.info(f"[Converter] {indent}Processing {len(lexical_node['children'])} children")
+            logger.debug(f"[Converter] {indent}Processing {len(lexical_node['children'])} children")
         
         for child_index, child in enumerate(lexical_node['children']):
             try:
@@ -150,7 +150,7 @@ def process_lexical_node(lexical_node: Dict[str, Any], tree: LoroTree, tree_id, 
                 child_tree_id = tree.create_at(child_index, tree_id)
                 
                 if logger:
-                    logger.info(f"[Converter] {indent}Created child node {child_index} with ID: {child_tree_id}")
+                    logger.debug(f"[Converter] {indent}Created child node {child_index} with ID: {child_tree_id}")
                 
                 process_lexical_node(child, tree, child_tree_id, logger, depth + 1)
             except Exception as e:
@@ -199,13 +199,13 @@ def initialize_loro_doc_with_lexical_content(doc: LoroDoc, logger=None) -> None:
     This ensures consistent starting state across all clients
     """
     if logger:
-        logger.info(f"[Converter] Initializing Loro document with Lexical content")
+        logger.debug(f"[Converter] Initializing Loro document with Lexical content")
     
     tree = doc.get_tree(DEFAULT_TREE_NAME)
     tree.enable_fractional_index(1)  # Use integer instead of float
     
     if logger:
-        logger.info(f"[Converter] Enabled fractional index, starting conversion...")
+        logger.debug(f"[Converter] Enabled fractional index, starting conversion...")
     
     # Convert the initial Lexical JSON to Loro tree structure
     root_id = lexical_to_loro_tree(INITIAL_LEXICAL_JSON, tree, logger)
@@ -215,20 +215,20 @@ def initialize_loro_doc_with_lexical_content(doc: LoroDoc, logger=None) -> None:
             try:
                 all_nodes = tree.nodes()  # method
                 roots = tree.roots        # property
-                logger.info(f"[Converter] Final tree statistics:")
-                logger.info(f"[Converter]   Total nodes: {len(all_nodes)}")
-                logger.info(f"[Converter]   Root nodes: {len(roots)}")
-                logger.info(f"[Converter]   Main root ID: {root_id}")
+                logger.debug(f"[Converter] Final tree statistics:")
+                logger.debug(f"[Converter]   Total nodes: {len(all_nodes)}")
+                logger.debug(f"[Converter]   Root nodes: {len(roots)}")
+                logger.debug(f"[Converter]   Main root ID: {root_id}")
                 
                 # Log some node details (all_nodes contains TreeID objects, not TreeNode objects)
                 try:
                     for i, tree_id in enumerate(all_nodes[:5]):  # First 5 tree IDs
                         try:
-                            logger.info(f"[Converter]   Node {i}: TreeID {tree_id}")
+                            logger.debug(f"[Converter]   Node {i}: TreeID {tree_id}")
                         except Exception as e:
-                            logger.info(f"[Converter]   Node {i}: TreeID access error: {e}")
+                            logger.debug(f"[Converter]   Node {i}: TreeID access error: {e}")
                 except Exception as e:
-                    logger.info(f"[Converter]   Could not retrieve tree ID details: {e}")
+                    logger.debug(f"[Converter]   Could not retrieve tree ID details: {e}")
                         
             except Exception as e:
                 logger.warning(f"[Converter] Error logging tree structure: {e}")
@@ -304,12 +304,12 @@ def loro_tree_to_lexical_json(doc: LoroDoc, logger=None) -> str:
         roots = tree.roots
         
         if logger:
-            logger.info(f"[Converter] Converting Loro tree to Lexical JSON")
-            logger.info(f"[Converter] Tree has {len(roots)} roots, {len(tree.nodes())} total nodes")
+            logger.debug(f"[Converter] Converting Loro tree to Lexical JSON")
+            logger.debug(f"[Converter] Tree has {len(roots)} roots, {len(tree.nodes())} total nodes")
         
         if not roots:
             if logger:
-                logger.info(f"[Converter] Empty document, returning initial Lexical JSON")
+                logger.debug(f"[Converter] Empty document, returning initial Lexical JSON")
             return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
         
         # Find the root node (should be the first/only root)
@@ -320,7 +320,7 @@ def loro_tree_to_lexical_json(doc: LoroDoc, logger=None) -> str:
             return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
         
         if logger:
-            logger.info(f"[Converter] Converting from root node: {main_root_id}")
+            logger.debug(f"[Converter] Converting from root node: {main_root_id}")
         
         # Convert the tree starting from root using the tree structure
         lexical_root = convert_loro_node_to_lexical(tree, main_root_id, logger)
@@ -334,7 +334,7 @@ def loro_tree_to_lexical_json(doc: LoroDoc, logger=None) -> str:
         result_json = json.dumps(lexical_doc, indent=2)
         
         if logger:
-            logger.info(f"[Converter] Successfully converted to Lexical JSON ({len(result_json)} chars)")
+            logger.debug(f"[Converter] Successfully converted to Lexical JSON ({len(result_json)} chars)")
         
         return result_json
         
