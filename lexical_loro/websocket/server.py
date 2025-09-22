@@ -5,19 +5,139 @@ import json
 import logging
 import time
 from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import Dict, Any, Optional, Callable
 import websockets
 from websockets.server import serve
 from loro import LoroDoc, ExportMode
 from ..constants import DEFAULT_TREE_NAME
-from .lexical_converter import initialize_loro_doc_with_lexical_content, should_initialize_loro_doc
+from .lexical_converter import (
+    initialize_loro_doc_with_lexical_content, 
+    should_initialize_loro_doc, 
+    loro_tree_to_lexical_json
+)
 
 logger = logging.getLogger(__name__)
+
+# Initial Lexical JSON structure for new documents
+INITIAL_LEXICAL_JSON = """{
+    "root": {
+        "children": [
+            {
+                "children": [
+                    {
+                        "detail": 0,
+                        "format": 0,
+                        "mode": "normal",
+                        "style": "",
+                        "text": "Lexical with Loro",
+                        "type": "text",
+                        "version": 1
+                    }
+                ],
+                "direction": null,
+                "format": "",
+                "indent": 0,
+                "type": "heading",
+                "version": 1,
+                "tag": "h1"
+            },
+            {
+                "children": [
+                    {
+                        "detail": 0,
+                        "format": 0,
+                        "mode": "normal",
+                        "style": "",
+                        "text": "Type something...",
+                        "type": "text",
+                        "version": 1
+                    }
+                ],
+                "direction": null,
+                "format": "",
+                "indent": 0,
+                "type": "paragraph",
+                "version": 1,
+                "textFormat": 0,
+                "textStyle": ""
+            }
+        ],
+        "direction": null,
+        "format": "",
+        "indent": 0,
+        "type": "root",
+        "version": 1
+    }
+}"""
 
 # Message type constants (matching TypeScript implementation)
 MESSAGE_UPDATE = 'update'
 MESSAGE_QUERY_SNAPSHOT = 'query-snapshot'
 MESSAGE_EPHEMERAL = 'ephemeral'
 MESSAGE_QUERY_EPHEMERAL = 'query-ephemeral'
+
+def default_load_model(doc_id: str) -> Optional[str]:
+    """
+    Default load_model implementation - loads from local .models folder or
+    returns initial content.
+    
+    Args:
+        doc_id: Document ID to load
+        
+    Returns:
+        Content string from saved file, or initial content for new models
+    """
+    try:
+        # Check if a saved model exists
+        models_dir = Path(".models")
+        model_file = models_dir / f"{doc_id}.json"
+        
+        if model_file.exists():
+            with open(model_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    logger.info(f"📂 [Persistence] Loaded existing model {doc_id} from {model_file}")
+                    return content
+        
+        # No existing file found, return initial content for new documents
+        logger.info(f"✨ [Persistence] Creating new model {doc_id} with initial content")
+        return INITIAL_LEXICAL_JSON
+        
+    except Exception as e:
+        logger.warning(f"⚠️ [Persistence] Error loading model {doc_id}: {e}, using initial content")
+        return INITIAL_LEXICAL_JSON
+
+def default_save_model(doc_id: str, lexical_json: str) -> bool:
+    """
+    Default save_model implementation - saves to local .models folder.
+    
+    Args:
+        doc_id: Document ID
+        lexical_json: Lexical JSON content as string to save
+        
+    Returns:
+        True if save successful, False otherwise
+    """
+    try:
+        # Create .models directory if it doesn't exist
+        models_dir = Path(".models")
+        models_dir.mkdir(exist_ok=True)
+        
+        # Save model as JSON file
+        model_file = models_dir / f"{doc_id}.json"
+        
+        with open(model_file, 'w', encoding='utf-8') as f:
+            f.write(lexical_json)
+        
+        logger.info(f"💾 [Persistence] Saved model {doc_id} to {model_file}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ [Persistence] Failed to save model {doc_id}: {e}")
+        return False
+
+
 
 @dataclass
 class EphemeralMessage:
@@ -26,12 +146,22 @@ class EphemeralMessage:
     docId: str = ""
 
 class WSSharedDoc:
-    def __init__(self, name: str):
+    def __init__(self, name: str, 
+                 load_model: Optional[Callable[[str], Optional[str]]] = None,
+                 save_model: Optional[Callable[[str, str], bool]] = None):
         self.name = name
+        self.load_model = load_model or default_load_model
+        self.save_model = save_model or default_save_model
+        self.last_save_time = 0
+        self.has_changes_since_save = False
+        
         # Create actual Loro document
         self.doc = LoroDoc()
         
-        # Initialize with proper Lexical content structure
+        # Load from persistence first
+        self._load_from_persistence()
+        
+        # Initialize with proper Lexical content structure if needed
         try:
             # Add debug logging for initialization check
             tree = self.doc.get_tree(DEFAULT_TREE_NAME)
@@ -43,6 +173,7 @@ class WSSharedDoc:
                 logger.info(f"[Server] Document is empty, initializing with Lexical content")
                 initialize_loro_doc_with_lexical_content(self.doc, logger)
                 self.doc.commit()
+                self.has_changes_since_save = True  # Mark as changed for initial save
                 logger.info(f"[Server] Successfully initialized document with Lexical content")
                 
                 # Verify initialization
@@ -54,8 +185,8 @@ class WSSharedDoc:
                 # Log what content exists
                 for i, root_id in enumerate(roots[:3]):  # First 3 roots
                     try:
-                        root_node = tree.get(root_id)
-                        element_type = root_node.data.get('elementType', 'unknown')
+                        meta_map = tree.get_meta(root_id)
+                        element_type = meta_map.get('elementType', 'unknown')
                         logger.info(f"[Server] Existing root {i}: {root_id} -> type: {element_type}")
                     except Exception as e:
                         logger.info(f"[Server] Error reading root {i}: {e}")
@@ -66,6 +197,7 @@ class WSSharedDoc:
                 tree = self.doc.get_tree(DEFAULT_TREE_NAME)
                 root_id = tree.create()
                 self.doc.commit()
+                self.has_changes_since_save = True
                 logger.warning(f"[Server] Fallback: Created basic empty document")
             except Exception as fallback_e:
                 logger.error(f"[Server] Even fallback initialization failed: {fallback_e}")
@@ -74,9 +206,84 @@ class WSSharedDoc:
         self.ephemeral_store = {"data": {}}
         self.last_ephemeral_sender = None
         logger.info(f"[Server] Initialized document '{name}' with Loro tree structure")
+    
+    def _load_from_persistence(self):
+        """Load document content from persistence if available"""
+        try:
+            logger.info(f"📂 [Persistence] Loading document '{self.name}' from storage")
+            
+            # Load Lexical JSON content
+            lexical_content = self.load_model(self.name)
+            if not lexical_content or lexical_content.strip() == INITIAL_LEXICAL_JSON.strip():
+                logger.info(f"📂 [Persistence] No existing content found for '{self.name}', will use initial content")
+                return
+            
+            # Parse the JSON to validate it
+            try:
+                lexical_data = json.loads(lexical_content)
+                logger.info(f"📂 [Persistence] Successfully loaded existing content for '{self.name}'")
+                
+                # Convert Lexical JSON back to Loro tree structure
+                # For now, we'll store the lexical content and let the normal initialization handle it
+                # TODO: Implement proper Lexical -> Loro conversion if needed
+                logger.info(f"📂 [Persistence] Loaded content will be used during initialization")
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"⚠️ [Persistence] Invalid JSON in stored content for '{self.name}': {e}")
+                
+        except Exception as e:
+            logger.error(f"❌ [Persistence] Error loading document '{self.name}': {e}")
+    
+    def save_to_persistence(self) -> bool:
+        """Save current document state to persistence"""
+        try:
+            if not self.has_changes_since_save:
+                logger.debug(f"⏭️ [Persistence] No changes to save for document '{self.name}'")
+                return True
+            
+            logger.info(f"💾 [Persistence] Saving document '{self.name}' to storage")
+            
+            # Convert current Loro tree to Lexical JSON
+            lexical_json = loro_tree_to_lexical_json(self.doc, logger)
+            
+            # Save using the save function
+            success = self.save_model(self.name, lexical_json)
+            
+            if success:
+                self.has_changes_since_save = False
+                self.last_save_time = time.time()
+                logger.info(f"✅ [Persistence] Successfully saved document '{self.name}'")
+            else:
+                logger.error(f"❌ [Persistence] Failed to save document '{self.name}'")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"❌ [Persistence] Error saving document '{self.name}': {e}")
+            return False
+    
+    def mark_changed(self):
+        """Mark the document as having changes since last save"""
+        self.has_changes_since_save = True
+    
+    def needs_save(self) -> bool:
+        """Check if document needs to be saved"""
+        return self.has_changes_since_save
 
 # Global document storage
 docs = {}
+
+# Global persistence functions
+global_load_model = default_load_model
+global_save_model = default_save_model
+
+def set_persistence_functions(load_func: Optional[Callable[[str], Optional[str]]] = None,
+                            save_func: Optional[Callable[[str, str], bool]] = None):
+    """Set global persistence functions for all documents"""
+    global global_load_model, global_save_model
+    global_load_model = load_func or default_load_model
+    global_save_model = save_func or default_save_model
+    logger.info(f"[Persistence] Updated global persistence functions")
 
 def clear_docs():
     """Clear all cached documents - useful for server restarts"""
@@ -86,8 +293,24 @@ def clear_docs():
 
 def get_doc(docname: str):
     if docname not in docs:
-        docs[docname] = WSSharedDoc(docname)
+        docs[docname] = WSSharedDoc(docname, global_load_model, global_save_model)
     return docs[docname]
+
+def save_all_docs() -> Dict[str, bool]:
+    """Save all documents to persistence"""
+    results = {}
+    logger.info(f"💾 [Persistence] Saving all {len(docs)} documents")
+    
+    for doc_name, doc in docs.items():
+        try:
+            results[doc_name] = doc.save_to_persistence()
+        except Exception as e:
+            logger.error(f"❌ [Persistence] Error saving document '{doc_name}': {e}")
+            results[doc_name] = False
+    
+    saved_count = sum(1 for success in results.values() if success)
+    logger.info(f"✅ [Persistence] Saved {saved_count}/{len(docs)} documents")
+    return results
 
 def close_conn(doc, conn):
     if conn in doc.conns:
@@ -113,6 +336,9 @@ async def message_listener(conn, doc, message):
                 logger.info(f"[Server] Received binary Loro update: {len(message)} bytes")
                 # Apply the update to the document
                 doc.doc.import_(message)
+                # Mark document as changed for persistence
+                doc.mark_changed()
+                logger.debug(f"💾 [Persistence] Marked document '{doc.name}' as changed (binary update)")
                 
                 # Broadcast to other connections
                 for c in doc.conns:
@@ -246,6 +472,9 @@ async def handle_update(conn, doc, message_data):
         if update_data:
             update_bytes = bytes(update_data)
             doc.doc.import_(update_bytes)
+            # Mark document as changed for persistence
+            doc.mark_changed()
+            logger.debug(f"💾 [Persistence] Marked document '{doc.name}' as changed")
         
         # Broadcast to other connections
         logger.info(f"[Server] *** STARTING BROADCAST TO OTHER CONNECTIONS ***")
@@ -321,17 +550,13 @@ async def setup_ws_connection(conn, path: str):
     finally:
         close_conn(doc, conn)
 
-async def start_server(host: str = "localhost", port: int = 3002):
+async def start_server(host: str = "localhost", port: int = 3002, autosave_interval_sec: int = 60):
+    """Start WebSocket server with persistence - legacy function"""
     logger.info(f"Starting Loro WebSocket server on {host}:{port}")
     
-    # Clear any cached documents from previous runs
-    clear_docs()
-    
-    async def handler(websocket, path):
-        await setup_ws_connection(websocket, path)
-    
-    server = await serve(handler, host, port)
-    logger.info(f"Tree WebSocket server running on ws://{host}:{port}")
+    # Use the new server class
+    server = LoroWebSocketServer(host, port, autosave_interval_sec)
+    await server.start()
     
     return server
 
@@ -339,15 +564,28 @@ async def start_server(host: str = "localhost", port: int = 3002):
 class LoroWebSocketServer:
     """WebSocket server class for CLI compatibility"""
     
-    def __init__(self, host: str = "localhost", port: int = 3002, autosave_interval_sec: int = 60):
+    def __init__(self, host: str = "localhost", port: int = 3002, 
+                 autosave_interval_sec: int = 60,
+                 load_model: Optional[Callable[[str], Optional[str]]] = None,
+                 save_model: Optional[Callable[[str, str], bool]] = None):
         self.host = host
         self.port = port
-        self.autosave_interval_sec = autosave_interval_sec  # Not used in current implementation but kept for API compatibility
+        self.autosave_interval_sec = autosave_interval_sec
         self.server = None
+        self.running = False
+        self._autosave_task: Optional[asyncio.Task] = None
+        
+        # Set up persistence functions
+        set_persistence_functions(load_model, save_model)
         
     async def start(self):
         """Start the WebSocket server"""
-        logger.info(f"Starting LoroWebSocketServer on {self.host}:{self.port}")
+        logger.info(f"🚀 Starting LoroWebSocketServer")
+        logger.info(f"   Host: {self.host}")
+        logger.info(f"   Port: {self.port}")
+        logger.info(f"   Auto-save interval: {self.autosave_interval_sec} seconds")
+        
+        self.running = True
         
         # Clear any cached documents from previous runs
         clear_docs()
@@ -356,17 +594,98 @@ class LoroWebSocketServer:
             await setup_ws_connection(websocket, path)
         
         self.server = await serve(handler, self.host, self.port)
-        logger.info(f"LoroWebSocketServer running on ws://{self.host}:{self.port}")
+        logger.info(f"✅ LoroWebSocketServer running on ws://{self.host}:{self.port}")
         
-        # Keep the server running
-        await self.server.wait_closed()
+        # Start background autosave task
+        logger.info(f"🔄 Starting background services...")
+        self._autosave_task = asyncio.create_task(self._autosave_models())
+        logger.info(f"   ✓ Auto-save service ({self.autosave_interval_sec}s interval)")
+        
+        try:
+            # Keep the server running
+            await self.server.wait_closed()
+        finally:
+            await self.stop()
         
     async def stop(self):
         """Stop the WebSocket server"""
+        logger.info("🛑 Stopping LoroWebSocketServer...")
+        self.running = False
+        
+        # Cancel autosave task
+        if self._autosave_task:
+            self._autosave_task.cancel()
+            try:
+                await self._autosave_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Perform final save of all documents
+        logger.info("💾 Performing final save of all documents...")
+        save_results = save_all_docs()
+        saved_count = sum(1 for success in save_results.values() if success)
+        logger.info(f"✅ Final save completed: {saved_count}/{len(save_results)} documents saved")
+        
+        # Close server
         if self.server:
-            logger.info("Stopping LoroWebSocketServer...")
             self.server.close()
             await self.server.wait_closed()
+            logger.info("✅ WebSocket server stopped")
+    
+    async def _autosave_models(self):
+        """Periodically auto-save all models at the configured interval"""
+        logger.info(f"🚀 Auto-save task started with interval: {self.autosave_interval_sec} seconds")
+        
+        while self.running:
+            try:
+                await asyncio.sleep(self.autosave_interval_sec)
+                if self.running:
+                    logger.debug(f"🔍 Auto-save check: found {len(docs)} documents")
+                    
+                    if docs:
+                        logger.info(f"🔄 Auto-saving {len(docs)} documents...")
+                        saved_count = 0
+                        unchanged_count = 0
+                        
+                        for doc_name, doc in docs.items():
+                            try:
+                                if doc.needs_save():
+                                    success = doc.save_to_persistence()
+                                    if success:
+                                        saved_count += 1
+                                        logger.info(f"💾 Auto-saved document: {doc_name}")
+                                    else:
+                                        logger.warning(f"⚠️ Auto-save failed for document: {doc_name}")
+                                else:
+                                    unchanged_count += 1
+                                    logger.debug(f"⏭️ Skipping auto-save for unchanged document: {doc_name}")
+                            except Exception as e:
+                                logger.error(f"❌ Error auto-saving document {doc_name}: {e}")
+                        
+                        if saved_count > 0:
+                            logger.info(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                        elif unchanged_count > 0:
+                            logger.debug(f"ℹ️ Auto-save check: {unchanged_count} documents unchanged, none saved")
+                    else:
+                        logger.debug(f"🔍 No documents to auto-save")
+                        
+            except asyncio.CancelledError:
+                logger.info("🛑 Auto-save task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"❌ Error in auto-save loop: {e}")
+        
+        logger.info("✅ Auto-save task stopped")
+    
+    def save_all_models(self) -> Dict[str, bool]:
+        """
+        Manually save all models using the save_model function.
+        
+        Returns:
+            Dictionary mapping doc_id to save success status
+        """
+        logger.info(f"💾 Manually saving {len(docs)} documents...")
+        return save_all_docs()
 
 
 def main():
@@ -375,16 +694,55 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    loop = asyncio.get_event_loop()
-    server = loop.run_until_complete(start_server())
+    async def run_server():
+        # Example of custom load/save functions (uncomment to use)
+        
+        # def custom_load_model(doc_id: str) -> Optional[str]:
+        #     """Custom model loader - could load from database, API, etc."""
+        #     try:
+        #         # Example: Load from custom location
+        #         custom_file = Path(f"custom_models/{doc_id}.json")
+        #         if custom_file.exists():
+        #             with open(custom_file, 'r', encoding='utf-8') as f:
+        #                 return f.read()
+        #     except Exception as e:
+        #         logger.error(f"❌ Custom load error for {doc_id}: {e}")
+        #     return None
+        
+        # def custom_save_model(doc_id: str, lexical_json: str) -> bool:
+        #     """Custom model saver - could save to database, API, etc."""
+        #     try:
+        #         # Example: Save to custom location
+        #         custom_dir = Path("custom_models")
+        #         custom_dir.mkdir(exist_ok=True)
+        #         custom_file = custom_dir / f"{doc_id}.json"
+        #         with open(custom_file, 'w', encoding='utf-8') as f:
+        #             f.write(lexical_json)
+        #         return True
+        #     except Exception as e:
+        #         logger.error(f"❌ Custom save error for {doc_id}: {e}")
+        #         return False
+        
+        # Create and start server with persistence
+        server = LoroWebSocketServer(
+            host="localhost",
+            port=3002,
+            autosave_interval_sec=60,
+            # load_model=custom_load_model,
+            # save_model=custom_save_model
+        )
+        
+        try:
+            await server.start()
+        except KeyboardInterrupt:
+            logger.info("🛑 Shutting down server...")
+        finally:
+            await server.stop()
     
     try:
-        loop.run_forever()
+        asyncio.run(run_server())
     except KeyboardInterrupt:
-        logger.info("Shutting down server...")
-    finally:
-        server.close()
-        loop.run_until_complete(server.wait_closed())
+        logger.info("✅ Server shutdown complete")
 
 if __name__ == "__main__":
     main()

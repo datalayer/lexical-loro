@@ -284,3 +284,169 @@ def should_initialize_loro_doc(doc: LoroDoc) -> bool:
         return is_empty
     except Exception:
         return False  # Don't initialize if there's an error
+
+def loro_tree_to_lexical_json(doc: LoroDoc, logger=None) -> str:
+    """
+    Convert a Loro tree document to Lexical JSON format.
+    This function properly reconstructs the hierarchical structure from the tree.
+    
+    Args:
+        doc: LoroDoc instance
+        logger: Optional logger instance
+        
+    Returns:
+        Lexical JSON as string
+    """
+    import json
+    
+    try:
+        tree = doc.get_tree(DEFAULT_TREE_NAME)
+        roots = tree.roots
+        
+        if logger:
+            logger.info(f"[Converter] Converting Loro tree to Lexical JSON")
+            logger.info(f"[Converter] Tree has {len(roots)} roots, {len(tree.nodes())} total nodes")
+        
+        if not roots:
+            if logger:
+                logger.info(f"[Converter] Empty document, returning initial Lexical JSON")
+            return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
+        
+        # Find the root node (should be the first/only root)
+        main_root_id = roots[0] if roots else None
+        if not main_root_id:
+            if logger:
+                logger.warning(f"[Converter] No root node found, returning initial content")
+            return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
+        
+        if logger:
+            logger.info(f"[Converter] Converting from root node: {main_root_id}")
+        
+        # Convert the tree starting from root using the tree structure
+        lexical_root = convert_loro_node_to_lexical(tree, main_root_id, logger)
+        
+        # Wrap in the expected Lexical document structure
+        lexical_doc = {
+            "root": lexical_root
+        }
+        
+        # Return as formatted JSON string
+        result_json = json.dumps(lexical_doc, indent=2)
+        
+        if logger:
+            logger.info(f"[Converter] Successfully converted to Lexical JSON ({len(result_json)} chars)")
+        
+        return result_json
+        
+    except Exception as e:
+        if logger:
+            logger.error(f"❌ [Converter] Error converting Loro tree to Lexical JSON: {e}")
+            import traceback
+            logger.error(f"❌ [Converter] Traceback: {traceback.format_exc()}")
+        return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
+
+def convert_loro_node_to_lexical(tree, tree_id, logger=None) -> Dict[str, Any]:
+    """
+    Convert a single Loro tree node to Lexical node format.
+    This function uses the tree container structure to properly traverse children.
+    
+    Args:
+        tree: LoroTree instance
+        tree_id: TreeID of the node to convert
+        logger: Optional logger instance
+        
+    Returns:
+        Dictionary representing the Lexical node
+    """
+    try:
+        # Get node metadata first
+        meta_map = tree.get_meta(tree_id)
+        
+        # Get stored data using correct LoroMap API
+        keys = list(meta_map.keys())
+        
+        if logger:
+            logger.debug(f"[Converter] Converting node {tree_id}, meta keys: {keys}")
+        
+        # Get element type
+        element_type = 'paragraph'  # default
+        if 'elementType' in keys:
+            element_type_value = meta_map.get('elementType')
+            if hasattr(element_type_value, 'value'):
+                element_type = element_type_value.value
+            else:
+                element_type = str(element_type_value)
+        
+        # Get lexical data
+        lexical_data = {}
+        if 'lexical' in keys:
+            lexical_value = meta_map.get('lexical')
+            if hasattr(lexical_value, 'value'):
+                lexical_data = lexical_value.value
+            else:
+                # Try to convert to dict if it's a string
+                if isinstance(lexical_value, str):
+                    try:
+                        import json
+                        lexical_data = json.loads(lexical_value)
+                    except:
+                        lexical_data = {}
+                elif isinstance(lexical_value, dict):
+                    lexical_data = lexical_value
+                else:
+                    lexical_data = {}
+        
+        # Ensure we have the basic structure
+        node_data = {
+            'type': element_type or lexical_data.get('type', 'paragraph'),
+            'version': lexical_data.get('version', 1) if isinstance(lexical_data, dict) else 1
+        }
+        
+        # Add other lexical properties if they exist
+        if isinstance(lexical_data, dict):
+            for key in ['text', 'format', 'style', 'mode', 'detail', 'indent', 
+                       'direction', 'tag', 'textFormat', 'textStyle']:
+                if key in lexical_data:
+                    node_data[key] = lexical_data[key]
+        
+        # Get children using the correct tree API
+        children = []
+        try:
+            # Get children IDs for this node
+            child_ids = tree.children(tree_id)
+            
+            if logger:
+                logger.debug(f"[Converter] Node {tree_id} has {len(child_ids)} children")
+            
+            # Process each child
+            for i, child_id in enumerate(child_ids):
+                if logger:
+                    logger.debug(f"[Converter] Processing child {i}: {child_id}")
+                
+                # Recursively convert child node
+                child_lexical = convert_loro_node_to_lexical(tree, child_id, logger)
+                children.append(child_lexical)
+            
+            if logger and children:
+                logger.debug(f"[Converter] Found {len(children)} children for node {tree_id}")
+                
+        except Exception as e:
+            if logger:
+                logger.debug(f"[Converter] Error getting children for node {tree_id}: {e}")
+                # This might not be an error - some nodes may not have children
+        
+        # Add children if any exist
+        if children:
+            node_data['children'] = children
+        
+        return node_data
+        
+    except Exception as e:
+        if logger:
+            logger.error(f"❌ [Converter] Error converting node {tree_id}: {e}")
+        # Return a safe default node
+        return {
+            'type': 'paragraph',
+            'version': 1,
+            'children': []
+        }
