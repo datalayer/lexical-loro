@@ -25,7 +25,6 @@ export const callbackIntegrator = (doc) => {
       content: content && typeof content.toJSON === 'function' ? content.toJSON() : content
     }
   })
-  CALLBACK_URL && callbackRequest(CALLBACK_URL, CALLBACK_TIMEOUT, dataToSend)
 }
 
 /**

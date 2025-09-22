@@ -697,7 +697,11 @@ class LoroTreeModel:
                 # Start listening for messages
                 logger.info(f"🎧 MCP SERVER: Starting message listener task for doc: {self.doc_id}")
                 self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
-                logger.info(f"✅ MCP SERVER: WebSocket connection and message listener established for doc: {self.doc_id}")
+                
+                # Set up local update subscription for automatic propagation
+                self._setup_local_update_subscription()
+                
+                logger.info(f"✅ MCP SERVER: WebSocket connection, message listener, and local update subscription established for doc: {self.doc_id}")
                 return  # Success, exit retry loop
                 
             except Exception as e:
@@ -991,6 +995,55 @@ class LoroTreeModel:
             
         except Exception as e:
             logger.error(f"Failed to send update to WebSocket server: {e}")
+
+    def _setup_local_update_subscription(self) -> None:
+        """Set up subscription to automatically propagate local document changes to WebSocket server"""
+        try:
+            if hasattr(self, '_local_update_subscription'):
+                logger.debug(f"Local update subscription already exists for doc: {self.doc_id}")
+                return
+                
+            def local_update_callback(update_bytes):
+                """Callback to handle local document changes and send to WebSocket"""
+                try:
+                    logger.debug(f"🔄 LOCAL UPDATE: Document {self.doc_id} changed locally, propagating {len(update_bytes)} bytes to WebSocket")
+                    
+                    if self.websocket_connected and self.websocket:
+                        # Schedule the async send operation
+                        asyncio.create_task(self._send_local_update_to_websocket(update_bytes))
+                    else:
+                        logger.warning(f"⚠️ LOCAL UPDATE: WebSocket not connected for doc {self.doc_id}, cannot propagate local changes")
+                    
+                    return True  # Continue subscription
+                except Exception as e:
+                    logger.error(f"❌ LOCAL UPDATE: Failed to handle local update for doc {self.doc_id}: {e}")
+                    return True  # Continue subscription even on error
+            
+            # Subscribe to local document updates
+            self._local_update_subscription = self.doc.subscribe_local_update(local_update_callback)
+            logger.info(f"✅ LOCAL UPDATE: Subscription established for doc: {self.doc_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ LOCAL UPDATE: Failed to set up subscription for doc {self.doc_id}: {e}")
+
+    async def _send_local_update_to_websocket(self, update_bytes: bytes) -> None:
+        """Send local update to WebSocket server (async helper for subscription callback)"""
+        try:
+            if not self.websocket_connected or not self.websocket:
+                logger.warning(f"Cannot send local update: WebSocket not connected for doc {self.doc_id}")
+                return
+                
+            message = {
+                "type": "update",
+                "docId": self.doc_id,
+                "update": list(update_bytes)
+            }
+            
+            await self.websocket.send(json.dumps(message))
+            logger.info(f"✅ LOCAL UPDATE: Successfully propagated {len(update_bytes)} bytes to WebSocket server for doc: {self.doc_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ LOCAL UPDATE: Failed to send to WebSocket server for doc {self.doc_id}: {e}")
 
     def _log_document_structure(self, lexical_state: Dict[str, Any], operation: str) -> None:
         """

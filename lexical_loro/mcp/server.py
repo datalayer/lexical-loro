@@ -349,6 +349,10 @@ def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
 async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
     """Add a paragraph node to the Loro tree and sync with WebSocket server"""
     try:
+        # Capture version vector BEFORE making any changes for incremental updates
+        from_version = model.doc.state_vv
+        logger.info(f"🔍 MCP SERVER: Captured initial version: {from_version}")
+        
         # Work directly with TreeIDs since we're in a tree-based system
         tree = model.tree
         
@@ -393,23 +397,13 @@ async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
             "detail": 0
         })
         
-        # Commit the changes
-        model.doc.commit()
-        
         node_id = paragraph_id
         
-        # Send update to WebSocket server if connected
-        if model.websocket_connected:
-            try:
-                # Export the update and send to WebSocket server
-                update_bytes = model.doc.export(loro.ExportMode.Update)
-                await model.send_update_to_websocket_server(update_bytes)
-                logger.debug(f"📤 Sent paragraph update to WebSocket server for doc: {model.doc_id}")
-            except Exception as e:
-                logger.warning(f"Failed to send update to WebSocket server: {e}")
+        # Commit the changes - the model's local update subscription will handle WebSocket propagation automatically
+        model.doc.commit()
+        logger.info(f"✅ MCP SERVER: Changes committed for doc {model.doc_id} - model will handle WebSocket propagation via subscription")
         
-        return node_id
-        
+        return paragraph_id
     except Exception as e:
         logger.error(f"Error adding paragraph to tree: {e}")
         raise
