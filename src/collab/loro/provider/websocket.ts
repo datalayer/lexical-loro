@@ -33,11 +33,13 @@ export interface EphemeralMessage {
 export interface QueryEphemeralMessage {
   type: 'query-ephemeral'
   docId: string
+  clientId?: string  // Optional client ID for server logging/correlation
 }
 
 export interface QuerySnapshotMessage {
   type: 'query-snapshot'
   docId: string
+  clientId?: string  // Optional client ID for server logging/correlation
 }
 
 export type LoroWebSocketMessage = LoroUpdateMessage | EphemeralMessage | QueryEphemeralMessage | QuerySnapshotMessage;
@@ -522,11 +524,13 @@ const setupWS = (provider) => {
       if (!provider.snapshotLoaded) {
         // First request a snapshot to get the initial document state
         const requestId = Math.random().toString(36).substr(2, 9);
+        const clientId = generateClientID(provider.doc).toString();
         const snapshotRequest: QuerySnapshotMessage = {
           type: 'query-snapshot',
-          docId: provider.docId
+          docId: provider.docId,
+          clientId: clientId
         }
-        console.log(`🔄 Requesting initial snapshot from server (ID: ${requestId}):`, snapshotRequest)
+        console.log(`🔄 Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
         console.log(`🔄 Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
         sendMessage(ws, snapshotRequest)
       } else {
@@ -534,9 +538,11 @@ const setupWS = (provider) => {
       }
       
       // Then request initial ephemeral state from server  
+      const clientId = generateClientID(provider.doc).toString();
       const ephemeralRequest: QueryEphemeralMessage = {
         type: 'query-ephemeral',
-        docId: provider.docId
+        docId: provider.docId,
+        clientId: clientId
       }
       sendMessage(ws, ephemeralRequest)
 
@@ -730,10 +736,12 @@ export class WebsocketProvider extends ObservableV2<any> {
     if (resyncInterval > 0) {
       this._resyncInterval = /** @type {any} */ (setInterval(() => {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          // Request fresh ephemeral state from server
+          // Request fresh ephemeral state from server with client ID
+          const clientId = generateClientID(this.doc).toString();
           const queryMessage: QueryEphemeralMessage = {
             type: 'query-ephemeral',
-            docId: this.docId
+            docId: this.docId,
+            clientId: clientId
           }
           sendMessage(this.ws, queryMessage)
         }
@@ -918,9 +926,11 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Note: BroadcastChannel snapshot sharing removed - only WebSocket queries supported
     
     // Query ephemeral state from other tabs
+    const clientId = generateClientID(this.doc).toString();
     const queryMessage: QueryEphemeralMessage = {
       type: 'query-ephemeral',
-      docId: this.docId
+      docId: this.docId,
+      clientId: clientId
     }
     bc.publish(this.bcChannel, JSON.stringify(queryMessage), this)
     

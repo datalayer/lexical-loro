@@ -8,7 +8,13 @@ const WEBSOCKET_ENDPOINT =
   params.get('collabEndpoint') || 'ws://localhost:3002';
 const WEBSOCKET_SLUG = 'playground';
 const WEBSOCKET_ID = params.get('collabId') || '0';
+const RESYNC_INTERVAL = parseInt(params.get('resyncInterval') || '30000', 10); // Default 30s, configurable via URL
 
+/**
+ * Create a WebSocket provider for Loro collaboration with periodic ephemeral state synchronization.
+ * The resyncInterval enables client-side periodic querying to complement server-side cleanup,
+ * preventing stale user states from accumulating after browser refreshes.
+ */
 export function createWebsocketProvider(
   id: string,
   docMap: Map<string, LoroDoc>,
@@ -29,9 +35,10 @@ export function createWebsocketProvider(
     doc,
     {
       connect: false,
+      resyncInterval: RESYNC_INTERVAL, // Poll ephemeral state periodically to prevent stale user accumulation
     },
   );
   
-  console.log(`🏭 WebsocketProvider created for: ${WEBSOCKET_ENDPOINT}/${WEBSOCKET_SLUG}/${WEBSOCKET_ID}/${id}`);
+  console.log(`🏭 WebsocketProvider created for: ${WEBSOCKET_ENDPOINT}/${WEBSOCKET_SLUG}/${WEBSOCKET_ID}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
   return websocketProvider;
 }

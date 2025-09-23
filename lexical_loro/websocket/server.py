@@ -387,6 +387,19 @@ def close_conn(doc, conn):
         
         logger.debug(f"💔 [Server] *** CONNECTION CLOSING *** for document: {doc.name}")
         logger.debug(f"💔 [Server] Closing connection: {conn}")
+        
+        # Clean up ephemeral state for this client
+        if client_id:
+            try:
+                # Remove the client's ephemeral state
+                doc.ephemeral_store.delete(client_id)
+                logger.info(f"🧹 [Server] CLEANED UP ephemeral state for clientID: {client_id}")
+                logger.info(f"🔗 [CORRELATION] Removed ephemeral data for Frontend clientID: {client_id}")
+            except Exception as ephemeral_error:
+                logger.warning(f"⚠️ [Server] Failed to cleanup ephemeral state for {client_id}: {ephemeral_error}")
+        else:
+            logger.warning(f"⚠️ [Server] No client_id available for connection cleanup, cannot remove ephemeral state")
+        
         del doc.conns[conn]
         logger.debug(f"💔 [Server] Remaining connections for document {doc.name}: {len(doc.conns)}")
         logger.debug(f"💔 [Server] Remaining connections list: {list(doc.conns.keys())}")
@@ -458,12 +471,25 @@ async def message_listener(conn, doc, message):
 
 async def handle_query_snapshot(conn, doc, message_data):
     try:
+        # Extract client ID from message if provided
+        client_id = message_data.get("clientId")
+        conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+        
+        if client_id:
+            # Store client ID mapping on first snapshot request
+            conn.client_id = client_id
+            display_id = client_id
+            logger.info(f"🆔 [Server] CLIENT ID from snapshot request: {conn_id} ↔ {client_id}")
+            logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+        else:
+            display_id = getattr(conn, 'client_id', conn_id)
+        
         request_id = str(time.time())
-        logger.debug(f"[Server] Client requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
+        logger.info(f"📸 [Server] Client {display_id} requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
         
         # Export actual Loro document snapshot
         snapshot = doc.doc.export(ExportMode.Snapshot())
-        logger.debug(f"[Server] Sending snapshot response: {len(snapshot)} bytes")
+        logger.info(f"📸 [Server] Sending snapshot response to {display_id}: {len(snapshot)} bytes")
         
         # Log tree structure for debugging
         tree = doc.doc.get_tree(DEFAULT_TREE_NAME)
@@ -481,10 +507,6 @@ async def handle_ephemeral(conn, doc, message_data):
     try:
         ephemeral_data = message_data.get("ephemeral", [])
         conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-        logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {conn_id}")
-        
-        # Mark this connection as sender to avoid echo
-        doc.last_ephemeral_sender = conn
         
         # Debug: Check ephemeral store state before applying
         before_states = doc.ephemeral_store.get_all_states()
@@ -515,18 +537,22 @@ async def handle_ephemeral(conn, doc, message_data):
         if new_client_ids:
             # Now keys are direct client IDs, so we can use the first new client ID
             client_id = new_client_ids[0]  # Get the first new client ID (e.g., "1172255969499")
-            logger.info(f"🎭 [Server] CLIENT ID DETECTED: {conn_id} → {client_id}")
             # Store the client ID mapping for future reference
             if not hasattr(conn, 'client_id'):
                 conn.client_id = client_id
-                logger.info(f"🆔 [Server] MAPPED CONNECTION: {conn_id} ↔ {client_id}")
-                # Also log in a format that makes correlation easy
+                logger.info(f"🆔 [Server] NEW CLIENT MAPPED: {conn_id} ↔ {client_id}")
                 logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+            else:
+                logger.debug(f"🎭 [Server] CLIENT ID CONFIRMED: {conn_id} → {client_id}")
         
-        # Use client ID in logging if available
+        # Use client ID in logging if available  
         display_id = getattr(conn, 'client_id', conn_id)
         
-        logger.info(f"📡 [Server] Ephemeral update applied for {display_id} (was {conn_id})")
+        # Log the processed ephemeral update with proper client ID
+        logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {display_id}")
+        
+        # Mark this connection as sender to avoid echo (moved after client ID detection)
+        doc.last_ephemeral_sender = conn
         logger.debug(f"📡 SERVER DEBUG - Applied ephemeral update from {display_id}: "
                     f"bytes_length={len(ephemeral_bytes)}, "
                     f"before_keys={before_keys}, "
@@ -539,15 +565,27 @@ async def handle_ephemeral(conn, doc, message_data):
         doc.last_ephemeral_sender = None
 
 async def handle_query_ephemeral(conn, doc, message_data):
-    logger.info(f"❓👻❓ [Server] HANDLE_QUERY_EPHEMERAL CALLED ❓👻❓")
+    # Extract client ID from message if provided, otherwise use stored client_id
+    client_id = message_data.get("clientId") or getattr(conn, 'client_id', None)
+    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+    
+    if client_id and not hasattr(conn, 'client_id'):
+        # Store client ID mapping if not already stored
+        conn.client_id = client_id
+        logger.info(f"🆔 [Server] CLIENT ID from ephemeral query: {conn_id} ↔ {client_id}")
+        logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+    
+    display_id = client_id if client_id else conn_id
+    
+    logger.info(f"❓👻❓ [Server] QUERY-EPHEMERAL from {display_id} ❓👻❓")
     try:
         # Get all current ephemeral state using proper Loro EphemeralStore API
         all_states = doc.ephemeral_store.get_all_states()
         all_keys = list(all_states.keys())
         ephemeral_update = doc.ephemeral_store.encode_all()
         
-        logger.info(f"📊 [Server] Ephemeral query - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
-        logger.debug(f"📡 SERVER DEBUG - Client conn {id(conn)} requesting ephemeral state: "
+        logger.info(f"📊 [Server] Ephemeral query response for {display_id} - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
+        logger.debug(f"📡 SERVER DEBUG - Client {display_id} requesting ephemeral state: "
                     f"all_keys_available={all_keys}, "
                     f"encoded_length={len(ephemeral_update)}, "
                     f"total_connections={len(doc.conns)}")
