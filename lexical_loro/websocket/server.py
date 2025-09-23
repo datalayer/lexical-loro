@@ -572,12 +572,12 @@ async def handle_query_ephemeral(conn, doc, message_data):
     if client_id and not hasattr(conn, 'client_id'):
         # Store client ID mapping if not already stored
         conn.client_id = client_id
-        logger.info(f"🆔 [Server] CLIENT ID from ephemeral query: {conn_id} ↔ {client_id}")
+        logger.info(f"🆔 [Server] Client ID from ephemeral query: {conn_id} ↔ {client_id}")
         logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
     
     display_id = client_id if client_id else conn_id
     
-    logger.info(f"❓👻❓ [Server] QUERY-EPHEMERAL from {display_id} ❓👻❓")
+    logger.info(f"👻 [Server] Query Ephemeral from {display_id}")
     try:
         # Get all current ephemeral state using proper Loro EphemeralStore API
         all_states = doc.ephemeral_store.get_all_states()

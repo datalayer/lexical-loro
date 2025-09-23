@@ -9,7 +9,7 @@ import type { UserState, AwarenessProvider } from '../State'
 import { generateClientID, generateRandomClientID } from '../utils/Utils'
 
 // @todo - this should depend on ephemeral timeout
-const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
+const messageReconnectTimeoutMs = 30 * 1000 // 30 seconds
 
 // Loro message types
 export const messageUpdate = 'update'
