@@ -130,6 +130,7 @@ export function useCollaboration(
         if (update.tags.has(SKIP_COLLAB_TAG) === false) {
           syncLexicalToLoro(
             binding,
+            provider,
             update,
           );
         }

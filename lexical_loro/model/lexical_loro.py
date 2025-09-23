@@ -1195,8 +1195,7 @@ class LoroTreeModel:
         elif message_type == "keepalive_ack":
             await self._handle_keepalive_ack(data)
         else:
-            logger.warning(f"❓ MCP SERVER: Received unknown WebSocket message type '{message_type}' for doc: {self.doc_id}")
-            logger.warning(f"❓ MCP SERVER: Message data: {data}")
+            logger.debug(f"❓ MCP SERVER: Received unknown WebSocket message type '{message_type}' for doc: {self.doc_id} with data: {data}")
 
     async def _handle_snapshot_message(self, data: Dict[str, Any]) -> None:
         """Handle snapshot message from WebSocket server"""

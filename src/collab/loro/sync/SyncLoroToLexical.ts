@@ -1,8 +1,8 @@
 import { LoroEventBatch } from 'loro-crdt';
-import { $getRoot, $getSelection, $setSelection, SKIP_COLLAB_TAG } from 'lexical';
+import { $addUpdateTag, $createParagraphNode, $getRoot, $getSelection, $isRangeSelection, $setSelection, COLLABORATION_TAG, HISTORIC_TAG, SKIP_COLLAB_TAG, SKIP_SCROLL_INTO_VIEW_TAG } from 'lexical';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
-import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
+import { $syncLocalCursorPosition, syncCursorPositions, SyncCursorPositionsFn, syncLexicalSelectionToLoro } from './SyncCursors';
 
 // Import the new diff integrators
 import { TreeIntegrator } from '../integrators/TreeIntegrator';
@@ -10,6 +10,7 @@ import { MapIntegrator } from '../integrators/MapIntegrator';
 import { ListIntegrator } from '../integrators/ListIntegrator';
 import { TextIntegrator } from '../integrators/TextIntegrator';
 import { CounterIntegrator } from '../integrators/CounterIntegrator';
+import { $moveSelectionToPreviousNode, doesSelectionNeedRecovering } from '../utils/Utils';
 
 // Create singleton instances of the diff integrators (created once, reused across calls)
 const treeIntegrator = new TreeIntegrator();
@@ -25,6 +26,9 @@ export function syncLoroToLexical(
   isFromUndoManger: boolean,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
 ): void {
+
+  const editor = binding.editor;
+  const currentEditorState = editor._editorState;
 
   // Batch all events into a single discrete editor.update() to avoid race conditions
   // Using discrete: true ensures immediate synchronous commit before other operations
@@ -71,25 +75,53 @@ export function syncLoroToLexical(
       }
     });
     
-  // discrete: true
-  }, { tag: SKIP_COLLAB_TAG });
+    const selection = $getSelection();
 
-  // Verify final editor state after all events
-  binding.editor.getEditorState().read(() => {
-    const root = $getRoot();
-    const allNodes = root.getChildren().flatMap(child => {
-      const nodes = [child];
-      if ('getChildren' in child && typeof child.getChildren === 'function') {
-        nodes.push(...(child as any).getChildren());
+    if ($isRangeSelection(selection)) {
+      if (doesSelectionNeedRecovering(selection)) {
+        const prevSelection = currentEditorState._selection;
+
+        if ($isRangeSelection(prevSelection)) {
+          $syncLocalCursorPosition(binding, provider);
+          if (doesSelectionNeedRecovering(selection)) {
+            // If the selected node is deleted, move the selection to the previous or parent node.
+            const anchorNodeKey = selection.anchor.key;
+            $moveSelectionToPreviousNode(anchorNodeKey, currentEditorState);
+          }
+        }
+
+        syncLexicalSelectionToLoro(
+          binding,
+          provider,
+          prevSelection,
+          $getSelection(),
+        );
+      } else {
+        $syncLocalCursorPosition(binding, provider);
       }
-      return nodes;
-    });
-    
-    const textNodes = allNodes.filter(node => node.getType() === 'text');
-  });
+    }
 
-  // Sync cursor positions after applying changes
-  if (!isFromUndoManger) {
-    syncCursorPositionsFn(binding, provider);
-  }
+    if (!isFromUndoManger) {
+      // If it is an external change, we don't want the current scroll position to get changed
+      // since the user might've intentionally scrolled somewhere else in the document.
+      $addUpdateTag(SKIP_SCROLL_INTO_VIEW_TAG);
+    }
+  },
+  {
+    onUpdate: () => {
+      syncCursorPositionsFn(binding, provider);
+      // If there was a collision on the top level paragraph
+      // we need to re-add a paragraph. To ensure this insertion properly syncs with other clients,
+      // it must be placed outside of the update block above that has tags 'collaboration' or 'historic'.
+      editor.update(() => {
+        if ($getRoot().getChildrenSize() === 0) {
+          $getRoot().append($createParagraphNode());
+        }
+      });
+    },
+//    discrete: true,
+    skipTransforms: true,
+//    tag: isFromUndoManger ? HISTORIC_TAG : COLLABORATION_TAG,
+    tag: SKIP_COLLAB_TAG
+  });
 }

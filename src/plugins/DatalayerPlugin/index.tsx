@@ -102,7 +102,7 @@ export default function DatalayerPlugin(): JSX.Element | null {
   const executeAppendParagraph = async () => {
     try {
       const timestamp = new Date().toISOString();
-      const paragraphText = `New paragraph added at ${timestamp}`;
+      const paragraphText = `New paragraph added at via MCP at ${timestamp}`;
       
       console.log('✏️ Executing append_paragraph MCP tool with text:', paragraphText);
       

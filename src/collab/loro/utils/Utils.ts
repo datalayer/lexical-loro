@@ -1,5 +1,5 @@
 import { LoroDoc, TreeID } from 'loro-crdt';
-import { $getSelection, $isRangeSelection, LexicalNode, NodeKey, TextNode } from 'lexical';
+import { $getNodeByKey, $getRoot, $getSelection, $isRangeSelection, $isTextNode, EditorState, ElementNode, LexicalNode, NodeKey, RangeSelection, TextNode } from 'lexical';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
 export const DEFAULT_TREE_NAME = 'lexical-tree';
@@ -102,4 +102,69 @@ export function $diffTextContentAndApplyDelta(
   textNode.spliceText(diff.index, diff.remove, diff.insert);
   const afterSplice = textNode.getTextContent();
   
+}
+
+export function doesSelectionNeedRecovering(
+  selection: RangeSelection,
+): boolean {
+  const anchor = selection.anchor;
+  const focus = selection.focus;
+  let recoveryNeeded = false;
+
+  try {
+    const anchorNode = anchor.getNode();
+    const focusNode = focus.getNode();
+
+    if (
+      // We might have removed a node that no longer exists
+      !anchorNode.isAttached() ||
+      !focusNode.isAttached() ||
+      // If we've split a node, then the offset might not be right
+      ($isTextNode(anchorNode) &&
+        anchor.offset > anchorNode.getTextContentSize()) ||
+      ($isTextNode(focusNode) && focus.offset > focusNode.getTextContentSize())
+    ) {
+      recoveryNeeded = true;
+    }
+  } catch (e) {
+    // Sometimes checking nor a node via getNode might trigger
+    // an error, so we need recovery then too.
+    recoveryNeeded = true;
+  }
+
+  return recoveryNeeded;
+}
+
+export function $moveSelectionToPreviousNode(
+  anchorNodeKey: string,
+  currentEditorState: EditorState,
+) {
+  const anchorNode = currentEditorState._nodeMap.get(anchorNodeKey);
+  if (!anchorNode) {
+    $getRoot().selectStart();
+    return;
+  }
+  // Get previous node
+  const prevNodeKey = anchorNode.__prev;
+  let prevNode: ElementNode | null = null;
+  if (prevNodeKey) {
+    prevNode = $getNodeByKey(prevNodeKey);
+  }
+
+  // If previous node not found, get parent node
+  if (prevNode === null && anchorNode.__parent !== null) {
+    prevNode = $getNodeByKey(anchorNode.__parent);
+  }
+  if (prevNode === null) {
+    $getRoot().selectStart();
+    return;
+  }
+
+  if (prevNode !== null && prevNode.isAttached()) {
+    prevNode.selectEnd();
+    return;
+  } else {
+    // If the found node is also deleted, select the next one
+    $moveSelectionToPreviousNode(prevNode.__key, currentEditorState);
+  }
 }

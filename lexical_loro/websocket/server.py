@@ -6,14 +6,13 @@ import logging
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Optional, Callable
 import websockets
 from websockets.server import serve
 from loro import LoroDoc, ExportMode
 from ..constants import DEFAULT_TREE_NAME
 from ..model.lexical_converter import (
-    initialize_loro_doc_with_lexical_content, 
-    should_initialize_loro_doc, 
+    initialize_loro_doc_with_lexical_content,
     loro_tree_to_lexical_json,
     lexical_to_loro_tree
 )

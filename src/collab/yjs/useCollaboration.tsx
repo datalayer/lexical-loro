@@ -31,7 +31,6 @@ import {
 import { Binding } from './Bindings';
 import { syncYjsUpdatesToLexical, syncLexicalUpdatesToYjs } from './sync/SyncEditorStates';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
-import { CounterNode } from '../../nodes/CounterNode';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 

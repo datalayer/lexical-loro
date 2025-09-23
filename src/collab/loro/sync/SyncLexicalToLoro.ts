@@ -1,4 +1,4 @@
-import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode } from 'lexical';
+import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode, $getSelection } from 'lexical';
 import { Binding } from '../Bindings';
 import { propagateRootNode } from '../propagators/RootNodePropagator';
 import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
@@ -7,13 +7,20 @@ import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending } from '../utils/Utils';
 import { scheduleAsyncCommit } from '../Bindings';
+import { syncLexicalSelectionToLoro } from './SyncCursors';
+import { Provider } from '../State';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
 export function syncLexicalToLoro(
   binding: Binding,
-  update: UpdateListenerPayload
+  provider: Provider,
+  update: UpdateListenerPayload,
 ) {
-  const { mutatedNodes } = update;
+  const {
+    mutatedNodes,
+    prevEditorState,
+    editorState: currEditorState,
+  } = update;
 
   if (mutatedNodes) {
 
@@ -72,7 +79,7 @@ export function syncLexicalToLoro(
     });
 
     // Option 1 - commit directly (synchronous, can be slow for large docs)
-    // binding.doc.commit({ origin: binding.doc.peerIdStr });
+    binding.doc.commit({ origin: binding.doc.peerIdStr });
 
     // Option 2 - Schedule an async commit instead of immediate synchronous commit
     // This reduces latency for large documents by debouncing commits
@@ -80,14 +87,17 @@ export function syncLexicalToLoro(
 
     // Option 3 - Schedule an async commit instead of immediate synchronous commit
     // This reduces latency for large documents by debouncing commits.
-    
+    /*
     const doCommit = () => requestIdleCallback(() => {
        binding.doc.commit({ origin: binding.doc.peerIdStr });
     }, { timeout: 2000 });
     doCommit();
-
-    // Sync cursor positions after all node mutations are processed.
-    // syncCursorPositions(binding, update);
+    */
+    currEditorState.read(() => {
+      const selection = $getSelection();
+      const prevSelection = prevEditorState._selection;
+      syncLexicalSelectionToLoro(binding, provider, prevSelection, selection);
+    });
 
   }
 }

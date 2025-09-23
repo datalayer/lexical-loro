@@ -45,7 +45,7 @@ export function syncCursorPositions(
   provider: Provider,
   options?: SyncCursorPositionsOptions,
 ): void {
-  //
+ // TODO Implement this method.
 }
 
 export function syncLexicalSelectionToLoro(
@@ -54,5 +54,15 @@ export function syncLexicalSelectionToLoro(
   prevSelection: null | BaseSelection,
   nextSelection: null | BaseSelection,
 ): void {
-  //
+ // TODO Implement this method.
 }
+
+/*****************************************************************************/
+
+export function $syncLocalCursorPosition(
+  binding: Binding,
+  provider: Provider,
+): void {
+ // TODO Implement this method.
+}
+
