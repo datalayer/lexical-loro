@@ -2,7 +2,7 @@ import type {LexicalEditor} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
 import type {LoroDoc, LoroTree} from 'loro-crdt';
 import invariant from '../utils/invariant';
-import type {Cursor} from './sync/SyncCursors';
+import type {CollabCursor} from './sync/SyncCursors';
 import { getLoroTree } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
@@ -13,7 +13,7 @@ export type ClientID = number;
 export type Binding = {
   tree: LoroTree;
   clientID: ClientID;
-  cursors: Map<ClientID, Cursor>;
+  cursors: Map<ClientID, CollabCursor>;
   cursorsContainer: null | HTMLElement;
   doc: LoroDoc;
   docMap: Map<string, LoroDoc>;

@@ -49,9 +49,10 @@ class AwarenessAdapter implements AwarenessProvider {
   private localClientId: number
   private eventHandlers: Map<string, (() => void)[]> = new Map()
 
-  constructor(ephemeralStore: EphemeralStore) {
+  constructor(ephemeralStore: EphemeralStore, doc?: LoroDoc) {
     this.ephemeralStore = ephemeralStore
-    this.localClientId = Math.floor(Math.random() * 2147483647) // Random client ID
+    // Use the same client ID as the binding for consistency
+    this.localClientId = doc ? Number(doc.peerIdStr.slice(0, 8)) : Math.floor(Math.random() * 2147483647)
     
     // Subscribe to ephemeral store changes and emit awareness updates
     this.ephemeralStore.subscribe((event) => {
@@ -82,15 +83,30 @@ class AwarenessAdapter implements AwarenessProvider {
   getStates(): Map<number, UserState> {
     const states = new Map<number, UserState>()
     
-    // In a real implementation, you'd need to track all user keys
-    // For now, we'll just add the local state
-    const localState = this.getLocalState()
-    if (localState) {
-      states.set(this.localClientId, localState)
+    try {
+      // Get all states from ephemeral store
+      const allStates = this.ephemeralStore.getAllStates()
+      
+      // Iterate through all keys and extract user states
+      for (const [key, value] of Object.entries(allStates)) {
+        if (key.startsWith('user-')) {
+          // Extract client ID from key format "user-{clientId}"
+          const clientIdStr = key.substring(5) // Remove "user-" prefix
+          const clientId = parseInt(clientIdStr, 10)
+          
+          if (!isNaN(clientId) && value) {
+            states.set(clientId, value as UserState)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[Client] AwarenessAdapter.getStates() - ERROR:`, error.message)
+      // Fallback to just local state
+      const localState = this.getLocalState()
+      if (localState) {
+        states.set(this.localClientId, localState)
+      }
     }
-    
-    // TODO: Iterate through all ephemeral keys that match user pattern
-    // and build the complete states map
     
     return states
   }
@@ -612,7 +628,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     }
     
     // Create awareness adapter that wraps ephemeral store
-    this.awareness = new AwarenessAdapter(this.ephemeralStore)
+    this.awareness = new AwarenessAdapter(this.ephemeralStore, this.doc)
     this.wsconnected = false
     this.wsconnecting = false
     this.bcconnected = false
