@@ -314,18 +314,6 @@ export function syncCursorPositions(
   const nodeMap = editor._editorState._nodeMap;
   const visitedClientIDs = new Set();
 
-  // Debug: Log cursor sync information
-  console.log('syncCursorPositions Debug:', {
-    localClientID,
-    awarenessStatesCount: awarenessStates.length,
-    currentCursorsCount: cursors.size,
-    awarenessStates: awarenessStates.map(([id, state]) => ({
-      clientId: id,
-      name: state.name,
-      focusing: state.focusing
-    }))
-  });
-
   // Process all cursor positions from awareness (including local user)
   for (let i = 0; i < awarenessStates.length; i++) {
     const awarenessState = awarenessStates[i];

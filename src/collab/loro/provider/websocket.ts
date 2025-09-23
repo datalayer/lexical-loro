@@ -70,7 +70,7 @@ class AwarenessAdapter implements AwarenessProvider {
   }
 
   getLocalState(): UserState | null {
-    const localKey = `user-${this.localClientId}`
+    const localKey = this.localClientId.toString()
     
     try {
       const state = this.ephemeralStore.get(localKey)
@@ -101,28 +101,13 @@ class AwarenessAdapter implements AwarenessProvider {
       
       // Iterate through all keys and extract user states
       for (const [key, value] of Object.entries(allStates)) {
-        if (key.startsWith('user-')) {
-          // Extract client ID from key format "user-{clientId}"
-          const clientIdStr = key.substring(5) // Remove "user-" prefix
-          const clientId = parseInt(clientIdStr, 10)
-          
-          if (!isNaN(clientId) && value) {
-            states.set(clientId, value as UserState)
-          }
+        // Keys are now direct client ID strings
+        const clientId = parseInt(key, 10)
+        
+        if (!isNaN(clientId) && value) {
+          states.set(clientId, value as UserState)
         }
       }
-      
-      console.log('🔄 AWARENESS DEBUG - Retrieved states:', {
-        localClientId: this.localClientId,
-        allKeysCount: Object.keys(allStates).length,
-        userKeysFound: Array.from(states.keys()),
-        stateDetails: Array.from(states.entries()).map(([id, state]) => ({
-          clientId: id,
-          name: state.name,
-          color: state.color,
-          isLocal: id === this.localClientId
-        }))
-      });
       
     } catch (error) {
       console.warn(`[Client] AwarenessAdapter.getStates() - ERROR:`, error.message)
@@ -142,7 +127,9 @@ class AwarenessAdapter implements AwarenessProvider {
     
     try {
       for (const [key, value] of Object.entries(allStates)) {
-        if (key.startsWith('user-') && value && typeof value === 'object') {
+        // Keys are now direct client ID strings
+        const clientId = parseInt(key, 10)
+        if (!isNaN(clientId) && value && typeof value === 'object') {
           const state = value as UserState
           const lastActivity = typeof state.lastActivity === 'number' ? state.lastActivity : 0
           
@@ -159,7 +146,7 @@ class AwarenessAdapter implements AwarenessProvider {
   }
 
   setLocalState(state: UserState): void {
-    const localKey = `user-${this.localClientId}`
+    const localKey = this.localClientId.toString()
     
     // Add lastActivity timestamp for stale state cleanup
     const stateWithActivity = {
@@ -167,26 +154,9 @@ class AwarenessAdapter implements AwarenessProvider {
       lastActivity: Date.now()
     }
 
-    console.log('🔄 AWARENESS DEBUG - Setting local state:', {
-      localClientId: this.localClientId,
-      awarenessKey: localKey,
-      stateName: state.name,
-      stateColor: state.color,
-      focusing: state.focusing
-    });
-
     try {
       this.ephemeralStore.set(localKey, stateWithActivity as any)
-      
-      // Debug: Check what's actually in the store after setting
-      const allStates = this.ephemeralStore.getAllStates();
-      const userKeys = Object.keys(allStates).filter(key => key.startsWith('user-'));
-      console.log('🔄 AWARENESS DEBUG - All user states in store after set:', {
-        userKeys,
-        totalKeys: Object.keys(allStates).length,
-        myKey: localKey
-      });
-      
+            
     } catch (error) {
       console.warn(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() FAILED:`, {
         error: error.message,
@@ -471,7 +441,7 @@ const closeWebsocketConnection = (provider, ws, event) => {
       // Clear user-specific state
       try {
         const peerId = generateClientID(provider.doc)
-        const userKey = `user-${peerId}`
+        const userKey = peerId.toString()
         provider.ephemeralStore.delete(userKey)
         console.log('Disconnect cleanup: removed user key:', userKey)
       } catch (error) {
@@ -711,7 +681,9 @@ export class WebsocketProvider extends ObservableV2<any> {
           // Clean up all existing user states when reusing store to prevent accumulation
           const allStates = WebsocketProvider.globalEphemeralStore.getAllStates()
           Object.keys(allStates).forEach(key => {
-            if (key.startsWith('user-')) {
+            // Keys are now direct client ID strings, check if it's a valid client ID
+            const clientId = parseInt(key, 10)
+            if (!isNaN(clientId)) {
               WebsocketProvider.globalEphemeralStore!.delete(key)
               console.log('🧹 Cleaned up stale user state:', key)
             }
@@ -824,7 +796,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       if (this.ephemeralStore && this.awareness) {
         try {
           const peerId = generateClientID(this.doc)
-          const userKey = `user-${peerId}`
+          const userKey = peerId.toString()
           this.ephemeralStore.delete(userKey)
         } catch (error) {
           console.warn(`[Client] Process exit - Could not clear user state:`, error.message)
@@ -924,7 +896,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     if (this.ephemeralStore && this.awareness) {
       try {
         const peerId = generateClientID(this.doc)
-        const userKey = `user-${peerId}`
+        const userKey = peerId.toString()
         this.ephemeralStore.delete(userKey)
       } catch (error) {
         console.warn(`[Client] WebsocketProvider.destroy - Could not clear user state:`, error.message)
@@ -979,7 +951,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Clear user-specific state
     try {
       const peerId = generateClientID(this.doc)
-      const userKey = `user-${peerId}`
+      const userKey = peerId.toString()
       this.ephemeralStore.delete(userKey)
       console.log('Broadcast disconnect cleanup: removed user key:', userKey)
     } catch (error) {

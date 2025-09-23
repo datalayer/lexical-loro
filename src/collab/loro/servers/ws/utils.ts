@@ -300,18 +300,18 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           
           // Debug: Check ephemeral store state before and after
           const beforeStates = doc.ephemeralStore.getAllStates()
-          const beforeUserKeys = Object.keys(beforeStates).filter(k => k.startsWith('user-'))
+          const beforeKeys = Object.keys(beforeStates)
           
           doc.ephemeralStore.apply(ephemeralBytes)
           
           const afterStates = doc.ephemeralStore.getAllStates()
-          const afterUserKeys = Object.keys(afterStates).filter(k => k.startsWith('user-'))
+          const afterKeys = Object.keys(afterStates)
           
           console.log(`📡 SERVER DEBUG - Applied ephemeral update from ${conn.id}:`, {
             bytesLength: ephemeralBytes.length,
-            beforeUserKeys,
-            afterUserKeys,
-            newKeys: afterUserKeys.filter(k => !beforeUserKeys.includes(k)),
+            beforeKeys,
+            afterKeys,
+            newKeys: afterKeys.filter(k => !beforeKeys.includes(k)),
             totalConnections: doc.conns.size
           });
           
@@ -326,11 +326,11 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         // Send current ephemeral state to requesting client       
         try {
           const allStates = doc.ephemeralStore.getAllStates()
-          const userKeys = Object.keys(allStates).filter(k => k.startsWith('user-'))
+          const allKeys = Object.keys(allStates)
           const ephemeralUpdate = doc.ephemeralStore.encodeAll()
           
           console.log(`📡 SERVER DEBUG - Client ${conn.id} requesting ephemeral state:`, {
-            userKeysAvailable: userKeys,
+            allKeysAvailable: allKeys,
             encodedLength: ephemeralUpdate.length,
             totalConnections: doc.conns.size
           });

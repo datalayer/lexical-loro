@@ -35,17 +35,6 @@ export function LoroCollaborators({
     isCurrentUser: id === currentClientID
   }));
   
-  console.log('LoroCollaborators Debug:', {
-    currentClientID,
-    totalCursors: binding.cursors.size,
-    allCursors: allCursorsDebug
-  });
-  
-  // Log each cursor individually for clarity
-  allCursorsDebug.forEach(cursor => {
-    console.log(`Cursor ${cursor.clientId}:`, cursor);
-  });
-  
   // Get all collaborators including current user
   const allCollaborators = Array.from(binding.cursors.entries())
     .map(([clientId, cursor]) => ({ clientId, cursor, isCurrentUser: clientId === currentClientID }));
@@ -148,8 +137,8 @@ function CollaboratorBadge({ name, color, isCurrentUser, clientId }: Collaborato
     return color;
   };
 
-  const circleColor = isCurrentUser ? getColorWithOpacity(color, 0.3) : color;
-  const badgeColor = isCurrentUser ? getColorWithOpacity(color, 0.4) : color;
+  const circleColor = isCurrentUser ? getColorWithOpacity(color, 0.1) : color;
+  const badgeColor = isCurrentUser ? getColorWithOpacity(color, 0.1) : color;
 
   return (
     <div 

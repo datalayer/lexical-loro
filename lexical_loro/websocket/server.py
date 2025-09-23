@@ -377,8 +377,14 @@ def save_all_docs() -> Dict[str, bool]:
 def close_conn(doc, conn):
     if conn in doc.conns:
         conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-        logger.info(f"\n💔💔💔 [server:py:ws] CONNECTION CLOSED: {conn_id} ← document: {doc.name} 💔💔💔")
-        logger.info(f"[server:py:ws] CONNECTION CLOSED: {conn_id} ← document: {doc.name}")
+        client_id = getattr(conn, 'client_id', None)
+        display_id = client_id if client_id else conn_id
+        
+        print(f"\n💔💔💔 [server:py:ws] CONNECTION CLOSED: {display_id} (was {conn_id}) ← document: {doc.name} 💔💔💔")
+        logger.info(f"[server:py:ws] CONNECTION CLOSED: {display_id} ← document: {doc.name}")
+        if client_id:
+            logger.info(f"🔗 [CORRELATION] Closed Frontend clientID: {client_id} (WebSocket {conn_id})")
+        
         logger.debug(f"💔 [Server] *** CONNECTION CLOSING *** for document: {doc.name}")
         logger.debug(f"💔 [Server] Closing connection: {conn}")
         del doc.conns[conn]
@@ -388,20 +394,23 @@ def close_conn(doc, conn):
         logger.warning(f"⚠️ [Server] Tried to cleanup connection {conn} but it wasn't in doc.conns")
 
 async def message_listener(conn, doc, message):
-    logger.info(f"📨📨📨 [Server] MESSAGE RECEIVED: type={type(message)}, length={len(message) if hasattr(message, '__len__') else 'N/A'} 📨📨📨")
+    # Get display ID (client ID if available, otherwise connection ID)
+    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+    display_id = getattr(conn, 'client_id', conn_id)
+    
     try:
         message_data = None
         message_str = ""
         
         if isinstance(message, str):
             message_str = message
-            logger.info(f"📝 [Server] String message received: {message_str[:100]}...")
+            logger.info(f"📝 [Server] String message from {display_id}: {message_str[:100]}...")
         elif isinstance(message, bytes):
             try:
                 message_str = message.decode('utf-8')
-                logger.info(f"📝 [Server] Decoded bytes to string: {message_str[:100]}...")
+                logger.info(f"📝 [Server] Decoded bytes from {display_id}: {message_str[:100]}...")
             except UnicodeDecodeError:
-                logger.info(f"💾 [Server] Binary Loro update received: {len(message)} bytes")
+                logger.info(f"💾 [Server] Binary Loro update from {display_id}: {len(message)} bytes")
                 logger.debug(f"[Server] Received binary Loro update: {len(message)} bytes")
                 # Apply the update to the document
                 doc.doc.import_(message)
@@ -428,7 +437,7 @@ async def message_listener(conn, doc, message):
             return
         
         message_type = message_data.get("type", "")
-        logger.info(f"🎯🎯🎯 [Server] MESSAGE TYPE: {message_type} for doc: {doc.name} 🎯🎯🎯")
+        display_id = getattr(conn, 'client_id', f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown")
         logger.debug(f"[Server] Received message type: {message_type} for doc: {doc.name}")
         
         if message_type == MESSAGE_QUERY_SNAPSHOT:
@@ -471,27 +480,58 @@ async def handle_query_snapshot(conn, doc, message_data):
 async def handle_ephemeral(conn, doc, message_data):
     try:
         ephemeral_data = message_data.get("ephemeral", [])
-        logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from conn {id(conn)}")
+        conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+        logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {conn_id}")
         
         # Mark this connection as sender to avoid echo
         doc.last_ephemeral_sender = conn
         
         # Debug: Check ephemeral store state before applying
         before_states = doc.ephemeral_store.get_all_states()
-        before_user_keys = [k for k in before_states.keys() if k.startswith('user-')]
+        before_keys = list(before_states.keys())
         
         # Apply ephemeral update using proper Loro EphemeralStore API
         ephemeral_bytes = bytes(ephemeral_data)
         doc.ephemeral_store.apply(ephemeral_bytes)
         
-        # Debug: Check state after applying
+        # Debug: Check state after applying and extract client ID
         after_states = doc.ephemeral_store.get_all_states()
-        after_user_keys = [k for k in after_states.keys() if k.startswith('user-')]
+        after_keys = list(after_states.keys())
         
-        logger.debug(f"📡 SERVER DEBUG - Applied ephemeral update from conn {id(conn)}: "
+        # Extract the client ID for this connection from the new keys
+        new_keys = [k for k in after_keys if k not in before_keys]
+        
+        # Filter to only numeric keys (client IDs)
+        new_client_ids = []
+        for key in new_keys:
+            try:
+                # Check if the key is a valid client ID (numeric string)
+                int(key)
+                new_client_ids.append(key)
+            except ValueError:
+                # Skip non-numeric keys
+                pass
+        
+        if new_client_ids:
+            # Now keys are direct client IDs, so we can use the first new client ID
+            client_id = new_client_ids[0]  # Get the first new client ID (e.g., "1172255969499")
+            logger.info(f"🎭 [Server] CLIENT ID DETECTED: {conn_id} → {client_id}")
+            # Store the client ID mapping for future reference
+            if not hasattr(conn, 'client_id'):
+                conn.client_id = client_id
+                logger.info(f"🆔 [Server] MAPPED CONNECTION: {conn_id} ↔ {client_id}")
+                # Also log in a format that makes correlation easy
+                logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+        
+        # Use client ID in logging if available
+        display_id = getattr(conn, 'client_id', conn_id)
+        
+        logger.info(f"📡 [Server] Ephemeral update applied for {display_id} (was {conn_id})")
+        logger.debug(f"📡 SERVER DEBUG - Applied ephemeral update from {display_id}: "
                     f"bytes_length={len(ephemeral_bytes)}, "
-                    f"before_user_keys={before_user_keys}, "
-                    f"after_user_keys={after_user_keys}, "
+                    f"before_keys={before_keys}, "
+                    f"after_keys={after_keys}, "
+                    f"new_client_ids={new_client_ids}, "
                     f"total_connections={len(doc.conns)}")
         
     except Exception as e:
@@ -503,12 +543,12 @@ async def handle_query_ephemeral(conn, doc, message_data):
     try:
         # Get all current ephemeral state using proper Loro EphemeralStore API
         all_states = doc.ephemeral_store.get_all_states()
-        user_keys = [k for k in all_states.keys() if k.startswith('user-')]
+        all_keys = list(all_states.keys())
         ephemeral_update = doc.ephemeral_store.encode_all()
         
-        logger.info(f"📊 [Server] Ephemeral query - user_keys: {user_keys}, encoded_length: {len(ephemeral_update)}")
+        logger.info(f"📊 [Server] Ephemeral query - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
         logger.debug(f"📡 SERVER DEBUG - Client conn {id(conn)} requesting ephemeral state: "
-                    f"user_keys_available={user_keys}, "
+                    f"all_keys_available={all_keys}, "
                     f"encoded_length={len(ephemeral_update)}, "
                     f"total_connections={len(doc.conns)}")
         
@@ -618,8 +658,9 @@ async def setup_ws_connection(conn, path: str):
     conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
     
     # Add prominent logging that appears right after websockets.server connection logs
-    logger.info(f"\n🔥🔥🔥 [server:py:ws] CONNECTION ESTABLISHED: {conn_id} → document: {doc_name} 🔥🔥🔥")
-    logger.info(f"[server:py:ws] CONNECTION ID: {conn_id} → document: {doc_name}")
+    print(f"\n🔥🔥🔥 [server:py:ws] CONNECTION ESTABLISHED: {conn_id} → document: {doc_name} 🔥🔥🔥")
+    logger.info(f"[server:py:ws] CONNECTION ID: {conn_id} → document: {doc_name} (awaiting clientID)")
+    logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} awaiting Frontend clientID mapping...")
     logger.info(f"🔥🔥🔥 [Server] NEW CONNECTION STARTED: {conn_id} for document: {doc_name} 🔥🔥🔥")
     logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
     

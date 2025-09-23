@@ -7,7 +7,6 @@ import { getLoroTree, generateClientID } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
 
-
 export type ClientID = number;
 
 export type Binding = {
@@ -54,7 +53,7 @@ export function createBinding(
     localPeerId: doc.peerId,
     generatedClientID: clientID,
     docPeerIdType: typeof doc.peerId,
-    awarenessKey: `user-${clientID}`
+    awarenessKey: clientID.toString()
   });
 
   const binding: Binding = {
