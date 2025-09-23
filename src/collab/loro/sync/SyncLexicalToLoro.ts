@@ -5,7 +5,7 @@ import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
 import { propagateElementNode } from '../propagators/ElementNodePropagator';
 import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
-import { isClassExtending } from '../utils/Utils';
+import { isClassExtending, generateClientID } from '../utils/Utils';
 import { scheduleAsyncCommit } from '../Bindings';
 import { syncLexicalSelectionToLoro } from './SyncCursors';
 import { Provider } from '../State';
@@ -27,7 +27,7 @@ export function syncLexicalToLoro(
     const tree = binding.tree;
 
     // Ensure we have a numeric peerId for TreeID format
-    const peerId = Number(binding.doc.peerId);
+    const peerId = generateClientID(binding.doc);
 
     // Create options object for mutators
     const mutatorOptions = {

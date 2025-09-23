@@ -8,7 +8,7 @@ import {
   $isTextNode,
 } from 'lexical';
 import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
-import type { Cursor as LoroCursor, EphemeralStoreEvent, TreeID, LoroTreeNode } from 'loro-crdt';
+import type { Cursor as LoroCursor, LoroTreeNode } from 'loro-crdt';
 import type { Binding } from '../Bindings';
 import { Provider, UserState } from '../State';
 
@@ -242,13 +242,30 @@ function createCursorSelection(
   anchorOffset: number,
   focusKey: NodeKey,
   focusOffset: number,
+  isCurrentUser: boolean = false,
 ): CursorSelection {
   const color = cursor.color;
+  
+  // Helper function to convert color to rgba with opacity
+  const getColorWithOpacity = (color: string, opacity: number): string => {
+    if (color.startsWith('#')) {
+      const hex = color.slice(1);
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+    return color;
+  };
+
+  const caretColor = isCurrentUser ? getColorWithOpacity(color, 0.6) : color;
+  const nameBackgroundColor = isCurrentUser ? getColorWithOpacity(color, 0.7) : color;
+
   const caret = document.createElement('span');
-  caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:1px;background-color:${color};z-index:10;`;
+  caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:1px;background-color:${caretColor};z-index:10;${isCurrentUser ? 'opacity:0.8;' : ''}`;
   const name = document.createElement('span');
   name.textContent = cursor.name;
-  name.style.cssText = `position:absolute;left:-2px;top:-16px;background-color:${color};color:#fff;line-height:12px;font-size:12px;padding:2px;font-family:Arial;font-weight:bold;white-space:nowrap;`;
+  name.style.cssText = `position:absolute;left:-2px;top:-16px;background-color:${nameBackgroundColor};color:#fff;line-height:12px;font-size:12px;padding:2px;font-family:Arial;font-weight:bold;white-space:nowrap;${isCurrentUser ? 'opacity:0.9;' : ''}`;
   caret.appendChild(name);
   
   return {
@@ -297,24 +314,39 @@ export function syncCursorPositions(
   const nodeMap = editor._editorState._nodeMap;
   const visitedClientIDs = new Set();
 
-  // Process all remote cursor positions from awareness
+  // Debug: Log cursor sync information
+  console.log('syncCursorPositions Debug:', {
+    localClientID,
+    awarenessStatesCount: awarenessStates.length,
+    currentCursorsCount: cursors.size,
+    awarenessStates: awarenessStates.map(([id, state]) => ({
+      clientId: id,
+      name: state.name,
+      focusing: state.focusing
+    }))
+  });
+
+  // Process all cursor positions from awareness (including local user)
   for (let i = 0; i < awarenessStates.length; i++) {
     const awarenessState = awarenessStates[i];
     const [clientID, awareness] = awarenessState;
 
-    if (clientID !== localClientID) {
-      visitedClientIDs.add(clientID);
-      const { name, color, focusing } = awareness;
-      let selection = null;
+    visitedClientIDs.add(clientID);
+    const { name, color, focusing } = awareness;
+    const isCurrentUser = clientID === localClientID;
+    let selection = null;
 
-      let cursor = cursors.get(clientID);
+    let cursor = cursors.get(clientID);
 
-      if (cursor === undefined) {
-        cursor = createCollabCursor(name, color);
-        cursors.set(clientID, cursor);
-      }
+    if (cursor === undefined) {
+      // Add "Me" label for current user's cursor
+      const cursorName = isCurrentUser ? `${name} (Me)` : name;
+      cursor = createCollabCursor(cursorName, color);
+      cursors.set(clientID, cursor);
+      console.log('Added new cursor:', { clientID, name: cursorName, color, isCurrentUser, totalCursors: cursors.size });
+    }
 
-      if (focusing) {
+    if (focusing) {
         const { anchorPos, focusPos } = awareness;
 
         if (anchorPos !== null && focusPos !== null) {
@@ -331,6 +363,7 @@ export function syncCursorPositions(
                 anchorOffset,
                 focusKey,
                 focusOffset,
+                isCurrentUser,
               );
             } else {
               // Update existing selection
@@ -345,8 +378,7 @@ export function syncCursorPositions(
         }
       }
 
-      updateCursor(binding, cursor, selection, nodeMap);
-    }
+    updateCursor(binding, cursor, selection, nodeMap, isCurrentUser);
   }
 
   // Clean up cursors for clients that are no longer present
@@ -380,6 +412,7 @@ function updateCursor(
   cursor: CollabCursor,
   nextSelection: CursorSelection | null,
   nodeMap: any, // LexicalEditor NodeMap type
+  isCurrentUser: boolean = false,
 ): void {
   const editor = binding.editor;
   const rootElement = editor.getRootElement();
@@ -466,9 +499,11 @@ function updateCursor(
     const style = `position:absolute;top:${top}px;left:${left}px;height:${selectionRect.height}px;width:${selectionRect.width}px;pointer-events:none;z-index:5;`;
     selection.style.cssText = style;
 
+    // Adjust opacity for current user selections to be more transparent
+    const selectionOpacity = isCurrentUser ? 0.15 : 0.3;
     (
       selection.firstChild as HTMLSpanElement
-    ).style.cssText = `${style}left:0;top:0;background-color:${color};opacity:0.3;`;
+    ).style.cssText = `${style}left:0;top:0;background-color:${color};opacity:${selectionOpacity};`;
 
     if (i === selectionRectsLength - 1) {
       if (caret.parentNode !== selection) {

@@ -6,6 +6,7 @@ import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
 import type { UserState, AwarenessProvider } from '../State'
+import { generateClientID, generateRandomClientID } from '../utils/Utils'
 
 // @todo - this should depend on ephemeral timeout
 const messageReconnectTimeoutMs = 30000 * 1000 // 30 * 1000 seconds
@@ -52,7 +53,13 @@ class AwarenessAdapter implements AwarenessProvider {
   constructor(ephemeralStore: EphemeralStore, doc?: LoroDoc) {
     this.ephemeralStore = ephemeralStore
     // Use the same client ID as the binding for consistency
-    this.localClientId = doc ? Number(doc.peerIdStr.slice(0, 8)) : Math.floor(Math.random() * 2147483647)
+    this.localClientId = doc ? generateClientID(doc) : generateRandomClientID()
+    
+    console.log('🔄 AwarenessAdapter created:', {
+      localClientId: this.localClientId,
+      docPeerId: doc ? doc.peerId : 'no-doc',
+      existingStatesCount: Object.keys(ephemeralStore.getAllStates()).length
+    });
     
     // Subscribe to ephemeral store changes and emit awareness updates
     this.ephemeralStore.subscribe((event) => {
@@ -87,6 +94,11 @@ class AwarenessAdapter implements AwarenessProvider {
       // Get all states from ephemeral store
       const allStates = this.ephemeralStore.getAllStates()
       
+      // Clean up stale states periodically (very rarely to avoid performance issues)
+      if (Math.random() < 0.001) { // ~0.1% chance per call
+        this.cleanupStaleStates(allStates)
+      }
+      
       // Iterate through all keys and extract user states
       for (const [key, value] of Object.entries(allStates)) {
         if (key.startsWith('user-')) {
@@ -111,11 +123,39 @@ class AwarenessAdapter implements AwarenessProvider {
     return states
   }
 
+  private cleanupStaleStates(allStates: Record<string, any>): void {
+    const currentTime = Date.now()
+    const staleThreshold = 5 * 60 * 1000 // 5 minutes
+    
+    try {
+      for (const [key, value] of Object.entries(allStates)) {
+        if (key.startsWith('user-') && value && typeof value === 'object') {
+          const state = value as UserState
+          const lastActivity = typeof state.lastActivity === 'number' ? state.lastActivity : 0
+          
+          // Remove states that haven't been active for more than the threshold
+          if (typeof lastActivity === 'number' && currentTime - lastActivity > staleThreshold) {
+            console.log('Cleaning up stale user state:', key, 'last activity:', new Date(lastActivity).toISOString())
+            this.ephemeralStore.delete(key)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error during stale state cleanup:', error.message)
+    }
+  }
+
   setLocalState(state: UserState): void {
     const localKey = `user-${this.localClientId}`
+    
+    // Add lastActivity timestamp for stale state cleanup
+    const stateWithActivity = {
+      ...state,
+      lastActivity: Date.now()
+    }
 
     try {
-      this.ephemeralStore.set(localKey, state as any)
+      this.ephemeralStore.set(localKey, stateWithActivity as any)
     } catch (error) {
       console.warn(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() FAILED:`, {
         error: error.message,
@@ -156,6 +196,19 @@ class AwarenessAdapter implements AwarenessProvider {
       if (index !== -1) {
         integrators.splice(index, 1)
       }
+    }
+  }
+
+  // Manual cleanup method for debugging
+  forceCleanupStaleStates(): void {
+    try {
+      const allStates = this.ephemeralStore.getAllStates()
+      console.log('Force cleanup - total keys before:', Object.keys(allStates).length)
+      this.cleanupStaleStates(allStates)
+      const newStates = this.ephemeralStore.getAllStates()
+      console.log('Force cleanup - total keys after:', Object.keys(newStates).length)
+    } catch (error) {
+      console.warn('Force cleanup failed:', error.message)
     }
   }
 }
@@ -384,6 +437,15 @@ const closeWebsocketConnection = (provider, ws, event) => {
       // Clear local ephemeral state on disconnect
       provider.ephemeralStore.delete('presence')
       provider.ephemeralStore.delete('cursor')
+      // Clear user-specific state
+      try {
+        const peerId = generateClientID(provider.doc)
+        const userKey = `user-${peerId}`
+        provider.ephemeralStore.delete(userKey)
+        console.log('Disconnect cleanup: removed user key:', userKey)
+      } catch (error) {
+        console.warn('Disconnect cleanup failed:', error.message)
+      }
       provider.emit('status', [{
         status: 'disconnected'
       }])
@@ -612,8 +674,17 @@ export class WebsocketProvider extends ObservableV2<any> {
         // Create or reuse global ephemeral store for session persistence
         if (!WebsocketProvider.globalEphemeralStore) {
           WebsocketProvider.globalEphemeralStore = new EphemeralStore(300000) // 5 minute timeout
+          console.log('🆕 Created new global EphemeralStore')
         } else {
-          console.info(`[Client] WebsocketProvider constructor - Reusing existing global EphemeralStore`)
+          console.log('♻️ Reusing existing global EphemeralStore - cleaning up stale user states')
+          // Clean up all existing user states when reusing store to prevent accumulation
+          const allStates = WebsocketProvider.globalEphemeralStore.getAllStates()
+          Object.keys(allStates).forEach(key => {
+            if (key.startsWith('user-')) {
+              WebsocketProvider.globalEphemeralStore!.delete(key)
+              console.log('🧹 Cleaned up stale user state:', key)
+            }
+          })
         }
         this.ephemeralStore = WebsocketProvider.globalEphemeralStore
       }
@@ -721,7 +792,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       // Clear only our local ephemeral state on exit, don't destroy the global store
       if (this.ephemeralStore && this.awareness) {
         try {
-          const peerId = this.doc.peerId || 0
+          const peerId = generateClientID(this.doc)
           const userKey = `user-${peerId}`
           this.ephemeralStore.delete(userKey)
         } catch (error) {
@@ -821,7 +892,7 @@ export class WebsocketProvider extends ObservableV2<any> {
     // Only clear our local state from it
     if (this.ephemeralStore && this.awareness) {
       try {
-        const peerId = this.doc.peerId || 0
+        const peerId = generateClientID(this.doc)
         const userKey = `user-${peerId}`
         this.ephemeralStore.delete(userKey)
       } catch (error) {
@@ -874,6 +945,16 @@ export class WebsocketProvider extends ObservableV2<any> {
     this.ephemeralStore.delete('presence')
     this.ephemeralStore.delete('cursor')
     
+    // Clear user-specific state
+    try {
+      const peerId = generateClientID(this.doc)
+      const userKey = `user-${peerId}`
+      this.ephemeralStore.delete(userKey)
+      console.log('Broadcast disconnect cleanup: removed user key:', userKey)
+    } catch (error) {
+      console.warn('Broadcast disconnect cleanup failed:', error.message)
+    }
+    
     try {
       // Use encodeAll() to encode ephemeral store data for disconnect broadcast
       const encodedData = this.ephemeralStore.encodeAll()
@@ -916,5 +997,17 @@ export class WebsocketProvider extends ObservableV2<any> {
    */
   sendUpdate (update: Uint8Array) {
     this._updateHandler(update, null)
+  }
+
+  /**
+   * Force cleanup of stale ephemeral states (for debugging)
+   * Removes user states that haven't been active for more than 5 minutes
+   */
+  cleanupStaleStates(): void {
+    if (this.awareness && typeof this.awareness.forceCleanupStaleStates === 'function') {
+      this.awareness.forceCleanupStaleStates()
+    } else {
+      console.warn('Cleanup method not available on awareness provider')
+    }
   }
 }

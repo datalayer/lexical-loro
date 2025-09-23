@@ -3,7 +3,7 @@ import {Klass, LexicalNode} from 'lexical';
 import type {LoroDoc, LoroTree} from 'loro-crdt';
 import invariant from '../utils/invariant';
 import type {CollabCursor} from './sync/SyncCursors';
-import { getLoroTree } from './utils/Utils';
+import { getLoroTree, generateClientID } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
 
@@ -48,8 +48,7 @@ export function createBinding(
   console.log('📄 Loro tree initialized, content will be populated via server sync');
   
   const binding: Binding = {
-    clientID: Number(doc.peerId),
-//    clientID: Number(doc.peerIdStr.slice(0, 8)), // Convert Loro peer ID to number
+    clientID: generateClientID(doc),
     cursors: new Map(),
     cursorsContainer: null,
     doc,
@@ -66,7 +65,7 @@ export function createBinding(
   };
 
   // Initialize the NodeMapper with the binding
-  binding.nodeMapper = initializeNodeMapper(binding);  
+  binding.nodeMapper = initializeNodeMapper(binding);
 
   // Setup global debugging for Loro
   (window as any).debugLoro = {
@@ -474,11 +473,40 @@ export function createBinding(
             <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
             <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
             <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
+            <span onclick="window.debugLoro.cleanupEphemeralStore()" style="color: #ffaa00; cursor: pointer; text-decoration: underline;">🧹 Cleanup</span> |
+            <span onclick="window.debugLoro.resetGlobalEphemeralStore()" style="color: #ff6600; cursor: pointer; text-decoration: underline;">🔄 Reset Store</span> |
             <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;">❌ Close</span>
           </div>
         </div>
       `;
       document.body.appendChild(debugDiv);
+    },
+    cleanupEphemeralStore: (provider?: any) => {
+      if (!provider) {
+        console.log('⚠️ No provider passed. Usage: window.debugLoro.cleanupEphemeralStore(provider)');
+        console.log('You can get the provider from your useCollaboration hook');
+        return;
+      }
+      
+      if (typeof provider.cleanupStaleStates !== 'function') {
+        console.log('❌ Provider does not have cleanupStaleStates method');
+        return;
+      }
+      
+      console.log('🧹 Cleaning up stale ephemeral states...');
+      provider.cleanupStaleStates();
+    },
+    resetGlobalEphemeralStore: () => {
+      try {
+        // We need to access the WebsocketProvider class which may not be globally available
+        console.log('🔄 Attempting to reset global EphemeralStore...');
+        console.log('💡 You can also refresh the browser to clear the global store');
+        
+        // For now, instruct user to refresh
+        alert('To reset the global ephemeral store and clear all collaborators, please refresh the browser page.');
+      } catch (error) {
+        console.warn('❌ Reset failed:', error.message);
+      }
     }
   };
 

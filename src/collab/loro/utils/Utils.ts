@@ -5,6 +5,27 @@ import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 export const DEFAULT_TREE_NAME = 'lexical-tree';
 
 /**
+ * Generates a consistent client ID from a Loro document.
+ * Uses the numeric peer ID directly to ensure consistency across all components.
+ * 
+ * @param doc - The Loro document
+ * @returns A number representing the client ID
+ */
+export function generateClientID(doc: LoroDoc): number {
+  return Number(doc.peerId);
+}
+
+/**
+ * Generates a client ID for cases where no document is available.
+ * Creates a random ID within the safe integer range.
+ * 
+ * @returns A randomly generated client ID
+ */
+export function generateRandomClientID(): number {
+  return Math.floor(Math.random() * 2147483647);
+}
+
+/**
  * Ensure doc has a LoroTree instance
  */
 export function getLoroTree(doc: LoroDoc, treeName = DEFAULT_TREE_NAME) {

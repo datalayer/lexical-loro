@@ -8,7 +8,6 @@ import {
   messageUpdate,
   EphemeralMessage,
   LoroWebSocketMessage,
-  QuerySnapshotMessage,
 } from '../../provider/websocket'
 import { callbackIntegrator, isCallbackSet } from './callback'
 import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
