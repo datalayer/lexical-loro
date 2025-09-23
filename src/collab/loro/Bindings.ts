@@ -481,9 +481,9 @@ export function createBinding(
           <div style="margin-top: 10px; font-size: 10px; color: #666;">
             <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
             <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
-            <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Console Log</span> |
+            <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Log</span> |
             <span onclick="window.debugLoro.cleanupEphemeralStore()" style="color: #ffaa00; cursor: pointer; text-decoration: underline;">🧹 Cleanup</span> |
-            <span onclick="window.debugLoro.resetGlobalEphemeralStore()" style="color: #ff6600; cursor: pointer; text-decoration: underline;">🔄 Reset Store</span> |
+            <span onclick="window.debugLoro.resetGlobalEphemeralStore()" style="color: #ff6600; cursor: pointer; text-decoration: underline;">🔄 Reset</span> |
             <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;">❌ Close</span>
           </div>
         </div>

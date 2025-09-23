@@ -141,6 +141,11 @@ export default function DatalayerPlugin(): JSX.Element | null {
 
   // Handle tool selection and execution
   const handleToolChange = (toolName: string) => {
+    if (toolName === '') {
+      setSelectedTool('');
+      return;
+    }
+    
     setSelectedTool(toolName);
     
     if (toolName === 'get_document') {
@@ -148,6 +153,11 @@ export default function DatalayerPlugin(): JSX.Element | null {
     } else if (toolName === 'append_paragraph') {
       executeAppendParagraph();
     }
+    
+    // Reset selection back to "Select a tool" after execution
+    setTimeout(() => {
+      setSelectedTool('');
+    }, 100);
   };
 
   // Set hardcoded tools instead of fetching from server
@@ -155,12 +165,12 @@ export default function DatalayerPlugin(): JSX.Element | null {
     const hardcodedTools: MCPTool[] = [
       { 
         name: 'get_document', 
-        description: 'Get document content in Lexical JSON format',
+        description: 'Get document',
         parameters: {}
       },
       { 
         name: 'append_paragraph', 
-        description: 'Append a new paragraph with timestamp to the document',
+        description: 'Append paragraph',
         parameters: {}
       }
     ];
@@ -256,16 +266,6 @@ export default function DatalayerPlugin(): JSX.Element | null {
           </span>
         )}
         
-        {selectedTool && (
-          <span style={{ 
-            marginLeft: '10px', 
-            color: 'green', 
-            fontSize: '12px' 
-          }}>
-            Selected: {selectedTool}
-          </span>
-        )}
-        
         <button 
           onClick={fetchMCPTools} 
           disabled={isLoadingTools}
@@ -277,6 +277,16 @@ export default function DatalayerPlugin(): JSX.Element | null {
         >
           🔄 Refresh
         </button>
+
+        {selectedTool && (
+          <span style={{ 
+            marginLeft: '10px', 
+            color: 'green', 
+            fontSize: '12px' 
+          }}>
+            {selectedTool}
+          </span>
+        )}
       </div>
     </>
   );
