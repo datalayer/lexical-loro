@@ -8,7 +8,7 @@ import {
   $isTextNode,
 } from 'lexical';
 import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
-import type { Cursor as LoroCursor, EphemeralStoreEvent } from 'loro-crdt';
+import type { Cursor as LoroCursor, EphemeralStoreEvent, TreeID, LoroTreeNode } from 'loro-crdt';
 import type { Binding } from '../Bindings';
 import { Provider, UserState } from '../State';
 
@@ -50,6 +50,19 @@ export type SyncCursorPositionsFn = (
 
 /*****************************************************************************/
 
+// Helper function to find Loro tree node for a Lexical NodeKey
+function findLoroTreeNodeForLexicalKey(nodeKey: NodeKey, binding: Binding): LoroTreeNode | null {
+  try {
+    // Use NodeMapper to get the corresponding Loro tree node
+    const nodeMapper = binding.nodeMapper;
+    const treeNode = nodeMapper.getLoroNodeByLexicalKey(nodeKey);
+    return treeNode;
+  } catch (error) {
+    console.warn('Failed to find Loro tree node for Lexical key:', nodeKey, error);
+    return null;
+  }
+}
+
 // Helper function to convert a Lexical Point to a Loro Cursor
 function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor | null {
   try {
@@ -60,33 +73,77 @@ function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor
 
     // For text nodes, we need to find the corresponding text container in Loro tree
     if ($isTextNode(node)) {
-      // Try to get cursor from text content at the specified offset
+      // 1. Find the Loro tree node corresponding to this Lexical node
+      const treeNode = findLoroTreeNodeForLexicalKey(point.key, binding);
+      if (!treeNode) {
+        console.warn('Could not find corresponding Loro tree node for Lexical key:', point.key);
+        return null;
+      }
+
+      // 2. Get text content and validate offset
       const textContent = node.getTextContent();
       const offset = Math.min(point.offset, textContent.length);
-      
-      // TODO: Navigate Loro tree to find the correct text container
-      // For now, create a simple cursor based on the node key and offset
-      // This is a placeholder - in a full implementation, we'd need to:
-      // 1. Find the Loro tree node corresponding to this Lexical node
-      // 2. Get the text container within that node
-      // 3. Create a cursor at the specified offset in that text container
-      
-      // Since we don't have the full tree navigation implemented yet,
-      // we'll store the position information in a way that can be reconstructed
-      return {
-        nodeKey: point.key,
+
+      // 3. Note: Some tree nodes may not have textContent stored in Loro yet
+      // This is normal during the sync process - we use Lexical node text as fallback
+
+      // 4. Create position data that can be used for collaborative selection
+      // Since we need to transmit cursor data through EphemeralStore, we use a simple structure
+      const cursor = {
+        treeId: treeNode.id,
         offset: offset,
-        type: 'text'
-      } as any; // Temporary structure until we implement proper Loro Cursor creation
+        type: 'text',
+        nodeKey: point.key // Keep for debugging/validation
+      } as any; // We'll cast to LoroCursor when needed
+
+      return cursor;
     }
-    
-    // For element nodes
+
+    // Handle element nodes (paragraphs, headings, etc.)
     if ($isElementNode(node)) {
-      return {
-        nodeKey: point.key,
-        offset: point.offset,
-        type: 'element'
-      } as any; // Temporary structure
+      // For element nodes, we need to find the text child at the given offset
+      const children = node.getChildren();
+      let currentOffset = 0;
+      
+      for (const child of children) {
+        if ($isTextNode(child)) {
+          const childText = child.getTextContent();
+          if (point.offset <= currentOffset + childText.length) {
+            // The cursor is within this text child
+            const relativeOffset = point.offset - currentOffset;
+            
+            // Get the corresponding Loro tree node for this text child
+            const childTreeNode = findLoroTreeNodeForLexicalKey(child.getKey(), binding);
+            if (childTreeNode) {
+              return {
+                treeId: childTreeNode.id,
+                offset: Math.min(relativeOffset, childText.length),
+                type: 'text',
+                nodeKey: child.getKey()
+              } as any;
+            }
+          }
+          currentOffset += childText.length;
+        }
+      }
+      
+      // If we get here, the offset is at the end of the element
+      // Find the last text child
+      for (let i = children.length - 1; i >= 0; i--) {
+        const child = children[i];
+        if ($isTextNode(child)) {
+          const childTreeNode = findLoroTreeNodeForLexicalKey(child.getKey(), binding);
+          if (childTreeNode) {
+            const childText = child.getTextContent();
+            return {
+              treeId: childTreeNode.id,
+              offset: childText.length, // At the end
+              type: 'text',
+              nodeKey: child.getKey()
+            } as any;
+          }
+        }
+      }
     }
 
     return null;
@@ -99,23 +156,52 @@ function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor
 // Helper function to convert Loro cursor data back to Lexical selection
 function convertLoroSelectionToLexical(
   anchorCursor: LoroCursor | null,
-  focusCursor: LoroCursor | null
+  focusCursor: LoroCursor | null,
+  binding: Binding
 ): { anchorKey: NodeKey; anchorOffset: number; focusKey: NodeKey; focusOffset: number } | null {
   try {
     if (!anchorCursor || !focusCursor) {
       return null;
     }
 
-    // TODO: Convert Loro Cursors back to Lexical node keys and offsets
-    // For now, use the temporary structure we stored above
+    // Convert cursor data back to Lexical positions using our custom structure
     const anchor = anchorCursor as any;
     const focus = focusCursor as any;
 
+    // If we have nodeKey stored, use it directly (this is our temporary approach)
+    if (anchor.nodeKey && focus.nodeKey) {
+      return {
+        anchorKey: anchor.nodeKey,
+        anchorOffset: anchor.offset,
+        focusKey: focus.nodeKey, 
+        focusOffset: focus.offset,
+      };
+    }
+
+    // Alternative: Use NodeMapper to reverse-map from TreeID to NodeKey
+    const nodeMapper = binding.nodeMapper;
+    
+    let anchorKey: NodeKey | null = null;
+    let focusKey: NodeKey | null = null;
+    
+    if (anchor.treeId) {
+      anchorKey = nodeMapper.getLexicalKeyByLoroId(anchor.treeId);
+    }
+    
+    if (focus.treeId) {
+      focusKey = nodeMapper.getLexicalKeyByLoroId(focus.treeId);
+    }
+
+    if (!anchorKey || !focusKey) {
+      console.warn('Could not find Lexical keys for Loro cursor TreeIDs');
+      return null;
+    }
+
     return {
-      anchorKey: anchor.nodeKey,
-      anchorOffset: anchor.offset,
-      focusKey: focus.nodeKey, 
-      focusOffset: focus.offset,
+      anchorKey: anchorKey,
+      anchorOffset: anchor.offset || 0,
+      focusKey: focusKey,
+      focusOffset: focus.offset || 0,
     };
   } catch (error) {
     console.warn('Failed to convert Loro cursors to Lexical selection:', error);
@@ -232,7 +318,7 @@ export function syncCursorPositions(
         const { anchorPos, focusPos } = awareness;
 
         if (anchorPos !== null && focusPos !== null) {
-          const selectionInfo = convertLoroSelectionToLexical(anchorPos, focusPos);
+          const selectionInfo = convertLoroSelectionToLexical(anchorPos, focusPos, binding);
           
           if (selectionInfo) {
             const { anchorKey, anchorOffset, focusKey, focusOffset } = selectionInfo;
@@ -492,7 +578,7 @@ export function $syncLocalCursorPosition(
 
   // Convert Loro cursors back to Lexical selection
   if (anchorPos !== null && focusPos !== null) {
-    const selectionInfo = convertLoroSelectionToLexical(anchorPos, focusPos);
+    const selectionInfo = convertLoroSelectionToLexical(anchorPos, focusPos, binding);
     
     if (selectionInfo) {
       const { anchorKey, anchorOffset, focusKey, focusOffset } = selectionInfo;
