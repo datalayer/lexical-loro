@@ -48,8 +48,8 @@ export function createBinding(
   console.log('📄 Loro tree initialized, content will be populated via server sync');
   
   const binding: Binding = {
-//    clientID: doc.peerId,
-    clientID: Number(doc.peerIdStr.slice(0, 8)), // Convert Loro peer ID to number
+    clientID: Number(doc.peerId),
+//    clientID: Number(doc.peerIdStr.slice(0, 8)), // Convert Loro peer ID to number
     cursors: new Map(),
     cursorsContainer: null,
     doc,
