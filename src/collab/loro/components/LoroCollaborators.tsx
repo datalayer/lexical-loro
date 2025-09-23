@@ -84,7 +84,7 @@ export function LoroCollaborators({
       {/* Show current user even if no cursor data yet */}
       {!currentUserData && (
         <CollaboratorBadge
-          name={`${currentDisplayName}`}
+          name={`${currentDisplayName} (Me)`}
           color={currentDisplayColor}
           isCurrentUser={true}
           clientId={currentClientID}

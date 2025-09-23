@@ -297,7 +297,24 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           const ephemeralBytes = new Uint8Array(messageData.ephemeral)
           // Mark this connection as the sender to avoid echo
           doc.lastEphemeralSender = conn
+          
+          // Debug: Check ephemeral store state before and after
+          const beforeStates = doc.ephemeralStore.getAllStates()
+          const beforeUserKeys = Object.keys(beforeStates).filter(k => k.startsWith('user-'))
+          
           doc.ephemeralStore.apply(ephemeralBytes)
+          
+          const afterStates = doc.ephemeralStore.getAllStates()
+          const afterUserKeys = Object.keys(afterStates).filter(k => k.startsWith('user-'))
+          
+          console.log(`📡 SERVER DEBUG - Applied ephemeral update from ${conn.id}:`, {
+            bytesLength: ephemeralBytes.length,
+            beforeUserKeys,
+            afterUserKeys,
+            newKeys: afterUserKeys.filter(k => !beforeUserKeys.includes(k)),
+            totalConnections: doc.conns.size
+          });
+          
         } catch (ephemeralError) {
           console.warn('messageEphemeral - ERROR applying ephemeral update')
           // Clear sender reference on error
@@ -308,7 +325,16 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
       case messageQueryEphemeral:
         // Send current ephemeral state to requesting client       
         try {
+          const allStates = doc.ephemeralStore.getAllStates()
+          const userKeys = Object.keys(allStates).filter(k => k.startsWith('user-'))
           const ephemeralUpdate = doc.ephemeralStore.encodeAll()
+          
+          console.log(`📡 SERVER DEBUG - Client ${conn.id} requesting ephemeral state:`, {
+            userKeysAvailable: userKeys,
+            encodedLength: ephemeralUpdate.length,
+            totalConnections: doc.conns.size
+          });
+          
           const ephemeralResponse: EphemeralMessage = {
             type: 'ephemeral',
             ephemeral: Array.from(ephemeralUpdate),
@@ -316,7 +342,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           }
           sendMessage(doc, conn, ephemeralResponse)
         } catch (error) {
-            console.warn('[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:')
+            console.warn('[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:', error)
         }
         break
 

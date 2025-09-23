@@ -339,7 +339,7 @@ export function syncCursorPositions(
     let cursor = cursors.get(clientID);
 
     if (cursor === undefined) {
-      // Add "Me" label for current user's cursor
+      // Add "(Me)" label for current user's cursor
       const cursorName = isCurrentUser ? `${name} (Me)` : name;
       cursor = createCollabCursor(cursorName, color);
       cursors.set(clientID, cursor);

@@ -111,6 +111,19 @@ class AwarenessAdapter implements AwarenessProvider {
           }
         }
       }
+      
+      console.log('🔄 AWARENESS DEBUG - Retrieved states:', {
+        localClientId: this.localClientId,
+        allKeysCount: Object.keys(allStates).length,
+        userKeysFound: Array.from(states.keys()),
+        stateDetails: Array.from(states.entries()).map(([id, state]) => ({
+          clientId: id,
+          name: state.name,
+          color: state.color,
+          isLocal: id === this.localClientId
+        }))
+      });
+      
     } catch (error) {
       console.warn(`[Client] AwarenessAdapter.getStates() - ERROR:`, error.message)
       // Fallback to just local state
@@ -154,8 +167,26 @@ class AwarenessAdapter implements AwarenessProvider {
       lastActivity: Date.now()
     }
 
+    console.log('🔄 AWARENESS DEBUG - Setting local state:', {
+      localClientId: this.localClientId,
+      awarenessKey: localKey,
+      stateName: state.name,
+      stateColor: state.color,
+      focusing: state.focusing
+    });
+
     try {
       this.ephemeralStore.set(localKey, stateWithActivity as any)
+      
+      // Debug: Check what's actually in the store after setting
+      const allStates = this.ephemeralStore.getAllStates();
+      const userKeys = Object.keys(allStates).filter(key => key.startsWith('user-'));
+      console.log('🔄 AWARENESS DEBUG - All user states in store after set:', {
+        userKeys,
+        totalKeys: Object.keys(allStates).length,
+        myKey: localKey
+      });
+      
     } catch (error) {
       console.warn(`[Client] AwarenessAdapter.setLocalState() - ephemeralStore.set() FAILED:`, {
         error: error.message,

@@ -47,8 +47,18 @@ export function createBinding(
   const tree = getLoroTree(doc);
   console.log('📄 Loro tree initialized, content will be populated via server sync');
   
+  const clientID = generateClientID(doc);
+  
+  console.log('🏗️ BINDING DEBUG - Creating binding:', {
+    bindingId: id,
+    localPeerId: doc.peerId,
+    generatedClientID: clientID,
+    docPeerIdType: typeof doc.peerId,
+    awarenessKey: `user-${clientID}`
+  });
+
   const binding: Binding = {
-    clientID: generateClientID(doc),
+    clientID: clientID,
     cursors: new Map(),
     cursorsContainer: null,
     doc,

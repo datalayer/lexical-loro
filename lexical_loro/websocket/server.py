@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Optional, Callable
 import websockets
 from websockets.server import serve
-from loro import LoroDoc, ExportMode
+from loro import LoroDoc, ExportMode, EphemeralStore
 from ..constants import DEFAULT_TREE_NAME
 from ..model.lexical_converter import (
     initialize_loro_doc_with_lexical_content,
@@ -209,8 +209,56 @@ class WSSharedDoc:
                 logger.debug(f"[Server] Error accessing restored document content: {e}")
         
         self.conns = {}
-        self.ephemeral_store = {"data": {}}
+        # Initialize proper Loro EphemeralStore with 30 second timeout (matching Node.js server)
+        self.ephemeral_store = EphemeralStore(30000)  # 30 seconds timeout
         self.last_ephemeral_sender = None
+        
+        # Subscribe to ephemeral store changes to broadcast updates (like Node.js server)
+        def ephemeral_change_handler(event):
+            """Handle ephemeral store changes and broadcast to other connections"""
+            # Only broadcast if there are actual changes
+            if (hasattr(event, 'added') and len(event.added) > 0) or \
+               (hasattr(event, 'updated') and len(event.updated) > 0) or \
+               (hasattr(event, 'removed') and len(event.removed) > 0):
+                try:
+                    encoded_data = self.ephemeral_store.encode_all()
+                    
+                    # Skip broadcast if no actual data to send
+                    if len(encoded_data) == 0:
+                        return
+                    
+                    # MESSAGE_EPHEMERAL and EphemeralMessage are defined locally in this file
+                    message = EphemeralMessage(
+                        type=MESSAGE_EPHEMERAL,
+                        ephemeral=list(encoded_data),
+                        docId=self.name
+                    )
+                    
+                    # Broadcast to all connections EXCEPT the one that sent the last ephemeral update
+                    broadcast_count = 0
+                    for conn in self.conns:
+                        if conn != self.last_ephemeral_sender:
+                            try:
+                                # Use asyncio to handle the async send
+                                import asyncio
+                                import json
+                                from dataclasses import asdict
+                                asyncio.create_task(conn.send(json.dumps(asdict(message))))
+                                broadcast_count += 1
+                            except Exception as send_error:
+                                logger.warn(f"[Server] ephemeral_change_handler - Failed to send to conn: {send_error}")
+                    
+                    logger.debug(f"📡 SERVER DEBUG - Broadcasted ephemeral changes to {broadcast_count} connections")
+                    
+                    # Clear the sender reference after broadcast
+                    self.last_ephemeral_sender = None
+                    
+                except Exception as broadcast_error:
+                    logger.error(f"[Server] ephemeral_change_handler - ERROR broadcasting: {broadcast_error}")
+        
+        # Subscribe to the ephemeral store changes
+        self.ephemeral_store.subscribe(ephemeral_change_handler)
+        
         logger.debug(f"[Server] Initialized document '{name}' with Loro tree structure")
     
     def _load_from_persistence(self):
@@ -328,6 +376,9 @@ def save_all_docs() -> Dict[str, bool]:
 
 def close_conn(doc, conn):
     if conn in doc.conns:
+        conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+        logger.info(f"\n💔💔💔 [server:py:ws] CONNECTION CLOSED: {conn_id} ← document: {doc.name} 💔💔💔")
+        logger.info(f"[server:py:ws] CONNECTION CLOSED: {conn_id} ← document: {doc.name}")
         logger.debug(f"💔 [Server] *** CONNECTION CLOSING *** for document: {doc.name}")
         logger.debug(f"💔 [Server] Closing connection: {conn}")
         del doc.conns[conn]
@@ -337,16 +388,20 @@ def close_conn(doc, conn):
         logger.warning(f"⚠️ [Server] Tried to cleanup connection {conn} but it wasn't in doc.conns")
 
 async def message_listener(conn, doc, message):
+    logger.info(f"📨📨📨 [Server] MESSAGE RECEIVED: type={type(message)}, length={len(message) if hasattr(message, '__len__') else 'N/A'} 📨📨📨")
     try:
         message_data = None
         message_str = ""
         
         if isinstance(message, str):
             message_str = message
+            logger.info(f"📝 [Server] String message received: {message_str[:100]}...")
         elif isinstance(message, bytes):
             try:
                 message_str = message.decode('utf-8')
+                logger.info(f"📝 [Server] Decoded bytes to string: {message_str[:100]}...")
             except UnicodeDecodeError:
+                logger.info(f"💾 [Server] Binary Loro update received: {len(message)} bytes")
                 logger.debug(f"[Server] Received binary Loro update: {len(message)} bytes")
                 # Apply the update to the document
                 doc.doc.import_(message)
@@ -373,6 +428,7 @@ async def message_listener(conn, doc, message):
             return
         
         message_type = message_data.get("type", "")
+        logger.info(f"🎯🎯🎯 [Server] MESSAGE TYPE: {message_type} for doc: {doc.name} 🎯🎯🎯")
         logger.debug(f"[Server] Received message type: {message_type} for doc: {doc.name}")
         
         if message_type == MESSAGE_QUERY_SNAPSHOT:
@@ -415,22 +471,50 @@ async def handle_query_snapshot(conn, doc, message_data):
 async def handle_ephemeral(conn, doc, message_data):
     try:
         ephemeral_data = message_data.get("ephemeral", [])
-        logger.debug(f"[Server] Received ephemeral data: {len(ephemeral_data)} bytes")
+        logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from conn {id(conn)}")
         
+        # Mark this connection as sender to avoid echo
         doc.last_ephemeral_sender = conn
-        doc.ephemeral_store["data"]["last_update"] = ephemeral_data
+        
+        # Debug: Check ephemeral store state before applying
+        before_states = doc.ephemeral_store.get_all_states()
+        before_user_keys = [k for k in before_states.keys() if k.startswith('user-')]
+        
+        # Apply ephemeral update using proper Loro EphemeralStore API
+        ephemeral_bytes = bytes(ephemeral_data)
+        doc.ephemeral_store.apply(ephemeral_bytes)
+        
+        # Debug: Check state after applying
+        after_states = doc.ephemeral_store.get_all_states()
+        after_user_keys = [k for k in after_states.keys() if k.startswith('user-')]
+        
+        logger.debug(f"📡 SERVER DEBUG - Applied ephemeral update from conn {id(conn)}: "
+                    f"bytes_length={len(ephemeral_bytes)}, "
+                    f"before_user_keys={before_user_keys}, "
+                    f"after_user_keys={after_user_keys}, "
+                    f"total_connections={len(doc.conns)}")
         
     except Exception as e:
         logger.error(f"[Server] Error handling ephemeral: {e}")
         doc.last_ephemeral_sender = None
 
 async def handle_query_ephemeral(conn, doc, message_data):
+    logger.info(f"❓👻❓ [Server] HANDLE_QUERY_EPHEMERAL CALLED ❓👻❓")
     try:
-        ephemeral_data = list(doc.ephemeral_store["data"].get("last_update", []))
+        # Get all current ephemeral state using proper Loro EphemeralStore API
+        all_states = doc.ephemeral_store.get_all_states()
+        user_keys = [k for k in all_states.keys() if k.startswith('user-')]
+        ephemeral_update = doc.ephemeral_store.encode_all()
+        
+        logger.info(f"📊 [Server] Ephemeral query - user_keys: {user_keys}, encoded_length: {len(ephemeral_update)}")
+        logger.debug(f"📡 SERVER DEBUG - Client conn {id(conn)} requesting ephemeral state: "
+                    f"user_keys_available={user_keys}, "
+                    f"encoded_length={len(ephemeral_update)}, "
+                    f"total_connections={len(doc.conns)}")
         
         response = EphemeralMessage(
             type=MESSAGE_EPHEMERAL,
-            ephemeral=ephemeral_data,
+            ephemeral=list(ephemeral_update),
             docId=doc.name
         )
         
@@ -531,11 +615,18 @@ async def setup_ws_connection(conn, path: str):
     if not doc_name:
         doc_name = 'default'
     
+    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+    
+    # Add prominent logging that appears right after websockets.server connection logs
+    logger.info(f"\n🔥🔥🔥 [server:py:ws] CONNECTION ESTABLISHED: {conn_id} → document: {doc_name} 🔥🔥🔥")
+    logger.info(f"[server:py:ws] CONNECTION ID: {conn_id} → document: {doc_name}")
+    logger.info(f"🔥🔥🔥 [Server] NEW CONNECTION STARTED: {conn_id} for document: {doc_name} 🔥🔥🔥")
+    logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
+    
     doc = get_doc(doc_name)
     doc.conns[conn] = set()
     
-    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-    logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
+    logger.info(f"📊 [server:py:ws] Total connections for '{doc_name}': {len(doc.conns)} (including {conn_id})")
     logger.debug(f"🔗 [Server] Total connections now: {len(doc.conns)}")
     logger.debug(f"🔗 [Server] All connections: {list(doc.conns.keys())}")
     
@@ -545,22 +636,29 @@ async def setup_ws_connection(conn, path: str):
         logger.debug(f"[Server] Sending initial snapshot to new client: {len(initial_snapshot)} bytes")
         await conn.send(initial_snapshot)
         
-        ephemeral_data = list(doc.ephemeral_store["data"].get("last_update", []))
-        if ephemeral_data:
-            ephemeral_message = EphemeralMessage(
-                type=MESSAGE_EPHEMERAL,
-                ephemeral=ephemeral_data,
-                docId=doc_name
-            )
-            await conn.send(json.dumps(asdict(ephemeral_message)))
+        # Send current ephemeral state to new client using proper EphemeralStore API
+        try:
+            ephemeral_data = doc.ephemeral_store.encode_all()
+            if len(ephemeral_data) > 0:
+                ephemeral_message = EphemeralMessage(
+                    type=MESSAGE_EPHEMERAL,
+                    ephemeral=list(ephemeral_data),
+                    docId=doc_name
+                )
+                await conn.send(json.dumps(asdict(ephemeral_message)))
+                logger.debug(f"[Server] Sent initial ephemeral state to new client: {len(ephemeral_data)} bytes")
+        except Exception as ephemeral_error:
+            logger.warn(f"[Server] Failed to send initial ephemeral state: {ephemeral_error}")
         
         async for message in conn:
             await message_listener(conn, doc, message)
             
     except websockets.exceptions.ConnectionClosed:
+        logger.info(f"🚪 [server:py:ws] WebSocket connection {conn_id} closed normally")
         logger.debug(f"WebSocket connection {conn_id} closed")
     except Exception as e:
-        logger.error(f"WebSocket connection error: {e}")
+        logger.info(f"❌ [server:py:ws] WebSocket connection {conn_id} error: {e}")
+        logger.error(f"WebSocket connection {conn_id} error: {e}")
     finally:
         close_conn(doc, conn)
 

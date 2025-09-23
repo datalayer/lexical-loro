@@ -132,6 +132,36 @@ export function setLocalStateFocus(
     };
   }
 
+  // Always update name and color in case they changed
+  localState.name = name;
+  localState.color = color;
   localState.focusing = focusing;
+  awareness.setLocalState(localState);
+}
+
+export function updateLocalStateName(
+  provider: Provider,
+  name: string,
+  color: string,
+): void {
+  const {awareness} = provider;
+  let localState = awareness.getLocalState();
+
+  if (localState === null) {
+    // Initialize with the new name if no state exists
+    localState = {
+      anchorPos: null,
+      awarenessData: {},
+      color,
+      focusPos: null,
+      focusing: false,
+      name,
+    };
+  } else {
+    // Update existing state with new name and color
+    localState.name = name;
+    localState.color = color;
+  }
+
   awareness.setLocalState(localState);
 }

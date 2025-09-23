@@ -7,8 +7,9 @@ import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {
   type CollaborationContextType,
   useCollaborationContext,
+  generateDeterministicUserData,
 } from './LexicalCollaborationContext';
-import { Provider } from './State';
+import { Provider, updateLocalStateName } from './State';
 import {
   CursorsContainerRef,
   useCollaboration,
@@ -111,12 +112,33 @@ export function CollaborationPlugin({
       docMap,
       excludedProperties,
     );
+    
+    // Update collaboration context with deterministic name based on client ID
+    // This ensures consistent names across browser sessions
+    const deterministicUserData = generateDeterministicUserData(binding.clientID);
+    console.log('Setting deterministic user data based on client ID:', {
+      clientId: binding.clientID,
+      name: deterministicUserData.name,
+      color: deterministicUserData.color
+    });
+    
+    // Update the collaboration context with stable name and color
+    const finalName = username || deterministicUserData.name;
+    const finalColor = cursorColor || deterministicUserData.color;
+    
+    collabContext.name = finalName;
+    collabContext.color = finalColor;
+    collabContext.clientID = binding.clientID;
+    
+    // Update the awareness state immediately with the deterministic name
+    updateLocalStateName(provider, finalName, finalColor);
+    
     setBinding(binding);
 
     return () => {
       // Clean up binding resources if needed
     };
-  }, [editor, provider, id, docMap, doc, excludedProperties]);
+  }, [editor, provider, id, docMap, doc, excludedProperties, collabContext, username, cursorColor]);
 
   if (!provider || !binding) {
     return <></>;
