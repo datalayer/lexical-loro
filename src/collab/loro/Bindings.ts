@@ -545,3 +545,6 @@ export function flushPendingCommit(binding: Binding): void {
     console.log('🔄 Forced commit completed for binding:', binding.id);
   }
 }
+
+// Export components
+export { LoroCollaborators, type LoroCollaboratorsProps, LoroCollaborationUI, type LoroCollaborationUIProps } from './components';

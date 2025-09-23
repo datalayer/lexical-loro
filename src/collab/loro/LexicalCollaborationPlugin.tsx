@@ -16,7 +16,7 @@ import {
   useHistory,
 } from './useCollaboration';
 import { SyncCursorPositionsFn } from './sync/SyncCursors';
-import { Binding, createBinding, ExcludedProperties } from './Bindings';
+import { Binding, createBinding, ExcludedProperties, LoroCollaborationUI } from './Bindings';
 
 type Props = {
   id: string;
@@ -33,6 +33,8 @@ type Props = {
   // `awarenessData` parameter allows arbitrary data to be added to the awareness.
   awarenessData?: object;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
+  // Show collaborators list at the top of the editor
+  showCollaborators?: boolean;
 };
 
 export function CollaborationPlugin({
@@ -46,6 +48,7 @@ export function CollaborationPlugin({
   excludedProperties,
   awarenessData,
   syncCursorPositionsFn,
+  showCollaborators = true,
 }: Props): JSX.Element {
   const isBindingInitialized = useRef(false);
   const isProviderInitialized = useRef(false);
@@ -135,6 +138,7 @@ export function CollaborationPlugin({
       shouldBootstrap={shouldBootstrap}
       docMap={docMap}
       syncCursorPositionsFn={syncCursorPositionsFn}
+      showCollaborators={showCollaborators}
     />
   );
 }
@@ -154,6 +158,7 @@ function LoroCollaborationCursors({
   binding,
   setDoc,
   syncCursorPositionsFn,
+  showCollaborators = false,
 }: {
   editor: LexicalEditor;
   id: string;
@@ -169,6 +174,7 @@ function LoroCollaborationCursors({
   awarenessData?: object;
   collabContext: CollaborationContextType;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
+  showCollaborators?: boolean;
 }) {
   const cursorsElement = useCollaboration(
     editor,
@@ -190,6 +196,18 @@ function LoroCollaborationCursors({
 
   useHistory(editor, binding);
   useFocusTracking(editor, provider, name, color, awarenessData);
+
+  if (showCollaborators) {
+    return (
+      <LoroCollaborationUI
+        binding={binding}
+        cursorsContainer={cursorsElement}
+        currentUserName={name}
+        currentUserColor={color}
+        showCollaborators={true}
+      />
+    );
+  }
 
   return cursorsElement;
 }
