@@ -61,8 +61,7 @@ import threading
 from typing import Dict, Any, List, Optional, Callable, Union
 from enum import Enum
 import websockets
-import loro
-from loro import LoroDoc, LoroTree, ExportMode, EphemeralStore
+from loro import LoroDoc, EphemeralStore
 
 from .lexical_converter import LexicalTreeConverter
 from .node_mapper import TreeNodeMapper

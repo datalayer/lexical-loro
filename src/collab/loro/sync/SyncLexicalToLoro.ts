@@ -78,14 +78,14 @@ export function syncLexicalToLoro(
       });
     });
 
-    // Option 1 - commit directly (synchronous, can be slow for large docs)
+    // Option 1 - commit directly.
     binding.doc.commit({ origin: binding.doc.peerIdStr });
 
-    // Option 2 - Schedule an async commit instead of immediate synchronous commit
-    // This reduces latency for large documents by debouncing commits
+    // Option 2 - Schedule an async commit instead of immediate synchronous commit.
+    // This reduces latency for large documents by debouncing commits.
     // scheduleAsyncCommit(binding);
 
-    // Option 3 - Schedule an async commit instead of immediate synchronous commit
+    // Option 3 - Schedule an async commit instead of immediate synchronous commit.
     // This reduces latency for large documents by debouncing commits.
     /*
     const doCommit = () => requestIdleCallback(() => {

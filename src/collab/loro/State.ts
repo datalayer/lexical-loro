@@ -65,6 +65,7 @@ export function createUndoManager(
     mergeInterval: 1000, // Merge operations within 1 second
     maxUndoSteps: 100,   // Keep up to 100 undo steps
     excludeOriginPrefixes: ['collab-', 'sync-'], // Exclude collaboration operations
+    /*
     onPush: (isUndo, counterRange, event) => {
       // Save cursor positions when adding to undo stack
       const selection = binding.editor.getEditorState().read(() => {
@@ -90,6 +91,7 @@ export function createUndoManager(
         });
       }
     }
+    */
   });
   return undoManager;
 }

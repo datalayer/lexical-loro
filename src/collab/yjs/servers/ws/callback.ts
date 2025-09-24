@@ -24,7 +24,9 @@ export const callbackIntegrator = (doc) => {
       content: getContent(sharedObjectName, sharedObjectType, doc).toJSON()
     }
   })
-  CALLBACK_URL && callbackRequest(CALLBACK_URL, CALLBACK_TIMEOUT, dataToSend)
+  if (CALLBACK_URL) {
+    callbackRequest(CALLBACK_URL, CALLBACK_TIMEOUT, dataToSend)
+  }
 }
 
 /**
