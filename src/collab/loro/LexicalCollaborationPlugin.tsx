@@ -38,7 +38,7 @@ type Props = {
   showCollaborators?: boolean;
 };
 
-export function CollaborationPlugin({
+export function LoroCollaborationPlugin({
   id,
   providerFactory,
   shouldBootstrap,

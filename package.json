@@ -89,7 +89,7 @@
     "react-day-picker": "^9.7.0",
     "react-dom": "^18.2.0",
     "react-error-boundary": "^3.1.4",
-    "y-websocket": "^1.5.4",
+    "y-websocket": "3.0.0",
     "yjs": ">=13.5.42"
   },
   "devDependencies": {

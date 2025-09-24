@@ -10,6 +10,7 @@
       "DOM",
       "ES2022"
     ],
+    "rootDir": "./src",
     "jsx": "react-jsx",
     "target": "esnext",
     "allowJs": true,
@@ -23,6 +24,6 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": false
   }
 }

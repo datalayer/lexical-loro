@@ -1,7 +1,6 @@
 import {createRoot} from 'react-dom/client';
 // setupEnv must load before App because lexical computes CAN_USE_BEFORE_INPUT
 // at import time (disableBeforeInput is used to test legacy events)
-// eslint-disable-next-line simple-import-sort/imports
 import setupEnv from './setupEnv';
 
 // Initialize Prism.js for code highlighting

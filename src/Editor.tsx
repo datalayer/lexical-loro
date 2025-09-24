@@ -65,7 +65,7 @@ import TwitterPlugin from './plugins/TwitterPlugin';
 import YouTubePlugin from './plugins/YouTubePlugin';
 import ContentEditable from './ui/ContentEditable';
 import DatalayerPlugin from './plugins/DatalayerPlugin';
-import {CollaborationPlugin as LoroCollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
+import {LoroCollaborationPlugin as LoroCollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
 import {createWebsocketProvider as createLoroWebsocketProvider} from './collab/loro/wsProvider';
 import {CollaborationPlugin as YjsCollaborationPlugin} from './collab/yjs/LexicalCollaborationPlugin';
 import {createWebsocketProvider as createYjsWebsocketProvider} from './collab/yjs/wsProvider';
