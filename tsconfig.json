@@ -13,6 +13,8 @@
     "jsx": "react-jsx",
     "target": "esnext",
     "allowJs": true,
+    "outDir": "./lib",
+    "declaration": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,

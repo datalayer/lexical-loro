@@ -1,8 +1,31 @@
 {
   "name": "@datalayer/lexical-loro",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
+  "private": false,
+  "main": "lib/index.js",
+  "files": [
+    "lib/**/*.{css,d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
+    "style/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+    "schema/*.json"
+  ],
+  "keywords": [
+    "jupyter",
+    "jupyterlab",
+    "react"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datalayer/lexical-loro.git"
+  },
+  "sideEffects": [
+    "style/*.css",
+    "src/**/*.css",
+    "style/index.js"
+  ],
+  "styleModule": "style/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b && vite build",
     "dev": "cross-env NODE_ENV=development concurrently \"npm:server:py:ws\" \"npm:server:mcp\" \"vite --host --port 3000\"",
@@ -97,6 +120,5 @@
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
     "vitest": "^3.2.4"
-  },
-  "sideEffects": false
+  }
 }
