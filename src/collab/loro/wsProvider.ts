@@ -4,10 +4,6 @@ import { Provider } from './State';
 
 const url = new URL(window.location.href);
 const params = new URLSearchParams(url.search);
-const WEBSOCKET_ENDPOINT =
-  params.get('collabEndpoint') || 'ws://localhost:3002';
-const WEBSOCKET_SLUG = 'playground';
-const WEBSOCKET_ID = params.get('collabId') || '0';
 const RESYNC_INTERVAL = parseInt(params.get('resyncInterval') || '30000', 10); // Default 30s, configurable via URL
 
 /**
@@ -39,7 +35,7 @@ export function createWebsocketProvider(
   
   const websocketProvider = new WebsocketProvider(
     finalWebsocketUrl,
-    WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,
+    id,
     doc,
     {
       connect: false,
@@ -47,6 +43,6 @@ export function createWebsocketProvider(
     },
   );
   
-  console.log(`🏭 WebsocketProvider created for: ${finalWebsocketUrl}/${WEBSOCKET_SLUG}/${WEBSOCKET_ID}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
+  console.log(`🏭 WebsocketProvider created for: ${finalWebsocketUrl}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
   return websocketProvider;
 }
