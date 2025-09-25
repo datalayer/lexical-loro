@@ -54,7 +54,7 @@ Issues = "https://github.com/datalayer/lexical-loro/issues"
 
 [project.scripts]
 lexical-loro-ws-server = "lexical_loro.cli:main"
-lexical-loro-mcp-server = "lexical_loro.mcp"
+lexical-loro-mcp-server = "lexical_loro.mcp.server:server"
 
 [tool.hatch.version]
 source = "nodejs"
