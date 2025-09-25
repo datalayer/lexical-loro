@@ -7,6 +7,6 @@ MCP (Model Context Protocol) module for Lexical-Loro integration
 This module contains the MCP server implementation for document management.
 """
 
-from .server import main
+from .server import server
 
-__all__ = ["main"]
+__all__ = ["server"]
