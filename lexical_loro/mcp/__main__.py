@@ -3,7 +3,7 @@
 
 """Main entry point for the tree-based MCP server."""
 
-from .server import main
+from .server import server
 
 if __name__ == "__main__":
-    main()
+    server()

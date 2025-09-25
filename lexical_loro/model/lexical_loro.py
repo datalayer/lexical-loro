@@ -40,7 +40,7 @@ USAGE PATTERNS:
 ==============
 
 ✅ Initialization:
-model = LoroTreeModel(doc_id="doc1")
+model = LoroTreeModel(doc_id="doc1", websocket_url="ws://localhost:3002")
 model.initialize_from_lexical_state(lexical_json)
 
 ✅ Tree Operations:
@@ -87,6 +87,7 @@ class LoroTreeModel:
     def __init__(
         self,
         doc_id: str,
+        websocket_url: str,
         tree_name: str = DEFAULT_TREE_NAME,
         enable_collaboration: bool = False,
         event_handler: Optional[Callable] = None
@@ -96,11 +97,13 @@ class LoroTreeModel:
         
         Args:
             doc_id: Unique document identifier
+            websocket_url: WebSocket server URL for collaboration (REQUIRED)
             tree_name: Name of the tree container (default: "lexical")
             enable_collaboration: Whether to enable collaborative features
             event_handler: Optional event handler for notifications
         """
         self.doc_id = doc_id
+        self.websocket_url = websocket_url
         self.tree_name = tree_name
         self.enable_collaboration = enable_collaboration
         self._event_handler = event_handler
@@ -124,7 +127,6 @@ class LoroTreeModel:
         self._subscription_id: Optional[str] = None
         
         # WebSocket client state
-        self.websocket_url: str = "ws://localhost:3002"
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.websocket_connected: bool = False
         self._websocket_task: Optional[asyncio.Task] = None

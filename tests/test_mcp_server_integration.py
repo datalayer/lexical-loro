@@ -40,7 +40,7 @@ def mcp_server():
         
         try:
             # Create document manager
-            manager = TreeDocumentManager(base_path="./documents")
+            manager = TreeDocumentManager(base_path="./documents", websocket_url="ws://localhost:3002")
             
             # Create handler class with manager
             class TestMCPHandler(MCPRequestHandler):

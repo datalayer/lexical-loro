@@ -45,8 +45,9 @@ from ..model.lexical_loro import LoroTreeModel
 logger = logging.getLogger(__name__)
 
 ###############################################################################
-# Global document manager instance
+# Global document manager instance and configuration
 document_manager: Optional[TreeDocumentManager] = None
+_websocket_base_url: str = "ws://localhost:8081"
 
 ###############################################################################
 # MCP Server with CORS support and legacy HTTP endpoints
@@ -213,12 +214,13 @@ mcp = FastMCPWithCORS("lexical-loro", stateless_http=True)
 
 async def get_or_create_document_manager() -> TreeDocumentManager:
     """Get or create the global document manager instance"""
-    global document_manager
+    global document_manager, _websocket_base_url
     
     if document_manager is None:
         logger.debug("🔧 MCP SERVER: Creating TreeDocumentManager...")
         document_manager = TreeDocumentManager(
             base_path="./documents",
+            websocket_url=_websocket_base_url,
             auto_save_interval=30,
             max_cached_documents=50
         )
@@ -840,11 +842,15 @@ def start_command(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # Set global websocket URL before creating document manager
+    global document_manager, _websocket_base_url
+    _websocket_base_url = websocket_url
+    
     # Initialize global document manager with custom path
-    global document_manager
     logger.debug("🔧 MCP SERVER CLI: Initializing document manager...")
     document_manager = TreeDocumentManager(
         base_path=documents_path,
+        websocket_url=websocket_url,
         auto_save_interval=30,
         max_cached_documents=50
     )

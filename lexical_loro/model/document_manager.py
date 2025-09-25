@@ -61,6 +61,7 @@ class TreeDocumentManager:
     def __init__(
         self,
         base_path: str = "./documents",
+        websocket_url: str = "ws://localhost:3002",
         event_handler: Optional[Callable] = None,
         auto_save_interval: int = 30,
         max_cached_documents: int = 50
@@ -70,12 +71,14 @@ class TreeDocumentManager:
         
         Args:
             base_path: Base directory for document storage
+            websocket_url: WebSocket server URL for collaboration
             event_handler: Optional event handler for notifications
             auto_save_interval: Auto-save interval in seconds
             max_cached_documents: Maximum number of documents to keep in memory
         """
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
+        self.websocket_url = websocket_url
         
         self._event_handler = event_handler
         self.auto_save_interval = auto_save_interval
@@ -123,6 +126,7 @@ class TreeDocumentManager:
             # Create new tree model with consistent tree name
             model = LoroTreeModel(
                 doc_id=doc_id,
+                websocket_url=self.websocket_url,
                 tree_name=DEFAULT_TREE_NAME,  # Use shared constant
                 enable_collaboration=enable_collaboration,
                 event_handler=self._handle_document_event
@@ -201,6 +205,7 @@ class TreeDocumentManager:
             # Use consistent tree name matching all components
             model = LoroTreeModel(
                 doc_id=doc_id,
+                websocket_url=self.websocket_url,
                 tree_name=DEFAULT_TREE_NAME,  # Use shared constant
                 enable_collaboration=enable_collaboration,
                 event_handler=self._handle_document_event
@@ -256,6 +261,7 @@ class TreeDocumentManager:
                 # Create model and initialize with loaded content
                 model = LoroTreeModel(
                     doc_id=doc_id,
+                    websocket_url=self.websocket_url,
                     tree_name=DEFAULT_TREE_NAME,  # Use shared constant
                     enable_collaboration=True,
                     event_handler=self._handle_document_event
