@@ -103,7 +103,7 @@ export function createBinding(
       const findNode = (node: any, key: string): any => {
         if (node._key === key) return node;
         if (node._children) {
-          for (let child of node._children) {
+          for (const child of node._children) {
             const found = findNode(child, key);
             if (found) return found;
           }
