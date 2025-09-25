@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Conditional Debug Test</h1>
+    <p>This page tests the conditional debug functionality.</p>
+    <div id="output"></div>
+
+    <script type="module">
+        import { isDebugEnabled } from './build/esm/index.mjs';
+        
+        console.log('Testing conditional debug functionality...');
+        
+        // Test default state (should be false)
+        console.log('Debug enabled (no URL param):', isDebugEnabled());
+        
+        // Add debug parameter to URL and test again
+        const urlWithDebug = new URL(window.location);
+        urlWithDebug.searchParams.set('debug', 'true');
+        console.log('URL with debug=true:', urlWithDebug.toString());
+        
+        // Update document with results
+        const output = document.getElementById('output');
+        output.innerHTML = `
+            <p><strong>Current URL:</strong> ${window.location.href}</p>
+            <p><strong>Debug enabled:</strong> ${isDebugEnabled()}</p>
+            <p><strong>To test debug=true, visit:</strong> <a href="${urlWithDebug.toString()}">${urlWithDebug.toString()}</a></p>
+        `;
+    </script>
+</body>
+</html>
