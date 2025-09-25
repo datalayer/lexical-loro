@@ -813,6 +813,7 @@ def server():
 )
 @click.option(
     "--documents-path",
+    envvar="DOCUMENTS_PATH",
     default="./documents",
     help="Path to store documents"
 )
@@ -860,49 +861,3 @@ def start_command(
         uvicorn.run(mcp.streamable_http_app, host=host, port=port)
     else:
         raise ValueError("Transport should be 'stdio' or 'streamable-http'.")
-
-# Legacy main command for backward compatibility
-@click.command()
-@click.option("--host", default="localhost", help="Host to bind the server to")
-@click.option("--port", default=3001, help="Port to bind the server to")
-@click.option("--documents-path", default="./documents", help="Path to store documents")
-@click.option("--log-level", default="INFO", help="Logging level")
-def main(host: str, port: int, documents_path: str, log_level: str):
-    """Run the Lexical-Loro MCP server (legacy interface - use streamable-http transport)"""
-    
-    # Configure logging
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    
-    logger.debug(f"Starting Lexical-Loro MCP server on {host}:{port}")
-    logger.debug(f"Documents path: {documents_path}")
-    
-    # Initialize global document manager with custom path
-    global document_manager
-    logger.debug("🔧 MCP SERVER CLI: Initializing document manager...")
-    document_manager = TreeDocumentManager(
-        base_path=documents_path,
-        auto_save_interval=30,
-        max_cached_documents=50
-    )
-    logger.debug("✅ MCP SERVER CLI: Document manager initialized")
-    
-    logger.debug(f"MCP server started. Available at http://{host}:{port}")
-    logger.debug("Available tools:")
-    logger.debug("  - load_document(doc_id) - Load document structure")
-    logger.debug("  - get_document(doc_id) - Get document in Lexical JSON format")  
-    logger.debug("  - get_document_info(doc_id) - Get document statistics and info")
-    logger.debug("  - append_paragraph(doc_id, text) - Append paragraph to document")
-    logger.debug("  - insert_paragraph(doc_id, index, text) - Insert paragraph at index")
-    
-    try:
-        # Use streamable-http transport for the legacy interface
-        uvicorn.run(mcp.streamable_http_app, host=host, port=port)
-    except KeyboardInterrupt:
-        logger.debug("Shutting down MCP server...")
-
-
-if __name__ == "__main__":
-    main()
