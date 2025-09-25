@@ -47,6 +47,7 @@ export function useCollaboration(
   initialEditorState?: InitialEditorStateType,
   awarenessData?: object,
   syncCursorPositionsFn: SyncCursorPositionsFn = syncCursorPositions,
+  onInitialization?: (isInitialized: boolean) => void,
 ): JSX.Element {
   const isReloadingDoc = useRef(false);
 
@@ -74,6 +75,12 @@ export function useCollaboration(
         isReloadingDoc.current === false
       ) {
         initializeEditor(editor, initialEditorState);
+        
+        // Call the initialization callback after initializing the editor
+        if (onInitialization) {
+          console.log('🎉 Editor initialized after sync, calling onInitialization callback');
+          onInitialization(true);
+        }
       }
 
       isReloadingDoc.current = false;
@@ -179,6 +186,7 @@ export function useCollaboration(
     awarenessData,
     setDoc,
     syncCursorPositionsFn,
+    onInitialization,
   ]);
   const cursorsContainer = useMemo(() => {
     const ref = (element: null | HTMLElement) => {

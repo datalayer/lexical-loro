@@ -18,6 +18,7 @@ const RESYNC_INTERVAL = parseInt(params.get('resyncInterval') || '30000', 10); /
 export function createWebsocketProvider(
   id: string,
   docMap: Map<string, LoroDoc>,
+  websocketUrl?: string,
 ): Provider {
   let doc = docMap.get(id);
 
@@ -29,8 +30,15 @@ export function createWebsocketProvider(
   const providerInstanceId = Math.random().toString(36).substr(2, 9);
   console.log(`🏭 Creating WebsocketProvider instance (ID: ${providerInstanceId}) for docId: ${id}`);
   
+  // Use provided websocketUrl or fallback to URL parameters/defaults
+  const finalWebsocketUrl = websocketUrl || (() => {
+    const url = new URL(window.location.href);
+    const params = new URLSearchParams(url.search);
+    return params.get('collabEndpoint') || 'ws://localhost:3002';
+  })();
+  
   const websocketProvider = new WebsocketProvider(
-    WEBSOCKET_ENDPOINT,
+    finalWebsocketUrl,
     WEBSOCKET_SLUG + '/' + WEBSOCKET_ID + '/' + id,
     doc,
     {
@@ -39,6 +47,6 @@ export function createWebsocketProvider(
     },
   );
   
-  console.log(`🏭 WebsocketProvider created for: ${WEBSOCKET_ENDPOINT}/${WEBSOCKET_SLUG}/${WEBSOCKET_ID}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
+  console.log(`🏭 WebsocketProvider created for: ${finalWebsocketUrl}/${WEBSOCKET_SLUG}/${WEBSOCKET_ID}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
   return websocketProvider;
 }

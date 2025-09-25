@@ -8,24 +8,28 @@ import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
-import { globalIgnores } from 'eslint/config'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 export default tseslint.config([
-  globalIgnores(['dist']),
+  {
+    ignores: ['dist', 'build', 'lib', 'esm', 'split'],
+  },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
-      tseslint.configs.recommended,
-      reactHooks.configs['recommended-latest'],
-      reactRefresh.configs.vite,
+      ...tseslint.configs.recommended,
     ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
       parserOptions: {
-        project: './tsconfig.json',
-        tsconfigRootDir: import.meta.dirname,
+        projectService: true,
+        tsconfigRootDir: __dirname,
       },
     },
     rules: {
@@ -33,5 +37,12 @@ export default tseslint.config([
       "@typescript-eslint/no-unused-vars": "off",
       "no-case-declarations": "off",
     },
+  },
+  {
+    files: ['**/*.{jsx,tsx}'],
+    extends: [
+      reactHooks.configs['recommended-latest'],
+      reactRefresh.configs.vite,
+    ],
   },
 ])

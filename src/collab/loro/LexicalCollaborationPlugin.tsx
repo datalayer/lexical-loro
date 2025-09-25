@@ -24,6 +24,7 @@ type Props = {
   providerFactory: (
     id: string,
     docMap: Map<string, LoroDoc>,
+    websocketUrl?: string,
   ) => Provider;
   shouldBootstrap: boolean;
   username?: string;
@@ -36,6 +37,10 @@ type Props = {
   syncCursorPositionsFn?: SyncCursorPositionsFn;
   // Show collaborators list at the top of the editor
   showCollaborators?: boolean;
+  // WebSocket URL to use instead of the hardcoded one in wsProvider
+  websocketUrl?: string;
+  // Handler called when the initial snapshot is loaded
+  onInitialization?: (isInitialized: boolean) => void;
 };
 
 export function LoroCollaborationPlugin({
@@ -50,6 +55,8 @@ export function LoroCollaborationPlugin({
   awarenessData,
   syncCursorPositionsFn,
   showCollaborators = true,
+  websocketUrl = 'ws://localhost:3002',
+  onInitialization,
 }: Props): JSX.Element {
   const isBindingInitialized = useRef(false);
   const isProviderInitialized = useRef(false);
@@ -82,14 +89,14 @@ export function LoroCollaborationPlugin({
 
     isProviderInitialized.current = true;
 
-    const provider = providerFactory(id, docMap);
+    const provider = providerFactory(id, docMap, websocketUrl);
     setProvider(provider);
     setDoc(docMap.get(id));
 
     return () => {
       provider.disconnect();
     };
-  }, [id, providerFactory, docMap]);
+  }, [id, providerFactory, docMap, websocketUrl]);
 
   const [binding, setBinding] = useState<Binding>();
 
@@ -161,6 +168,7 @@ export function LoroCollaborationPlugin({
       docMap={docMap}
       syncCursorPositionsFn={syncCursorPositionsFn}
       showCollaborators={showCollaborators}
+      onInitialization={onInitialization}
     />
   );
 }
@@ -181,6 +189,7 @@ function LoroCollaborationCursors({
   setDoc,
   syncCursorPositionsFn,
   showCollaborators = false,
+  onInitialization,
 }: {
   editor: LexicalEditor;
   id: string;
@@ -197,6 +206,7 @@ function LoroCollaborationCursors({
   collabContext: CollaborationContextType;
   syncCursorPositionsFn?: SyncCursorPositionsFn;
   showCollaborators?: boolean;
+  onInitialization?: (isInitialized: boolean) => void;
 }) {
   const cursorsElement = useCollaboration(
     editor,
@@ -212,6 +222,7 @@ function LoroCollaborationCursors({
     initialEditorState,
     awarenessData,
     syncCursorPositionsFn,
+    onInitialization,
   );
 
   collabContext.clientID = binding.clientID;
