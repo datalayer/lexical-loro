@@ -478,16 +478,16 @@ async def stop_global_autosave():
 
 async def _global_autosave_loop():
     """Global auto-save loop - same pattern as LoroWebSocketServer"""
-    logger.debug(f"🚀 Global auto-save task started with interval: {_global_autosave_interval} seconds")
+    logger.info(f"🚀 Global auto-save task started with interval: {_global_autosave_interval} seconds")
     
     while _global_autosave_running:
         try:
             await asyncio.sleep(_global_autosave_interval)
             if _global_autosave_running:
-                logger.debug(f"🔍 Global auto-save check: found {len(docs)} documents")
+                logger.info(f"🔍 Global auto-save check: found {len(docs)} documents")
                 
                 if docs:
-                    logger.debug(f"🔄 Auto-saving {len(docs)} documents...")
+                    logger.info(f"🔄 Auto-saving {len(docs)} documents...")
                     saved_count = 0
                     unchanged_count = 0
                     
@@ -497,19 +497,19 @@ async def _global_autosave_loop():
                                 success = doc.save_to_persistence()
                                 if success:
                                     saved_count += 1
-                                    logger.debug(f"💾 Auto-saved document: {doc_name}")
+                                    logger.info(f"💾 Auto-saved document: {doc_name}")
                                 else:
                                     logger.warning(f"⚠️ Auto-save failed for document: {doc_name}")
                             else:
                                 unchanged_count += 1
-                                logger.debug(f"⏭️ Skipping auto-save for unchanged document: {doc_name}")
+                                logger.info(f"⏭️ Skipping auto-save for unchanged document: {doc_name}")
                         except Exception as e:
                             logger.error(f"❌ Error auto-saving document {doc_name}: {e}")
                     
                     if saved_count > 0:
-                        logger.debug(f"✅ Global auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                        logger.info(f"✅ Global auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                     elif unchanged_count > 0:
-                        logger.debug(f"ℹ️ Global auto-save check: {unchanged_count} documents unchanged, none saved")
+                        logger.info(f"ℹ️ Global auto-save check: {unchanged_count} documents unchanged, none saved")
                 else:
                     logger.debug(f"🔍 No documents to auto-save")
                     
@@ -1021,9 +1021,9 @@ class LoroWebSocketServer:
         logger.debug(f"✅ LoroWebSocketServer running on ws://{self.host}:{self.port}")
         
         # Start background autosave task
-        logger.debug(f"🔄 Starting background services...")
+        logger.info(f"🔄 Starting background services...")
         self._autosave_task = asyncio.create_task(self._autosave_models())
-        logger.debug(f"   ✓ Auto-save service ({self.autosave_interval_sec}s interval)")
+        logger.info(f"   ✓ Auto-save service ({self.autosave_interval_sec}s interval)")
         
         try:
             # Keep the server running
@@ -1058,7 +1058,7 @@ class LoroWebSocketServer:
     
     async def _autosave_models(self):
         """Periodically auto-save all models at the configured interval"""
-        logger.debug(f"🚀 Auto-save task started with interval: {self.autosave_interval_sec} seconds")
+        logger.info(f"🚀 Auto-save task started with interval: {self.autosave_interval_sec} seconds")
         
         while self.running:
             try:
@@ -1067,7 +1067,7 @@ class LoroWebSocketServer:
                     logger.debug(f"🔍 Auto-save check: found {len(docs)} documents")
                     
                     if docs:
-                        logger.debug(f"🔄 Auto-saving {len(docs)} documents...")
+                        logger.info(f"🔄 Auto-saving {len(docs)} documents...")
                         saved_count = 0
                         unchanged_count = 0
                         
@@ -1087,7 +1087,7 @@ class LoroWebSocketServer:
                                 logger.error(f"❌ Error auto-saving document {doc_name}: {e}")
                         
                         if saved_count > 0:
-                            logger.debug(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                            logger.info(f"✅ Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                         elif unchanged_count > 0:
                             logger.debug(f"ℹ️ Auto-save check: {unchanged_count} documents unchanged, none saved")
                     else:

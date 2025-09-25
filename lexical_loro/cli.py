@@ -18,7 +18,8 @@ from .websocket.server import LoroWebSocketServer
 @click.option("--log-level", "-l", default="INFO", 
               type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
               help="Logging level (default: INFO)")
-def main(port: int, host: str, log_level: str):
+@click.option("--autosave-interval", "-a", default=60, help="Auto-save interval in seconds (default: 60)")
+def main(port: int, host: str, log_level: str, autosave_interval: int):
     """
     Start the Lexical Loro WebSocket relay server for real-time collaboration.
     
@@ -40,11 +41,12 @@ def main(port: int, host: str, log_level: str):
     server = LoroWebSocketServer(
         port=port,
         host=host,
-        autosave_interval_sec=60
+        autosave_interval_sec=autosave_interval
     )
     
     click.echo(f"🚀 Starting Lexical Loro relay server on {host}:{port}")
     click.echo(f"📋 Log level: {log_level}")
+    click.echo(f"💾 Auto-save interval: {autosave_interval} seconds")
     click.echo("📡 Pure WebSocket relay - all operations delegated to LexicalModel")
     click.echo("Press Ctrl+C to stop the server")
     
