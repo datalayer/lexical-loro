@@ -121,6 +121,11 @@ def default_save_model(doc_id: str, lexical_json: str) -> bool:
     Returns:
         True if save successful, False otherwise
     """
+    # Type checking - enforce string type
+    if not isinstance(lexical_json, str):
+        logger.debug(f"🔄 [Persistence] default_save_model expects str, got {type(lexical_json).__name__} for {doc_id}")
+        return False
+    
     try:
         # Create .models directory if it doesn't exist
         models_dir = Path(".models")
@@ -296,6 +301,11 @@ class WSSharedDoc:
             logger.error(f"❌ [Persistence] Error loading document '{self.name}': {e}")
             return False
     
+    def to_json(self) -> str:
+        """Convert document to Lexical JSON format (required for spacer compatibility)"""
+        from .utils import loro_tree_to_lexical_json
+        return loro_tree_to_lexical_json(self.doc, logger)
+    
     def save_to_persistence(self) -> bool:
         """Save current document state to persistence"""
         try:
@@ -310,8 +320,14 @@ class WSSharedDoc:
             try:
                 # Try spacer-style save first (pass model object)
                 success = self.save_model(self.name, self)
-            except TypeError:
+                if not success:
+                    # If spacer-style save returns False, try JSON fallback
+                    logger.debug(f"🔄 [Persistence] Spacer-style save returned False, trying JSON fallback")
+                    lexical_json = loro_tree_to_lexical_json(self.doc, logger)
+                    success = self.save_model(self.name, lexical_json)
+            except (TypeError, AttributeError, ValueError) as e:
                 # Fallback to standard save function (pass JSON string)
+                logger.debug(f"🔄 [Persistence] Spacer-style save failed ({type(e).__name__}), trying JSON fallback")
                 lexical_json = loro_tree_to_lexical_json(self.doc, logger)
                 success = self.save_model(self.name, lexical_json)
             
@@ -421,6 +437,90 @@ docs = {}
 global_load_model = default_load_model
 global_save_model = default_save_model
 
+# Global auto-save configuration
+_global_autosave_task = None
+_global_autosave_interval = 30  # seconds
+_global_autosave_running = False
+
+async def start_global_autosave(interval_seconds: int = 30):
+    """
+    Start global auto-save task for all documents.
+    
+    Args:
+        interval_seconds: Auto-save interval in seconds
+    """
+    global _global_autosave_task, _global_autosave_interval, _global_autosave_running
+    
+    if _global_autosave_task is not None and not _global_autosave_task.done():
+        logger.debug("🔄 Global auto-save task already running")
+        return
+    
+    _global_autosave_interval = interval_seconds
+    _global_autosave_running = True
+    _global_autosave_task = asyncio.create_task(_global_autosave_loop())
+    
+    logger.info(f"🚀 Started global auto-save task with {interval_seconds}s interval")
+
+async def stop_global_autosave():
+    """Stop global auto-save task"""
+    global _global_autosave_task, _global_autosave_running
+    
+    _global_autosave_running = False
+    
+    if _global_autosave_task and not _global_autosave_task.done():
+        _global_autosave_task.cancel()
+        try:
+            await _global_autosave_task
+        except asyncio.CancelledError:
+            pass
+        
+    logger.info("🛑 Stopped global auto-save task")
+
+async def _global_autosave_loop():
+    """Global auto-save loop - same pattern as LoroWebSocketServer"""
+    logger.debug(f"🚀 Global auto-save task started with interval: {_global_autosave_interval} seconds")
+    
+    while _global_autosave_running:
+        try:
+            await asyncio.sleep(_global_autosave_interval)
+            if _global_autosave_running:
+                logger.debug(f"🔍 Global auto-save check: found {len(docs)} documents")
+                
+                if docs:
+                    logger.debug(f"🔄 Auto-saving {len(docs)} documents...")
+                    saved_count = 0
+                    unchanged_count = 0
+                    
+                    for doc_name, doc in docs.items():
+                        try:
+                            if doc.needs_save():
+                                success = doc.save_to_persistence()
+                                if success:
+                                    saved_count += 1
+                                    logger.debug(f"💾 Auto-saved document: {doc_name}")
+                                else:
+                                    logger.warning(f"⚠️ Auto-save failed for document: {doc_name}")
+                            else:
+                                unchanged_count += 1
+                                logger.debug(f"⏭️ Skipping auto-save for unchanged document: {doc_name}")
+                        except Exception as e:
+                            logger.error(f"❌ Error auto-saving document {doc_name}: {e}")
+                    
+                    if saved_count > 0:
+                        logger.debug(f"✅ Global auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                    elif unchanged_count > 0:
+                        logger.debug(f"ℹ️ Global auto-save check: {unchanged_count} documents unchanged, none saved")
+                else:
+                    logger.debug(f"🔍 No documents to auto-save")
+                    
+        except asyncio.CancelledError:
+            logger.debug("🛑 Global auto-save task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"❌ Error in global auto-save loop: {e}")
+    
+    logger.debug("✅ Global auto-save task stopped")
+
 def get_client_id(conn) -> Optional[str]:
     """
     Get the client ID associated with a connection.
@@ -466,9 +566,21 @@ def clear_docs():
     logger.debug(f"[Server] Cleared document cache")
 
 def get_doc(docname: str):
-    if docname not in docs:
-        docs[docname] = WSSharedDoc(docname, global_load_model, global_save_model)
-    return docs[docname]
+    # Extract the actual document ID from WebSocket path if needed
+    # Handle paths like "playground/0/actual_id" -> "actual_id"
+    if '/' in docname:
+        actual_doc_id = docname.split('/')[-1]
+        logger.debug(f"🔄 [Server] Extracted document ID '{actual_doc_id}' from path '{docname}'")
+    else:
+        actual_doc_id = docname
+    
+    if actual_doc_id not in docs:
+        logger.debug(f"📄 [Server] Creating new document: {actual_doc_id}")
+        docs[actual_doc_id] = WSSharedDoc(actual_doc_id, global_load_model, global_save_model)
+    else:
+        logger.debug(f"📄 [Server] Retrieved existing document: {actual_doc_id}")
+    
+    return docs[actual_doc_id]
 
 def save_all_docs() -> Dict[str, bool]:
     """Save all documents to persistence"""
@@ -661,7 +773,7 @@ async def handle_ephemeral(conn, doc, message_data):
         display_id = get_client_id(conn) or conn_id
         
         # Log the processed ephemeral update with proper client ID
-        logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {display_id}")
+        logger.debug(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {display_id}")
         
         # Mark this connection as sender to avoid echo (moved after client ID detection)
         doc.last_ephemeral_sender = conn
@@ -689,7 +801,7 @@ async def handle_query_ephemeral(conn, doc, message_data):
     
     display_id = client_id if client_id else conn_id
     
-    logger.info(f"👻 [Server] Query Ephemeral from {display_id}")
+    logger.debug(f"👻 [Server] Query Ephemeral from {display_id}")
     try:
         # Get all current ephemeral state using proper Loro EphemeralStore API
         all_states = doc.ephemeral_store.get_all_states()
@@ -806,19 +918,26 @@ async def setup_ws_connection(conn, path: str):
     if not doc_name:
         doc_name = 'default'
     
+    # Extract actual document ID from the WebSocket path
+    if '/' in doc_name:
+        actual_doc_id = doc_name.split('/')[-1]
+        logger.debug(f"🔄 [Server] WebSocket path '{doc_name}' -> document ID '{actual_doc_id}'")
+    else:
+        actual_doc_id = doc_name
+    
     conn_id = get_connection_id(conn)
     
     # Add prominent logging that appears right after websockets.server connection logs
-    print(f"\n🔥🔥🔥 [server:py:ws] CONNECTION ESTABLISHED: {conn_id} → document: {doc_name} 🔥🔥🔥")
-    logger.info(f"[server:py:ws] CONNECTION ID: {conn_id} → document: {doc_name} (awaiting clientID)")
+    print(f"\n🔥🔥🔥 [server:py:ws] CONNECTION ESTABLISHED: {conn_id} → path: {doc_name} → document: {actual_doc_id} 🔥🔥🔥")
+    logger.info(f"[server:py:ws] CONNECTION ID: {conn_id} → path: {doc_name} → document: {actual_doc_id} (awaiting clientID)")
     logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} awaiting Frontend clientID mapping...")
-    logger.info(f"🔥🔥🔥 [Server] NEW CONNECTION STARTED: {conn_id} for document: {doc_name} 🔥🔥🔥")
-    logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {doc_name}")
+    logger.info(f"🔥🔥🔥 [Server] NEW CONNECTION STARTED: {conn_id} for document: {actual_doc_id} 🔥🔥🔥")
+    logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {actual_doc_id}")
     
     doc = get_doc(doc_name)
     doc.conns[conn] = set()
     
-    logger.info(f"📊 [server:py:ws] Total connections for '{doc_name}': {len(doc.conns)} (including {conn_id})")
+    logger.info(f"📊 [server:py:ws] Total connections for '{actual_doc_id}': {len(doc.conns)} (including {conn_id})")
     logger.debug(f"🔗 [Server] Total connections now: {len(doc.conns)}")
     logger.debug(f"🔗 [Server] All connections: {list(doc.conns.keys())}")
     
