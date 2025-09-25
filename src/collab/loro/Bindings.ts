@@ -7,6 +7,7 @@ import { getLoroTree, generateClientID } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
 import { setupLoroDebugging } from './Debug';
+import { isDebugEnabled } from '../../appSettings';
 
 export type ClientID = number;
 
@@ -77,8 +78,11 @@ export function createBinding(
   // Initialize the NodeMapper with the binding
   binding.nodeMapper = initializeNodeMapper(binding);
 
-  // Setup debugging utilities
-  setupLoroDebugging(binding);
+  // Setup debugging utilities only if debug is enabled via URL parameter
+  if (isDebugEnabled()) {
+    setupLoroDebugging(binding);
+    console.log('🐛 Loro debugging enabled via ?debug=true URL parameter');
+  }
 
   return binding;
 }

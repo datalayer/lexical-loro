@@ -6,7 +6,7 @@ import logging
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, Any
 import websockets
 from websockets.server import serve
 from loro import LoroDoc, ExportMode, EphemeralStore
@@ -305,11 +305,15 @@ class WSSharedDoc:
             
             logger.debug(f"💾 [Persistence] Saving document '{self.name}' to storage")
             
-            # Convert current Loro tree to Lexical JSON
-            lexical_json = loro_tree_to_lexical_json(self.doc, logger)
-            
-            # Save using the save function
-            success = self.save_model(self.name, lexical_json)
+            # Check if we're using the spacer's save function (which expects model object)
+            # vs the standard save function (which expects JSON string)
+            try:
+                # Try spacer-style save first (pass model object)
+                success = self.save_model(self.name, self)
+            except TypeError:
+                # Fallback to standard save function (pass JSON string)
+                lexical_json = loro_tree_to_lexical_json(self.doc, logger)
+                success = self.save_model(self.name, lexical_json)
             
             if success:
                 self.has_changes_since_save = False
@@ -331,6 +335,84 @@ class WSSharedDoc:
     def needs_save(self) -> bool:
         """Check if document needs to be saved"""
         return self.has_changes_since_save
+    
+    def handle_client_disconnect(self, client_id: str) -> Dict[str, Any]:
+        """
+        Handle client disconnection and cleanup ephemeral state.
+        
+        Args:
+            client_id: Client identifier to disconnect
+            
+        Returns:
+            Dictionary with cleanup results
+        """
+        try:
+            # Remove the client's ephemeral state
+            self.ephemeral_store.delete(client_id)
+            logger.info(f"🧹 [Server] CLEANED UP ephemeral state for clientID: {client_id}")
+            return {"success": True, "removed_keys": [client_id]}
+        except Exception as e:
+            logger.warning(f"⚠️ [Server] Failed to cleanup ephemeral state for {client_id}: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Convert current Loro document state to Lexical JSON format.
+        
+        Returns:
+            Dictionary representing the Lexical editor state
+        """
+        try:
+            # Convert current Loro tree to Lexical JSON
+            lexical_json_str = loro_tree_to_lexical_json(self.doc, logger)
+            return json.loads(lexical_json_str)
+        except Exception as e:
+            logger.error(f"❌ [Persistence] Error converting document '{self.name}' to JSON: {e}")
+            # Return a basic empty Lexical structure as fallback
+            return {
+                "root": {
+                    "children": [],
+                    "direction": None,
+                    "format": "",
+                    "indent": 0,
+                    "type": "root",
+                    "version": 1
+                }
+            }
+    
+    def import_from_json(self, lexical_data: Dict[str, Any]) -> bool:
+        """
+        Import Lexical JSON data into the Loro document.
+        
+        Args:
+            lexical_data: Dictionary representing Lexical editor state
+            
+        Returns:
+            True if import successful, False otherwise
+        """
+        try:
+            logger.debug(f"📥 [Persistence] Importing JSON data into document '{self.name}'")
+            
+            # Clear existing document content
+            self.doc = LoroDoc()
+            
+            # Convert Lexical JSON to Loro tree structure
+            tree = self.doc.get_tree(DEFAULT_TREE_NAME)
+            tree.enable_fractional_index(1)
+            
+            # Import the Lexical data
+            root_id = lexical_to_loro_tree(lexical_data, tree, logger)
+            self.doc.commit()
+            
+            # Mark as changed for next save
+            self.has_changes_since_save = True
+            
+            logger.debug(f"✅ [Persistence] Successfully imported JSON data into document '{self.name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [Persistence] Error importing JSON data into document '{self.name}': {e}")
+            return False
 
 # Global document storage
 docs = {}
@@ -338,6 +420,36 @@ docs = {}
 # Global persistence functions
 global_load_model = default_load_model
 global_save_model = default_save_model
+
+def get_client_id(conn) -> Optional[str]:
+    """
+    Get the client ID associated with a connection.
+    
+    Args:
+        conn: WebSocket connection object
+        
+    Returns:
+        Client ID if available, None otherwise
+    """
+    return getattr(conn, 'client_id', None)
+
+def get_connection_id(conn) -> str:
+    """
+    Get a safe connection identifier for logging.
+    
+    Args:
+        conn: WebSocket connection object
+        
+    Returns:
+        Connection ID string for logging
+    """
+    try:
+        if hasattr(conn, 'remote_address') and conn.remote_address:
+            return f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}"
+        else:
+            return "conn-unknown"
+    except (AttributeError, TypeError, IndexError):
+        return "conn-unknown"
 
 def set_persistence_functions(load_func: Optional[Callable[[str], Optional[str]]] = None,
                             save_func: Optional[Callable[[str, str], bool]] = None):
@@ -376,8 +488,8 @@ def save_all_docs() -> Dict[str, bool]:
 
 def close_conn(doc, conn):
     if conn in doc.conns:
-        conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-        client_id = getattr(conn, 'client_id', None)
+        conn_id = get_connection_id(conn)
+        client_id = get_client_id(conn)
         display_id = client_id if client_id else conn_id
         
         print(f"\n💔💔💔 [server:py:ws] CONNECTION CLOSED: {display_id} (was {conn_id}) ← document: {doc.name} 💔💔💔")
@@ -408,8 +520,8 @@ def close_conn(doc, conn):
 
 async def message_listener(conn, doc, message):
     # Get display ID (client ID if available, otherwise connection ID)
-    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
-    display_id = getattr(conn, 'client_id', conn_id)
+    conn_id = get_connection_id(conn)
+    display_id = get_client_id(conn) or conn_id
     
     try:
         message_data = None
@@ -450,7 +562,7 @@ async def message_listener(conn, doc, message):
             return
         
         message_type = message_data.get("type", "")
-        display_id = getattr(conn, 'client_id', f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown")
+        display_id = get_client_id(conn) or get_connection_id(conn)
         logger.debug(f"[Server] Received message type: {message_type} for doc: {doc.name}")
         
         if message_type == MESSAGE_QUERY_SNAPSHOT:
@@ -473,7 +585,7 @@ async def handle_query_snapshot(conn, doc, message_data):
     try:
         # Extract client ID from message if provided
         client_id = message_data.get("clientId")
-        conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+        conn_id = get_connection_id(conn)
         
         if client_id:
             # Store client ID mapping on first snapshot request
@@ -482,7 +594,7 @@ async def handle_query_snapshot(conn, doc, message_data):
             logger.info(f"🆔 [Server] CLIENT ID from snapshot request: {conn_id} ↔ {client_id}")
             logger.info(f"🔗 [CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
         else:
-            display_id = getattr(conn, 'client_id', conn_id)
+            display_id = get_client_id(conn) or conn_id
         
         request_id = str(time.time())
         logger.info(f"📸 [Server] Client {display_id} requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
@@ -506,7 +618,7 @@ async def handle_query_snapshot(conn, doc, message_data):
 async def handle_ephemeral(conn, doc, message_data):
     try:
         ephemeral_data = message_data.get("ephemeral", [])
-        conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+        conn_id = get_connection_id(conn)
         
         # Debug: Check ephemeral store state before applying
         before_states = doc.ephemeral_store.get_all_states()
@@ -546,7 +658,7 @@ async def handle_ephemeral(conn, doc, message_data):
                 logger.debug(f"🎭 [Server] CLIENT ID CONFIRMED: {conn_id} → {client_id}")
         
         # Use client ID in logging if available  
-        display_id = getattr(conn, 'client_id', conn_id)
+        display_id = get_client_id(conn) or conn_id
         
         # Log the processed ephemeral update with proper client ID
         logger.info(f"📡 [Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {display_id}")
@@ -566,8 +678,8 @@ async def handle_ephemeral(conn, doc, message_data):
 
 async def handle_query_ephemeral(conn, doc, message_data):
     # Extract client ID from message if provided, otherwise use stored client_id
-    client_id = message_data.get("clientId") or getattr(conn, 'client_id', None)
-    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+    client_id = message_data.get("clientId") or get_client_id(conn)
+    conn_id = get_connection_id(conn)
     
     if client_id and not hasattr(conn, 'client_id'):
         # Store client ID mapping if not already stored
@@ -610,7 +722,8 @@ async def handle_keepalive(conn, doc, message_data):
         reason = message_data.get("reason", "regular_keepalive")
         error_info = message_data.get("error", None)
         
-        logger.debug(f"💓 [Server] *** RECEIVED KEEPALIVE #{ping_id} *** from conn-{conn.remote_address[0]}:{conn.remote_address[1]} for doc: {doc.name}")
+        conn_id = get_connection_id(conn)
+        logger.debug(f"💓 [Server] *** RECEIVED KEEPALIVE #{ping_id} *** from {conn_id} for doc: {doc.name}")
         logger.debug(f"💓 [Server] Keepalive timestamp: {timestamp}")
         logger.debug(f"💓 [Server] Keepalive reason: {reason}")
         logger.debug(f"💓 [Server] Current server time: {time.time()}")
@@ -627,7 +740,7 @@ async def handle_keepalive(conn, doc, message_data):
             "acknowledged": True
         }
         
-        logger.debug(f"💓 [Server] *** SENDING KEEPALIVE ACK #{ping_id} *** to conn-{conn.remote_address[0]}:{conn.remote_address[1]}")
+        logger.debug(f"💓 [Server] *** SENDING KEEPALIVE ACK #{ping_id} *** to {conn_id}")
         logger.debug(f"💓 [Server] ACK message: {keepalive_response}")
         
         await conn.send(json.dumps(keepalive_response))
@@ -693,7 +806,7 @@ async def setup_ws_connection(conn, path: str):
     if not doc_name:
         doc_name = 'default'
     
-    conn_id = f"conn-{conn.remote_address[0]}:{conn.remote_address[1]}" if conn.remote_address else "unknown"
+    conn_id = get_connection_id(conn)
     
     # Add prominent logging that appears right after websockets.server connection logs
     print(f"\n🔥🔥🔥 [server:py:ws] CONNECTION ESTABLISHED: {conn_id} → document: {doc_name} 🔥🔥🔥")
@@ -765,6 +878,7 @@ class LoroWebSocketServer:
         self.server = None
         self.running = False
         self._autosave_task: Optional[asyncio.Task] = None
+        self.clients = {}  # Track clients for adapter compatibility
         
         # Set up persistence functions
         set_persistence_functions(load_model, save_model)
@@ -877,6 +991,105 @@ class LoroWebSocketServer:
         """
         logger.debug(f"💾 Manually saving {len(docs)} documents...")
         return save_all_docs()
+    
+    def generate_client_id(self) -> str:
+        """
+        Generate a unique client ID for new connections.
+        This mimics the client-side behavior of generating timestamp-based IDs.
+        
+        Returns:
+            Unique client ID string (timestamp-based)
+        """
+        client_id = str(int(time.time() * 1000))
+        logger.debug(f"🆔 Generated new client ID: {client_id}")
+        return client_id
+    
+    @property 
+    def document_manager(self):
+        """
+        Provide access to the global document manager for compatibility.
+        Returns a simple object that provides access to the global docs.
+        """
+        class DocumentManager:
+            def list_documents(self):
+                return list(docs.keys())
+            
+            @property
+            def models(self):
+                return docs
+                
+            def cleanup(self):
+                docs.clear()
+        
+        return DocumentManager()
+    
+    async def send_initial_snapshots(self, websocket, client_id: str, doc_id: Optional[str] = None):
+        """
+        Send initial snapshots to a new client.
+        
+        Args:
+            websocket: WebSocket connection
+            client_id: Client identifier
+            doc_id: Optional specific document ID
+        """
+        try:
+            if doc_id:
+                # Send snapshot for specific document
+                doc = get_doc(doc_id)
+                snapshot = doc.doc.export(ExportMode.Snapshot())
+                await websocket.send(snapshot)
+                logger.debug(f"📸 Sent initial snapshot for doc '{doc_id}' to client {client_id}: {len(snapshot)} bytes")
+                
+                # Send ephemeral state
+                ephemeral_data = doc.ephemeral_store.encode_all()
+                if len(ephemeral_data) > 0:
+                    ephemeral_message = EphemeralMessage(
+                        type=MESSAGE_EPHEMERAL,
+                        ephemeral=list(ephemeral_data),
+                        docId=doc_id
+                    )
+                    await websocket.send(json.dumps(asdict(ephemeral_message)))
+                    logger.debug(f"📡 Sent initial ephemeral state for doc '{doc_id}' to client {client_id}: {len(ephemeral_data)} bytes")
+            else:
+                # Send snapshots for all documents (if any)
+                for doc_name in docs.keys():
+                    doc = docs[doc_name]
+                    snapshot = doc.doc.export(ExportMode.Snapshot())
+                    await websocket.send(snapshot)
+                    logger.debug(f"📸 Sent snapshot for doc '{doc_name}' to client {client_id}: {len(snapshot)} bytes")
+        except Exception as e:
+            logger.error(f"❌ Error sending initial snapshots to client {client_id}: {e}")
+    
+    async def handle_message(self, client_id: str, message: str):
+        """
+        Handle a message from a specific client.
+        
+        Args:
+            client_id: Client identifier
+            message: Message content
+        """
+        try:
+            # Find the client's connection
+            client = self.clients.get(client_id)
+            if not client:
+                logger.warning(f"⚠️ Client {client_id} not found in clients dict")
+                return
+                
+            conn = client.websocket
+            
+            # Parse message to determine document
+            try:
+                data = json.loads(message)
+                doc_id = data.get("docId", "default")
+            except json.JSONDecodeError:
+                doc_id = "default"
+                
+            # Get document and delegate to existing message handling
+            doc = get_doc(doc_id)
+            await message_listener(conn, doc, message)
+            
+        except Exception as e:
+            logger.error(f"❌ Error handling message from client {client_id}: {e}")
 
 
 def main():

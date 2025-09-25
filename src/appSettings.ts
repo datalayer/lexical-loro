@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   tableCellBackgroundColor: true,
   tableCellMerge: true,
   tableHorizontalScroll: true,
+  debug: false,  // Enable Loro debugging utilities
 } as const;
 
 // These are mutated in setupEnv
@@ -38,3 +39,13 @@ export const INITIAL_SETTINGS: Record<SettingName, boolean> = {
 export type SettingName = keyof typeof DEFAULT_SETTINGS;
 
 export type Settings = typeof INITIAL_SETTINGS;
+
+/**
+ * Check if debug mode is enabled via URL parameter
+ * @returns true if ?debug=true is in the URL, false otherwise
+ */
+export function isDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get('debug') === 'true';
+}
