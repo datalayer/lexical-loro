@@ -2,7 +2,7 @@
 
 [![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)
 
-# ✍️ 🦜 Lexical Loro - Collaborative Plugin for Lexical with Loro CRDT
+# ✍️ 🦜 Collaborative Plugin for Lexical with Loro CRDT
 
 A collaborative editing plugin for [Lexical](https://github.com/facebook/lexical) Rich Editor built with [Loro](https://github.com/loro-dev) CRDT, providing real-time collaborative editing capabilities with conflict-free synchronization.
 
