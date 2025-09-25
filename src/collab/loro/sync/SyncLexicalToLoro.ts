@@ -6,9 +6,9 @@ import { propagateElementNode } from '../propagators/ElementNodePropagator';
 import { propagateTextNode } from '../propagators/TextNodePropagator';
 import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, generateClientID } from '../utils/Utils';
-import { scheduleAsyncCommit } from '../Bindings';
 import { syncLexicalSelectionToLoro } from './SyncCursors';
 import { Provider } from '../State';
+// import { scheduleAsyncCommit } from '../Bindings';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
 export function syncLexicalToLoro(
