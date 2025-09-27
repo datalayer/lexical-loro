@@ -61,7 +61,6 @@
     "test:py:watch": "python3 -m pytest tests/ -v --tb=short -f"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.0",
     "@floating-ui/react": "^0.27.8",
     "@lexical/clipboard": "^0.35.0",
     "@lexical/code": "^0.35.0",
@@ -95,6 +94,7 @@
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
     "@babel/preset-react": "^7.24.7",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^25.0.7",
     "@types/jest": "^29.5.12",

@@ -64,14 +64,14 @@ import TreeViewPlugin from './plugins/TreeViewPlugin';
 import TwitterPlugin from './plugins/TwitterPlugin';
 import YouTubePlugin from './plugins/YouTubePlugin';
 import ContentEditable from './ui/ContentEditable';
-import DatalayerPlugin from './plugins/DatalayerPlugin';
+import DebugPlugin from './plugins/DebugPlugin';
 import {LoroCollaborationPlugin as LoroCollaborationPlugin} from './collab/loro/LexicalCollaborationPlugin';
 import {createWebsocketProvider as createLoroWebsocketProvider} from './collab/loro/wsProvider';
 import {CollaborationPlugin as YjsCollaborationPlugin} from './collab/yjs/LexicalCollaborationPlugin';
 import {createWebsocketProvider as createYjsWebsocketProvider} from './collab/yjs/wsProvider';
 
 const skipCollaborationInit =
-  // @ts-expect-error
+  // @ts-expect-error: window.parent may not exist in all environments, but we need to check iframe context
   window.parent != null && window.parent.frames.right === window;
 
 export default function Editor(): JSX.Element {
@@ -159,7 +159,7 @@ export default function Editor(): JSX.Element {
         }`}>
         {isMaxLength && <MaxLengthPlugin maxLength={30} />}
         <DragDropPaste />
-        <DatalayerPlugin/>
+        <DebugPlugin />
         <AutoFocusPlugin />
         {selectionAlwaysOnDisplay && <SelectionAlwaysOnDisplay />}
         <ClearEditorPlugin />
@@ -190,6 +190,8 @@ export default function Editor(): JSX.Element {
               ) : (
                 <LoroCollaborationPlugin
                   id="main"
+                  showCollaborators
+                                    
                   providerFactory={createLoroWebsocketProvider}
                   shouldBootstrap={!skipCollaborationInit}
                 />

@@ -3,16 +3,16 @@ import { useState, useEffect } from 'react';
 import { LexicalEditor, $getRoot, $createTextNode, $createParagraphNode } from 'lexical';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 
-interface MCPTool {
+interface IMCPTool {
   name: string;
   description?: string;
   parameters?: Record<string, any>;
 }
 
-export default function DatalayerPlugin(): JSX.Element | null {
+export function DebugPlugin(): JSX.Element | null {
 
   const [editor] = useLexicalComposerContext();
-  const [mcpTools, setMcpTools] = useState<MCPTool[]>([]);
+  const [mcpTools, setMcpTools] = useState<IMCPTool[]>([]);
   const [selectedTool, setSelectedTool] = useState<string>('');
   const [isLoadingTools, setIsLoadingTools] = useState<boolean>(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export default function DatalayerPlugin(): JSX.Element | null {
       const data = await response.json();
       
       if (data.tools) {
-        const tools: MCPTool[] = data.tools.map((tool: any) => ({
+        const tools: IMCPTool[] = data.tools.map((tool: any) => ({
           name: tool.name,
           description: tool.description || '',
           parameters: tool.parameters || {}
@@ -162,7 +162,7 @@ export default function DatalayerPlugin(): JSX.Element | null {
 
   // Set hardcoded tools instead of fetching from server
   useEffect(() => {
-    const hardcodedTools: MCPTool[] = [
+    const hardcodedTools: IMCPTool[] = [
       { 
         name: 'get_document', 
         description: 'Get document',
@@ -291,3 +291,5 @@ export default function DatalayerPlugin(): JSX.Element | null {
     </>
   );
 }
+
+export default DebugPlugin;
