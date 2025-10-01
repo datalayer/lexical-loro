@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import {Doc} from 'yjs';
 import {WebsocketProvider} from './provider/websocket';
 import { Provider } from './State';

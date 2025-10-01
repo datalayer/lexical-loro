@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import type {LexicalCommand} from 'lexical';
 import {createCommand} from 'lexical';
 import type {Doc, RelativePosition, UndoManager, XmlText} from 'yjs';

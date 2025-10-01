@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { LoroDoc, TreeID } from 'loro-crdt';
 import { $getNodeByKey, $getRoot, $getSelection, $isRangeSelection, $isTextNode, EditorState, ElementNode, LexicalNode, NodeKey, RangeSelection, TextNode } from 'lexical';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';

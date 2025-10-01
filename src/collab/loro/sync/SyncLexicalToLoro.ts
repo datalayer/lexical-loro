@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode, $getSelection } from 'lexical';
 import { Binding } from '../Bindings';
 import { propagateRootNode } from '../propagators/RootNodePropagator';

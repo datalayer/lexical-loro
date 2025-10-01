@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import type {ExcalidrawInitialElements} from '../../ui/ExcalidrawModal';
 import type {AppState, BinaryFiles} from '@excalidraw/excalidraw/types';
 import type {NodeKey} from 'lexical';

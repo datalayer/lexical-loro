@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import type {XmlElement} from 'yjs';
 import type {DecoratorNode, NodeKey, NodeMap} from 'lexical';
 import {$getNodeByKey, $isDecoratorNode} from 'lexical';

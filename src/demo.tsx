@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import {createRoot} from 'react-dom/client';
 // setupEnv must load before App because lexical computes CAN_USE_BEFORE_INPUT
 // at import time (disableBeforeInput is used to test legacy events)

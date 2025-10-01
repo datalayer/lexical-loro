@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 // Quick debug script to understand offset calculation differences
 // Run this to see the difference between YJS XmlText and LoroText
 

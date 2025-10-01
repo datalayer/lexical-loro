@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { LoroEventBatch } from 'loro-crdt';
 import { $addUpdateTag, $createParagraphNode, $getRoot, $getSelection, $isRangeSelection, $setSelection, COLLABORATION_TAG, HISTORIC_TAG, SKIP_COLLAB_TAG, SKIP_SCROLL_INTO_VIEW_TAG } from 'lexical';
 import { Binding } from '../Bindings';

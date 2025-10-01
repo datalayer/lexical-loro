@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import type {LineBreakNode, NodeKey} from 'lexical';
 import {$getNodeByKey, $isLineBreakNode} from 'lexical';
 import type {Map as YMap} from 'yjs';

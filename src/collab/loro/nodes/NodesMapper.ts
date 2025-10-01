@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';

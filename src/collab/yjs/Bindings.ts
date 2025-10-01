@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import type {LexicalEditor, NodeKey} from 'lexical';
 import {Klass, LexicalNode} from 'lexical';
 import type {Doc} from 'yjs';

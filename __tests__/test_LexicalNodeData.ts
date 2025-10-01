@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { $createTextNode, $createParagraphNode, $isTextNode, $isElementNode, createEditor, $getRoot } from 'lexical';
 import { LexicalNodeData, LexicalNodeDataHelper } from '../src/collab/loro/types/LexicalNodeData';
 
