@@ -75,10 +75,9 @@ export function useCollaboration(
         isReloadingDoc.current === false
       ) {
         initializeEditor(editor, initialEditorState);
-        
+
         // Call the initialization callback after initializing the editor
         if (onInitialization) {
-          console.log('🎉 Editor initialized after sync, calling onInitialization callback');
           onInitialization(true);
         }
       }
