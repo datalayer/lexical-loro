@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { TreeID, LoroTree } from 'loro-crdt';
 import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey, ElementNode } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';

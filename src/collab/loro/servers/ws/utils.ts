@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import {LoroDoc, EphemeralStore} from 'loro-crdt'
 import * as map from 'lib0/map'
 import * as eventloop from 'lib0/eventloop'
