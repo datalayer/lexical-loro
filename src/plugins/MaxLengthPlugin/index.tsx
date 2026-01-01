@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$trimTextContentFromAnchor} from '@lexical/selection';
 import {$restoreEditorState} from '@lexical/utils';
