@@ -8,14 +8,38 @@ import {
   LexicalEditor
 } from 'lexical';
 import { LoroDoc, LoroTree, TreeID } from 'loro-crdt';
-import { Binding } from '../Bindings';
-import { Provider } from '../Provider';
+import { Binding, createBinding } from '../Bindings';
+import { Provider, AwarenessProvider, UserState } from '../State';
 
-// Mock Provider class for testing
-class MockProvider extends Provider {
-  constructor(doc: LoroDoc, awareness: any) {
-    super(doc, awareness);
-  }
+/**
+ * Creates a mock Provider for testing
+ */
+function createMockProvider(): Provider {
+  const mockUserState: UserState = {
+    anchorPos: null,
+    color: '#FF0000',
+    focusing: false,
+    focusPos: null,
+    name: 'Test User',
+    awarenessData: {}
+  };
+
+  return {
+    awareness: {
+      clientID: 1,
+      getLocalState: () => mockUserState,
+      getStates: () => new Map(),
+      setLocalState: () => {},
+      setLocalStateField: () => {},
+      on: () => {},
+      off: () => {},
+      destroy: () => {}
+    } as AwarenessProvider,
+    connect: async () => {},
+    disconnect: () => {},
+    on: () => {},
+    off: () => {}
+  } as Provider;
 }
 
 function createTestBinding(doc: LoroDoc): Binding {
@@ -25,15 +49,16 @@ function createTestBinding(doc: LoroDoc): Binding {
     }
   });
 
-  const awareness = { clientID: 1 };
-  const provider = new MockProvider(doc, awareness);
+  const provider = createMockProvider();
+  const docMap = new Map<string, LoroDoc>();
+  docMap.set('test', doc);
 
-  const binding = new Binding(
-    $getRoot().getKey(),
-    provider,
-    doc.getTree('lexical'),
+  const binding = createBinding(
     editor,
-    () => $getRoot()
+    provider,
+    'test',
+    doc,
+    docMap
   );
 
   return binding;
