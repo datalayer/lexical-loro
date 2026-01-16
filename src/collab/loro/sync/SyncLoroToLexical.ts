@@ -8,7 +8,6 @@ import { $syncLocalCursorPosition, syncCursorPositions, SyncCursorPositionsFn, s
 import { TreeIntegrator } from '../integrators/TreeIntegrator';
 import { MapIntegrator } from '../integrators/MapIntegrator';
 import { ListIntegrator } from '../integrators/ListIntegrator';
-import { TextIntegrator } from '../integrators/TextIntegrator';
 import { CounterIntegrator } from '../integrators/CounterIntegrator';
 import { $moveSelectionToPreviousNode, doesSelectionNeedRecovering } from '../utils/Utils';
 
@@ -16,7 +15,6 @@ import { $moveSelectionToPreviousNode, doesSelectionNeedRecovering } from '../ut
 const treeIntegrator = new TreeIntegrator();
 const mapIntegrator = new MapIntegrator();
 const listIntegrator = new ListIntegrator();
-const textIntegrator = new TextIntegrator();
 const counterIntegrator = new CounterIntegrator();
 
 export function syncLoroToLexical(
@@ -60,10 +58,6 @@ export function syncLoroToLexical(
 
         case 'list':
           listIntegrator.integrateInternal(event.diff as any, binding, provider);
-          break;
-
-        case 'text':
-          textIntegrator.integrateInternal(event.diff as any, binding, provider);
           break;
 
         case 'counter':
