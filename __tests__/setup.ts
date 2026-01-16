@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 // Vitest setup for Lexical-Loro tests
 import { vi, beforeEach, afterEach } from 'vitest';
 import { JSDOM } from 'jsdom';
