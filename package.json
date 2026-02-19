@@ -60,6 +60,7 @@
     "test:py:watch": "python3 -m pytest tests/ -v --tb=short -f"
   },
   "dependencies": {
+    "@datalayer/primer-addons": "^1.0.8",
     "@floating-ui/react": "^0.27.8",
     "@lexical/clipboard": "^0.35.0",
     "@lexical/code": "^0.35.0",
