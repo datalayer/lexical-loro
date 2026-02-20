@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { $getNodeByKey, $getRoot, $isDecoratorNode, $isElementNode, RootNode, TextNode } from 'lexical';
 import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';

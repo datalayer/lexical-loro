@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import React, { useState, useEffect } from 'react';
 import type { Binding } from '../Bindings';
 
