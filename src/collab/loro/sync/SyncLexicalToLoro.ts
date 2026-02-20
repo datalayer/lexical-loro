@@ -1,4 +1,4 @@
-import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode, $getSelection } from 'lexical';
+import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode, $getSelection, $getNodeByKey, $isElementNode } from 'lexical';
 import { Binding } from '../Bindings';
 import { propagateRootNode } from '../propagators/RootNodePropagator';
 import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
@@ -36,46 +36,71 @@ export function syncLexicalToLoro(
       peerId
     };
 
-    // Process mutations in proper dependency order: containers before children
-    // 1. First process RootNode, ElementNodes (containers) 
-    // 2. Then process TextNodes, LineBreakNodes, DecoratorNodes (children)
-    
-    const containerClasses = [RootNode, ElementNode];
-    const childClasses = [TextNode, LineBreakNode, DecoratorNode];
+    // Process mutations in proper dependency order:
+    // 1. RootNode first
+    // 2. ElementNodes sorted by tree depth (parents before children)
+    // 3. TextNodes, LineBreakNodes, DecoratorNodes (leaf children)
+    //
+    // Depth sorting is critical: when a table is inserted, the mutations for
+    // table, tablerow, tablecell, and paragraph-inside-cell ALL fire in the
+    // same update. Without sorting, a tablecell may be propagated before its
+    // parent tablerow — causing `getTreeIDByLexicalKey(parent)` to return
+    // undefined and the cell to be created at the Loro tree root.
 
-    // Process containers first to ensure parent mappings exist
-    containerClasses.forEach(targetClass => {
-      mutatedNodes.forEach((nodeMap, Klass) => {
-        if (isClassExtending(Klass, targetClass)) {
-          nodeMap.forEach((mutation, nodeKey) => {
-            if (isClassExtending(Klass, RootNode)) {
-              propagateRootNode(update, mutation, nodeKey, mutatorOptions);
-            }
-            else if (isClassExtending(Klass, ElementNode)) {
-              propagateElementNode(update, mutation, nodeKey, mutatorOptions);
+    // Phase 1: Process RootNode mutations
+    mutatedNodes.forEach((nodeMap, Klass) => {
+      if (isClassExtending(Klass, RootNode)) {
+        nodeMap.forEach((mutation, nodeKey) => {
+          propagateRootNode(update, mutation, nodeKey, mutatorOptions);
+        });
+      }
+    });
+
+    // Phase 2: Collect all ElementNode mutations, sort by depth, then propagate
+    const elementMutations: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string; depth: number }> = [];
+    
+    mutatedNodes.forEach((nodeMap, Klass) => {
+      if (isClassExtending(Klass, ElementNode) && !isClassExtending(Klass, RootNode)) {
+        nodeMap.forEach((mutation, nodeKey) => {
+          // Compute depth in Lexical tree (root=0, paragraph=1, tablecell=3, etc.)
+          let depth = 0;
+          currEditorState.read(() => {
+            const node = $getNodeByKey(nodeKey);
+            if (node) {
+              let current = node.getParent();
+              while (current) {
+                depth++;
+                current = current.getParent();
+              }
             }
           });
-        }
-      });
+          elementMutations.push({ mutation, nodeKey, depth });
+        });
+      }
     });
     
-    // Then process children to ensure their parents are already mapped
-    childClasses.forEach(targetClass => {
-      mutatedNodes.forEach((nodeMap, Klass) => {
-        if (isClassExtending(Klass, targetClass)) {
-          nodeMap.forEach((mutation, nodeKey) => {
-            if (isClassExtending(Klass, TextNode)) {
-              propagateTextNode(update, mutation, nodeKey, mutatorOptions);
-            }
-            else if (isClassExtending(Klass, LineBreakNode)) {
-              propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
-            }
-            else if (isClassExtending(Klass, DecoratorNode)) {
-              propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
-            }
-          });
-        }
-      });
+    // Sort by depth ascending → parents (depth 1) are propagated before children (depth 2, 3, …)
+    elementMutations.sort((a, b) => a.depth - b.depth);
+    
+    for (const { mutation, nodeKey } of elementMutations) {
+      propagateElementNode(update, mutation, nodeKey, mutatorOptions);
+    }
+    
+    // Phase 3: Process leaf children (their parents are now guaranteed to be mapped)
+    mutatedNodes.forEach((nodeMap, Klass) => {
+      if (isClassExtending(Klass, TextNode)) {
+        nodeMap.forEach((mutation, nodeKey) => {
+          propagateTextNode(update, mutation, nodeKey, mutatorOptions);
+        });
+      } else if (isClassExtending(Klass, LineBreakNode)) {
+        nodeMap.forEach((mutation, nodeKey) => {
+          propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
+        });
+      } else if (isClassExtending(Klass, DecoratorNode)) {
+        nodeMap.forEach((mutation, nodeKey) => {
+          propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
+        });
+      }
     });
 
     // Option 1 - commit directly.

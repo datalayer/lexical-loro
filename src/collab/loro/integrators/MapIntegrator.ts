@@ -1,4 +1,4 @@
-import { $getNodeByKey, $getRoot, RootNode, TextNode } from 'lexical';
+import { $getNodeByKey, $getRoot, $isDecoratorNode, $isElementNode, RootNode, TextNode } from 'lexical';
 import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
@@ -120,7 +120,7 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         
         const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(actualTreeID as TreeID);
         if (lexicalKey) {
-          this.integrateLexicalDataUpdateInternal(value, lexicalKey, actualTreeID as TreeID);
+          this.integrateLexicalDataUpdateInternal(value, lexicalKey, actualTreeID as TreeID, binding);
         }
         break;
       case 'textContent':
@@ -199,43 +199,87 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
 
     if (lexicalData && typeof lexicalData === 'object') {
       binding.editor.update(() => {
-        this.integrateLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeID as TreeID);
+        this.integrateLexicalDataUpdateInternal(lexicalData, lexicalKey, actualTreeID as TreeID, binding);
       });
     }
   }
 
   // Internal method for use when already inside editor.update()
-  private integrateLexicalDataUpdateInternal(lexicalData: any, lexicalKey: string, treeId: TreeID): void {
-    const targetType = lexicalData.type || lexicalData.__type;
-    
+  private integrateLexicalDataUpdateInternal(lexicalData: any, lexicalKey: string, treeId: TreeID, binding: Binding): void {
+    // Handle Loro container objects that need conversion to plain JS
+    let data = lexicalData;
+    if (data && typeof data === 'object' && typeof data.toJSON === 'function') {
+      data = data.toJSON();
+    }
+
     const targetNode = $getNodeByKey(lexicalKey);
     if (!targetNode) {
       return;
     }
     
-    const textContent = lexicalData.__text || lexicalData.text || lexicalData.textContent;
+    const targetType = targetNode.getType();
+    const textContent = data.__text || data.text || data.textContent;
     
     if (targetType === 'text' && textContent !== undefined) {
-      
-      // Cast to TextNode to access text-specific methods
-      if (targetNode.getType() === 'text') {
-        const textNode = targetNode as TextNode;
-        
-        // Only update if the content is actually different to avoid unnecessary updates
-        const currentText = textNode.getTextContent();
-        if (currentText !== textContent) {
-          
-          // Apply the text update using delta to preserve cursor position and minimize disruption
-          $diffTextContentAndApplyDelta(textNode, lexicalKey, currentText, textContent);
+      // Text nodes: use diff approach to preserve cursor position
+      const textNode = targetNode as TextNode;
+      const currentText = textNode.getTextContent();
+      if (currentText !== textContent) {
+        $diffTextContentAndApplyDelta(textNode, lexicalKey, currentText, textContent);
+      }
+      // Apply text-specific properties
+      if (data.format !== undefined) {
+        textNode.setFormat(data.format);
+      }
+      if (data.style !== undefined) {
+        textNode.setStyle(data.style);
+      }
+    } else if ($isDecoratorNode(targetNode)) {
+      // Decorator nodes (excalidraw, images, counters, JupyterCellNode, …):
+      // Many decorator implementations do NOT override `updateFromJSON` for
+      // their custom properties — they only set them in the constructor via
+      // `importJSON`.  Since decorators are leaf nodes (no children), it is
+      // safe to replace the whole node with a fresh `importJSON` instance.
+      try {
+        const registeredNodes = binding.editor._nodes;
+        const nodeInfo = registeredNodes.get(targetType);
+        if (!nodeInfo) {
+          console.warn(`🗺️ MapIntegrator: Node type '${targetType}' not registered`);
+          return;
         }
-        
-        // Apply other text properties if present
-        if (lexicalData.format !== undefined) {
-          textNode.setFormat(lexicalData.format);
+        const serializedData = { ...data };
+        if (!serializedData.type) serializedData.type = targetType;
+        if (serializedData.version === undefined) serializedData.version = 1;
+        if (!('children' in serializedData)) serializedData.children = [];
+
+        const newNode = nodeInfo.klass.importJSON(serializedData);
+        targetNode.replace(newNode);
+        // Update bidirectional mapping: old key → remove, new key → treeId
+        // Use removeMappingForKey (not deleteMapping) because we are on the
+        // integration side — the Loro tree node must NOT be deleted; we are
+        // only swapping which Lexical key points to it.
+        binding.nodeMapper.removeMappingForKey(lexicalKey);
+        binding.nodeMapper.setMapping(newNode.getKey(), treeId);
+      } catch (error) {
+        console.warn(`🗺️ MapIntegrator: importJSON+replace failed for decorator ${targetType} node ${lexicalKey}:`, error);
+      }
+    } else {
+      try {
+        const serializedData = { ...data };
+        if (!serializedData.type) {
+          serializedData.type = targetType;
         }
-        if (lexicalData.style !== undefined) {
-          textNode.setStyle(lexicalData.style);
+        if (serializedData.version === undefined) {
+          serializedData.version = 1;
         }
+        // Provide empty children (TreeIntegrator manages children separately)
+        if (!('children' in serializedData)) {
+          serializedData.children = [];
+        }
+        const writable = targetNode.getWritable();
+        writable.updateFromJSON(serializedData);
+      } catch (error) {
+        console.warn(`🗺️ MapIntegrator: updateFromJSON failed for ${targetType} node ${lexicalKey}:`, error);
       }
     }
   }

@@ -43,8 +43,8 @@ export function createLineBreakNodeInLoro(
   
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
-    // Store complete lexical JSON without all key-related fields
-    const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
+    // Store complete lexical JSON without all key-related fields and children
+    const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedData);
   }
   
@@ -81,8 +81,8 @@ export function updateLineBreakNodeInLoro(
   
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
-    // Store complete lexical JSON without all key-related fields
-    const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
+    // Store complete lexical JSON without all key-related fields and children
+    const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedData);
   }
   

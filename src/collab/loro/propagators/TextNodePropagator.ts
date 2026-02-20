@@ -65,10 +65,11 @@ export function createTextNodeInLoro(
     try {
       // Store complete lexical JSON without the key
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
-        const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
+        const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
       } else {
-        treeNode.data.set('lexical', lexicalNodeJSON);
+        const { children, ...cleanedData } = lexicalNodeJSON as any;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to store lexical node JSON for TextNode:', error);
@@ -112,10 +113,11 @@ export function updateTextNodeInLoro(
     try {
       // Store complete lexical JSON without the key
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
-        const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
+        const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
         treeNode.data.set('lexical', cleanedData);
       } else {
-        treeNode.data.set('lexical', lexicalNodeJSON);
+        const { children, ...cleanedData } = lexicalNodeJSON as any;
+        treeNode.data.set('lexical', cleanedData);
       }
     } catch (error) {
       // This is expected during text operations when nodes get deleted/recreated

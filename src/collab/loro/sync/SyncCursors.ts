@@ -50,20 +50,28 @@ export type SyncCursorPositionsFn = (
 
 /*****************************************************************************/
 
-// Helper function to find Loro tree node for a Lexical NodeKey
+// Helper function to find Loro tree node for a Lexical NodeKey (read-only lookup)
 function findLoroTreeNodeForLexicalKey(nodeKey: NodeKey, binding: Binding): LoroTreeNode | null {
   try {
-    // Use NodeMapper to get the corresponding Loro tree node
     const nodeMapper = binding.nodeMapper;
-    const treeNode = nodeMapper.getLoroNodeByLexicalKey(nodeKey);
-    return treeNode;
+    const treeId = nodeMapper.getTreeIDByLexicalKey(nodeKey);
+    if (!treeId) {
+      return null;
+    }
+    const tree = binding.tree;
+    if (tree.has(treeId)) {
+      return tree.getNodeByID(treeId) || null;
+    }
+    return null;
   } catch (error) {
     console.warn('Failed to find Loro tree node for Lexical key:', nodeKey, error);
     return null;
   }
 }
 
-// Helper function to convert a Lexical Point to a Loro Cursor
+// Helper function to convert a Lexical Point to a Loro Cursor.
+// The cursor data uses TreeIDs (stable across all clients) instead of NodeKeys
+// (local to each editor instance) to ensure correct cross-client resolution.
 function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor | null {
   try {
     const node = $getNodeByKey(point.key);
@@ -71,89 +79,70 @@ function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor
       return null;
     }
 
-    // For text nodes, we need to find the corresponding text container in Loro tree
+    const nodeMapper = binding.nodeMapper;
+
+    // --- Text node ---
     if ($isTextNode(node)) {
-      // 1. Find the Loro tree node corresponding to this Lexical node
-      const treeNode = findLoroTreeNodeForLexicalKey(point.key, binding);
-      if (!treeNode) {
-        console.warn('Could not find corresponding Loro tree node for Lexical key:', point.key);
+      const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+      if (!treeId) {
         return null;
       }
-
-      // 2. Get text content and validate offset
       const textContent = node.getTextContent();
       const offset = Math.min(point.offset, textContent.length);
 
-      // 3. Note: Some tree nodes may not have textContent stored in Loro yet
-      // This is normal during the sync process - we use Lexical node text as fallback
-
-      // 4. Create position data that can be used for collaborative selection
-      // Since we need to transmit cursor data through EphemeralStore, we use a simple structure
-      const cursor = {
-        treeId: treeNode.id,
-        offset: offset,
-        type: 'text',
-        nodeKey: point.key // Keep for debugging/validation
-      } as any; // We'll cast to LoroCursor when needed
-
-      return cursor;
+      return {
+        treeId,
+        offset,
+        pointType: 'text',
+      } as any;
     }
 
-    // Handle element nodes (paragraphs, headings, etc.)
+    // --- Element node (paragraphs, headings, table cells, …) ---
     if ($isElementNode(node)) {
-      // For element nodes, we need to find the text child at the given offset
       const children = node.getChildren();
-      let currentOffset = 0;
-      
-      for (const child of children) {
-        if ($isTextNode(child)) {
-          const childText = child.getTextContent();
-          if (point.offset <= currentOffset + childText.length) {
-            // The cursor is within this text child
-            const relativeOffset = point.offset - currentOffset;
-            
-            // Get the corresponding Loro tree node for this text child
-            const childTreeNode = findLoroTreeNodeForLexicalKey(child.getKey(), binding);
-            if (childTreeNode) {
-              return {
-                treeId: childTreeNode.id,
-                offset: Math.min(relativeOffset, childText.length),
-                type: 'text',
-                nodeKey: child.getKey()
-              } as any;
-            }
-          }
-          currentOffset += childText.length;
-        }
+
+      if (children.length === 0) {
+        // Empty element (e.g. freshly-created paragraph after Enter)
+        const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+        if (!treeId) return null;
+        return { treeId, offset: point.offset, pointType: 'element' } as any;
       }
-      
-      // If we get here, the offset is at the end of the element
-      // Find the last text child
-      for (let i = children.length - 1; i >= 0; i--) {
-        const child = children[i];
-        if ($isTextNode(child)) {
-          const childTreeNode = findLoroTreeNodeForLexicalKey(child.getKey(), binding);
-          if (childTreeNode) {
-            const childText = child.getTextContent();
+
+      // Try to resolve the child at `point.offset`
+      if (point.offset < children.length) {
+        const child = children[point.offset];
+        if (child) {
+          const childTreeId = nodeMapper.getTreeIDByLexicalKey(child.getKey());
+          if (childTreeId) {
             return {
-              treeId: childTreeNode.id,
-              offset: childText.length, // At the end
-              type: 'text',
-              nodeKey: child.getKey()
+              treeId: childTreeId,
+              offset: 0,
+              pointType: $isTextNode(child) ? 'text' : 'element',
             } as any;
           }
         }
       }
+
+      // Fallback: cursor is at/past the end of this element's children
+      const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+      if (!treeId) return null;
+      return { treeId, offset: point.offset, pointType: 'element' } as any;
     }
 
-    return null;
+    // --- Any other node type (decorator, linebreak, …) ---
+    const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+    if (!treeId) return null;
+    return { treeId, offset: point.offset, pointType: 'element' } as any;
   } catch (error) {
     console.warn('Failed to convert Lexical point to Loro cursor:', error);
     return null;
   }
 }
 
-// Helper function to convert Loro cursor data back to Lexical selection
+// Helper function to convert Loro cursor data back to Lexical selection.
+// Always resolves via TreeID → NodeMapper → local NodeKey.
+// NodeKeys are never transmitted between clients because they are
+// editor-instance-local and would map to wrong nodes on the remote side.
 function convertLoroSelectionToLexical(
   anchorCursor: LoroCursor | null,
   focusCursor: LoroCursor | null,
@@ -164,43 +153,30 @@ function convertLoroSelectionToLexical(
       return null;
     }
 
-    // Convert cursor data back to Lexical positions using our custom structure
     const anchor = anchorCursor as any;
     const focus = focusCursor as any;
-
-    // If we have nodeKey stored, use it directly (this is our temporary approach)
-    if (anchor.nodeKey && focus.nodeKey) {
-      return {
-        anchorKey: anchor.nodeKey,
-        anchorOffset: anchor.offset,
-        focusKey: focus.nodeKey, 
-        focusOffset: focus.offset,
-      };
-    }
-
-    // Alternative: Use NodeMapper to reverse-map from TreeID to NodeKey
     const nodeMapper = binding.nodeMapper;
-    
+
     let anchorKey: NodeKey | null = null;
     let focusKey: NodeKey | null = null;
-    
+
     if (anchor.treeId) {
       anchorKey = nodeMapper.getLexicalKeyByLoroId(anchor.treeId);
     }
-    
     if (focus.treeId) {
       focusKey = nodeMapper.getLexicalKeyByLoroId(focus.treeId);
     }
 
     if (!anchorKey || !focusKey) {
-      console.warn('Could not find Lexical keys for Loro cursor TreeIDs');
+      // Mapping not yet available — tree operations may not have arrived yet.
+      // Cursors will be re-synced after the next tree integration.
       return null;
     }
 
     return {
-      anchorKey: anchorKey,
+      anchorKey,
       anchorOffset: anchor.offset || 0,
-      focusKey: focusKey,
+      focusKey,
       focusOffset: focus.offset || 0,
     };
   } catch (error) {
@@ -577,10 +553,10 @@ function shouldUpdatePosition(
   } else if (pos == null) {
     return true;
   } else {
-    // For now, do a simple comparison - in full implementation would compare Loro Cursor objects properly
+    // Compare using treeId (stable across clients) and offset
     const current = currentPos as any;
     const next = pos as any;
-    return current.nodeKey !== next.nodeKey || current.offset !== next.offset;
+    return current.treeId !== next.treeId || current.offset !== next.offset || current.pointType !== next.pointType;
   }
 }
 

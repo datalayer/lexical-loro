@@ -8,7 +8,7 @@ SHELL=/bin/bash
 
 .DEFAULT_GOAL := default
 
-.PHONY: docs
+.PHONY: docs dev
 
 help: ## display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
@@ -20,6 +20,12 @@ clean: ## clean
 
 build: ## build
 	npm run build
+
+dev: ## dev
+	@exec echo
+	@exec echo open http://localhost:3000/split/index.html
+	@exec echo
+	npm run dev
 
 publish-npm: clean build ## publish-npm
 	npm publish

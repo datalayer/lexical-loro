@@ -1,6 +1,6 @@
 {
   "name": "@datalayer/lexical-loro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "lib/index.js",
   "files": [
     "lib/**/*.{css,d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
