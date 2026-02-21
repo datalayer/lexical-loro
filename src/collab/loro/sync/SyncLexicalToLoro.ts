@@ -27,6 +27,10 @@ export function syncLexicalToLoro(
     editorState: currEditorState,
   } = update;
 
+  // Process node mutations if present.
+  // NOTE: mutatedNodes is null for selection-only updates (no DOM mutations).
+  // See Lexical docs: "Will be null if no DOM was mutated, such as when only
+  // the selection changed."
   if (mutatedNodes) {
 
     const tree = binding.tree;
@@ -52,82 +56,81 @@ export function syncLexicalToLoro(
     // parent tablerow — causing `getTreeIDByLexicalKey(parent)` to return
     // undefined and the cell to be created at the Loro tree root.
 
-    // Phase 1: Process RootNode mutations
-    mutatedNodes.forEach((nodeMap, Klass) => {
-      if (isClassExtending(Klass, RootNode)) {
-        nodeMap.forEach((mutation, nodeKey) => {
-          propagateRootNode(update, mutation, nodeKey, mutatorOptions);
-        });
-      }
+    // Check if any nodes actually mutated (Map could be empty for selection-only changes)
+    let hasMutations = false;
+    mutatedNodes.forEach((nodeMap) => {
+      if (nodeMap.size > 0) hasMutations = true;
     });
 
-    // Phase 2: Collect all ElementNode mutations, sort by depth, then propagate
-    const elementMutations: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string; depth: number }> = [];
-    
-    mutatedNodes.forEach((nodeMap, Klass) => {
-      if (isClassExtending(Klass, ElementNode) && !isClassExtending(Klass, RootNode)) {
-        nodeMap.forEach((mutation, nodeKey) => {
-          // Compute depth in Lexical tree (root=0, paragraph=1, tablecell=3, etc.)
-          let depth = 0;
-          currEditorState.read(() => {
-            const node = $getNodeByKey(nodeKey);
-            if (node) {
-              let current = node.getParent();
-              while (current) {
-                depth++;
-                current = current.getParent();
-              }
-            }
+    if (hasMutations) {
+      // Phase 1: Process RootNode mutations
+      mutatedNodes.forEach((nodeMap, Klass) => {
+        if (isClassExtending(Klass, RootNode)) {
+          nodeMap.forEach((mutation, nodeKey) => {
+            propagateRootNode(update, mutation, nodeKey, mutatorOptions);
           });
-          elementMutations.push({ mutation, nodeKey, depth });
-        });
+        }
+      });
+
+      // Phase 2: Collect all ElementNode mutations, sort by depth, then propagate
+      const elementMutations: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string; depth: number }> = [];
+      
+      mutatedNodes.forEach((nodeMap, Klass) => {
+        if (isClassExtending(Klass, ElementNode) && !isClassExtending(Klass, RootNode)) {
+          nodeMap.forEach((mutation, nodeKey) => {
+            // Compute depth in Lexical tree (root=0, paragraph=1, tablecell=3, etc.)
+            let depth = 0;
+            currEditorState.read(() => {
+              const node = $getNodeByKey(nodeKey);
+              if (node) {
+                let current = node.getParent();
+                while (current) {
+                  depth++;
+                  current = current.getParent();
+                }
+              }
+            });
+            elementMutations.push({ mutation, nodeKey, depth });
+          });
+        }
+      });
+      
+      // Sort by depth ascending → parents (depth 1) are propagated before children (depth 2, 3, …)
+      elementMutations.sort((a, b) => a.depth - b.depth);
+      
+      for (const { mutation, nodeKey } of elementMutations) {
+        propagateElementNode(update, mutation, nodeKey, mutatorOptions);
       }
-    });
-    
-    // Sort by depth ascending → parents (depth 1) are propagated before children (depth 2, 3, …)
-    elementMutations.sort((a, b) => a.depth - b.depth);
-    
-    for (const { mutation, nodeKey } of elementMutations) {
-      propagateElementNode(update, mutation, nodeKey, mutatorOptions);
+      
+      // Phase 3: Process leaf children (their parents are now guaranteed to be mapped)
+      mutatedNodes.forEach((nodeMap, Klass) => {
+        if (isClassExtending(Klass, TextNode)) {
+          nodeMap.forEach((mutation, nodeKey) => {
+            propagateTextNode(update, mutation, nodeKey, mutatorOptions);
+          });
+        } else if (isClassExtending(Klass, LineBreakNode)) {
+          nodeMap.forEach((mutation, nodeKey) => {
+            propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
+          });
+        } else if (isClassExtending(Klass, DecoratorNode)) {
+          nodeMap.forEach((mutation, nodeKey) => {
+            propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
+          });
+        }
+      });
+
+      // Commit only when there were actual node mutations (not selection-only changes)
+      binding.doc.commit({ origin: binding.doc.peerIdStr });
     }
-    
-    // Phase 3: Process leaf children (their parents are now guaranteed to be mapped)
-    mutatedNodes.forEach((nodeMap, Klass) => {
-      if (isClassExtending(Klass, TextNode)) {
-        nodeMap.forEach((mutation, nodeKey) => {
-          propagateTextNode(update, mutation, nodeKey, mutatorOptions);
-        });
-      } else if (isClassExtending(Klass, LineBreakNode)) {
-        nodeMap.forEach((mutation, nodeKey) => {
-          propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
-        });
-      } else if (isClassExtending(Klass, DecoratorNode)) {
-        nodeMap.forEach((mutation, nodeKey) => {
-          propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
-        });
-      }
-    });
-
-    // Option 1 - commit directly.
-    binding.doc.commit({ origin: binding.doc.peerIdStr });
-
-    // Option 2 - Schedule an async commit instead of immediate synchronous commit.
-    // This reduces latency for large documents by debouncing commits.
-    // scheduleAsyncCommit(binding);
-
-    // Option 3 - Schedule an async commit instead of immediate synchronous commit.
-    // This reduces latency for large documents by debouncing commits.
-    /*
-    const doCommit = () => requestIdleCallback(() => {
-       binding.doc.commit({ origin: binding.doc.peerIdStr });
-    }, { timeout: 2000 });
-    doCommit();
-    */
-    currEditorState.read(() => {
-      const selection = $getSelection();
-      const prevSelection = prevEditorState._selection;
-      syncLexicalSelectionToLoro(binding, provider, prevSelection, selection);
-    });
-
   }
+
+  // Always sync selection/cursor state — even for selection-only changes
+  // (e.g. user clicks or drags to select text without editing).
+  // This MUST be outside the `if (mutatedNodes)` block because Lexical sets
+  // mutatedNodes to null when only the selection changed (no DOM mutations).
+  currEditorState.read(() => {
+    const selection = $getSelection();
+    const prevSelection = prevEditorState._selection;
+    syncLexicalSelectionToLoro(binding, provider, prevSelection, selection);
+  });
 }

@@ -140,6 +140,25 @@ export function useCollaboration(
     const removeListener = editor.registerUpdateListener(
       (update) => {
         if (update.tags.has(SKIP_COLLAB_TAG) === false) {
+          // Debug: detect selection-only updates (no mutations)
+          let hasMutations = false;
+          if (update.mutatedNodes) {
+            update.mutatedNodes.forEach((nodeMap) => {
+              if (nodeMap.size > 0) hasMutations = true;
+            });
+          }
+          if (!hasMutations) {
+            const sel = update.editorState._selection as any;
+            if (sel && sel.anchor && sel.focus) {
+              const isExpanded = sel.anchor.key !== sel.focus.key || sel.anchor.offset !== sel.focus.offset;
+              if (isExpanded) {
+                console.log('[CURSOR-DEBUG] Selection-only update (no mutations) with EXPANDED selection:', {
+                  anchorKey: sel.anchor.key, anchorOffset: sel.anchor.offset,
+                  focusKey: sel.focus.key, focusOffset: sel.focus.offset,
+                });
+              }
+            }
+          }
           syncLexicalToLoro(
             binding,
             provider,
@@ -199,7 +218,16 @@ export function useCollaboration(
     };
 
     return createPortal(
-      <div ref={ref} />,
+      <div ref={ref} style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        pointerEvents: 'none',
+        zIndex: 1000,
+        overflow: 'visible',
+      }} />,
       (cursorsContainerRef && cursorsContainerRef.current) || document.body,
     );
   }, [binding, cursorsContainerRef]);
