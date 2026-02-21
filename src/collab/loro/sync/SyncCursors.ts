@@ -1,4 +1,9 @@
-import type { BaseSelection, NodeKey, Point, RangeSelection } from 'lexical';
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
+import type { BaseSelection, NodeKey, Point } from 'lexical';
 import {
   $getNodeByKey,
   $getSelection,
@@ -50,20 +55,28 @@ export type SyncCursorPositionsFn = (
 
 /*****************************************************************************/
 
-// Helper function to find Loro tree node for a Lexical NodeKey
+// Helper function to find Loro tree node for a Lexical NodeKey (read-only lookup)
 function findLoroTreeNodeForLexicalKey(nodeKey: NodeKey, binding: Binding): LoroTreeNode | null {
   try {
-    // Use NodeMapper to get the corresponding Loro tree node
     const nodeMapper = binding.nodeMapper;
-    const treeNode = nodeMapper.getLoroNodeByLexicalKey(nodeKey);
-    return treeNode;
+    const treeId = nodeMapper.getTreeIDByLexicalKey(nodeKey);
+    if (!treeId) {
+      return null;
+    }
+    const tree = binding.tree;
+    if (tree.has(treeId)) {
+      return tree.getNodeByID(treeId) || null;
+    }
+    return null;
   } catch (error) {
     console.warn('Failed to find Loro tree node for Lexical key:', nodeKey, error);
     return null;
   }
 }
 
-// Helper function to convert a Lexical Point to a Loro Cursor
+// Helper function to convert a Lexical Point to a Loro Cursor.
+// The cursor data uses TreeIDs (stable across all clients) instead of NodeKeys
+// (local to each editor instance) to ensure correct cross-client resolution.
 function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor | null {
   try {
     const node = $getNodeByKey(point.key);
@@ -71,89 +84,70 @@ function convertLexicalPointToCursor(point: Point, binding: Binding): LoroCursor
       return null;
     }
 
-    // For text nodes, we need to find the corresponding text container in Loro tree
+    const nodeMapper = binding.nodeMapper;
+
+    // --- Text node ---
     if ($isTextNode(node)) {
-      // 1. Find the Loro tree node corresponding to this Lexical node
-      const treeNode = findLoroTreeNodeForLexicalKey(point.key, binding);
-      if (!treeNode) {
-        console.warn('Could not find corresponding Loro tree node for Lexical key:', point.key);
+      const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+      if (!treeId) {
         return null;
       }
-
-      // 2. Get text content and validate offset
       const textContent = node.getTextContent();
       const offset = Math.min(point.offset, textContent.length);
 
-      // 3. Note: Some tree nodes may not have textContent stored in Loro yet
-      // This is normal during the sync process - we use Lexical node text as fallback
-
-      // 4. Create position data that can be used for collaborative selection
-      // Since we need to transmit cursor data through EphemeralStore, we use a simple structure
-      const cursor = {
-        treeId: treeNode.id,
-        offset: offset,
-        type: 'text',
-        nodeKey: point.key // Keep for debugging/validation
-      } as any; // We'll cast to LoroCursor when needed
-
-      return cursor;
+      return {
+        treeId,
+        offset,
+        pointType: 'text',
+      } as any;
     }
 
-    // Handle element nodes (paragraphs, headings, etc.)
+    // --- Element node (paragraphs, headings, table cells, …) ---
     if ($isElementNode(node)) {
-      // For element nodes, we need to find the text child at the given offset
       const children = node.getChildren();
-      let currentOffset = 0;
-      
-      for (const child of children) {
-        if ($isTextNode(child)) {
-          const childText = child.getTextContent();
-          if (point.offset <= currentOffset + childText.length) {
-            // The cursor is within this text child
-            const relativeOffset = point.offset - currentOffset;
-            
-            // Get the corresponding Loro tree node for this text child
-            const childTreeNode = findLoroTreeNodeForLexicalKey(child.getKey(), binding);
-            if (childTreeNode) {
-              return {
-                treeId: childTreeNode.id,
-                offset: Math.min(relativeOffset, childText.length),
-                type: 'text',
-                nodeKey: child.getKey()
-              } as any;
-            }
-          }
-          currentOffset += childText.length;
-        }
+
+      if (children.length === 0) {
+        // Empty element (e.g. freshly-created paragraph after Enter)
+        const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+        if (!treeId) return null;
+        return { treeId, offset: point.offset, pointType: 'element' } as any;
       }
-      
-      // If we get here, the offset is at the end of the element
-      // Find the last text child
-      for (let i = children.length - 1; i >= 0; i--) {
-        const child = children[i];
-        if ($isTextNode(child)) {
-          const childTreeNode = findLoroTreeNodeForLexicalKey(child.getKey(), binding);
-          if (childTreeNode) {
-            const childText = child.getTextContent();
+
+      // Try to resolve the child at `point.offset`
+      if (point.offset < children.length) {
+        const child = children[point.offset];
+        if (child) {
+          const childTreeId = nodeMapper.getTreeIDByLexicalKey(child.getKey());
+          if (childTreeId) {
             return {
-              treeId: childTreeNode.id,
-              offset: childText.length, // At the end
-              type: 'text',
-              nodeKey: child.getKey()
+              treeId: childTreeId,
+              offset: 0,
+              pointType: $isTextNode(child) ? 'text' : 'element',
             } as any;
           }
         }
       }
+
+      // Fallback: cursor is at/past the end of this element's children
+      const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+      if (!treeId) return null;
+      return { treeId, offset: point.offset, pointType: 'element' } as any;
     }
 
-    return null;
+    // --- Any other node type (decorator, linebreak, …) ---
+    const treeId = nodeMapper.getTreeIDByLexicalKey(point.key);
+    if (!treeId) return null;
+    return { treeId, offset: point.offset, pointType: 'element' } as any;
   } catch (error) {
     console.warn('Failed to convert Lexical point to Loro cursor:', error);
     return null;
   }
 }
 
-// Helper function to convert Loro cursor data back to Lexical selection
+// Helper function to convert Loro cursor data back to Lexical selection.
+// Always resolves via TreeID → NodeMapper → local NodeKey.
+// NodeKeys are never transmitted between clients because they are
+// editor-instance-local and would map to wrong nodes on the remote side.
 function convertLoroSelectionToLexical(
   anchorCursor: LoroCursor | null,
   focusCursor: LoroCursor | null,
@@ -164,43 +158,30 @@ function convertLoroSelectionToLexical(
       return null;
     }
 
-    // Convert cursor data back to Lexical positions using our custom structure
     const anchor = anchorCursor as any;
     const focus = focusCursor as any;
-
-    // If we have nodeKey stored, use it directly (this is our temporary approach)
-    if (anchor.nodeKey && focus.nodeKey) {
-      return {
-        anchorKey: anchor.nodeKey,
-        anchorOffset: anchor.offset,
-        focusKey: focus.nodeKey, 
-        focusOffset: focus.offset,
-      };
-    }
-
-    // Alternative: Use NodeMapper to reverse-map from TreeID to NodeKey
     const nodeMapper = binding.nodeMapper;
-    
+
     let anchorKey: NodeKey | null = null;
     let focusKey: NodeKey | null = null;
-    
+
     if (anchor.treeId) {
       anchorKey = nodeMapper.getLexicalKeyByLoroId(anchor.treeId);
     }
-    
     if (focus.treeId) {
       focusKey = nodeMapper.getLexicalKeyByLoroId(focus.treeId);
     }
 
     if (!anchorKey || !focusKey) {
-      console.warn('Could not find Lexical keys for Loro cursor TreeIDs');
+      // Mapping not yet available — tree operations may not have arrived yet.
+      // Cursors will be re-synced after the next tree integration.
       return null;
     }
 
     return {
-      anchorKey: anchorKey,
+      anchorKey,
       anchorOffset: anchor.offset || 0,
-      focusKey: focusKey,
+      focusKey,
       focusOffset: focus.offset || 0,
     };
   } catch (error) {
@@ -262,7 +243,7 @@ function createCursorSelection(
   const nameBackgroundColor = isCurrentUser ? getColorWithOpacity(color, 0.7) : color;
 
   const caret = document.createElement('span');
-  caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:1px;background-color:${caretColor};z-index:10;${isCurrentUser ? 'opacity:0.8;' : ''}`;
+  caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:2px;background-color:${caretColor};z-index:10;${isCurrentUser ? 'opacity:0.8;' : ''}`;
   const name = document.createElement('span');
   name.textContent = cursor.name;
   name.style.cssText = `position:absolute;left:-2px;top:-16px;background-color:${nameBackgroundColor};color:#fff;line-height:12px;font-size:12px;padding:2px;font-family:Arial;font-weight:bold;white-space:nowrap;${isCurrentUser ? 'opacity:0.9;' : ''}`;
@@ -331,40 +312,43 @@ export function syncCursorPositions(
       const cursorName = isCurrentUser ? `${name} (Me)` : name;
       cursor = createCollabCursor(cursorName, color);
       cursors.set(clientID, cursor);
-      console.log('Added new cursor:', { clientID, name: cursorName, color, isCurrentUser, totalCursors: cursors.size });
     }
 
-    if (focusing) {
-        const { anchorPos, focusPos } = awareness;
+    // Render cursor/selection whenever valid anchorPos/focusPos exist.
+    // We intentionally do NOT gate on `focusing` because the FOCUS_COMMAND
+    // and selection-update can race — the selection update may broadcast
+    // before FOCUS_COMMAND fires, leaving `focusing: false` even though
+    // the user clearly has the editor focused (they are selecting text).
+    const { anchorPos, focusPos } = awareness;
 
-        if (anchorPos !== null && focusPos !== null) {
-          const selectionInfo = convertLoroSelectionToLexical(anchorPos, focusPos, binding);
-          
-          if (selectionInfo) {
-            const { anchorKey, anchorOffset, focusKey, focusOffset } = selectionInfo;
-            selection = cursor.selection;
+    if (anchorPos !== null && focusPos !== null) {
+      const selectionInfo = convertLoroSelectionToLexical(anchorPos, focusPos, binding);
+      
+      if (selectionInfo) {
+        const { anchorKey, anchorOffset, focusKey, focusOffset } = selectionInfo;
+        selection = cursor.selection;
 
-            if (selection === null) {
-              selection = createCursorSelection(
-                cursor,
-                anchorKey,
-                anchorOffset,
-                focusKey,
-                focusOffset,
-                isCurrentUser,
-              );
-            } else {
-              // Update existing selection
-              const anchor = selection.anchor;
-              const focus = selection.focus;
-              anchor.key = anchorKey;
-              anchor.offset = anchorOffset;
-              focus.key = focusKey;
-              focus.offset = focusOffset;
-            }
-          }
+        if (selection === null) {
+          selection = createCursorSelection(
+            cursor,
+            anchorKey,
+            anchorOffset,
+            focusKey,
+            focusOffset,
+            isCurrentUser,
+          );
+        } else {
+          // Update existing selection
+          const anchor = selection.anchor;
+          const focus = selection.focus;
+          anchor.key = anchorKey;
+          anchor.offset = anchorOffset;
+          focus.key = focusKey;
+          focus.offset = focusOffset;
         }
+
       }
+    }
 
     updateCursor(binding, cursor, selection, nodeMap, isCurrentUser);
   }
@@ -410,12 +394,10 @@ function updateCursor(
     return;
   }
 
-  const cursorsContainerOffsetParent = cursorsContainer.offsetParent;
-  if (cursorsContainerOffsetParent === null) {
-    return;
-  }
-
-  const containerRect = cursorsContainerOffsetParent.getBoundingClientRect();
+  // The cursorsContainer is a position:fixed overlay covering the viewport.
+  // Use its own getBoundingClientRect() as the coordinate reference,
+  // so that absolute children are positioned correctly relative to it.
+  const containerRect = cursorsContainer.getBoundingClientRect();
   const prevSelection = cursor.selection;
 
   if (nextSelection === null) {
@@ -443,15 +425,21 @@ function updateCursor(
   if (anchorNode == null || focusNode == null) {
     return;
   }
-  
+
+  // Determine if the selection is collapsed (cursor only) or expanded (text selected)
+  const isCollapsed = anchorKey === focusKey && anchor.offset === focus.offset;
+
   let selectionRects: Array<DOMRect>;
 
   // Handle collapsed selection on a linebreak
   if (anchorNode === focusNode && $isLineBreakNode(anchorNode)) {
-    const brRect = (
-      editor.getElementByKey(anchorKey) as HTMLElement
-    ).getBoundingClientRect();
-    selectionRects = [brRect];
+    const brElement = editor.getElementByKey(anchorKey) as HTMLElement;
+    if (brElement) {
+      const brRect = brElement.getBoundingClientRect();
+      selectionRects = [brRect];
+    } else {
+      selectionRects = [];
+    }
   } else {
     const range = createDOMRange(
       editor,
@@ -464,7 +452,22 @@ function updateCursor(
     if (range === null) {
       return;
     }
-    selectionRects = createRectsFromDOMRange(editor, range);
+
+    if (isCollapsed) {
+      // For collapsed cursors, get all rects (including zero-width) to position the caret.
+      // createRectsFromDOMRange filters out rects with width < 1, so use the raw
+      // range rect as a fallback for caret positioning.
+      selectionRects = createRectsFromDOMRange(editor, range);
+      if (selectionRects.length === 0) {
+        // Fallback: use the bounding rect of the collapsed range
+        const boundingRect = range.getBoundingClientRect();
+        if (boundingRect.height > 0) {
+          selectionRects = [boundingRect];
+        }
+      }
+    } else {
+      selectionRects = createRectsFromDOMRange(editor, range);
+    }
   }
 
   const selectionsLength = selections.length;
@@ -484,14 +487,32 @@ function updateCursor(
 
     const top = selectionRect.top - containerRect.top;
     const left = selectionRect.left - containerRect.left;
-    const style = `position:absolute;top:${top}px;left:${left}px;height:${selectionRect.height}px;width:${selectionRect.width}px;pointer-events:none;z-index:5;`;
+    // For collapsed cursors, give the wrapper a minimum width so the caret
+    // (positioned inside) is not clipped by some browsers.
+    const effectiveWidth = isCollapsed ? Math.max(selectionRect.width, 4) : selectionRect.width;
+    const style = `position:absolute;top:${top}px;left:${left}px;height:${selectionRect.height}px;width:${effectiveWidth}px;pointer-events:none;z-index:10;overflow:visible;`;
     selection.style.cssText = style;
 
-    // Adjust opacity for current user selections to be more transparent
-    const selectionOpacity = isCurrentUser ? 0.15 : 0.3;
-    (
-      selection.firstChild as HTMLSpanElement
-    ).style.cssText = `${style}left:0;top:0;background-color:${color};opacity:${selectionOpacity};`;
+    if (isCollapsed) {
+      // Collapsed cursor: hide the background span.
+      (selection.firstChild as HTMLSpanElement).style.cssText =
+        `position:absolute;left:0;top:0;width:0;height:0;`;
+      // Make the caret clearly visible with explicit height and a bright border-left for contrast.
+      caret.style.cssText = `position:absolute;top:0;left:0;width:2px;height:${selectionRect.height}px;background-color:${color};z-index:10;`;
+    } else if (isCurrentUser) {
+      // Current user's expanded selection: very subtle since the browser already
+      // shows the native selection highlight.
+      (selection.firstChild as HTMLSpanElement).style.cssText =
+        `position:absolute;left:0;top:0;width:${selectionRect.width}px;height:${selectionRect.height}px;` +
+        `background-color:${color};opacity:0.08;border-radius:2px;pointer-events:none;`;
+    } else {
+      // Remote user's expanded selection: clearly visible with transparency.
+      // The user's color is shown as a translucent overlay so the text beneath
+      // remains readable.
+      (selection.firstChild as HTMLSpanElement).style.cssText =
+        `position:absolute;left:0;top:0;width:${selectionRect.width}px;height:${selectionRect.height}px;` +
+        `background-color:${color};opacity:0.25;border-radius:2px;pointer-events:none;`;
+    }
 
     if (i === selectionRectsLength - 1) {
       if (caret.parentNode !== selection) {
@@ -532,39 +553,43 @@ export function syncLexicalSelectionToLoro(
   let anchorPos: LoroCursor | null = null;
   let focusPos: LoroCursor | null = null;
 
-  // Check if we should clear the selection
-  if (
-    nextSelection === null ||
-    (currentAnchorPos !== null && !nextSelection.is(prevSelection))
-  ) {
-    if (prevSelection === null) {
-      return;
-    }
-  }
-
   // Convert Lexical selection to Loro cursors if we have a range selection
   if ($isRangeSelection(nextSelection)) {
     anchorPos = convertLexicalPointToCursor(nextSelection.anchor, binding);
     focusPos = convertLexicalPointToCursor(nextSelection.focus, binding);
+
+  } else if (nextSelection === null) {
+    // Selection cleared — broadcast null positions
+  } else {
+    // Not a range selection (e.g. NodeSelection) — skip
+    return;
   }
 
-  // Check if cursor positions have actually changed
-  const shouldUpdate = 
+  // Always broadcast to keep remote cursors in sync.
+  // The shouldUpdatePosition check prevents redundant updates for unchanged positions.
+  const shouldUpdate =
     shouldUpdatePosition(currentAnchorPos, anchorPos) ||
     shouldUpdatePosition(currentFocusPos, focusPos);
 
-  if (shouldUpdate) {
-    // Update the local state in EphemeralStore via awareness
-    awareness.setLocalState({
-      ...localState,
-      anchorPos,
-      awarenessData,
-      color,
-      focusPos,
-      focusing,
-      name,
-    });
+  if (!shouldUpdate) {
+    return;
   }
+
+  // When we have a valid selection to broadcast, the editor IS focused —
+  // force `focusing: true` to prevent the FOCUS_COMMAND race condition
+  // where the selection update fires before FOCUS_COMMAND sets the flag.
+  const effectiveFocusing = (anchorPos !== null && focusPos !== null) ? true : focusing;
+
+  // Update the local state in EphemeralStore via awareness
+  awareness.setLocalState({
+    ...localState,
+    anchorPos,
+    awarenessData,
+    color,
+    focusPos,
+    focusing: effectiveFocusing,
+    name,
+  });
 }
 
 // Helper function to determine if cursor position should be updated
@@ -577,10 +602,10 @@ function shouldUpdatePosition(
   } else if (pos == null) {
     return true;
   } else {
-    // For now, do a simple comparison - in full implementation would compare Loro Cursor objects properly
+    // Compare using treeId (stable across clients) and offset
     const current = currentPos as any;
     const next = pos as any;
-    return current.nodeKey !== next.nodeKey || current.offset !== next.offset;
+    return current.treeId !== next.treeId || current.offset !== next.offset || current.pointType !== next.pointType;
   }
 }
 

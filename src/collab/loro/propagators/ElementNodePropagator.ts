@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { TreeID, LoroTree } from 'loro-crdt';
 import { 
   $createParagraphNode, 
@@ -48,8 +53,8 @@ export function createElementNodeInLoro(
   
   // Store complete lexical node data as JSON object (without the key) if provided
   if (lexicalNodeJSON) {
-    // Remove all key-related fields from lexical node data and store the cleaned object
-    const { key, __key, lexicalKey, ...cleanedLexicalData } = lexicalNodeJSON;
+    // Remove all key-related fields and children from lexical node data
+    const { key, __key, lexicalKey, children, ...cleanedLexicalData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedLexicalData);
   }
   
@@ -80,7 +85,7 @@ export function updateElementNodeInLoro(
   
   // Store the lexical node data if provided
   if (lexicalNodeJSON) {
-    const { key, __key, lexicalKey, ...cleanedLexicalData } = lexicalNodeJSON;
+    const { key, __key, lexicalKey, children, ...cleanedLexicalData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedLexicalData);
   }
   
@@ -368,10 +373,11 @@ export function propagateElementNode(
           // Determine element type
           elementType = currentNode.getType(); // 'paragraph', 'heading', etc.
           
-          // If parent exists but doesn't have mapping yet, defer parent assignment
+          // If parent exists but doesn't have mapping yet, this shouldn't happen
+          // because SyncLexicalToLoro sorts element mutations by depth.
+          // But as a safety net, log a warning.
           if (parent && !parentId) {
-            // Store the node creation but defer parent assignment
-            parentId = undefined; // Create as orphan temporarily
+            console.warn(`⚠️ ElementNodePropagator: parent mapping missing for ${elementType} nodeKey=${nodeKey}, parentKey=${parent.getKey()}`);
           }
         
           // Collect metadata (format, style, direction, etc.)
@@ -391,21 +397,6 @@ export function propagateElementNode(
         
         // Create the node in Loro after safely reading from editor state
         createElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, lexicalNodeJSON, options);
-        
-        // If this node was created without a parent, schedule a retry to fix parent assignment
-        if (parent && !parentId) {
-          setTimeout(() => {
-            const mapper = getNodeMapper();
-            const retryParentId = mapper.getTreeIDByLexicalKey(parent.getKey());
-            if (retryParentId) {
-              // Move the node to its correct parent now that the parent exists
-              const loroNode = mapper.getLoroNodeByLexicalKey(nodeKey);
-              if (loroNode && tree.has(loroNode.id)) {
-                tree.move(loroNode.id, retryParentId, index);
-              }
-            }
-          }, 10); // Small delay to allow parent to be created
-        }
       }
       break;
     }

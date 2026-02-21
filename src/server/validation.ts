@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import {createHeadlessEditor} from '@lexical/headless';
 import {$isMarkNode, $unwrapMarkNode} from '@lexical/mark';
 import * as http from 'http';

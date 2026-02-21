@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { WebSocketServer } from 'ws'
 import http from 'http'
 import * as number from 'lib0/number'

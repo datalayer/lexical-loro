@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { TreeID, LoroTree } from 'loro-crdt';
 import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPayload, NodeKey, ElementNode } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
@@ -43,8 +48,8 @@ export function createLineBreakNodeInLoro(
   
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
-    // Store complete lexical JSON without all key-related fields
-    const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
+    // Store complete lexical JSON without all key-related fields and children
+    const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedData);
   }
   
@@ -81,8 +86,8 @@ export function updateLineBreakNodeInLoro(
   
   // Store complete lexical node data as clean JSON if provided
   if (lexicalNodeJSON) {
-    // Store complete lexical JSON without all key-related fields
-    const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON;
+    // Store complete lexical JSON without all key-related fields and children
+    const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
     treeNode.data.set('lexical', cleanedData);
   }
   

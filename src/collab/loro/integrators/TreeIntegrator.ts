@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { 
   $getRoot, 
   $getNodeByKey, 
@@ -37,30 +42,26 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
 
     // Internal method that can be called when already inside editor.update()
   integrateInternal(diff: TreeDiff, binding: Binding, provider: Provider): void {
-    // Sort operations: deletes first, then creates (element nodes before text), then moves
-    const operations = [...diff.diff];
-    operations.sort((a, b) => {
-      // Delete operations first
-      if (a.action === 'delete' && b.action !== 'delete') return -1;
-      if (b.action === 'delete' && a.action !== 'delete') return 1;
-      
-      // Move operations last
-      if (a.action === 'move' && b.action !== 'move') return 1;
-      if (b.action === 'move' && a.action !== 'move') return -1;
-      
-      // For create operations, prioritize element nodes over text nodes
-      if (a.action === 'create' && b.action === 'create') {
-        const aNode = binding.tree.getNodeByID(a.target);
-        const bNode = binding.tree.getNodeByID(b.target);
-        const aIsText = aNode?.data.get('elementType') === 'text';
-        const bIsText = bNode?.data.get('elementType') === 'text';
-        
-        if (aIsText && !bIsText) return 1;  // b (element) comes before a (text)
-        if (!aIsText && bIsText) return -1; // a (element) comes before b (text)
+    // Separate operations by action type
+    const deletes: Array<{ action: string; target: TreeID; parent?: TreeID; index?: number }> = [];
+    const creates: Array<{ action: string; target: TreeID; parent?: TreeID; index?: number }> = [];
+    const moves: Array<{ action: string; target: TreeID; parent?: TreeID; index?: number }> = [];
+
+    for (const op of diff.diff) {
+      switch (op.action) {
+        case 'delete': deletes.push(op); break;
+        case 'create': creates.push(op); break;
+        case 'move':   moves.push(op);   break;
       }
-      
-      return 0; // Keep original order for same priority
-    });
+    }
+
+    // Topologically sort create operations so parents are created before children.
+    // Without this, a TableCellNode may arrive before its parent TableRowNode,
+    // causing the cell to fall back to $getRoot() and appear on one flat line.
+    const sortedCreates = this.topologicalSortCreates(creates, binding);
+
+    // Execute: deletes → creates (parent-first) → moves
+    const operations = [...deletes, ...sortedCreates, ...moves];
     
     operations.forEach(operation => {
       switch (operation.action) {
@@ -133,6 +134,7 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
         if (parentLexicalNode && $isElementNode(parentLexicalNode)) {
           parentNode = parentLexicalNode;
         } else {
+          console.warn(`🌳 Parent NOT found for ${lexicalNode.getType()} target=${operation.target} parent=${operation.parent} parentKey=${parentKey} parentFound=${!!parentLexicalNode} isElement=${parentLexicalNode ? $isElementNode(parentLexicalNode) : 'N/A'}`);
           // For text nodes, we MUST have a proper parent element
           if (lexicalNode.getType() === 'text') {
             return;
@@ -236,17 +238,75 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
       // Remove from Lexical tree
       nodeToDelete.remove();
       
-      // Clean up mapping
-      binding.nodeMapper.deleteMapping(lexicalKey);
+      // Clean up mapping only — do NOT call deleteMapping() here because
+      // the Loro tree has already processed this deletion from the remote
+      // peer.  Calling tree.delete() again would throw "is deleted or does
+      // not exist".
+      binding.nodeMapper.removeMappingForKey(lexicalKey);
       
     } catch (error) {
-      // Handle the case where Loro is trying to delete an already deleted node
-      if (error.message && error.message.includes('is deleted or does not exist')) {
-        console.log(`🌳 Node ${operation.target} already deleted (normal during restructuring):`, error.message);
-      } else {
-        console.warn(`🌳 Error deleting node ${operation.target}:`, error);
+      console.warn(`🌳 Error deleting node ${operation.target}:`, error);
+    }
+  }
+
+  /**
+   * Topologically sort create operations so that parent nodes are created
+   * before their children.
+   *
+   * Computes depth using the `parent` field from the diff operations
+   * themselves rather than querying the Loro tree API (which may behave
+   * unexpectedly during event processing).  For each create op, we count
+   * how many of its ancestors are also being created in this same batch.
+   * Ties at the same depth preserve the original diff order (stable sort).
+   */
+  private topologicalSortCreates(
+    creates: Array<{ action: string; target: TreeID; parent?: TreeID; index?: number }>,
+    binding: Binding,
+  ): Array<{ action: string; target: TreeID; parent?: TreeID; index?: number }> {
+    if (creates.length <= 1) return creates;
+
+    // Build lookup: target → parent (only for operations in this batch)
+    const batchTargets = new Set<string>(creates.map(op => String(op.target)));
+    const parentOf = new Map<string, string>();
+    for (const op of creates) {
+      if (op.parent) {
+        parentOf.set(String(op.target), String(op.parent));
       }
     }
+
+    const depthCache = new Map<string, number>();
+
+    const getDepth = (targetStr: string): number => {
+      if (depthCache.has(targetStr)) return depthCache.get(targetStr)!;
+
+      let depth = 0;
+      let current = targetStr;
+      const visited = new Set<string>();
+
+      // Walk up the parent chain; count only ancestors that are also being
+      // created in this batch (i.e. don't exist yet and must come first).
+      while (parentOf.has(current)) {
+        const parent = parentOf.get(current)!;
+        if (visited.has(parent)) break; // cycle guard
+        visited.add(parent);
+
+        if (batchTargets.has(parent)) {
+          depth++;
+          current = parent;
+        } else {
+          break; // parent already exists locally — stop counting
+        }
+      }
+
+      depthCache.set(targetStr, depth);
+      return depth;
+    };
+
+    // Tag each operation with its original index (for stable tie-breaking)
+    const tagged = creates.map((op, i) => ({ op, depth: getDepth(String(op.target)), idx: i }));
+    tagged.sort((a, b) => a.depth - b.depth || a.idx - b.idx);
+
+    return tagged.map(t => t.op);
   }
 
 }

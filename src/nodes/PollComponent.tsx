@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import type {Option, Options, PollNode} from './PollNode';
 import type {JSX} from 'react';
 

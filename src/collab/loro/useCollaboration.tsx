@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import * as React from 'react';
 import type {JSX} from 'react';
 import {useCallback, useEffect, useMemo, useRef} from 'react';
@@ -78,7 +83,6 @@ export function useCollaboration(
         
         // Call the initialization callback after initializing the editor
         if (onInitialization) {
-          console.log('🎉 Editor initialized after sync, calling onInitialization callback');
           onInitialization(true);
         }
       }
@@ -194,7 +198,16 @@ export function useCollaboration(
     };
 
     return createPortal(
-      <div ref={ref} />,
+      <div ref={ref} style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        pointerEvents: 'none',
+        zIndex: 1000,
+        overflow: 'visible',
+      }} />,
       (cursorsContainerRef && cursorsContainerRef.current) || document.body,
     );
   }, [binding, cursorsContainerRef]);

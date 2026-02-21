@@ -48,5 +48,6 @@ header:
     - 'LICENSE'
     - 'src/stories'
     - '.husky/pre-commit'
+    - src/collab/yjs
 
   comment: on-failure

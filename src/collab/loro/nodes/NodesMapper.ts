@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import { LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
@@ -160,10 +165,11 @@ export class NodeMapper {
         const lexicalNodeJSON = lexicalNode.exportJSON();
         // Remove all key-related fields to avoid duplication (TreeID serves as the key)
         if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
-          const { key, __key, lexicalKey, ...cleanedData } = lexicalNodeJSON as any;
+          const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON as any;
           treeNode.data.set('lexical', cleanedData);
         } else {
-          treeNode.data.set('lexical', lexicalNodeJSON);
+          const { children, ...cleanedData } = lexicalNodeJSON as any;
+          treeNode.data.set('lexical', cleanedData);
         }
       } catch (error) {
         console.warn('Failed to export lexical node JSON in NodesMapper:', error);
@@ -194,7 +200,9 @@ export class NodeMapper {
   }
 
   /**
-   * Remove mapping when a node is deleted
+   * Remove mapping when a node is deleted (also deletes from Loro tree).
+   * Use this on the ORIGINATING side (propagation) where the local peer
+   * is actively deleting a node.
    */
   deleteMapping(nodeKey: NodeKey): void {
     const treeId = this.lexicalToLoro.get(nodeKey);
@@ -205,6 +213,19 @@ export class NodeMapper {
       if (this.tree.has(treeId)) {
         this.tree.delete(treeId);
       }
+    }
+  }
+
+  /**
+   * Remove bidirectional mapping WITHOUT deleting from the Loro tree.
+   * Use this on the INTEGRATION side (receiving remote events) where the
+   * Loro tree has already been updated by the remote peer — we only need
+   * to clean up the local key↔TreeID association.
+   */
+  removeMappingForKey(nodeKey: NodeKey): void {
+    const treeId = this.lexicalToLoro.get(nodeKey);
+    if (treeId) {
+      this.removeMapping(nodeKey, treeId);
     }
   }
 

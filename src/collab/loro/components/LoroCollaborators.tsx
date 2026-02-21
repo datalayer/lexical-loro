@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Distributed under the terms of the MIT License.
+ */
+
 import React, { useState, useEffect } from 'react';
 import type { Binding } from '../Bindings';
 
@@ -53,12 +58,13 @@ export function LoroCollaborators({
       display: 'flex',
       alignItems: 'center',
       padding: '8px 12px',
-      backgroundColor: '#f8f9fa',
-      borderBottom: '1px solid #e1e5e9',
+      backgroundColor: 'var(--bgColor-muted, #f8f9fa)',
+      borderBottom: '1px solid var(--borderColor-default, #e1e5e9)',
       fontSize: '14px',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       gap: '8px',
-      flexWrap: 'wrap'
+      flexWrap: 'wrap',
+      color: 'var(--fgColor-default, inherit)',
     }}>
       {/* Current User (if they have a cursor) */}
       {currentUserData && (
@@ -85,7 +91,7 @@ export function LoroCollaborators({
         <div style={{
           width: '1px',
           height: '20px',
-          backgroundColor: '#d1d5db',
+          backgroundColor: 'var(--borderColor-muted, #d1d5db)',
           margin: '0 4px'
         }} />
       )}
@@ -104,7 +110,7 @@ export function LoroCollaborators({
       {/* Show count if no active collaborators */}
       {otherCollaborators.length === 0 && (
         <span style={{
-          color: '#6b7280',
+          color: 'var(--fgColor-muted, #6b7280)',
           fontStyle: 'italic',
           marginLeft: '8px'
         }}>

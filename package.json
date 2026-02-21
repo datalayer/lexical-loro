@@ -1,7 +1,6 @@
 {
   "name": "@datalayer/lexical-loro",
-  "version": "0.1.0",
-  "private": false,
+  "version": "0.2.1",
   "main": "lib/index.js",
   "files": [
     "lib/**/*.{css,d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -61,6 +60,7 @@
     "test:py:watch": "python3 -m pytest tests/ -v --tb=short -f"
   },
   "dependencies": {
+    "@datalayer/primer-addons": "^1.0.8",
     "@floating-ui/react": "^0.27.8",
     "@lexical/clipboard": "^0.35.0",
     "@lexical/code": "^0.35.0",
@@ -81,8 +81,8 @@
     "date-fns": "^4.1.0",
     "katex": "^0.16.10",
     "lexical": "^0.35.0",
-    "loro-crdt": "^1.8.0",
     "lodash-es": "^4.17.21",
+    "loro-crdt": "^1.8.0",
     "prettier": "^2.8.8",
     "react": "^18.2.0",
     "react-day-picker": "^9.7.0",

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2023-2025 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
 """
 Test script to verify client ID correlation between WebSocket connections and frontend client IDs
 """
