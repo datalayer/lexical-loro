@@ -349,7 +349,6 @@ export function syncCursorPositions(
 
       }
     }
-    }
 
     updateCursor(binding, cursor, selection, nodeMap, isCurrentUser);
   }

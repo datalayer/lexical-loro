@@ -1,8 +1,3 @@
-/*
- * Copyright (c) 2023-2025 Datalayer, Inc.
- * Distributed under the terms of the MIT License.
- */
-
 import type {JSX} from 'react';
 import {useEffect, useRef, useState} from 'react';
 import type {Doc} from 'yjs';
