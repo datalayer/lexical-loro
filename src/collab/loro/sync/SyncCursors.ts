@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import type { BaseSelection, NodeKey, Point, RangeSelection } from 'lexical';
+import type { BaseSelection, NodeKey, Point } from 'lexical';
 import {
   $getNodeByKey,
   $getSelection,
@@ -312,7 +312,6 @@ export function syncCursorPositions(
       const cursorName = isCurrentUser ? `${name} (Me)` : name;
       cursor = createCollabCursor(cursorName, color);
       cursors.set(clientID, cursor);
-      console.log('Added new cursor:', { clientID, name: cursorName, color, isCurrentUser, totalCursors: cursors.size });
     }
 
     // Render cursor/selection whenever valid anchorPos/focusPos exist.
@@ -348,17 +347,8 @@ export function syncCursorPositions(
           focus.offset = focusOffset;
         }
 
-        if (!isCurrentUser) {
-          const isExpanded = anchorKey !== focusKey || anchorOffset !== focusOffset;
-          console.log('[CURSOR-DEBUG] Remote selection resolved:', {
-            clientID, anchorKey, anchorOffset, focusKey, focusOffset, isExpanded, color, focusing
-          });
-        }
-      } else if (!isCurrentUser) {
-        console.warn('[CURSOR-DEBUG] convertLoroSelectionToLexical returned null for remote:', {
-          clientID, anchorPos, focusPos
-        });
       }
+    }
     }
 
     updateCursor(binding, cursor, selection, nodeMap, isCurrentUser);
@@ -402,11 +392,6 @@ function updateCursor(
   const cursorsContainer = binding.cursorsContainer;
 
   if (cursorsContainer === null || rootElement === null) {
-    if (!isCurrentUser && nextSelection !== null) {
-      console.warn('[CURSOR-DEBUG] updateCursor EXIT: container/root null:', {
-        cursorsContainer: !!cursorsContainer, rootElement: !!rootElement
-      });
-    }
     return;
   }
 
@@ -439,11 +424,6 @@ function updateCursor(
   const focusNode = nodeMap.get(focusKey);
 
   if (anchorNode == null || focusNode == null) {
-    if (!isCurrentUser) {
-      console.warn('[CURSOR-DEBUG] updateCursor: anchorNode or focusNode not found in nodeMap:', {
-        anchorKey, focusKey, anchorFound: anchorNode != null, focusFound: focusNode != null
-      });
-    }
     return;
   }
 
@@ -471,9 +451,6 @@ function updateCursor(
     );
 
     if (range === null) {
-      if (!isCurrentUser) {
-        console.warn('[CURSOR-DEBUG] updateCursor: createDOMRange returned null for remote selection');
-      }
       return;
     }
 
@@ -492,15 +469,6 @@ function updateCursor(
     } else {
       selectionRects = createRectsFromDOMRange(editor, range);
     }
-  }
-
-  if (!isCurrentUser) {
-    console.log('[CURSOR-DEBUG] updateCursor rendering remote cursor:', {
-      isCollapsed, rectsCount: selectionRects.length,
-      rects: selectionRects.map(r => ({ w: Math.round(r.width), h: Math.round(r.height), t: Math.round(r.top), l: Math.round(r.left) })),
-      color, containerTag: cursorsContainer?.tagName,
-      containerRect: { t: Math.round(containerRect.top), l: Math.round(containerRect.left) },
-    });
   }
 
   const selectionsLength = selections.length;
@@ -567,26 +535,10 @@ export function syncLexicalSelectionToLoro(
   prevSelection: null | BaseSelection,
   nextSelection: null | BaseSelection,
 ): void {
-  // Trace every entry into this function
-  const isRange = $isRangeSelection(nextSelection);
-  const selInfo = isRange ? {
-    anchorKey: (nextSelection as RangeSelection).anchor.key,
-    anchorOffset: (nextSelection as RangeSelection).anchor.offset,
-    focusKey: (nextSelection as RangeSelection).focus.key,
-    focusOffset: (nextSelection as RangeSelection).focus.offset,
-  } : null;
-  console.log('[CURSOR-TRACE] syncLexicalSelectionToLoro ENTERED:', {
-    isRange,
-    isNull: nextSelection === null,
-    type: nextSelection ? nextSelection.constructor.name : 'null',
-    sel: selInfo,
-  });
-
   const awareness = provider.awareness;
   const localState = awareness.getLocalState();
 
   if (localState === null) {
-    console.log('[CURSOR-TRACE] EXIT: localState is null');
     return;
   }
 
@@ -607,24 +559,10 @@ export function syncLexicalSelectionToLoro(
     anchorPos = convertLexicalPointToCursor(nextSelection.anchor, binding);
     focusPos = convertLexicalPointToCursor(nextSelection.focus, binding);
 
-    // Debug: trace ALL selection conversions
-    const lexAnchor = nextSelection.anchor;
-    const lexFocus = nextSelection.focus;
-    const isLexExpanded = lexAnchor.key !== lexFocus.key || lexAnchor.offset !== lexFocus.offset;
-    if (isLexExpanded) {
-      console.log('[CURSOR-DEBUG] Converting EXPANDED selection:', {
-        lexAnchor: { key: lexAnchor.key, offset: lexAnchor.offset, type: lexAnchor.type },
-        lexFocus: { key: lexFocus.key, offset: lexFocus.offset, type: lexFocus.type },
-        loroAnchor: anchorPos ? { treeId: (anchorPos as any).treeId, offset: (anchorPos as any).offset, pointType: (anchorPos as any).pointType } : null,
-        loroFocus: focusPos ? { treeId: (focusPos as any).treeId, offset: (focusPos as any).offset, pointType: (focusPos as any).pointType } : null,
-      });
-    }
   } else if (nextSelection === null) {
     // Selection cleared — broadcast null positions
-    console.log('[CURSOR-TRACE] Selection is null, will broadcast null positions');
   } else {
     // Not a range selection (e.g. NodeSelection) — skip
-    console.log('[CURSOR-TRACE] EXIT: Not a RangeSelection, type=' + nextSelection.constructor.name);
     return;
   }
 
@@ -635,20 +573,8 @@ export function syncLexicalSelectionToLoro(
     shouldUpdatePosition(currentFocusPos, focusPos);
 
   if (!shouldUpdate) {
-    console.log('[CURSOR-TRACE] EXIT: shouldUpdate=false, positions unchanged');
     return;
   }
-
-  const isExpanded = anchorPos && focusPos &&
-    ((anchorPos as any).treeId !== (focusPos as any).treeId ||
-     (anchorPos as any).offset !== (focusPos as any).offset);
-  console.log('[CURSOR-DEBUG] Broadcasting selection:', {
-    hasAnchor: !!anchorPos, hasFocus: !!focusPos, isExpanded, focusing,
-    anchor: anchorPos ? { treeId: (anchorPos as any).treeId, offset: (anchorPos as any).offset } : null,
-    focus: focusPos ? { treeId: (focusPos as any).treeId, offset: (focusPos as any).offset } : null,
-    currentAnchor: currentAnchorPos ? { offset: (currentAnchorPos as any).offset } : null,
-    currentFocus: currentFocusPos ? { offset: (currentFocusPos as any).offset } : null,
-  });
 
   // When we have a valid selection to broadcast, the editor IS focused —
   // force `focusing: true` to prevent the FOCUS_COMMAND race condition
