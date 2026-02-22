@@ -1,6 +1,6 @@
 {
   "name": "@datalayer/lexical-loro",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "main": "lib/index.js",
   "files": [
     "lib/**/*.{css,d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -40,7 +40,7 @@
     "test:js:coverage": "jest --coverage",
     "preview": "vite preview",
     "watch:lib": "tsc -b -w",
-    "clean": "rimraf dist lib",
+    "clean": "rimraf dist lib tsconfig.tsbuildinfo",
     "dev:all:js": "npm run example:js",
     "dev:all:py": "npm run example:py",
     "dev:vite": "npm run example:vite",
