@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -47,6 +47,35 @@ type Props = {
   // Handler called when the initial snapshot is loaded
   onInitialization?: (isInitialized: boolean) => void;
 };
+
+function getIdentityField(
+  awarenessData: object | undefined,
+  keys: string[],
+): string | undefined {
+  if (!awarenessData || typeof awarenessData !== 'object') {
+    return undefined;
+  }
+
+  const data = awarenessData as Record<string, unknown>;
+  const user = data.user;
+  const userRecord =
+    user && typeof user === 'object' ? (user as Record<string, unknown>) : undefined;
+
+  for (const key of keys) {
+    const direct = data[key];
+    if (typeof direct === 'string' && direct.trim().length > 0) {
+      return direct;
+    }
+    if (userRecord) {
+      const nested = userRecord[key];
+      if (typeof nested === 'string' && nested.trim().length > 0) {
+        return nested;
+      }
+    }
+  }
+
+  return undefined;
+}
 
 export function LoroCollaborationPlugin({
   id,
@@ -124,25 +153,26 @@ export function LoroCollaborationPlugin({
       docMap,
       excludedProperties,
     );
-    
-    // Update collaboration context with deterministic name based on client ID
-    // This ensures consistent names across browser sessions
+
     const deterministicUserData = generateDeterministicUserData(binding.clientID);
-    console.log('Setting deterministic user data based on client ID:', {
-      clientId: binding.clientID,
-      name: deterministicUserData.name,
-      color: deterministicUserData.color
-    });
-    
-    // Update the collaboration context with stable name and color
-    const finalName = username || deterministicUserData.name;
-    const finalColor = cursorColor || deterministicUserData.color;
+
+    // Prefer explicit username/color first, then awareness identity, then deterministic fallback.
+    const awarenessDisplayName = getIdentityField(awarenessData, [
+      'display_name',
+      'displayName',
+      'name',
+      'username',
+      'handle',
+    ]);
+    const awarenessColor = getIdentityField(awarenessData, ['color']);
+    const finalName = username || awarenessDisplayName || deterministicUserData.name;
+    const finalColor = cursorColor || awarenessColor || deterministicUserData.color;
     
     collabContext.name = finalName;
     collabContext.color = finalColor;
     collabContext.clientID = binding.clientID;
     
-    // Update the awareness state immediately with the deterministic name
+    // Update the awareness state immediately with the resolved identity.
     updateLocalStateName(provider, finalName, finalColor);
     
     setBinding(binding);
@@ -150,7 +180,7 @@ export function LoroCollaborationPlugin({
     return () => {
       // Clean up binding resources if needed
     };
-  }, [editor, provider, id, docMap, doc, excludedProperties, collabContext, username, cursorColor]);
+  }, [editor, provider, id, docMap, doc, excludedProperties, collabContext, username, cursorColor, awarenessData]);
 
   if (!provider || !binding) {
     return <></>;

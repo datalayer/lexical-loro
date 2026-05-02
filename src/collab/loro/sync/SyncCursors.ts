@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -52,6 +52,40 @@ export type SyncCursorPositionsFn = (
   provider: Provider,
   options?: SyncCursorPositionsOptions,
 ) => void;
+
+function getDisplayNameFromAwareness(awareness: UserState): string {
+  const awarenessData = awareness.awarenessData;
+  if (!awarenessData || typeof awarenessData !== 'object') {
+    return awareness.name;
+  }
+
+  const data = awarenessData as Record<string, unknown>;
+  const user = data.user;
+  const userRecord =
+    user && typeof user === 'object' ? (user as Record<string, unknown>) : undefined;
+
+  const candidates = [
+    userRecord?.display_name,
+    userRecord?.displayName,
+    userRecord?.name,
+    userRecord?.username,
+    userRecord?.handle,
+    data.display_name,
+    data.displayName,
+    data.name,
+    data.username,
+    data.handle,
+    awareness.name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+
+  return awareness.name;
+}
 
 /*****************************************************************************/
 
@@ -301,7 +335,8 @@ export function syncCursorPositions(
     const [clientID, awareness] = awarenessState;
 
     visitedClientIDs.add(clientID);
-    const { name, color, focusing } = awareness;
+    const { color } = awareness;
+    const displayName = getDisplayNameFromAwareness(awareness);
     const isCurrentUser = clientID === localClientID;
     let selection = null;
 
@@ -309,9 +344,16 @@ export function syncCursorPositions(
 
     if (cursor === undefined) {
       // Add "(Me)" label for current user's cursor
-      const cursorName = isCurrentUser ? `${name} (Me)` : name;
+      const cursorName = isCurrentUser ? `${displayName} (Me)` : displayName;
       cursor = createCollabCursor(cursorName, color);
       cursors.set(clientID, cursor);
+    } else if (cursor.name !== displayName) {
+      cursor.name = displayName;
+      if (cursor.selection) {
+        cursor.selection.name.textContent = isCurrentUser
+          ? `${displayName} (Me)`
+          : displayName;
+      }
     }
 
     // Render cursor/selection whenever valid anchorPos/focusPos exist.

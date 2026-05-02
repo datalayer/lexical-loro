@@ -2,9 +2,9 @@ header:
   license:
     spdx-id: Datalayer
     copyright-owner: Datalayer, Inc.
-    copyright-year: 2023-2025
+    copyright-year: ''
     content: |
-      Copyright (c) [year] [owner]
+      Copyright (c) 2025-[year] [owner]
       Distributed under the terms of the MIT License.
 
   paths-ignore:
