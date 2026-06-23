@@ -497,7 +497,10 @@ async def _global_autosave_loop():
                     for doc_name, doc in docs.items():
                         try:
                             if doc.needs_save():
-                                success = doc.save_to_persistence()
+                                # Run the (potentially blocking) persistence call in a
+                                # worker thread so blocking I/O (e.g. S3 uploads) does not
+                                # stall the shared asyncio event loop and HTTP handlers.
+                                success = await asyncio.to_thread(doc.save_to_persistence)
                                 if success:
                                     saved_count += 1
                                     logger.info(f"💾 Auto-saved document: {doc_name}")
@@ -937,7 +940,10 @@ async def setup_ws_connection(conn, path: str):
     logger.info(f"🔥🔥🔥 [Server] NEW CONNECTION STARTED: {conn_id} for document: {actual_doc_id} 🔥🔥🔥")
     logger.debug(f"🔗 [Server] *** NEW CONNECTION *** {conn_id} for document: {actual_doc_id}")
     
-    doc = get_doc(doc_name)
+    # get_doc may load the document from persistence (e.g. blocking S3 reads) the
+    # first time it is accessed; run it in a worker thread so the shared asyncio
+    # event loop (and HTTP handlers running on it) is not stalled.
+    doc = await asyncio.to_thread(get_doc, doc_name)
     doc.conns[conn] = set()
     
     logger.info(f"📊 [server:py:ws] Total connections for '{actual_doc_id}': {len(doc.conns)} (including {conn_id})")
@@ -1077,7 +1083,11 @@ class LoroWebSocketServer:
                         for doc_name, doc in docs.items():
                             try:
                                 if doc.needs_save():
-                                    success = doc.save_to_persistence()
+                                    # Run the (potentially blocking) persistence call in a
+                                    # worker thread so blocking I/O (e.g. S3 uploads) does
+                                    # not stall the shared asyncio event loop and HTTP
+                                    # handlers running on it.
+                                    success = await asyncio.to_thread(doc.save_to_persistence)
                                     if success:
                                         saved_count += 1
                                         logger.debug(f"💾 Auto-saved document: {doc_name}")
