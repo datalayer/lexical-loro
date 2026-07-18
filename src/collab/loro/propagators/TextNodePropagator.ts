@@ -17,6 +17,7 @@ import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 import { $diffTextContentAndApplyDelta } from '../utils/Utils';
+import { invariant } from '../utils/Invariant';
 
 /**
  * TextNode Propagator for Loro Tree Collaboration
@@ -49,13 +50,16 @@ export function createTextNodeInLoro(
   options?: TextNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
-  
-  // Debug logging for text node creation issues
-  if (!parentId) {
-    console.warn(`❌ Creating TextNode ${nodeKey} without parent in Loro tree - THIS WILL FAIL`);
-    return null as any; // Return early to avoid creating orphaned nodes
-  }
-  
+
+  // A text node is always a leaf with a parent element. A missing parent means
+  // the parent element was not synced first — surface it instead of creating an
+  // orphaned (unrenderable) node.
+  invariant(
+    parentId !== undefined,
+    'createTextNodeInLoro: text node has no parent in Loro tree',
+    { nodeKey },
+  );
+
   // Use mapper to get or create the tree node
   // Note: We can't pass lexicalNode directly due to context issues, but parentId should be sufficient
   const treeNode = mapper.getLoroNodeByLexicalKey(
@@ -102,46 +106,23 @@ export function updateTextNodeInLoro(
 ): void {
   const mapper = getNodeMapper();
   
-  // Get the existing tree node using the mapper
+  // Get the existing tree node using the mapper (created on demand if absent).
   const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
-  
-  if (!treeNode) {
-    console.warn(`📝 TextNode ${nodeKey} not found in Loro, skipping update`);
-    return;
-  }
-  
-  // Note: Container validation is done in each try-catch block below since
-  // the container can be deleted between operations
-  
-  // Store complete lexical node data as clean JSON if provided
+
+  // Store complete lexical node data as clean JSON if provided.
   if (lexicalNodeJSON) {
-    try {
-      // Store complete lexical JSON without the key
-      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
-        const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
-      } else {
-        const { children, ...cleanedData } = lexicalNodeJSON as any;
-        treeNode.data.set('lexical', cleanedData);
-      }
-    } catch (error) {
-      // This is expected during text operations when nodes get deleted/recreated
-      console.warn(`📝 TextNode ${nodeKey} container was deleted during update, skipping (normal during text operations):`, error.message);
-      return;
+    if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+      const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
+      treeNode.data.set('lexical', cleanedData);
+    } else {
+      const { children, ...cleanedData } = lexicalNodeJSON as any;
+      treeNode.data.set('lexical', cleanedData);
     }
   }
-  
-  // Update only essential metadata
-  try {
-    treeNode.data.set('elementType', 'text');
-    treeNode.data.set('updatedAt', Date.now());
-  } catch (error) {
-    console.warn(`📝 TextNode ${nodeKey} container deleted during metadata update (normal during text operations):`, error.message);
-    return;
-  }
-  
-  // The exported Lexical node data is already propagated by the mapper
-  // No additional JSON export needed since mapper propagates exportJSON automatically
+
+  // Update only essential metadata.
+  treeNode.data.set('elementType', 'text');
+  treeNode.data.set('updatedAt', Date.now());
 }
 
 /**

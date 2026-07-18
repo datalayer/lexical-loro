@@ -16,6 +16,7 @@ import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { Binding } from '../Bindings';
+import { invariant } from '../utils/Invariant';
 
 /**
  * ElementNode Propagator for Loro Tree Collaboration
@@ -94,49 +95,62 @@ export function updateElementNodeInLoro(
     treeNode.data.set('elementType', elementType);
   }
   
-  // Move the node if parent or position changed
+  // Move the node only if its position in Loro actually differs from Lexical.
   if (parentId !== undefined || index !== undefined) {
-    // Note: For moving, we need access to tree - this might need to be propagated differently
     const { tree } = options!;
-    
-    // CRITICAL: Prevent cycle moves - a node cannot be its own parent
-    if (parentId && treeNode.id === parentId) {
-      console.warn(`🚨 CYCLE MOVE DETECTED: Node ${treeNode.id} cannot be its own parent! Skipping move operation.`);
-      return;
-    }
-    
-    // Debug: Check if the parent exists and its children count
-    const parentNode = parentId ? tree.getNodeByID(parentId) : null;
-    const parentChildCount = parentNode ? parentNode.children.length : tree.roots().length;
-    
-    // Check if the node is already a child of the target parent
-    const currentParent = treeNode.parent();
-    const isAlreadyChild = currentParent?.id === parentId;
-    
-    if (index !== undefined) {
-      // Loro move index must satisfy:
-      // - same parent reorder: 0 <= index <= (children.length - 1)
-      // - different parent move: 0 <= index <= children.length
-      const maxIndex = isAlreadyChild
-        ? Math.max(parentChildCount - 1, 0)
-        : parentChildCount;
-      const adjustedIndex = Math.max(0, Math.min(index, maxIndex));
 
-      tree.move(treeNode.id, parentId, adjustedIndex);
-    } else {
-      // No specific index, append to end
-      tree.move(treeNode.id, parentId, parentChildCount);
+    // A node can never be its own parent — that indicates a wrong parent
+    // mapping upstream, not something to silently skip.
+    invariant(
+      !(parentId && treeNode.id === parentId),
+      'updateElementNodeInLoro: cycle move (node is its own parent)',
+      { nodeKey, treeId: treeNode.id },
+    );
+
+    // Where does the node currently sit in the Loro tree?
+    const currentParent = treeNode.parent();
+    const currentParentId = currentParent ? currentParent.id : undefined;
+    const siblings = currentParent ? (currentParent.children() ?? []) : tree.roots();
+    const currentIndex = siblings.findIndex(child => child.id === treeNode.id);
+
+    const sameParent = currentParentId === parentId;
+
+    // Re-issuing a move on every content edit is unnecessary and races with
+    // sibling creation (the classic source of "index out of range"). Only move
+    // when the parent or index genuinely changed. This is a real no-op check,
+    // not a masked failure.
+    const needsMove =
+      !sameParent || (index !== undefined && index !== currentIndex);
+
+    if (needsMove) {
+      const parentNode = parentId ? tree.getNodeByID(parentId) : null;
+      const parentChildCount = parentNode
+        ? (parentNode.children()?.length ?? 0)
+        : tree.roots().length;
+
+      if (index !== undefined) {
+        // Loro move index bounds:
+        //   same-parent reorder : [0, children.length - 1]
+        //   cross-parent move   : [0, children.length]
+        // An index outside this range means the position was computed against
+        // siblings that are not yet synced — surface it, do not clamp.
+        const maxIndex = sameParent
+          ? Math.max(parentChildCount - 1, 0)
+          : parentChildCount;
+        invariant(
+          index >= 0 && index <= maxIndex,
+          'updateElementNodeInLoro: move index out of range',
+          { nodeKey, treeId: treeNode.id, index, maxIndex, sameParent },
+        );
+        tree.move(treeNode.id, parentId, index);
+      } else {
+        tree.move(treeNode.id, parentId, parentChildCount);
+      }
     }
   }
-      
-  // The exported Lexical node data is already propagated by the mapper
-  // No additional JSON export needed since mapper propagates exportJSON automatically
-  
-  try {
-    treeNode.data.set('lastUpdated', Date.now());
-  } catch (error) {
-    console.warn(`🔄 ElementNode ${treeNode.id} container deleted during timestamp update (normal during operations):`, error.message);
-  }
+
+  // The exported Lexical node data is already propagated by the mapper.
+  treeNode.data.set('lastUpdated', Date.now());
 }
 
 /**

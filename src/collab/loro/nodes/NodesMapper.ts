@@ -7,6 +7,7 @@ import { LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
 import { LexicalNodeData } from '../types/LexicalNodeData';
+import { invariant } from '../utils/Invariant';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs
@@ -142,18 +143,23 @@ export class NodeMapper {
     parentTreeID?: TreeID,
     index?: number
   ): TreeID {
-    let insertionIndex = index;
+    const insertionIndex = index;
 
-    // Loro requires insertion index to be within [0, children.length].
-    // During concurrent edits the Lexical index can momentarily exceed the
-    // current CRDT parent child count, so clamp defensively.
+    // Loro requires the insertion index to be within [0, children.length]. An
+    // out-of-range index means the position was computed against stale/unsynced
+    // siblings; surface it instead of silently clamping (which would drop the
+    // node at the wrong position and hide the real ordering bug).
     if (insertionIndex !== undefined) {
       const parentNode =
         parentTreeID !== undefined ? this.tree.getNodeByID(parentTreeID) : null;
       const childrenLength = parentNode
-        ? parentNode.children.length
+        ? (parentNode.children()?.length ?? 0)
         : this.tree.roots().length;
-      insertionIndex = Math.max(0, Math.min(insertionIndex, childrenLength));
+      invariant(
+        insertionIndex >= 0 && insertionIndex <= childrenLength,
+        'createLoroNode: insertion index out of range',
+        { nodeKey, parentTreeID, insertionIndex, childrenLength },
+      );
     }
 
     // Create the tree node first
@@ -162,12 +168,15 @@ export class NodeMapper {
     // Get the TreeID from the created node
     const treeId: TreeID = treeNode.id;
     
-    // Debug logging for parent relationship issues
+    // A requested parent must actually become this node's parent. If it does
+    // not, the CRDT structure diverges from Lexical — surface it.
     if (parentTreeID) {
       const actualParent = treeNode.parent();
-      if (!actualParent || actualParent.id !== parentTreeID) {
-        console.warn(`⚠️  Parent relationship not set correctly for ${nodeKey}: expected ${parentTreeID}, got ${actualParent?.id || 'None'}`);
-      }
+      invariant(
+        actualParent != null && actualParent.id === parentTreeID,
+        'createLoroNode: parent relationship not established',
+        { nodeKey, expected: parentTreeID, actual: actualParent?.id ?? null },
+      );
     }
     
     // Store basic metadata
