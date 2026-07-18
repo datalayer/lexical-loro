@@ -44,18 +44,18 @@ def main(port: int, host: str, log_level: str, autosave_interval: int):
         autosave_interval_sec=autosave_interval
     )
     
-    click.echo(f"🚀 Starting Lexical Loro relay server on {host}:{port}")
-    click.echo(f"📋 Log level: {log_level}")
-    click.echo(f"💾 Auto-save interval: {autosave_interval} seconds")
-    click.echo("📡 Pure WebSocket relay - all operations delegated to LexicalModel")
+    click.echo(f"Starting Lexical Loro relay server on {host}:{port}")
+    click.echo(f"Log level: {log_level}")
+    click.echo(f"Auto-save interval: {autosave_interval} seconds")
+    click.echo("Pure WebSocket relay - all operations delegated to LexicalModel")
     click.echo("Press Ctrl+C to stop the server")
     
     try:
         asyncio.run(server.start())
     except KeyboardInterrupt:
-        click.echo("\n🛑 Server stopped by user")
+        click.echo("\nServer stopped by user")
     except Exception as e:
-        click.echo(f"❌ Server error: {e}")
+        click.echo(f"Server error: {e}")
         raise click.ClickException(str(e))
 
 
