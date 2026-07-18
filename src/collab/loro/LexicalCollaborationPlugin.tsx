@@ -46,6 +46,12 @@ type Props = {
   websocketUrl?: string;
   // Handler called when the initial snapshot is loaded
   onInitialization?: (isInitialized: boolean) => void;
+  // Handler called once the local collaborator identity is resolved
+  onIdentityResolved?: (identity: {
+    name: string;
+    color: string;
+    clientID: number;
+  }) => void;
 };
 
 function getIdentityField(
@@ -91,6 +97,7 @@ export function LoroCollaborationPlugin({
   showCollaborators = true,
   websocketUrl = 'ws://localhost:3002',
   onInitialization,
+  onIdentityResolved,
 }: Props): JSX.Element {
   const isBindingInitialized = useRef(false);
   const isProviderInitialized = useRef(false);
@@ -171,7 +178,14 @@ export function LoroCollaborationPlugin({
     collabContext.name = finalName;
     collabContext.color = finalColor;
     collabContext.clientID = binding.clientID;
-    
+
+    // Notify listeners of the resolved local collaborator identity.
+    onIdentityResolved?.({
+      name: finalName,
+      color: finalColor,
+      clientID: binding.clientID,
+    });
+
     // Update the awareness state immediately with the resolved identity.
     updateLocalStateName(provider, finalName, finalColor);
     

@@ -105,9 +105,17 @@ export function updateTextNodeInLoro(
   options?: TextNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
-  
-  // Get the existing tree node using the mapper (created on demand if absent).
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
+
+  // Updates must target an existing mapped node. Creating on update can
+  // accidentally create inline nodes at root when parent info is unavailable.
+  const treeID = mapper.getTreeIDByLexicalKey(nodeKey);
+  if (!treeID || !options?.tree.has(treeID)) {
+    return;
+  }
+  const treeNode = options.tree.getNodeByID(treeID);
+  if (!treeNode) {
+    return;
+  }
 
   // Store complete lexical node data as clean JSON if provided.
   if (lexicalNodeJSON) {
@@ -521,6 +529,33 @@ export function propagateTextNode(
           }
         }
         
+        // If a text node emits only an "updated" mutation before we have a
+        // mapping, treat it as a create so parent/index are explicit.
+        if (!existingTreeID) {
+          const { parent, parentId, index, textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
+            const parent = currentNode.getParent();
+            const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
+            const index = currentNode.getIndexWithinParent();
+            const textContent = currentNode.getTextContent();
+            const format = currentNode.getFormat();
+            const mode = currentNode.getMode();
+
+            let lexicalNodeJSON: any = undefined;
+            try {
+              lexicalNodeJSON = currentNode.exportJSON();
+            } catch (error) {
+              console.warn('Failed to export node JSON in propagateTextNode updated(create fallback):', error);
+            }
+
+            return { parent, parentId, index, textContent, format, mode, lexicalNodeJSON };
+          });
+
+          if (parentId !== undefined) {
+            createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, lexicalNodeJSON, options);
+          }
+          return;
+        }
+
         // Normal update case - parent hasn't changed
         const { textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
           const textContent = currentNode.getTextContent();

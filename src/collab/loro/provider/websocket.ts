@@ -336,6 +336,7 @@ messageHandlers[messageUpdate] = (
     const importStatus = provider.doc.import(updateBytes)
 
     const afterVersion = provider.doc.version()
+    console.log('[SEED-DEBUG] messageUpdate: imported', updateBytes.length, 'bytes; importStatus=', JSON.stringify(importStatus))
     
     // Update our last exported version to include the remote changes
     // This ensures we don't re-export remote changes
@@ -573,6 +574,23 @@ const setupWS = (provider) => {
           })
         }
       }
+
+      // Flush any local document updates that were buffered while the socket
+      // was not ready to send (e.g. the initial-content bootstrap ran before
+      // the connection opened). Without this, seeded content committed before
+      // the socket opened would never reach the server or other collaborators.
+      if (provider._pendingUpdates.length > 0) {
+        const pending = provider._pendingUpdates
+        provider._pendingUpdates = []
+        console.log('[SEED-DEBUG] ws.onopen: flushing', pending.length, 'buffered local updates')
+        for (const pendingUpdate of pending) {
+          sendMessage(ws, {
+            type: 'update',
+            update: Array.from(pendingUpdate),
+            docId: provider.docId
+          })
+        }
+      }
     }
     provider.emit('status', [{
       status: 'connecting'
@@ -634,6 +652,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _exitIntegrator = null
   _bcSubscriber = null
   _lastExportedVersion: VersionVector = null  // Track last exported version for incremental updates
+  _pendingUpdates: Uint8Array[] = []  // Local updates buffered while the socket is not ready to send
 
   /**
    * @param {string} wsServerUrl
@@ -777,8 +796,25 @@ export class WebsocketProvider extends ObservableV2<any> {
         update: Array.from(update),
         docId: this.docId
       }
-      
-      broadcastMessage(this, updateMessage)
+
+      const ws = this.ws
+      if (this.wsconnected && ws && ws.readyState === ws.OPEN) {
+        console.log('[SEED-DEBUG] _updateHandler: sending local update over WS', update.length, 'bytes')
+        sendMessage(ws, updateMessage)
+      } else {
+        // The socket is not ready yet — this happens when the initial-content
+        // bootstrap commits before the connection opens. Loro delivers each
+        // local update to subscribeLocalUpdates exactly once, so dropping it
+        // here would lose the seeded content permanently (remote peers would
+        // never receive it). Buffer it and flush on open instead.
+        console.log('[SEED-DEBUG] _updateHandler: WS not ready, buffering local update', update.length, 'bytes (pending now', this._pendingUpdates.length + 1, ')')
+        this._pendingUpdates.push(update)
+      }
+
+      // Mirror to other same-origin tabs when the BroadcastChannel is available.
+      if (this.bcconnected) {
+        bc.publish(this.bcChannel, JSON.stringify(updateMessage), this)
+      }
     }
     // Document update integrater - called when Loro emits document change events
     /**
