@@ -72,7 +72,7 @@ export function setupLoroDebugging(binding: Binding): void {
         console.log('');
         
         if (rootNodes.length === 0) {
-          console.log('⚠️  No root nodes found!');
+          console.log('  No root nodes found!');
         } else {
           rootNodes.forEach((root, index) => {
             const isLastRoot = index === rootNodes.length - 1;
@@ -86,9 +86,9 @@ export function setupLoroDebugging(binding: Binding): void {
     },
     verifyStructure: () => {
       const binding = (window as any).debugLoro.binding as Binding;
-      if (!binding) return console.log('❌ Loro Binding not available');
+      if (!binding) return console.log(' Loro Binding not available');
       
-      console.log('🔍 LORO TREE VERIFICATION:');
+      console.log(' LORO TREE VERIFICATION:');
       const tree = binding.tree;
       const nodes = tree.nodes();
       
@@ -98,7 +98,7 @@ export function setupLoroDebugging(binding: Binding): void {
       
       // Check mapping consistency
       const mapper = binding.nodeMapper;
-      console.log('\n📍 Node Mappings:');
+      console.log('\n Node Mappings:');
       
       nodes.forEach((node, index) => {
         const data = Object.fromEntries(node.data.entries());
@@ -106,7 +106,7 @@ export function setupLoroDebugging(binding: Binding): void {
         // Get lexical key from mapper instead of node data
         const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(treeId) || 'no-key';
         
-        console.log(`\n📍 Node ${index}:`);
+        console.log(`\n Node ${index}:`);
         console.log('  TreeID:', treeId);
         console.log('  Lexical Key:', lexicalKey);
         console.log('  Element Type:', data.elementType || 'N/A');
@@ -134,7 +134,7 @@ export function setupLoroDebugging(binding: Binding): void {
         return !parent && !data.isRoot;
       });
       if (orphanedNodes.length > 0) {
-        console.log('\n⚠️  WARNING: Found orphaned nodes (no parent, not root):');
+        console.log('\n  WARNING: Found orphaned nodes (no parent, not root):');
         orphanedNodes.forEach(node => {
           const data = Object.fromEntries(node.data.entries());
           const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(node.id) || 'no-key';
@@ -143,7 +143,7 @@ export function setupLoroDebugging(binding: Binding): void {
       }
       
       // Show parent-child relationships
-      console.log('\n🌳 Parent-Child Relationships:');
+      console.log('\n Parent-Child Relationships:');
       nodes.forEach(node => {
         const data = Object.fromEntries(node.data.entries());
         const parent = node.parent();
@@ -178,7 +178,7 @@ export function setupLoroDebugging(binding: Binding): void {
         // Get lexical key from mapper instead of node data
         const lexicalKey = binding.nodeMapper?.getLexicalKeyByLoroId(node.id) || 'no-key';
         
-        console.log('🔍 Loro Node Details:', {
+        console.log(' Loro Node Details:', {
           treeId: node.id,
           lexicalKey: lexicalKey,
           elementType: data.elementType,
@@ -191,20 +191,20 @@ export function setupLoroDebugging(binding: Binding): void {
         
         // Handle different lexical data formats
         if (Object.keys(lexicalProps).length > 0) {
-          console.log('📄 Lexical Data (Individual Properties):', lexicalProps);
+          console.log(' Lexical Data (Individual Properties):', lexicalProps);
         } else if (data.lexical) {
           if (typeof data.lexical === 'object') {
-            console.log('📄 Lexical Data (Current JSON Object):', data.lexical);
+            console.log(' Lexical Data (Current JSON Object):', data.lexical);
           } else if (typeof data.lexical === 'string') {
             try {
               const lexicalData = JSON.parse(data.lexical);
-              console.log('📄 Lexical Data (Legacy JSON String):', lexicalData);
+              console.log(' Lexical Data (Legacy JSON String):', lexicalData);
             } catch (e) {
-              console.log('❌ Failed to parse lexical data:', e);
+              console.log(' Failed to parse lexical data:', e);
             }
           }
         } else {
-          console.log('⚠️ No lexical data found for this node');
+          console.log(' No lexical data found for this node');
         }
         
         // Fetch and log the corresponding lexical node
@@ -237,15 +237,15 @@ export function setupLoroDebugging(binding: Binding): void {
             });
             
             if (nodeInfo) {
-              console.log('🔗 Linked Lexical Node:', nodeInfo);
+              console.log(' Linked Lexical Node:', nodeInfo);
             } else {
-              console.log('⚠️ No lexical node found in editor state for key:', lexicalKey, '(node may have been deleted or not yet created)');
+              console.log(' No lexical node found in editor state for key:', lexicalKey, '(node may have been deleted or not yet created)');
             }
           } catch (e) {
-            console.log('❌ Failed to fetch lexical node:', e);
+            console.log(' Failed to fetch lexical node:', e);
           }
         } else {
-          console.log('⚠️ No valid lexical key found for this Loro node (key:', lexicalKey, ')');
+          console.log(' No valid lexical key found for this Loro node (key:', lexicalKey, ')');
         }
       } else {
         console.warn(`Node with TreeID "${treeId}" not found`);
@@ -307,7 +307,7 @@ export function setupLoroDebugging(binding: Binding): void {
       const nodes = tree.nodes();
       
       // Debug: log the actual structure to console as a tree
-      console.log('🟢 LORO Tree structure:');
+      console.log(' LORO Tree structure:');
       console.log(`  Total nodes: ${nodes.length}`);
       console.log(`  Peer ID: ${binding.doc.peerIdStr}`);
       console.log(`  Client ID: ${binding.clientID}`);
@@ -344,7 +344,7 @@ export function setupLoroDebugging(binding: Binding): void {
       });
       
       if (rootNodes.length === 0) {
-        console.log('  ⚠️  No root nodes found!');
+        console.log('    No root nodes found!');
       } else {
         rootNodes.forEach((root, index) => {
           const isLastRoot = index === rootNodes.length - 1;
@@ -352,9 +352,9 @@ export function setupLoroDebugging(binding: Binding): void {
         });
       }
 
-      console.log('🟢 Loro Tree:', tree.toJSON());
+      console.log(' Loro Tree:', tree.toJSON());
       
-      console.log('🟢 Lexical State:', binding.editor.getEditorState().toJSON());
+      console.log(' Lexical State:', binding.editor.getEditorState().toJSON());
       
       const treeHTML = (window as any).debugLoro.generateTreeHTML(nodes);
       
@@ -420,7 +420,7 @@ export function setupLoroDebugging(binding: Binding): void {
       
       debugDiv.innerHTML = `
         <div class="debug-drag-integrate" style="color: #00ff88; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding: 15px 15px 5px 15px; cursor: move; background: linear-gradient(90deg, rgba(0,255,136,0.1), transparent);">
-          🟢 LORO TREE <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
+           LORO TREE <span style="float: right; font-size: 9px; color: #666;">⋮⋮ drag</span>
         </div>
         <div style="padding: 0 15px 15px 15px; overflow-y: auto; max-height: calc(80vh - 50px);">
           <div style="color: #00ffaa; margin-bottom: 8px;">Total nodes: ${nodes.length}</div>
@@ -430,12 +430,12 @@ export function setupLoroDebugging(binding: Binding): void {
             ${treeHTML}
           </div>
           <div style="margin-top: 10px; font-size: 10px; color: #666;">
-            <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;">🔄 Refresh</span> | 
-            <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;">✅ Verify</span> | 
-            <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;">📝 Log</span> |
-            <span onclick="window.debugLoro.cleanupEphemeralStore()" style="color: #ffaa00; cursor: pointer; text-decoration: underline;">🧹 Cleanup</span> |
-            <span onclick="window.debugLoro.resetGlobalEphemeralStore()" style="color: #ff6600; cursor: pointer; text-decoration: underline;">🔄 Reset</span> |
-            <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;">❌ Close</span>
+            <span onclick="window.debugLoro.addDebugToPage()" style="color: #00ffaa; cursor: pointer; text-decoration: underline;"> Refresh</span> | 
+            <span onclick="window.debugLoro.verifyStructure()" style="color: #00ff66; cursor: pointer; text-decoration: underline;"> Verify</span> | 
+            <span onclick="window.debugLoro.logStructure()" style="color: #00ffdd; cursor: pointer; text-decoration: underline;"> Log</span> |
+            <span onclick="window.debugLoro.cleanupEphemeralStore()" style="color: #ffaa00; cursor: pointer; text-decoration: underline;"> Cleanup</span> |
+            <span onclick="window.debugLoro.resetGlobalEphemeralStore()" style="color: #ff6600; cursor: pointer; text-decoration: underline;"> Reset</span> |
+            <span onclick="document.getElementById('debug-loro').remove()" style="color: #ff0066; cursor: pointer; text-decoration: underline;"> Close</span>
           </div>
         </div>
       `;
@@ -443,29 +443,29 @@ export function setupLoroDebugging(binding: Binding): void {
     },
     cleanupEphemeralStore: (provider?: any) => {
       if (!provider) {
-        console.log('⚠️ No provider passed. Usage: window.debugLoro.cleanupEphemeralStore(provider)');
+        console.log(' No provider passed. Usage: window.debugLoro.cleanupEphemeralStore(provider)');
         console.log('You can get the provider from your useCollaboration hook');
         return;
       }
       
       if (typeof provider.cleanupStaleStates !== 'function') {
-        console.log('❌ Provider does not have cleanupStaleStates method');
+        console.log(' Provider does not have cleanupStaleStates method');
         return;
       }
       
-      console.log('🧹 Cleaning up stale ephemeral states...');
+      console.log(' Cleaning up stale ephemeral states...');
       provider.cleanupStaleStates();
     },
     resetGlobalEphemeralStore: () => {
       try {
         // We need to access the WebsocketProvider class which may not be globally available
-        console.log('🔄 Attempting to reset global EphemeralStore...');
-        console.log('💡 You can also refresh the browser to clear the global store');
+        console.log(' Attempting to reset global EphemeralStore...');
+        console.log(' You can also refresh the browser to clear the global store');
         
         // For now, instruct user to refresh
         alert('To reset the global ephemeral store and clear all collaborators, please refresh the browser page.');
       } catch (error) {
-        console.warn('❌ Reset failed:', error.message);
+        console.warn(' Reset failed:', error.message);
       }
     }
   };

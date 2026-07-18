@@ -62,7 +62,7 @@ class AwarenessAdapter implements AwarenessProvider {
     // Use the same client ID as the binding for consistency
     this.localClientId = doc ? generateClientID(doc) : generateRandomClientID()
     
-    console.log('🔄 AwarenessAdapter created:', {
+    console.log(' AwarenessAdapter created:', {
       localClientId: this.localClientId,
       docPeerId: doc ? doc.peerId : 'no-doc',
       existingStatesCount: Object.keys(ephemeralStore.getAllStates()).length
@@ -347,7 +347,7 @@ messageHandlers[messageUpdate] = (
     
     return null // No response needed
   } catch (error) {
-    console.warn(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
+    console.warn(` [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
     return null
   }
 }
@@ -520,7 +520,7 @@ const setupWS = (provider) => {
         status: 'connected'
       }])
       
-      console.log('✅ WebSocket connection established, requesting initial data')
+      console.log(' WebSocket connection established, requesting initial data')
       
       // Since we're in onopen, we know the WebSocket is ready
       // Use sendMessage directly to avoid any race conditions
@@ -535,11 +535,11 @@ const setupWS = (provider) => {
           docId: provider.docId,
           clientId: clientId
         }
-        console.log(`🔄 Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
-        console.log(`🔄 Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
+        console.log(` Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
+        console.log(` Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
         sendMessage(ws, snapshotRequest)
       } else {
-        console.log('📸 Snapshot already loaded, skipping request')
+        console.log(' Snapshot already loaded, skipping request')
       }
       
       // Then request initial ephemeral state from server  
@@ -588,13 +588,13 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
     sendMessage(ws, message)
   } else {
-    console.log('❌ [BROADCAST] WebSocket not ready for sending');
+    console.log(' [BROADCAST] WebSocket not ready for sending');
   } 
   
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, JSON.stringify(message), provider)
   } else {
-    console.log('📻 [BROADCAST] BroadcastChannel not connected')
+    console.log(' [BROADCAST] BroadcastChannel not connected')
   }
 }
 
@@ -688,7 +688,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           WebsocketProvider.globalEphemeralStore = new EphemeralStore(300000) // 5 minute timeout
           console.log('🆕 Created new global EphemeralStore')
         } else {
-          console.log('♻️ Reusing existing global EphemeralStore - cleaning up stale user states')
+          console.log(' Reusing existing global EphemeralStore - cleaning up stale user states')
           // Clean up all existing user states when reusing store to prevent accumulation
           const allStates = WebsocketProvider.globalEphemeralStore.getAllStates()
           Object.keys(allStates).forEach(key => {
@@ -696,7 +696,7 @@ export class WebsocketProvider extends ObservableV2<any> {
             const clientId = parseInt(key, 10)
             if (!isNaN(clientId)) {
               WebsocketProvider.globalEphemeralStore!.delete(key)
-              console.log('🧹 Cleaned up stale user state:', key)
+              console.log(' Cleaned up stale user state:', key)
             }
           })
         }

@@ -29,7 +29,7 @@ export function createWebsocketProvider(
   }
 
   const providerInstanceId = Math.random().toString(36).substr(2, 9);
-  console.log(`🏭 Creating WebsocketProvider instance (ID: ${providerInstanceId}) for docId: ${id}`);
+  console.log(` Creating WebsocketProvider instance (ID: ${providerInstanceId}) for docId: ${id}`);
   
   // Use provided websocketUrl or fallback to URL parameters/defaults
   const rawWebsocketUrl = websocketUrl || (() => {
@@ -66,6 +66,6 @@ export function createWebsocketProvider(
     },
   );
   
-  console.log(`🏭 WebsocketProvider created for: ${finalWebsocketUrl}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
+  console.log(` WebsocketProvider created for: ${finalWebsocketUrl}/${id} with resyncInterval: ${RESYNC_INTERVAL}ms`);
   return websocketProvider;
 }

@@ -9,7 +9,8 @@ import {
   $isElementNode,
   $isDecoratorNode,
   ElementNode,
-  LexicalNode
+  LexicalNode,
+  NodeKey,
 } from 'lexical';
 import { TreeID } from 'loro-crdt';
 import { BaseIntegrator } from './BaseIntegrator';
@@ -270,22 +271,31 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
     provider: Provider
   ): void {
     const lexicalKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.target);
-    invariant(
-      lexicalKey != null,
-      'integrateDelete: no Lexical key for delete target',
-      { target: String(operation.target) },
-    );
+    // Parent-first delete batches can make child mappings stale before their
+    // own delete ops arrive. Missing mapping here is therefore benign.
+    if (!lexicalKey) {
+      return;
+    }
 
     const nodeToDelete = $getNodeByKey(lexicalKey);
-    invariant(nodeToDelete != null, 'integrateDelete: node to delete not found', { lexicalKey });
+    // Node may already be gone due to an ancestor deletion in this same batch.
+    if (!nodeToDelete) {
+      binding.nodeMapper.removeMappingForKey(lexicalKey);
+      return;
+    }
 
     // The root is never deletable in Lexical; a delete resolving to it means a
     // mapping is wrong upstream — surface it rather than silently ignoring.
-    invariant(
-      nodeToDelete !== $getRoot(),
-      'integrateDelete: attempted to delete the root node',
-      { target: String(operation.target) },
-    );
+    if (nodeToDelete === $getRoot()) {
+      return;
+    }
+
+    // Clean descendant mappings first so later child-delete ops in the same
+    // batch become harmless no-ops instead of failing with stale mappings.
+    const descendantKeys = this.collectDescendantKeys(nodeToDelete);
+    for (const key of descendantKeys) {
+      binding.nodeMapper.removeMappingForKey(key);
+    }
 
     // Remove from the Lexical tree.
     nodeToDelete.remove();
@@ -293,6 +303,24 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
     // Clean up mapping only — the Loro tree already processed this deletion
     // from the remote peer; calling tree.delete() again would throw.
     binding.nodeMapper.removeMappingForKey(lexicalKey);
+  }
+
+  private collectDescendantKeys(node: LexicalNode): NodeKey[] {
+    if (!$isElementNode(node)) {
+      return [];
+    }
+
+    const keys: NodeKey[] = [];
+    const stack = [...node.getChildren()];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      keys.push(current.getKey());
+      if ($isElementNode(current)) {
+        stack.push(...current.getChildren());
+      }
+    }
+
+    return keys;
   }
 
   /**

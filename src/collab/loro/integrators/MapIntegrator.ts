@@ -249,7 +249,7 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         const registeredNodes = binding.editor._nodes;
         const nodeInfo = registeredNodes.get(targetType);
         if (!nodeInfo) {
-          console.warn(`🗺️ MapIntegrator: Node type '${targetType}' not registered`);
+          console.warn(` MapIntegrator: Node type '${targetType}' not registered`);
           return;
         }
         const serializedData = { ...data };
@@ -266,7 +266,7 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         binding.nodeMapper.removeMappingForKey(lexicalKey);
         binding.nodeMapper.setMapping(newNode.getKey(), treeId);
       } catch (error) {
-        console.warn(`🗺️ MapIntegrator: importJSON+replace failed for decorator ${targetType} node ${lexicalKey}:`, error);
+        console.warn(` MapIntegrator: importJSON+replace failed for decorator ${targetType} node ${lexicalKey}:`, error);
       }
     } else {
       try {
@@ -284,7 +284,7 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         const writable = targetNode.getWritable();
         writable.updateFromJSON(serializedData);
       } catch (error) {
-        console.warn(`🗺️ MapIntegrator: updateFromJSON failed for ${targetType} node ${lexicalKey}:`, error);
+        console.warn(` MapIntegrator: updateFromJSON failed for ${targetType} node ${lexicalKey}:`, error);
       }
     }
   }

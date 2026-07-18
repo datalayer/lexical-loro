@@ -308,7 +308,7 @@ export class NodeMapper {
     // 2. Normal collaboration flow as nodes are created/updated
     // 
     // This method is kept for compatibility but is now a no-op.
-    console.log('📍 syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
+    console.log(' syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
   }
 }
 

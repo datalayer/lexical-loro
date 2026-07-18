@@ -72,7 +72,8 @@ export function syncLexicalToLoro(
         }
       });
 
-      // Phase 2: Collect all ElementNode mutations, sort by depth, then propagate
+      // Phase 2: Collect all ElementNode mutations.
+      // Apply destroys deepest-first, then creates/updates parent-first.
       const elementMutations: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string; depth: number }> = [];
       
       mutatedNodes.forEach((nodeMap, Klass) => {
@@ -95,29 +96,77 @@ export function syncLexicalToLoro(
         }
       });
       
-      // Sort by depth ascending → parents (depth 1) are propagated before children (depth 2, 3, …)
-      elementMutations.sort((a, b) => a.depth - b.depth);
-      
-      for (const { mutation, nodeKey } of elementMutations) {
+      const elementDestroyed = elementMutations
+        .filter(m => m.mutation === 'destroyed')
+        .sort((a, b) => b.depth - a.depth); // children first
+
+      const elementCreated = elementMutations
+        .filter(m => m.mutation === 'created')
+        .sort((a, b) => a.depth - b.depth); // parents first
+
+      const elementUpdated = elementMutations
+        .filter(m => m.mutation === 'updated')
+        .sort((a, b) => a.depth - b.depth); // parents first, after creates
+
+      for (const { mutation, nodeKey } of [...elementDestroyed, ...elementCreated, ...elementUpdated]) {
         propagateElementNode(update, mutation, nodeKey, mutatorOptions);
       }
       
-      // Phase 3: Process leaf children (their parents are now guaranteed to be mapped)
+      // Phase 3: Process leaf children.
+      // Apply destroys first to avoid re-create/update races during bulk deletes.
+      const textDestroyed: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string }> = [];
+      const textCreateOrUpdate: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string }> = [];
+      const lineBreakDestroyed: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string }> = [];
+      const lineBreakCreateOrUpdate: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string }> = [];
+      const decoratorDestroyed: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string }> = [];
+      const decoratorCreateOrUpdate: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string }> = [];
+
       mutatedNodes.forEach((nodeMap, Klass) => {
         if (isClassExtending(Klass, TextNode)) {
           nodeMap.forEach((mutation, nodeKey) => {
-            propagateTextNode(update, mutation, nodeKey, mutatorOptions);
+            if (mutation === 'destroyed') {
+              textDestroyed.push({ mutation, nodeKey });
+            } else {
+              textCreateOrUpdate.push({ mutation, nodeKey });
+            }
           });
         } else if (isClassExtending(Klass, LineBreakNode)) {
           nodeMap.forEach((mutation, nodeKey) => {
-            propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
+            if (mutation === 'destroyed') {
+              lineBreakDestroyed.push({ mutation, nodeKey });
+            } else {
+              lineBreakCreateOrUpdate.push({ mutation, nodeKey });
+            }
           });
         } else if (isClassExtending(Klass, DecoratorNode)) {
           nodeMap.forEach((mutation, nodeKey) => {
-            propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
+            if (mutation === 'destroyed') {
+              decoratorDestroyed.push({ mutation, nodeKey });
+            } else {
+              decoratorCreateOrUpdate.push({ mutation, nodeKey });
+            }
           });
         }
       });
+
+      for (const { mutation, nodeKey } of textDestroyed) {
+        propagateTextNode(update, mutation, nodeKey, mutatorOptions);
+      }
+      for (const { mutation, nodeKey } of lineBreakDestroyed) {
+        propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
+      }
+      for (const { mutation, nodeKey } of decoratorDestroyed) {
+        propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
+      }
+      for (const { mutation, nodeKey } of textCreateOrUpdate) {
+        propagateTextNode(update, mutation, nodeKey, mutatorOptions);
+      }
+      for (const { mutation, nodeKey } of lineBreakCreateOrUpdate) {
+        propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
+      }
+      for (const { mutation, nodeKey } of decoratorCreateOrUpdate) {
+        propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
+      }
 
       // Commit only when there were actual node mutations (not selection-only changes)
       binding.doc.commit({ origin: binding.doc.peerIdStr });

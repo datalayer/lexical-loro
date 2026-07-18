@@ -75,6 +75,8 @@ export function updateElementNodeInLoro(
   elementType?: string,
   parentId?: TreeID,
   index?: number,
+  previousSiblingId?: TreeID,
+  nextSiblingId?: TreeID,
   metadata?: Record<string, any>,
   lexicalNodeJSON?: any, // JSON object from exportJSON()
   options?: ElementNodeMutatorOptions
@@ -115,6 +117,24 @@ export function updateElementNodeInLoro(
 
     const sameParent = currentParentId === parentId;
 
+    // DIAGNOSTIC: an existing element that only had its text edited should never
+    // report sameParent=false. When it does, its Loro parent diverges from the
+    // mapped Lexical parent — the tell-tale of duplicate/mismatched Loro roots.
+    if (!sameParent) {
+      const roots = tree.roots();
+      console.warn('[loro-collab][diag] element move with different parent', {
+        nodeKey,
+        treeId: treeNode.id,
+        index,
+        currentIndex,
+        currentParentId: currentParentId ?? '(root/none)',
+        targetParentId: parentId ?? '(root/none)',
+        loroRootCount: roots.length,
+        loroRootIds: roots.map(r => r.id),
+        loroRootTypes: roots.map(r => r.data.get('elementType')),
+      });
+    }
+
     // Re-issuing a move on every content edit is unnecessary and races with
     // sibling creation (the classic source of "index out of range"). Only move
     // when the parent or index genuinely changed. This is a real no-op check,
@@ -133,16 +153,60 @@ export function updateElementNodeInLoro(
         //   same-parent reorder : [0, children.length - 1]
         //   cross-parent move   : [0, children.length]
         // An index outside this range means the position was computed against
-        // siblings that are not yet synced — surface it, do not clamp.
+        // siblings that are not yet synced. Before failing, resolve index
+        // from mapped sibling anchors when available.
+        let targetIndex = index;
         const maxIndex = sameParent
           ? Math.max(parentChildCount - 1, 0)
           : parentChildCount;
-        invariant(
-          index >= 0 && index <= maxIndex,
-          'updateElementNodeInLoro: move index out of range',
-          { nodeKey, treeId: treeNode.id, index, maxIndex, sameParent },
-        );
-        tree.move(treeNode.id, parentId, index);
+
+        if (targetIndex < 0 || targetIndex > maxIndex) {
+          const targetSiblings = parentNode
+            ? (parentNode.children() ?? [])
+            : tree.roots();
+
+          if (previousSiblingId) {
+            const prevIndex = targetSiblings.findIndex(child => child.id === previousSiblingId);
+            if (prevIndex >= 0) {
+              targetIndex = prevIndex + 1;
+            }
+          }
+
+          if ((targetIndex < 0 || targetIndex > maxIndex) && nextSiblingId) {
+            const nextIndex = targetSiblings.findIndex(child => child.id === nextSiblingId);
+            if (nextIndex >= 0) {
+              targetIndex = nextIndex;
+            }
+          }
+
+          // A move can observe transiently sparse sibling mappings within one
+          // update batch (e.g. pressing Enter at the end of the document, where
+          // the sibling created in the same batch is not yet mapped). When the
+          // anchors cannot resolve the position, clamp into the valid Loro range
+          // instead of throwing: a hard failure rolls back the user's keystroke,
+          // whereas a bounded placement still converges via the CRDT and can be
+          // refined by subsequent updates.
+          if (targetIndex < 0 || targetIndex > maxIndex) {
+            const clamped = Math.min(Math.max(targetIndex, 0), maxIndex);
+            console.warn(
+              `[loro-collab] updateElementNodeInLoro: clamping out-of-range move index`,
+              {
+                nodeKey,
+                treeId: treeNode.id,
+                index,
+                targetIndex,
+                clamped,
+                maxIndex,
+                sameParent,
+                previousSiblingId,
+                nextSiblingId,
+              },
+            );
+            targetIndex = clamped;
+          }
+        }
+
+        tree.move(treeNode.id, parentId, targetIndex);
       } else {
         tree.move(treeNode.id, parentId, parentChildCount);
       }
@@ -390,7 +454,7 @@ export function propagateElementNode(
           // because SyncLexicalToLoro sorts element mutations by depth.
           // But as a safety net, log a warning.
           if (parent && !parentId) {
-            console.warn(`⚠️ ElementNodePropagator: parent mapping missing for ${elementType} nodeKey=${nodeKey}, parentKey=${parent.getKey()}`);
+            console.warn(` ElementNodePropagator: parent mapping missing for ${elementType} nodeKey=${nodeKey}, parentKey=${parent.getKey()}`);
           }
         
           // Collect metadata (format, style, direction, etc.)
@@ -419,6 +483,8 @@ export function propagateElementNode(
       if (currentNode && $isElementNode(currentNode)) {
         // Use editorState.read() to safely access node methods
         let parent: any, parentId: TreeID | undefined, index: number;
+        let previousSiblingId: TreeID | undefined;
+        let nextSiblingId: TreeID | undefined;
         let elementType: string;
         const metadata: Record<string, any> = {};
         
@@ -432,6 +498,28 @@ export function propagateElementNode(
           const mapper = getNodeMapper();
           parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
           index = currentNode.getIndexWithinParent();
+
+          // Resolve nearest mapped sibling anchors to stabilize target index
+          // when Lexical index includes siblings not yet represented in Loro.
+          if (parent) {
+            const siblings = parent.getChildren();
+            for (let i = index - 1; i >= 0; i--) {
+              const candidate = siblings[i];
+              const candidateTreeId = mapper.getTreeIDByLexicalKey(candidate.getKey());
+              if (candidateTreeId && tree.has(candidateTreeId)) {
+                previousSiblingId = candidateTreeId;
+                break;
+              }
+            }
+            for (let i = index + 1; i < siblings.length; i++) {
+              const candidate = siblings[i];
+              const candidateTreeId = mapper.getTreeIDByLexicalKey(candidate.getKey());
+              if (candidateTreeId && tree.has(candidateTreeId)) {
+                nextSiblingId = candidateTreeId;
+                break;
+              }
+            }
+          }
         
           // Get element type and metadata
           elementType = currentNode.getType();
@@ -451,7 +539,17 @@ export function propagateElementNode(
         });
         
         // Update the node in Loro after safely reading from editor state
-        updateElementNodeInLoro(nodeKey, elementType, parentId, index, metadata, lexicalNodeJSON, options);
+        updateElementNodeInLoro(
+          nodeKey,
+          elementType,
+          parentId,
+          index,
+          previousSiblingId,
+          nextSiblingId,
+          metadata,
+          lexicalNodeJSON,
+          options,
+        );
       }
       break;
     }

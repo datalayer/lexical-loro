@@ -23,7 +23,7 @@ interface ListDiff {
 export class ListIntegrator implements BaseIntegrator<ListDiff> {
   
   integrate(diff: ListDiff, binding: Binding, provider: Provider): void {
-    console.log('📋 Handling ListDiff:', diff);
+    console.log(' Handling ListDiff:', diff);
     this.integrateInternal(diff, binding, provider);
   }
 
@@ -42,7 +42,7 @@ export class ListIntegrator implements BaseIntegrator<ListDiff> {
             this.integrateRetain(change, binding, provider);
             break;
           default:
-            console.warn(`📋 Unknown list change type: ${change.type}`);
+            console.warn(` Unknown list change type: ${change.type}`);
         }
       });
     }
@@ -83,7 +83,7 @@ export class ListIntegrator implements BaseIntegrator<ListDiff> {
     // They represent portions of the list that remain unchanged
     
     if (change.attributes) {
-      console.log(`📋 List retain with attributes at ${change.index}, length: ${change.length}`, change.attributes);
+      console.log(` List retain with attributes at ${change.index}, length: ${change.length}`, change.attributes);
       // Handle any attribute changes if needed
     }
   }

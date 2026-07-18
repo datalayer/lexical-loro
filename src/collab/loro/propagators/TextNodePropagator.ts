@@ -324,7 +324,7 @@ export function applyTextFormatInLoro(
     // Try a simple read operation to verify the container is accessible
     treeNode.data.get('format');
   } catch (error) {
-    console.warn(`📝 TextNode ${nodeKey} container deleted during format check (normal during text operations):`, error.message);
+    console.warn(` TextNode ${nodeKey} container deleted during format check (normal during text operations):`, error.message);
     return;
   }
   
@@ -343,7 +343,7 @@ export function applyTextFormatInLoro(
     treeNode.data.set('format', currentFormat);
     treeNode.data.set('lastUpdated', Date.now());
   } catch (error) {
-    console.warn(`📝 TextNode ${nodeKey} container deleted during format update (normal during text operations):`, error.message);
+    console.warn(` TextNode ${nodeKey} container deleted during format update (normal during text operations):`, error.message);
     return;
   }
 }
@@ -381,7 +381,7 @@ export function propagateTextNode(
               currentParentId = parentNode ? parentNode.id.toString() : undefined;
             }
           } catch (error) {
-            console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeID}:`, error);
+            console.warn(` Failed to get parent for existing TreeID ${existingTreeID}:`, error);
           }
           
           return { currentParentId, expectedParentId };
@@ -399,7 +399,7 @@ export function propagateTextNode(
               actualTreeID = treeNode.id;
             }
           } catch (error) {
-            console.warn(`📝 Could not get TreeNode for ${existingTreeID} during creation:`, error);
+            console.warn(` Could not get TreeNode for ${existingTreeID} during creation:`, error);
           }
           
           // Clear the old mapping first to avoid conflicts
@@ -411,7 +411,7 @@ export function propagateTextNode(
               tree.delete(actualTreeID);
             }
           } catch (error) {
-            console.warn(`📝 Failed to delete TreeNode ${actualTreeID} during creation:`, error);
+            console.warn(` Failed to delete TreeNode ${actualTreeID} during creation:`, error);
           }
         }
       }
@@ -467,7 +467,7 @@ export function propagateTextNode(
                 currentParentId = parentNode ? parentNode.id.toString() : undefined;
               }
             } catch (error) {
-              console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeID} during update:`, error);
+              console.warn(` Failed to get parent for existing TreeID ${existingTreeID} during update:`, error);
             }
             
             return { currentParentId, expectedParentId, parent };
@@ -483,7 +483,7 @@ export function propagateTextNode(
                 actualTreeID = treeNode.id;
               }
             } catch (error) {
-              console.warn(`📝 Could not get TreeNode for ${existingTreeID}:`, error);
+              console.warn(` Could not get TreeNode for ${existingTreeID}:`, error);
             }
             
             // Clear the old mapping first to avoid conflicts
@@ -495,7 +495,7 @@ export function propagateTextNode(
                 tree.delete(actualTreeID);
               }
             } catch (error) {
-              console.warn(`📝 Failed to delete TreeNode ${actualTreeID} during update:`, error);
+              console.warn(` Failed to delete TreeNode ${actualTreeID} during update:`, error);
             }
             
             // Now recreate the TextNode with the new parent (treat as "created")

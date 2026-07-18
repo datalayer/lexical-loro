@@ -177,31 +177,31 @@ class WSSharedDoc:
         # Initialize with proper Lexical content structure if needed (only if no content was loaded)
         if not content_loaded:
             try:
-                logger.debug(f"[Server] No persisted content found, initializing with default Lexical content")
+                logger.debug(f"[LORO SERVER] No persisted content found, initializing with default Lexical content")
                 initialize_loro_doc_with_lexical_content(self.doc, logger)
                 self.doc.commit()
                 self.has_changes_since_save = True  # Mark as changed for initial save
-                logger.debug(f"[Server] Successfully initialized document with default Lexical content")
+                logger.debug(f"[LORO SERVER] Successfully initialized document with default Lexical content")
                 
                 # Verify initialization
                 tree = self.doc.get_tree(DEFAULT_TREE_NAME)
                 final_nodes = tree.nodes()  # method
                 final_roots = tree.roots     # property
-                logger.debug(f"[Server] After initialization - nodes: {len(final_nodes)}, roots: {len(final_roots)}")
+                logger.debug(f"[LORO SERVER] After initialization - nodes: {len(final_nodes)}, roots: {len(final_roots)}")
                 
             except Exception as e:
-                logger.error(f"[Server] Error initializing document with Lexical content: {e}")
+                logger.error(f"[LORO SERVER] Error initializing document with Lexical content: {e}")
                 # Fallback to empty document
                 try:
                     tree = self.doc.get_tree(DEFAULT_TREE_NAME)
                     root_id = tree.create()
                     self.doc.commit()
                     self.has_changes_since_save = True
-                    logger.warning(f"[Server] Fallback: Created basic empty document")
+                    logger.warning(f"[LORO SERVER] Fallback: Created basic empty document")
                 except Exception as fallback_e:
-                    logger.error(f"[Server] Even fallback initialization failed: {fallback_e}")
+                    logger.error(f"[LORO SERVER] Even fallback initialization failed: {fallback_e}")
         else:
-            logger.debug(f"[Server] Document restored from persistence, skipping initialization")
+            logger.debug(f"[LORO SERVER] Document restored from persistence, skipping initialization")
             # Log what content exists
             try:
                 tree = self.doc.get_tree(DEFAULT_TREE_NAME)
@@ -210,11 +210,11 @@ class WSSharedDoc:
                     try:
                         meta_map = tree.get_meta(root_id)
                         element_type = meta_map.get('elementType', 'unknown')
-                        logger.debug(f"[Server] Existing root {i}: {root_id} -> type: {element_type}")
+                        logger.debug(f"[LORO SERVER] Existing root {i}: {root_id} -> type: {element_type}")
                     except Exception as e:
-                        logger.debug(f"[Server] Error reading root {i}: {e}")
+                        logger.debug(f"[LORO SERVER] Error reading root {i}: {e}")
             except Exception as e:
-                logger.debug(f"[Server] Error accessing restored document content: {e}")
+                logger.debug(f"[LORO SERVER] Error accessing restored document content: {e}")
         
         self.conns = {}
         # Initialize proper Loro EphemeralStore with 30 second timeout (matching Node.js server)
@@ -254,7 +254,7 @@ class WSSharedDoc:
                                 asyncio.create_task(conn.send(json.dumps(asdict(message))))
                                 broadcast_count += 1
                             except Exception as send_error:
-                                logger.warning(f"[Server] ephemeral_change_handler - Failed to send to conn: {send_error}")
+                                logger.warning(f"[LORO SERVER] ephemeral_change_handler - Failed to send to conn: {send_error}")
                     
                     logger.debug(f"SERVER DEBUG - Broadcasted ephemeral changes to {broadcast_count} connections")
                     
@@ -262,12 +262,12 @@ class WSSharedDoc:
                     self.last_ephemeral_sender = None
                     
                 except Exception as broadcast_error:
-                    logger.error(f"[Server] ephemeral_change_handler - ERROR broadcasting: {broadcast_error}")
+                    logger.error(f"[LORO SERVER] ephemeral_change_handler - ERROR broadcasting: {broadcast_error}")
         
         # Subscribe to the ephemeral store changes
         self.ephemeral_store.subscribe(ephemeral_change_handler)
         
-        logger.debug(f"[Server] Initialized document '{name}' with Loro tree structure")
+        logger.debug(f"[LORO SERVER] Initialized document '{name}' with Loro tree structure")
     
     def _load_from_persistence(self):
         """Load document content from persistence if available and convert to Loro tree structure"""
@@ -368,10 +368,10 @@ class WSSharedDoc:
         try:
             # Remove the client's ephemeral state
             self.ephemeral_store.delete(client_id)
-            logger.info(f"[Server] CLEANED UP ephemeral state for clientID: {client_id}")
+            logger.info(f"[LORO SERVER] CLEANED UP ephemeral state for clientID: {client_id}")
             return {"success": True, "removed_keys": [client_id]}
         except Exception as e:
-            logger.warning(f"[Server] Failed to cleanup ephemeral state for {client_id}: {e}")
+            logger.warning(f"[LORO SERVER] Failed to cleanup ephemeral state for {client_id}: {e}")
             return {"success": False, "error": str(e)}
     
     def to_json(self) -> Dict[str, Any]:
@@ -569,22 +569,22 @@ def clear_docs():
     """Clear all cached documents - useful for server restarts"""
     global docs
     docs.clear()
-    logger.debug(f"[Server] Cleared document cache")
+    logger.debug(f"[LORO SERVER] Cleared document cache")
 
 def get_doc(docname: str):
     # Extract the actual document ID from WebSocket path if needed
     # Handle paths like "playground/0/actual_id" -> "actual_id"
     if '/' in docname:
         actual_doc_id = docname.split('/')[-1]
-        logger.debug(f"[Server] Extracted document ID '{actual_doc_id}' from path '{docname}'")
+        logger.debug(f"[LORO SERVER] Extracted document ID '{actual_doc_id}' from path '{docname}'")
     else:
         actual_doc_id = docname
     
     if actual_doc_id not in docs:
-        logger.debug(f"[Server] Creating new document: {actual_doc_id}")
+        logger.debug(f"[LORO SERVER] Creating new document: {actual_doc_id}")
         docs[actual_doc_id] = WSSharedDoc(actual_doc_id, global_load_model, global_save_model)
     else:
-        logger.debug(f"[Server] Retrieved existing document: {actual_doc_id}")
+        logger.debug(f"[LORO SERVER] Retrieved existing document: {actual_doc_id}")
     
     return docs[actual_doc_id]
 
@@ -615,26 +615,26 @@ def close_conn(doc, conn):
         if client_id:
             logger.info(f"[CORRELATION] Closed Frontend clientID: {client_id} (WebSocket {conn_id})")
         
-        logger.debug(f"[Server] Connection closing for document: {doc.name}")
-        logger.debug(f"[Server] Closing connection: {conn}")
+        logger.debug(f"[LORO SERVER] Connection closing for document: {doc.name}")
+        logger.debug(f"[LORO SERVER] Closing connection: {conn}")
         
         # Clean up ephemeral state for this client
         if client_id:
             try:
                 # Remove the client's ephemeral state
                 doc.ephemeral_store.delete(client_id)
-                logger.info(f"[Server] Cleaned up ephemeral state for clientID: {client_id}")
+                logger.info(f"[LORO SERVER] Cleaned up ephemeral state for clientID: {client_id}")
                 logger.info(f"[CORRELATION] Removed ephemeral data for Frontend clientID: {client_id}")
             except Exception as ephemeral_error:
-                logger.warning(f"[Server] Failed to cleanup ephemeral state for {client_id}: {ephemeral_error}")
+                logger.warning(f"[LORO SERVER] Failed to cleanup ephemeral state for {client_id}: {ephemeral_error}")
         else:
-            logger.warning(f"[Server] No client_id available for connection cleanup, cannot remove ephemeral state")
+            logger.warning(f"[LORO SERVER] No client_id available for connection cleanup, cannot remove ephemeral state")
         
         del doc.conns[conn]
-        logger.debug(f"[Server] Remaining connections for document {doc.name}: {len(doc.conns)}")
-        logger.debug(f"[Server] Remaining connections list: {list(doc.conns.keys())}")
+        logger.debug(f"[LORO SERVER] Remaining connections for document {doc.name}: {len(doc.conns)}")
+        logger.debug(f"[LORO SERVER] Remaining connections list: {list(doc.conns.keys())}")
     else:
-        logger.warning(f"[Server] Tried to cleanup connection {conn} but it wasn't in doc.conns")
+        logger.warning(f"[LORO SERVER] Tried to cleanup connection {conn} but it wasn't in doc.conns")
 
 async def message_listener(conn, doc, message):
     # Get display ID (client ID if available, otherwise connection ID)
@@ -647,14 +647,14 @@ async def message_listener(conn, doc, message):
         
         if isinstance(message, str):
             message_str = message
-            logger.info(f"[Server] String message from {display_id}: {message_str[:100]}...")
+            logger.info(f"[LORO SERVER] String message from {display_id}: {message_str[:100]}...")
         elif isinstance(message, bytes):
             try:
                 message_str = message.decode('utf-8')
-                logger.info(f"[Server] Decoded bytes from {display_id}: {message_str[:100]}...")
+                logger.info(f"[LORO SERVER] Decoded bytes from {display_id}: {message_str[:100]}...")
             except UnicodeDecodeError:
-                logger.info(f"[Server] Binary Loro update from {display_id}: {len(message)} bytes")
-                logger.debug(f"[Server] Received binary Loro update: {len(message)} bytes")
+                logger.info(f"[LORO SERVER] Binary Loro update from {display_id}: {len(message)} bytes")
+                logger.debug(f"[LORO SERVER] Received binary Loro update: {len(message)} bytes")
                 # Apply the update to the document
                 doc.doc.import_(message)
                 # Mark document as changed for persistence
@@ -667,7 +667,7 @@ async def message_listener(conn, doc, message):
                         await c.send(message)
                 return
         else:
-            logger.warning(f"[Server] Unknown message type: {type(message)}")
+            logger.warning(f"[LORO SERVER] Unknown message type: {type(message)}")
             return
         
         if not message_str:
@@ -676,12 +676,12 @@ async def message_listener(conn, doc, message):
         try:
             message_data = json.loads(message_str)
         except json.JSONDecodeError as e:
-            logger.warning(f"[Server] JSON parse error: {e}")
+            logger.warning(f"[LORO SERVER] JSON parse error: {e}")
             return
         
         message_type = message_data.get("type", "")
         display_id = get_client_id(conn) or get_connection_id(conn)
-        logger.debug(f"[Server] Received message type: {message_type} for doc: {doc.name}")
+        logger.debug(f"[LORO SERVER] Received message type: {message_type} for doc: {doc.name}")
         
         if message_type == MESSAGE_QUERY_SNAPSHOT:
             await handle_query_snapshot(conn, doc, message_data)
@@ -694,10 +694,10 @@ async def message_listener(conn, doc, message):
         elif message_type == "keepalive":
             await handle_keepalive(conn, doc, message_data)
         else:
-            logger.warning(f"[Server] Unknown message type '{message_type}' from {display_id} for document {doc.name}")
+            logger.warning(f"[LORO SERVER] Unknown message type '{message_type}' from {display_id} for document {doc.name}")
             
     except Exception as e:
-        logger.error(f"[Server] Message handling error for {display_id} on document {doc.name}: {e}")
+        logger.error(f"[LORO SERVER] Message handling error for {display_id} on document {doc.name}: {e}")
 
 async def handle_query_snapshot(conn, doc, message_data):
     try:
@@ -709,30 +709,30 @@ async def handle_query_snapshot(conn, doc, message_data):
             # Store client ID mapping on first snapshot request
             conn.client_id = client_id
             display_id = client_id
-            logger.info(f"[Server] Client ID from snapshot request: {conn_id} <-> {client_id}")
+            logger.info(f"[LORO SERVER] Client ID from snapshot request: {conn_id} <-> {client_id}")
             logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
         else:
             display_id = get_client_id(conn) or conn_id
         
         request_id = str(time.time())
-        logger.info(f"[Server] Client {display_id} requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
+        logger.info(f"[LORO SERVER] Client {display_id} requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
         
         # Export actual Loro document snapshot
         snapshot = doc.doc.export(ExportMode.Snapshot())
-        logger.info(f"[Server] Sending snapshot response to {display_id}: {len(snapshot)} bytes")
+        logger.info(f"[LORO SERVER] Sending snapshot response to {display_id}: {len(snapshot)} bytes")
         
         # Log tree structure for debugging
         tree = doc.doc.get_tree(DEFAULT_TREE_NAME)
         nodes = tree.nodes()  # method call
-        logger.debug(f"[Server] Snapshot contains {len(nodes)} nodes from server document")
+        logger.debug(f"[LORO SERVER] Snapshot contains {len(nodes)} nodes from server document")
         
         await conn.send(snapshot)
-        logger.debug(f"[Server] Snapshot sent to {display_id} for document {doc.name}")
+        logger.debug(f"[LORO SERVER] Snapshot sent to {display_id} for document {doc.name}")
         
     except Exception as e:
-        logger.error(f"[Server] Error handling query-snapshot: {e}")
+        logger.error(f"[LORO SERVER] Error handling query-snapshot: {e}")
         import traceback
-        logger.error(f"[Server] Traceback: {traceback.format_exc()}")
+        logger.error(f"[LORO SERVER] Traceback: {traceback.format_exc()}")
 
 async def handle_ephemeral(conn, doc, message_data):
     try:
@@ -771,16 +771,16 @@ async def handle_ephemeral(conn, doc, message_data):
             # Store the client ID mapping for future reference
             if not hasattr(conn, 'client_id'):
                 conn.client_id = client_id
-                logger.info(f"[Server] New client mapped: {conn_id} <-> {client_id}")
+                logger.info(f"[LORO SERVER] New client mapped: {conn_id} <-> {client_id}")
                 logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
             else:
-                logger.debug(f"[Server] CLIENT ID CONFIRMED: {conn_id} -> {client_id}")
+                logger.debug(f"[LORO SERVER] CLIENT ID CONFIRMED: {conn_id} -> {client_id}")
         
         # Use client ID in logging if available  
         display_id = get_client_id(conn) or conn_id
         
         # Log the processed ephemeral update with proper client ID
-        logger.debug(f"[Server] Processing ephemeral data: {len(ephemeral_data)} bytes from {display_id}")
+        logger.debug(f"[LORO SERVER] Processing ephemeral data: {len(ephemeral_data)} bytes from {display_id}")
         
         # Mark this connection as sender to avoid echo (moved after client ID detection)
         doc.last_ephemeral_sender = conn
@@ -792,7 +792,7 @@ async def handle_ephemeral(conn, doc, message_data):
                     f"total_connections={len(doc.conns)}")
         
     except Exception as e:
-        logger.error(f"[Server] Error handling ephemeral: {e}")
+        logger.error(f"[LORO SERVER] Error handling ephemeral: {e}")
         doc.last_ephemeral_sender = None
 
 async def handle_query_ephemeral(conn, doc, message_data):
@@ -803,19 +803,19 @@ async def handle_query_ephemeral(conn, doc, message_data):
     if client_id and not hasattr(conn, 'client_id'):
         # Store client ID mapping if not already stored
         conn.client_id = client_id
-        logger.info(f"[Server] Client ID from ephemeral query: {conn_id} <-> {client_id}")
+        logger.info(f"[LORO SERVER] Client ID from ephemeral query: {conn_id} <-> {client_id}")
         logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
     
     display_id = client_id if client_id else conn_id
     
-    logger.debug(f"[Server] Query Ephemeral from {display_id}")
+    logger.debug(f"[LORO SERVER] Query Ephemeral from {display_id}")
     try:
         # Get all current ephemeral state using proper Loro EphemeralStore API
         all_states = doc.ephemeral_store.get_all_states()
         all_keys = list(all_states.keys())
         ephemeral_update = doc.ephemeral_store.encode_all()
         
-        logger.info(f"[Server] Ephemeral query response for {display_id} - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
+        logger.info(f"[LORO SERVER] Ephemeral query response for {display_id} - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
         logger.debug(f"SERVER DEBUG - Client {display_id} requesting ephemeral state: "
                     f"all_keys_available={all_keys}, "
                     f"encoded_length={len(ephemeral_update)}, "
@@ -830,7 +830,7 @@ async def handle_query_ephemeral(conn, doc, message_data):
         await conn.send(json.dumps(asdict(response)))
         
     except Exception as e:
-        logger.error(f"[Server] Error handling query ephemeral: {e}")
+        logger.error(f"[LORO SERVER] Error handling query ephemeral: {e}")
         doc.last_ephemeral_sender = None
 
 async def handle_keepalive(conn, doc, message_data):
@@ -842,13 +842,13 @@ async def handle_keepalive(conn, doc, message_data):
         error_info = message_data.get("error", None)
         
         conn_id = get_connection_id(conn)
-        logger.debug(f"[Server] Received keepalive #{ping_id} from {conn_id} for doc: {doc.name}")
-        logger.debug(f"[Server] Keepalive timestamp: {timestamp}")
-        logger.debug(f"[Server] Keepalive reason: {reason}")
-        logger.debug(f"[Server] Current server time: {time.time()}")
+        logger.debug(f"[LORO SERVER] Received keepalive #{ping_id} from {conn_id} for doc: {doc.name}")
+        logger.debug(f"[LORO SERVER] Keepalive timestamp: {timestamp}")
+        logger.debug(f"[LORO SERVER] Keepalive reason: {reason}")
+        logger.debug(f"[LORO SERVER] Current server time: {time.time()}")
         
         if error_info:
-            logger.warning(f"[Server] Keepalive indicated client error: {error_info}")
+            logger.warning(f"[LORO SERVER] Keepalive indicated client error: {error_info}")
         
         # Send a keepalive response back to acknowledge
         keepalive_response = {
@@ -859,22 +859,22 @@ async def handle_keepalive(conn, doc, message_data):
             "acknowledged": True
         }
         
-        logger.debug(f"[Server] Sending keepalive ack #{ping_id} to {conn_id}")
-        logger.debug(f"[Server] ACK message: {keepalive_response}")
+        logger.debug(f"[LORO SERVER] Sending keepalive ack #{ping_id} to {conn_id}")
+        logger.debug(f"[LORO SERVER] ACK message: {keepalive_response}")
         
         await conn.send(json.dumps(keepalive_response))
         
-        logger.debug(f"[Server] Keepalive ack #{ping_id} sent; connection maintained")
+        logger.debug(f"[LORO SERVER] Keepalive ack #{ping_id} sent; connection maintained")
         
     except Exception as e:
-        logger.error(f"[Server] Error handling keepalive: {e}")
-        logger.error(f"[Server] Keepalive message data: {message_data}")
+        logger.error(f"[LORO SERVER] Error handling keepalive: {e}")
+        logger.error(f"[LORO SERVER] Keepalive message data: {message_data}")
         # Don't propagate error - keepalive failure shouldn't break the connection
 
 async def handle_update(conn, doc, message_data):
     try:
         update_data = message_data.get("update", [])
-        logger.debug(f"[Server] Received update: {len(update_data)} bytes")
+        logger.debug(f"[LORO SERVER] Received update: {len(update_data)} bytes")
         
         # Apply update to Loro document
         if update_data:
@@ -885,40 +885,40 @@ async def handle_update(conn, doc, message_data):
             logger.debug(f"[Persistence] Marked document '{doc.name}' as changed")
         
         # Broadcast to other connections
-        logger.debug("[Server] Starting broadcast to other connections")
-        logger.debug(f"[Server] Total connections for doc '{doc.name}': {len(doc.conns)}")
-        logger.debug(f"[Server] Sender connection: {conn}")
-        logger.debug(f"[Server] All connections: {list(doc.conns.keys())}")
+        logger.debug("[LORO SERVER] Starting broadcast to other connections")
+        logger.debug(f"[LORO SERVER] Total connections for doc '{doc.name}': {len(doc.conns)}")
+        logger.debug(f"[LORO SERVER] Sender connection: {conn}")
+        logger.debug(f"[LORO SERVER] All connections: {list(doc.conns.keys())}")
         
         # Create a copy of connections to avoid "dictionary changed size during iteration" error
         connections_copy = list(doc.conns.keys())
-        logger.debug(f"[Server] Created connections copy with {len(connections_copy)} connections")
+        logger.debug(f"[LORO SERVER] Created connections copy with {len(connections_copy)} connections")
         
         broadcast_count = 0
         for c in connections_copy:
-            logger.debug(f"[Server] Checking connection {c} (sender: {c == conn})")
+            logger.debug(f"[LORO SERVER] Checking connection {c} (sender: {c == conn})")
             # Check if connection is still in the active connections (might have been removed)
             if c not in doc.conns:
-                logger.debug(f"[Server] Connection {c} no longer active, skipping")
+                logger.debug(f"[LORO SERVER] Connection {c} no longer active, skipping")
                 continue
                 
             if c != conn:
-                logger.debug(f"[Server] Broadcasting update to different connection: {c}")
+                logger.debug(f"[LORO SERVER] Broadcasting update to different connection: {c}")
                 try:
                     await c.send(json.dumps(message_data))
                     broadcast_count += 1
-                    logger.debug(f"[Server] Successfully sent update to connection {c}")
+                    logger.debug(f"[LORO SERVER] Successfully sent update to connection {c}")
                 except Exception as send_error:
-                    logger.error(f"[Server] Failed to send update to connection {c}: {send_error}")
+                    logger.error(f"[LORO SERVER] Failed to send update to connection {c}: {send_error}")
             else:
-                logger.debug(f"[Server] Skipping sender connection: {c}")
+                logger.debug(f"[LORO SERVER] Skipping sender connection: {c}")
         
-            logger.debug(f"[Server] Broadcast complete; sent to {broadcast_count} connections")
+            logger.debug(f"[LORO SERVER] Broadcast complete; sent to {broadcast_count} connections")
         
     except Exception as e:
-        logger.error(f"[Server] Error handling update: {e}")
+        logger.error(f"[LORO SERVER] Error handling update: {e}")
         import traceback
-        logger.error(f"[Server] Traceback: {traceback.format_exc()}")
+        logger.error(f"[LORO SERVER] Traceback: {traceback.format_exc()}")
 
 async def setup_ws_connection(conn, path: str):
     doc_name = path.strip('/').split('?')[0] if path else 'default'
@@ -928,7 +928,7 @@ async def setup_ws_connection(conn, path: str):
     # Extract actual document ID from the WebSocket path
     if '/' in doc_name:
         actual_doc_id = doc_name.split('/')[-1]
-        logger.debug(f"[Server] WebSocket path '{doc_name}' -> document ID '{actual_doc_id}'")
+        logger.debug(f"[LORO SERVER] WebSocket path '{doc_name}' -> document ID '{actual_doc_id}'")
     else:
         actual_doc_id = doc_name
     
@@ -938,24 +938,24 @@ async def setup_ws_connection(conn, path: str):
     print(f"\n[server:py:ws] Connection established: {conn_id} -> path: {doc_name} -> document: {actual_doc_id}")
     logger.info(f"[server:py:ws] Connection ID: {conn_id} -> path: {doc_name} -> document: {actual_doc_id} (awaiting clientID)")
     logger.info(f"[CORRELATION] WebSocket {conn_id} awaiting Frontend clientID mapping...")
-    logger.info(f"[Server] New connection started: {conn_id} for document: {actual_doc_id}")
-    logger.debug(f"[Server] New connection: {conn_id} for document: {actual_doc_id}")
+    logger.info(f"[LORO SERVER] New connection started: {conn_id} for document: {actual_doc_id}")
+    logger.debug(f"[LORO SERVER] New connection: {conn_id} for document: {actual_doc_id}")
     
     # get_doc may load the document from persistence (e.g. blocking S3 reads) the
     # first time it is accessed; run it in a worker thread so the shared asyncio
     # event loop (and HTTP handlers running on it) is not stalled.
     doc = await asyncio.to_thread(get_doc, doc_name)
     doc.conns[conn] = set()
-    logger.debug(f"[Server] Document {actual_doc_id} ready for messaging")
+    logger.debug(f"[LORO SERVER] Document {actual_doc_id} ready for messaging")
     
     logger.info(f"[server:py:ws] Total connections for '{actual_doc_id}': {len(doc.conns)} (including {conn_id})")
-    logger.debug(f"[Server] Total connections now: {len(doc.conns)}")
-    logger.debug(f"[Server] All connections: {list(doc.conns.keys())}")
+    logger.debug(f"[LORO SERVER] Total connections now: {len(doc.conns)}")
+    logger.debug(f"[LORO SERVER] All connections: {list(doc.conns.keys())}")
     
     try:
         # Send initial snapshot using actual Loro document
         initial_snapshot = doc.doc.export(ExportMode.Snapshot())
-        logger.debug(f"[Server] Sending initial snapshot to new client: {len(initial_snapshot)} bytes")
+        logger.debug(f"[LORO SERVER] Sending initial snapshot to new client: {len(initial_snapshot)} bytes")
         await conn.send(initial_snapshot)
         
         # Send current ephemeral state to new client using proper EphemeralStore API
@@ -968,9 +968,9 @@ async def setup_ws_connection(conn, path: str):
                     docId=doc_name
                 )
                 await conn.send(json.dumps(asdict(ephemeral_message)))
-                logger.debug(f"[Server] Sent initial ephemeral state to new client: {len(ephemeral_data)} bytes")
+                logger.debug(f"[LORO SERVER] Sent initial ephemeral state to new client: {len(ephemeral_data)} bytes")
         except Exception as ephemeral_error:
-            logger.warning(f"[Server] Failed to send initial ephemeral state: {ephemeral_error}")
+            logger.warning(f"[LORO SERVER] Failed to send initial ephemeral state: {ephemeral_error}")
         
         async for message in conn:
             await message_listener(conn, doc, message)

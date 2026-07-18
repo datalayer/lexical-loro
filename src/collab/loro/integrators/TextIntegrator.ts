@@ -42,7 +42,7 @@ export class TextIntegrator implements BaseIntegrator<TextDiff> {
             this.integrateTextRetain(change, binding, provider);
             break;
           default:
-            console.warn(`📝 Unknown text change type: ${change.type}`);
+            console.warn(` Unknown text change type: ${change.type}`);
         }
       });
     }
