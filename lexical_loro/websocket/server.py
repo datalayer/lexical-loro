@@ -508,14 +508,14 @@ async def _global_autosave_loop():
                                     logger.warning(f"Auto-save failed for document: {doc_name}")
                             else:
                                 unchanged_count += 1
-                                logger.info(f"Skipping Skipping auto-save for unchanged document: {doc_name}")
+                                logger.info(f"Skipping auto-save for unchanged document: {doc_name}")
                         except Exception as e:
                             logger.error(f"Error auto-saving document {doc_name}: {e}")
                     
                     if saved_count > 0:
                         logger.info(f"Global auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                     elif unchanged_count > 0:
-                        logger.info(f"Info Global auto-save check: {unchanged_count} documents unchanged, none saved")
+                        logger.info(f"Global auto-save check: {unchanged_count} documents unchanged, none saved")
                 else:
                     logger.debug(f"No documents to auto-save")
                     
@@ -610,12 +610,12 @@ def close_conn(doc, conn):
         client_id = get_client_id(conn)
         display_id = client_id if client_id else conn_id
         
-        print(f"\n [server:py:ws] CONNECTION CLOSED: {display_id} (was {conn_id}) ← document: {doc.name} ")
-        logger.info(f"[server:py:ws] CONNECTION CLOSED: {display_id} ← document: {doc.name}")
+        print(f"\n[server:py:ws] Connection closed: {display_id} (was {conn_id}) -> document: {doc.name}")
+        logger.info(f"[server:py:ws] Connection closed: {display_id} -> document: {doc.name}")
         if client_id:
             logger.info(f"[CORRELATION] Closed Frontend clientID: {client_id} (WebSocket {conn_id})")
         
-        logger.debug(f"[Server] *** CONNECTION CLOSING *** for document: {doc.name}")
+        logger.debug(f"[Server] Connection closing for document: {doc.name}")
         logger.debug(f"[Server] Closing connection: {conn}")
         
         # Clean up ephemeral state for this client
@@ -623,7 +623,7 @@ def close_conn(doc, conn):
             try:
                 # Remove the client's ephemeral state
                 doc.ephemeral_store.delete(client_id)
-                logger.info(f"[Server] CLEANED UP ephemeral state for clientID: {client_id}")
+                logger.info(f"[Server] Cleaned up ephemeral state for clientID: {client_id}")
                 logger.info(f"[CORRELATION] Removed ephemeral data for Frontend clientID: {client_id}")
             except Exception as ephemeral_error:
                 logger.warning(f"[Server] Failed to cleanup ephemeral state for {client_id}: {ephemeral_error}")
@@ -694,10 +694,10 @@ async def message_listener(conn, doc, message):
         elif message_type == "keepalive":
             await handle_keepalive(conn, doc, message_data)
         else:
-            logger.warning(f"[Server] Unknown message type: {message_type}")
+            logger.warning(f"[Server] Unknown message type '{message_type}' from {display_id} for document {doc.name}")
             
     except Exception as e:
-        logger.error(f"[Server] Message handling error: {e}")
+        logger.error(f"[Server] Message handling error for {display_id} on document {doc.name}: {e}")
 
 async def handle_query_snapshot(conn, doc, message_data):
     try:
@@ -709,7 +709,7 @@ async def handle_query_snapshot(conn, doc, message_data):
             # Store client ID mapping on first snapshot request
             conn.client_id = client_id
             display_id = client_id
-            logger.info(f"🆔 [Server] CLIENT ID from snapshot request: {conn_id} ↔ {client_id}")
+            logger.info(f"[Server] Client ID from snapshot request: {conn_id} <-> {client_id}")
             logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
         else:
             display_id = get_client_id(conn) or conn_id
@@ -727,6 +727,7 @@ async def handle_query_snapshot(conn, doc, message_data):
         logger.debug(f"[Server] Snapshot contains {len(nodes)} nodes from server document")
         
         await conn.send(snapshot)
+        logger.debug(f"[Server] Snapshot sent to {display_id} for document {doc.name}")
         
     except Exception as e:
         logger.error(f"[Server] Error handling query-snapshot: {e}")
@@ -770,7 +771,7 @@ async def handle_ephemeral(conn, doc, message_data):
             # Store the client ID mapping for future reference
             if not hasattr(conn, 'client_id'):
                 conn.client_id = client_id
-                logger.info(f"🆔 [Server] NEW CLIENT MAPPED: {conn_id} ↔ {client_id}")
+                logger.info(f"[Server] New client mapped: {conn_id} <-> {client_id}")
                 logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
             else:
                 logger.debug(f"[Server] CLIENT ID CONFIRMED: {conn_id} -> {client_id}")
@@ -802,7 +803,7 @@ async def handle_query_ephemeral(conn, doc, message_data):
     if client_id and not hasattr(conn, 'client_id'):
         # Store client ID mapping if not already stored
         conn.client_id = client_id
-        logger.info(f"🆔 [Server] Client ID from ephemeral query: {conn_id} ↔ {client_id}")
+        logger.info(f"[Server] Client ID from ephemeral query: {conn_id} <-> {client_id}")
         logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
     
     display_id = client_id if client_id else conn_id
@@ -841,7 +842,7 @@ async def handle_keepalive(conn, doc, message_data):
         error_info = message_data.get("error", None)
         
         conn_id = get_connection_id(conn)
-        logger.debug(f"[Server] *** RECEIVED KEEPALIVE #{ping_id} *** from {conn_id} for doc: {doc.name}")
+        logger.debug(f"[Server] Received keepalive #{ping_id} from {conn_id} for doc: {doc.name}")
         logger.debug(f"[Server] Keepalive timestamp: {timestamp}")
         logger.debug(f"[Server] Keepalive reason: {reason}")
         logger.debug(f"[Server] Current server time: {time.time()}")
@@ -858,12 +859,12 @@ async def handle_keepalive(conn, doc, message_data):
             "acknowledged": True
         }
         
-        logger.debug(f"[Server] *** SENDING KEEPALIVE ACK #{ping_id} *** to {conn_id}")
+        logger.debug(f"[Server] Sending keepalive ack #{ping_id} to {conn_id}")
         logger.debug(f"[Server] ACK message: {keepalive_response}")
         
         await conn.send(json.dumps(keepalive_response))
         
-        logger.debug(f"[Server] *** KEEPALIVE ACK #{ping_id} SENT *** - connection maintained")
+        logger.debug(f"[Server] Keepalive ack #{ping_id} sent; connection maintained")
         
     except Exception as e:
         logger.error(f"[Server] Error handling keepalive: {e}")
@@ -884,7 +885,7 @@ async def handle_update(conn, doc, message_data):
             logger.debug(f"[Persistence] Marked document '{doc.name}' as changed")
         
         # Broadcast to other connections
-        logger.debug(f"[Server] *** STARTING BROADCAST TO OTHER CONNECTIONS ***")
+        logger.debug("[Server] Starting broadcast to other connections")
         logger.debug(f"[Server] Total connections for doc '{doc.name}': {len(doc.conns)}")
         logger.debug(f"[Server] Sender connection: {conn}")
         logger.debug(f"[Server] All connections: {list(doc.conns.keys())}")
@@ -910,9 +911,9 @@ async def handle_update(conn, doc, message_data):
                 except Exception as send_error:
                     logger.error(f"[Server] Failed to send update to connection {c}: {send_error}")
             else:
-                logger.debug(f"Skipping [Server] Skipping sender connection: {c}")
+                logger.debug(f"[Server] Skipping sender connection: {c}")
         
-        logger.debug(f"[Server] *** BROADCAST COMPLETE *** - Sent to {broadcast_count} connections")
+            logger.debug(f"[Server] Broadcast complete; sent to {broadcast_count} connections")
         
     except Exception as e:
         logger.error(f"[Server] Error handling update: {e}")
@@ -934,17 +935,18 @@ async def setup_ws_connection(conn, path: str):
     conn_id = get_connection_id(conn)
     
     # Add prominent logging that appears right after websockets.server connection logs
-    print(f"\n [server:py:ws] CONNECTION ESTABLISHED: {conn_id} -> path: {doc_name} -> document: {actual_doc_id} ")
-    logger.info(f"[server:py:ws] CONNECTION ID: {conn_id} -> path: {doc_name} -> document: {actual_doc_id} (awaiting clientID)")
+    print(f"\n[server:py:ws] Connection established: {conn_id} -> path: {doc_name} -> document: {actual_doc_id}")
+    logger.info(f"[server:py:ws] Connection ID: {conn_id} -> path: {doc_name} -> document: {actual_doc_id} (awaiting clientID)")
     logger.info(f"[CORRELATION] WebSocket {conn_id} awaiting Frontend clientID mapping...")
-    logger.info(f"[Server] NEW CONNECTION STARTED: {conn_id} for document: {actual_doc_id} ")
-    logger.debug(f"[Server] *** NEW CONNECTION *** {conn_id} for document: {actual_doc_id}")
+    logger.info(f"[Server] New connection started: {conn_id} for document: {actual_doc_id}")
+    logger.debug(f"[Server] New connection: {conn_id} for document: {actual_doc_id}")
     
     # get_doc may load the document from persistence (e.g. blocking S3 reads) the
     # first time it is accessed; run it in a worker thread so the shared asyncio
     # event loop (and HTTP handlers running on it) is not stalled.
     doc = await asyncio.to_thread(get_doc, doc_name)
     doc.conns[conn] = set()
+    logger.debug(f"[Server] Document {actual_doc_id} ready for messaging")
     
     logger.info(f"[server:py:ws] Total connections for '{actual_doc_id}': {len(doc.conns)} (including {conn_id})")
     logger.debug(f"[Server] Total connections now: {len(doc.conns)}")
@@ -1095,14 +1097,14 @@ class LoroWebSocketServer:
                                         logger.warning(f"Auto-save failed for document: {doc_name}")
                                 else:
                                     unchanged_count += 1
-                                    logger.debug(f"Skipping Skipping auto-save for unchanged document: {doc_name}")
+                                    logger.debug(f"Skipping auto-save for unchanged document: {doc_name}")
                             except Exception as e:
                                 logger.error(f"Error auto-saving document {doc_name}: {e}")
                         
                         if saved_count > 0:
                             logger.info(f"Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                         elif unchanged_count > 0:
-                            logger.debug(f"Info Auto-save check: {unchanged_count} documents unchanged, none saved")
+                            logger.debug(f"Auto-save check: {unchanged_count} documents unchanged, none saved")
                     else:
                         logger.debug(f"No documents to auto-save")
                         
@@ -1133,7 +1135,7 @@ class LoroWebSocketServer:
             Unique client ID string (timestamp-based)
         """
         client_id = str(int(time.time() * 1000))
-        logger.debug(f"🆔 Generated new client ID: {client_id}")
+        logger.debug(f"Generated new client ID: {client_id}")
         return client_id
     
     @property 
