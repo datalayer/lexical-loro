@@ -117,24 +117,6 @@ export function updateElementNodeInLoro(
 
     const sameParent = currentParentId === parentId;
 
-    // DIAGNOSTIC: an existing element that only had its text edited should never
-    // report sameParent=false. When it does, its Loro parent diverges from the
-    // mapped Lexical parent — the tell-tale of duplicate/mismatched Loro roots.
-    if (!sameParent) {
-      const roots = tree.roots();
-      console.warn('[loro-collab][diag] element move with different parent', {
-        nodeKey,
-        treeId: treeNode.id,
-        index,
-        currentIndex,
-        currentParentId: currentParentId ?? '(root/none)',
-        targetParentId: parentId ?? '(root/none)',
-        loroRootCount: roots.length,
-        loroRootIds: roots.map(r => r.id),
-        loroRootTypes: roots.map(r => r.data.get('elementType')),
-      });
-    }
-
     // Re-issuing a move on every content edit is unnecessary and races with
     // sibling creation (the classic source of "index out of range"). Only move
     // when the parent or index genuinely changed. This is a real no-op check,

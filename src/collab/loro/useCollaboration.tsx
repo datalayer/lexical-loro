@@ -11,6 +11,7 @@ import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
 import {
   $getRoot,
+  $parseSerializedNode,
   BLUR_COMMAND,
   CAN_REDO_COMMAND,
   CAN_UNDO_COMMAND,
@@ -335,18 +336,63 @@ function initializeEditor(
   editor: LexicalEditor,
   initialEditorState?: InitialEditorStateType,
 ): void {
+  const hasMeaningfulContent = (): boolean => {
+    const root = $getRoot();
+    const children = root.getChildren();
+
+    if (children.length === 0) {
+      return false;
+    }
+
+    for (const child of children) {
+      const type = child.getType();
+      const text = child.getTextContent().trim();
+
+      if (text.length > 0) {
+        return true;
+      }
+
+      // Ignore known scaffold placeholders used by some host apps before
+      // collaboration bootstrap fills the real initial document.
+      if (type !== 'paragraph' && type !== 'jupyter-output') {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   editor.update(
     () => {
-      const root = $getRoot();
-      if (root.isEmpty()) {
+      if (!hasMeaningfulContent()) {
         if (initialEditorState) {
           switch (typeof initialEditorState) {
             case 'string': {
-              const parsedEditorState =
-                editor.parseEditorState(initialEditorState);
-              editor.setEditorState(parsedEditorState, {
-                tag: HISTORY_MERGE_TAG,
-              });
+              // IMPORTANT: do not use editor.setEditorState() here. Replacing
+              // the whole state does not emit per-node "created" mutations, so
+              // the Loro binding never sees the seeded nodes and the content
+              // fails to propagate to other collaborators. Instead, rebuild the
+              // document by appending freshly parsed nodes inside this update,
+              // which produces the mutations the Loro sync relies on.
+              try {
+                const serialized = JSON.parse(initialEditorState);
+                const serializedChildren: unknown[] =
+                  serialized?.root?.children ?? [];
+                const root = $getRoot();
+                root.clear();
+                for (const serializedNode of serializedChildren) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  root.append($parseSerializedNode(serializedNode as any));
+                }
+              } catch (error) {
+                // Fall back to a plain state swap if the payload is not a
+                // serialized editor state we can rebuild node-by-node.
+                const parsedEditorState =
+                  editor.parseEditorState(initialEditorState);
+                editor.setEditorState(parsedEditorState, {
+                  tag: HISTORY_MERGE_TAG,
+                });
+              }
               break;
             }
             case 'object': {
@@ -358,8 +404,7 @@ function initializeEditor(
             case 'function': {
               editor.update(
                 () => {
-                  const root1 = $getRoot();
-                  if (root1.isEmpty()) {
+                  if (!hasMeaningfulContent()) {
                     initialEditorState(editor);
                   }
                 },
