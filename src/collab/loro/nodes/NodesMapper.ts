@@ -142,8 +142,22 @@ export class NodeMapper {
     parentTreeID?: TreeID,
     index?: number
   ): TreeID {
+    let insertionIndex = index;
+
+    // Loro requires insertion index to be within [0, children.length].
+    // During concurrent edits the Lexical index can momentarily exceed the
+    // current CRDT parent child count, so clamp defensively.
+    if (insertionIndex !== undefined) {
+      const parentNode =
+        parentTreeID !== undefined ? this.tree.getNodeByID(parentTreeID) : null;
+      const childrenLength = parentNode
+        ? parentNode.children.length
+        : this.tree.roots().length;
+      insertionIndex = Math.max(0, Math.min(insertionIndex, childrenLength));
+    }
+
     // Create the tree node first
-    const treeNode = this.tree.createNode(parentTreeID, index);
+    const treeNode = this.tree.createNode(parentTreeID, insertionIndex);
     
     // Get the TreeID from the created node
     const treeId: TreeID = treeNode.id;

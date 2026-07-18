@@ -12,7 +12,7 @@
 
 import { ElementNode, NodeKey } from 'lexical';
 import { Binding } from '../Bindings';
-import { LoroTree } from 'loro-crdt/bundler/loro_wasm';
+import type { LoroTree } from 'loro-crdt';
 
 // Root Node Propagator
 export * from './RootNodePropagator';

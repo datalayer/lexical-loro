@@ -260,21 +260,8 @@ function createCursorSelection(
   isCurrentUser: boolean = false,
 ): CursorSelection {
   const color = cursor.color;
-  
-  // Helper function to convert color to rgba with opacity
-  const getColorWithOpacity = (color: string, opacity: number): string => {
-    if (color.startsWith('#')) {
-      const hex = color.slice(1);
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-    return color;
-  };
-
-  const caretColor = isCurrentUser ? getColorWithOpacity(color, 0.6) : color;
-  const nameBackgroundColor = isCurrentUser ? getColorWithOpacity(color, 0.7) : color;
+  const caretColor = color;
+  const nameBackgroundColor = color;
 
   const caret = document.createElement('span');
   caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:2px;background-color:${caretColor};z-index:10;${isCurrentUser ? 'opacity:0.8;' : ''}`;

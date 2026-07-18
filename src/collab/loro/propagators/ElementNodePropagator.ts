@@ -114,15 +114,14 @@ export function updateElementNodeInLoro(
     const isAlreadyChild = currentParent?.id === parentId;
     
     if (index !== undefined) {
-      let adjustedIndex = index;
-      
-      if (!isAlreadyChild) {
-        // Moving to a new parent - check bounds against current child count
-        if (index > parentChildCount) {
-          adjustedIndex = parentChildCount;
-        }
-      }
-      
+      // Loro move index must satisfy:
+      // - same parent reorder: 0 <= index <= (children.length - 1)
+      // - different parent move: 0 <= index <= children.length
+      const maxIndex = isAlreadyChild
+        ? Math.max(parentChildCount - 1, 0)
+        : parentChildCount;
+      const adjustedIndex = Math.max(0, Math.min(index, maxIndex));
+
       tree.move(treeNode.id, parentId, adjustedIndex);
     } else {
       // No specific index, append to end

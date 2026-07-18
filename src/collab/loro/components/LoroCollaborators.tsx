@@ -69,7 +69,7 @@ export function LoroCollaborators({
       {/* Current User (if they have a cursor) */}
       {currentUserData && (
         <CollaboratorBadge
-          name={`${currentUserData.cursor.name}`}
+          name={`${currentUserData.cursor.name} (me)`}
           color={currentDisplayColor}
           isCurrentUser={true}
           clientId={currentClientID}
@@ -79,7 +79,7 @@ export function LoroCollaborators({
       {/* Show current user even if no cursor data yet */}
       {!currentUserData && (
         <CollaboratorBadge
-          name={`${currentDisplayName} (Me)`}
+          name={`${currentDisplayName} (me)`}
           color={currentDisplayColor}
           isCurrentUser={true}
           clientId={currentClientID}
@@ -129,22 +129,9 @@ interface CollaboratorBadgeProps {
 }
 
 function CollaboratorBadge({ name, color, isCurrentUser, clientId }: CollaboratorBadgeProps): JSX.Element {
-  // Convert color to rgba for transparency when current user
-  const getColorWithOpacity = (color: string, opacity: number = 1): string => {
-    // If it's a hex color, convert to rgba
-    if (color.startsWith('#')) {
-      const hex = color.slice(1);
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-    // If it's already rgba or rgb, just return as is (basic support)
-    return color;
-  };
-
-  const circleColor = isCurrentUser ? getColorWithOpacity(color, 0.1) : color;
-  const badgeColor = isCurrentUser ? getColorWithOpacity(color, 0.1) : color;
+  const circleColor = color;
+  const badgeColor = color;
+  const shortClientId = String(clientId).slice(0, 4);
 
   return (
     <div 
@@ -180,9 +167,9 @@ function CollaboratorBadge({ name, color, isCurrentUser, clientId }: Collaborato
         boxShadow: isCurrentUser 
           ? '0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.2)' 
           : '0 1px 2px rgba(0,0,0,0.1)',
-        opacity: isCurrentUser ? 0.9 : 1
+        opacity: 1
       }}>
-        {name}
+        {`${name} ${shortClientId}`}
       </span>
     </div>
   );

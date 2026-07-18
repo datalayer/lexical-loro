@@ -7,7 +7,9 @@ import {
   $getRoot, 
   $getNodeByKey, 
   $isElementNode,
-  ElementNode
+  $isDecoratorNode,
+  ElementNode,
+  LexicalNode
 } from 'lexical';
 import { TreeID } from 'loro-crdt';
 import { BaseIntegrator } from './BaseIntegrator';
@@ -60,104 +62,164 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
     // causing the cell to fall back to $getRoot() and appear on one flat line.
     const sortedCreates = this.topologicalSortCreates(creates, binding);
 
-    // Execute: deletes → creates (parent-first) → moves
-    const operations = [...deletes, ...sortedCreates, ...moves];
-    
-    operations.forEach(operation => {
-      switch (operation.action) {
-        case 'create':
-          this.integrateCreate(operation, binding, provider);
-          break;
-        case 'move':
-          this.integrateMove(operation, binding, provider);
-          break;
-        case 'delete':
-          this.integrateDelete(operation, binding, provider);
-          break;
-        default:
-          console.warn(`🌳 Unknown tree operation: ${operation.action}`);
+    // Phase 1: deletes.
+    deletes.forEach(op => this.integrateDelete(op, binding, provider));
+
+    // Phase 2: creates (parent-first, with deferral).
+    //
+    // Topological sort orders parents before children *within this batch*, but
+    // a child may still reference a parent whose Lexical mapping is not yet
+    // established (deeply nested tables, list items inside quotes, Jupyter
+    // cells, …). Rather than dropping such a node onto the root — which throws
+    // for inline nodes like text/linebreak ("Only element or decorator nodes
+    // can be inserted to the root node") and corrupts the document — we defer
+    // it and retry until a full pass makes no further progress.
+    //
+    // Created Lexical nodes are cached so deferred retries reuse the same
+    // instance instead of importing (and registering) duplicate nodes.
+    const nodeCache = new Map<string, LexicalNode | null>();
+    let pending = sortedCreates;
+    while (pending.length > 0) {
+      const stillPending: typeof pending = [];
+      for (const op of pending) {
+        if (this.integrateCreate(op, binding, provider, nodeCache) === 'deferred') {
+          stillPending.push(op);
+        }
       }
-    });
+      if (stillPending.length === pending.length) {
+        // No progress in a full pass: the remaining parents genuinely never
+        // arrived in this batch. Attach what we safely can to the root.
+        stillPending.forEach(op => this.integrateCreateOrphan(op, binding, nodeCache));
+        break;
+      }
+      pending = stillPending;
+    }
+
+    // Phase 3: moves.
+    moves.forEach(op => this.integrateMove(op, binding, provider));
   }
 
   private integrateCreate(
-    operation: { target: TreeID; parent?: TreeID; index?: number }, 
-    binding: Binding, 
-    provider: Provider
-  ): void {
+    operation: { target: TreeID; parent?: TreeID; index?: number },
+    binding: Binding,
+    provider: Provider,
+    nodeCache: Map<string, LexicalNode | null>,
+  ): 'created' | 'deferred' | 'skipped' {
     try {
       let { nodeKey } = parseTreeID(operation.target);
-      
-      // Skip root node creation - root is integrated during initial setup
-      // But ensure the root mapping exists
-      // Only treat as root if it's actually a root-type node in Loro
+
+      // Skip root node creation - root is integrated during initial setup.
+      // Only treat as root if it's actually a root-type node in Loro.
       if (nodeKey === "0") {
         const treeNode = binding.tree.getNodeByID(operation.target);
         const elementType = treeNode?.data.get('elementType');
         if (elementType === 'root' || !elementType) {
           const root = $getRoot();
           binding.nodeMapper.setMapping(root.getKey(), operation.target);
-          return;
+          return 'created';
         }
-        // If nodeKey is "0" but it's not actually a root element, continue with normal processing
+        // nodeKey is "0" but not an actual root element — fall through.
       }
-      
-      // Check if node already exists and if it's the same TreeID
+
+      // Node already exists with the same TreeID → nothing to do.
       const existingNode = $getNodeByKey(nodeKey);
       if (existingNode) {
         const existingTreeID = binding.nodeMapper.getTreeIDByLexicalKey(nodeKey);
         if (existingTreeID === operation.target) {
-          return;
-        } else {
-          // Don't reuse existing keys for different TreeIDs - let Lexical generate a fresh one
-          nodeKey = undefined; // Let createLexicalNodeFromLoro generate a fresh key
+          return 'created';
         }
+        // Different TreeID reuses this key — let Lexical assign a fresh one.
+        nodeKey = undefined;
       }
 
-      // Create Lexical node from Loro data
-      const lexicalNode = createLexicalNodeFromLoro(
-        operation.target,
-        binding.tree,
-        binding
-      );
+      // Create the Lexical node once and cache it, so deferred retries reuse
+      // the same instance instead of importing duplicate nodes.
+      const cacheKey = String(operation.target);
+      let lexicalNode = nodeCache.get(cacheKey);
+      if (lexicalNode === undefined) {
+        lexicalNode = createLexicalNodeFromLoro(operation.target, binding.tree, binding);
+        nodeCache.set(cacheKey, lexicalNode);
+      }
+      if (!lexicalNode) {
+        return 'skipped';
+      }
 
+      if (operation.parent) {
+        const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
+        const parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
+
+        // Parent expected but not mapped yet → defer until it is created.
+        if (!(parentLexicalNode && $isElementNode(parentLexicalNode))) {
+          return 'deferred';
+        }
+
+        this.insertChild(parentLexicalNode, lexicalNode, operation.index);
+      } else {
+        // No parent → root. Only element/decorator nodes are valid root children;
+        // inline nodes without a parent would throw, so skip them here.
+        if (!this.canBeRootChild(lexicalNode)) {
+          return 'skipped';
+        }
+        this.insertChild($getRoot(), lexicalNode, operation.index);
+      }
+
+      binding.nodeMapper.setMapping(lexicalNode.getKey(), operation.target);
+      return 'created';
+
+    } catch (error) {
+      console.warn(`🌳 Error creating node for ${operation.target}:`, error);
+      return 'skipped';
+    }
+  }
+
+  /**
+   * Last-resort handling for create operations whose parent never materialised
+   * within the batch. Element and decorator nodes are attached to the root so
+   * their content stays visible; inline nodes (text, linebreak, …) cannot live
+   * at the root and are dropped — they will re-sync once their parent arrives
+   * in a later event batch.
+   */
+  private integrateCreateOrphan(
+    operation: { target: TreeID; parent?: TreeID; index?: number },
+    binding: Binding,
+    nodeCache: Map<string, LexicalNode | null>,
+  ): void {
+    try {
+      const cacheKey = String(operation.target);
+      let lexicalNode = nodeCache.get(cacheKey);
+      if (lexicalNode === undefined) {
+        lexicalNode = createLexicalNodeFromLoro(operation.target, binding.tree, binding);
+        nodeCache.set(cacheKey, lexicalNode);
+      }
       if (!lexicalNode) {
         return;
       }
 
-      // Find parent node
-      let parentNode: ElementNode;
-      if (operation.parent) {
-        const parentKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.parent);
-        const parentLexicalNode = parentKey ? $getNodeByKey(parentKey) : null;
-        
-        if (parentLexicalNode && $isElementNode(parentLexicalNode)) {
-          parentNode = parentLexicalNode;
-        } else {
-          console.warn(`🌳 Parent NOT found for ${lexicalNode.getType()} target=${operation.target} parent=${operation.parent} parentKey=${parentKey} parentFound=${!!parentLexicalNode} isElement=${parentLexicalNode ? $isElementNode(parentLexicalNode) : 'N/A'}`);
-          // For text nodes, we MUST have a proper parent element
-          if (lexicalNode.getType() === 'text') {
-            return;
-          }
-          
-          parentNode = $getRoot();
-        }
-      } else {
-        parentNode = $getRoot();
+      if (!this.canBeRootChild(lexicalNode)) {
+        console.warn(
+          `🌳 Dropping orphan inline node ${operation.target} (${lexicalNode.getType()}): parent ${operation.parent} never resolved in this batch`,
+        );
+        return;
       }
 
-      // Normal insertion
-      if (operation.index !== undefined) {
-        parentNode.splice(operation.index, 0, [lexicalNode]);
-      } else {
-        parentNode.append(lexicalNode);
-      }
-
-      // Set up mapping
+      this.insertChild($getRoot(), lexicalNode, operation.index);
       binding.nodeMapper.setMapping(lexicalNode.getKey(), operation.target);
-
     } catch (error) {
-      console.warn(`🌳 Error creating node for ${operation.target}:`, error);
+      console.warn(`🌳 Error creating orphan node ${operation.target}:`, error);
+    }
+  }
+
+  /** Only element and decorator nodes may be inserted directly under the root. */
+  private canBeRootChild(node: LexicalNode): boolean {
+    return $isElementNode(node) || $isDecoratorNode(node);
+  }
+
+  /** Insert a child into a parent element at an optional index. */
+  private insertChild(parent: ElementNode, child: LexicalNode, index?: number): void {
+    if (index !== undefined) {
+      parent.splice(index, 0, [child]);
+    } else {
+      parent.append(child);
     }
   }
 
@@ -188,16 +250,16 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
         if (parentNode && $isElementNode(parentNode)) {
           newParent = parentNode;
         } else {
-          // For text nodes, we can't move them to root - skip this move operation
-          // The node is already in the correct position from our create fix
-          if (nodeToMove.getType() === 'text') {
+          // Can't relocate to root unless it's an element/decorator node.
+          // Inline nodes (text, linebreak, …) stay where they are.
+          if (!this.canBeRootChild(nodeToMove)) {
             return;
           }
           newParent = $getRoot();
         }
       } else {
-        // For text nodes without a parent, skip the move
-        if (nodeToMove.getType() === 'text') {
+        // No parent → root, only valid for element/decorator nodes.
+        if (!this.canBeRootChild(nodeToMove)) {
           return;
         }
         newParent = $getRoot();
@@ -232,6 +294,16 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
       const nodeToDelete = $getNodeByKey(lexicalKey);
       if (!nodeToDelete) {
         console.warn(`🌳 Node to delete not found: ${lexicalKey}`);
+        return;
+      }
+
+      // Root nodes are never deletable in Lexical. In rare races a remote
+      // delete operation may transiently resolve to the local root mapping;
+      // ignore it to keep integration resilient.
+      if (nodeToDelete === $getRoot()) {
+        console.warn(
+          `🌳 Skipping invalid root delete operation for target ${operation.target}`,
+        );
         return;
       }
 

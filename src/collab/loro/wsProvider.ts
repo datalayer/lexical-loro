@@ -32,18 +32,36 @@ export function createWebsocketProvider(
   console.log(`🏭 Creating WebsocketProvider instance (ID: ${providerInstanceId}) for docId: ${id}`);
   
   // Use provided websocketUrl or fallback to URL parameters/defaults
-  const finalWebsocketUrl = websocketUrl || (() => {
+  const rawWebsocketUrl = websocketUrl || (() => {
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
     return params.get('collabEndpoint') || 'ws://localhost:3002';
   })();
-  
+
+  // The WebsocketProvider builds the connection URL as
+  // `serverUrl + '/' + docId + '?' + params`. If the caller embedded a query
+  // string (for example `?token=<jwt>`) directly in the URL, the docId would be
+  // appended *after* the query string, corrupting the URL. Split any query
+  // string off the base URL and forward it through the provider `params` so the
+  // final URL is `serverUrl/docId?token=<jwt>` as the server expects.
+  let finalWebsocketUrl = rawWebsocketUrl;
+  const params: Record<string, string> = {};
+  const queryIndex = finalWebsocketUrl.indexOf('?');
+  if (queryIndex !== -1) {
+    const query = finalWebsocketUrl.slice(queryIndex + 1);
+    finalWebsocketUrl = finalWebsocketUrl.slice(0, queryIndex);
+    new URLSearchParams(query).forEach((value, key) => {
+      params[key] = value;
+    });
+  }
+
   const websocketProvider = new WebsocketProvider(
     finalWebsocketUrl,
     id,
     doc,
     {
       connect: false,
+      params,
       resyncInterval: RESYNC_INTERVAL, // Poll ephemeral state periodically to prevent stale user accumulation
     },
   );
