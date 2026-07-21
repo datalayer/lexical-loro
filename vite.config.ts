@@ -19,6 +19,9 @@ const require = createRequire(import.meta.url);
 // https://vitejs.dev/config/
 export default defineConfig(({mode}) => ({
   build: {
+    // Keep a modern output target so vite-plugin-top-level-await does not
+    // trigger unsupported downlevel transforms in esbuild.
+    target: 'esnext',
     outDir: 'build',
     rollupOptions: {
       input: {
