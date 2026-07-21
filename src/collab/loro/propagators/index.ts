@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -12,7 +12,7 @@
 
 import { ElementNode, NodeKey } from 'lexical';
 import { Binding } from '../Bindings';
-import { LoroTree } from 'loro-crdt/bundler/loro_wasm';
+import type { LoroTree } from 'loro-crdt';
 
 // Root Node Propagator
 export * from './RootNodePropagator';

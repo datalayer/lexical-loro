@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -10,7 +10,10 @@ import {createPortal} from 'react-dom';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
 import {
+  $getNodeByKey,
   $getRoot,
+  $parseSerializedNode,
+  $setSelection,
   BLUR_COMMAND,
   CAN_REDO_COMMAND,
   CAN_UNDO_COMMAND,
@@ -74,6 +77,7 @@ export function useCollaboration(
     };
 
     const onSync = (isSynced: boolean) => {
+      console.log('[SEED-DEBUG] onSync: isSynced=', isSynced, 'shouldBootstrap=', shouldBootstrap, 'isReloadingDoc=', isReloadingDoc.current);
       if (
         shouldBootstrap &&
         isSynced &&
@@ -136,8 +140,64 @@ export function useCollaboration(
     // This updates the local editor state when we receive updates from other clients.
     const unsubscribe = binding.doc.subscribe(onLoroUpdates);
 
+    // Lexical only includes a node type in `update.mutatedNodes` when that type
+    // has at least one registered mutation listener. Our Lexical→Loro sync
+    // relies entirely on `mutatedNodes`, so any node type without a listener is
+    // invisible to collaboration. In particular, the bootstrap seed runs before
+    // other plugins mount and register their own mutation listeners, so its
+    // commits produced an empty `mutatedNodes` and never propagated to peers.
+    // Register a no-op mutation listener for every node type registered on this
+    // editor so `mutatedNodes` is always fully populated (this mirrors how the
+    // Yjs binding stays independent of other plugins).
+    const mutationListenerCleanups: Array<() => void> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registeredNodes = (editor as any)._nodes as
+      | Map<string, {klass: any}>
+      | undefined;
+    console.log(
+      '[SEED-DEBUG] registering mutation listeners; registeredNodes=',
+      registeredNodes ? registeredNodes.size : 'undefined',
+    );
+    if (registeredNodes) {
+      registeredNodes.forEach((registered) => {
+        if (registered && registered.klass) {
+          mutationListenerCleanups.push(
+            // eslint-disable-next-line @typescript-eslint/no-empty-function
+            editor.registerMutationListener(registered.klass, () => {}, {
+              skipInitialization: true,
+            }),
+          );
+        }
+      });
+    }
+    console.log(
+      '[SEED-DEBUG] mutation listeners registered=',
+      mutationListenerCleanups.length,
+      'editor._listeners.mutation.size=',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (editor as any)._listeners?.mutation?.size,
+    );
+
     const removeListener = editor.registerUpdateListener(
       (update) => {
+        let __mn = 0;
+        if (update.mutatedNodes) {
+          update.mutatedNodes.forEach((m) => {
+            __mn += m.size;
+          });
+        }
+        console.log(
+          '[SEED-DEBUG] updateListener fired; tags=',
+          Array.from(update.tags),
+          'mutatedNodes=',
+          update.mutatedNodes ? 'map' : 'null',
+          'count=',
+          __mn,
+          'dirtyElements=',
+          update.dirtyElements?.size,
+          'dirtyLeaves=',
+          update.dirtyLeaves?.size,
+        );
         if (update.tags.has(SKIP_COLLAB_TAG) === false) {
           syncLexicalToLoro(
             binding,
@@ -174,6 +234,7 @@ export function useCollaboration(
       unsubscribe?.();
       docMap.delete(id);
       removeListener();
+      mutationListenerCleanups.forEach((cleanup) => cleanup());
     };
   }, [
     binding,
@@ -335,39 +396,169 @@ function initializeEditor(
   editor: LexicalEditor,
   initialEditorState?: InitialEditorStateType,
 ): void {
+  // Text used by the server-side default scaffold that fresh rooms are
+  // pre-seeded with. When a room only contains this scaffold it should be
+  // treated as empty so the host app's real initial content can replace it.
+  const PLACEHOLDER_TEXTS = new Set([
+    'Lexical with Loro',
+    'Welcome to Lexical with Loro',
+    'Type something...',
+  ]);
+
+  const hasMeaningfulContent = (): boolean => {
+    const root = $getRoot();
+    const children = root.getChildren();
+
+    if (children.length === 0) {
+      return false;
+    }
+
+    for (const child of children) {
+      const type = child.getType();
+      const text = child.getTextContent().trim();
+
+      if (text.length > 0) {
+        // Ignore the known default scaffold text so it can be overwritten by
+        // the host app's initial content on a freshly created room.
+        if (!PLACEHOLDER_TEXTS.has(text)) {
+          return true;
+        }
+        continue;
+      }
+
+      // Ignore known scaffold placeholders used by some host apps before
+      // collaboration bootstrap fills the real initial document.
+      if (type !== 'paragraph' && type !== 'jupyter-output') {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Only seed a room whose sole content is the (empty/scaffold) default.
+  let shouldSeed = false;
+  editor.getEditorState().read(() => {
+    shouldSeed = !hasMeaningfulContent();
+  });
+  console.log('[SEED-DEBUG] initializeEditor: shouldSeed=', shouldSeed, 'hasInitialState=', !!initialEditorState, 'type=', typeof initialEditorState);
+  if (!shouldSeed || !initialEditorState) {
+    return;
+  }
+
+  // Preferred path: a serialized editor state (string). Seed it INCREMENTALLY,
+  // exactly as a human collaborator would build the document — append each
+  // top-level block in its own commit, then remove the scaffold blocks one by
+  // one. Each small, well-formed commit produces clean per-node "created"
+  // mutations that the Loro binding propagates reliably. A single bulk
+  // clear()+append emitted one large, malformed batch that failed to integrate
+  // on remote peers (inline nodes arriving without a resolved parent), which is
+  // why the second editor never received the initial content.
+  if (typeof initialEditorState === 'string') {
+    let serializedChildren: unknown[] = [];
+    try {
+      const serialized = JSON.parse(initialEditorState);
+      serializedChildren = serialized?.root?.children ?? [];
+    } catch (error) {
+      // Not a rebuildable serialized state → fall back to a whole-state swap.
+      editor.update(
+        () => {
+          editor.setEditorState(editor.parseEditorState(initialEditorState), {
+            tag: HISTORY_MERGE_TAG,
+          });
+        },
+        {tag: HISTORY_MERGE_TAG},
+      );
+      return;
+    }
+
+    // IMPORTANT: every seed update below is committed with `discrete: true`.
+    // The remote snapshot import runs `editor.update({tag: SKIP_COLLAB_TAG})`
+    // and that update is still queued when this bootstrap runs. Without
+    // `discrete`, Lexical coalesces the queued remote update together with our
+    // seed updates into a single reconciliation and unions their tags, so the
+    // seed batch inherits `skip-collab` and the collab sync ignores it. A
+    // leading discrete no-op flushes the pending remote (skip-collab) update on
+    // its own, and each discrete seed update then commits as its own
+    // reconciliation carrying only `history-merge`, so it propagates to peers.
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    editor.update(() => {}, {tag: HISTORY_MERGE_TAG, discrete: true});
+
+    // Clear any pending selection first: it may point at scaffold nodes we are
+    // about to remove, which would otherwise crash selection-reading plugins
+    // (e.g. the typeahead menu).
+    editor.update(
+      () => {
+        $setSelection(null);
+      },
+      {tag: HISTORY_MERGE_TAG, discrete: true},
+    );
+
+    // Capture the scaffold blocks AFTER the leading discrete flush, so any
+    // late-arriving remote scaffold nodes are included. We remove them BEFORE
+    // appending the real content: the scaffold's position in the Loro tree does
+    // not necessarily line up with its Lexical index, so appending after it
+    // makes the computed Loro insertion index drift out of range. Removing the
+    // scaffold first leaves both trees at an aligned empty root, after which
+    // each appended block sits at a matching index in Lexical and Loro.
+    let scaffoldKeys: string[] = [];
+    editor.getEditorState().read(() => {
+      scaffoldKeys = $getRoot()
+        .getChildren()
+        .map(child => child.getKey());
+    });
+
+    console.log('[SEED-DEBUG] initializeEditor: seeding', serializedChildren.length, 'blocks, removing', scaffoldKeys.length, 'scaffold blocks first');
+
+    // Remove the scaffold blocks one by one so both trees reach an aligned
+    // empty root before we append the real content.
+    for (const key of scaffoldKeys) {
+      editor.update(
+        () => {
+          const node = $getNodeByKey(key);
+          if (node) {
+            node.remove();
+          }
+        },
+        {tag: HISTORY_MERGE_TAG, discrete: true},
+      );
+    }
+
+    // Append the real content block by block into the now-empty, aligned root
+    // (each commit ≈ one collaborator action).
+    let __blockIndex = 0;
+    for (const serializedNode of serializedChildren) {
+      const __idx = __blockIndex++;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const __type = (serializedNode as any)?.type;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const __childTypes = Array.isArray((serializedNode as any)?.children)
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (serializedNode as any).children.map((c: any) => c?.type)
+        : [];
+      editor.update(
+        () => {
+          const root = $getRoot();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          root.append($parseSerializedNode(serializedNode as any));
+        },
+        {tag: HISTORY_MERGE_TAG, discrete: true},
+      );
+      console.log('[SEED-DEBUG] appended block', __idx, 'type=', __type, 'children=', __childTypes);
+    }
+    return;
+  }
+
+  // Non-string fallbacks (EditorState object or builder function).
   editor.update(
     () => {
-      const root = $getRoot();
-      if (root.isEmpty()) {
-        if (initialEditorState) {
-          switch (typeof initialEditorState) {
-            case 'string': {
-              const parsedEditorState =
-                editor.parseEditorState(initialEditorState);
-              editor.setEditorState(parsedEditorState, {
-                tag: HISTORY_MERGE_TAG,
-              });
-              break;
-            }
-            case 'object': {
-              editor.setEditorState(initialEditorState, {
-                tag: HISTORY_MERGE_TAG,
-              });
-              break;
-            }
-            case 'function': {
-              editor.update(
-                () => {
-                  const root1 = $getRoot();
-                  if (root1.isEmpty()) {
-                    initialEditorState(editor);
-                  }
-                },
-                {tag: HISTORY_MERGE_TAG},
-              );
-              break;
-            }
-          }
+      if (!hasMeaningfulContent()) {
+        if (typeof initialEditorState === 'object') {
+          editor.setEditorState(initialEditorState, {
+            tag: HISTORY_MERGE_TAG,
+          });
+        } else if (typeof initialEditorState === 'function') {
+          initialEditorState(editor);
         }
       }
     },

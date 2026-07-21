@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2025 Datalayer, Inc.
+# Copyright (c) 2025-2026 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
 """
@@ -39,16 +39,16 @@ KEY DESIGN PRINCIPLES:
 USAGE PATTERNS:
 ==============
 
-✅ Initialization:
+ Initialization:
 model = LoroTreeModel(doc_id="doc1", websocket_url="ws://localhost:3002")
 model.initialize_from_lexical_state(lexical_json)
 
-✅ Tree Operations:
+ Tree Operations:
 model.add_block_to_tree(parent_key, block_data, index)
 model.update_tree_node(node_key, new_data)
 model.remove_tree_node(node_key)
 
-✅ Export:
+ Export:
 lexical_state = model.export_to_lexical_state()
 model.save_document_state(file_path)
 """
@@ -164,7 +164,7 @@ class LoroTreeModel:
                 "node_count": len(list(self.tree.nodes()))
             })
             
-            logger.debug(f"🚀 Initialized document {self.doc_id} with root tree ID: {self.root_tree_id}")
+            logger.debug(f"Initialized document {self.doc_id} with root tree ID: {self.root_tree_id}")
             
             # Log initial document structure
             try:
@@ -329,7 +329,7 @@ class LoroTreeModel:
                 "index": index
             })
             
-            logger.debug(f"✏️ Added block to tree: {new_key} (type: {block_data['type']}) to parent: {parent_key}")
+            logger.debug(f"Added block to tree: {new_key} (type: {block_data['type']}) to parent: {parent_key}")
             
             # Log document structure after manual addition
             try:
@@ -382,7 +382,7 @@ class LoroTreeModel:
                 "new_data": new_data
             })
             
-            logger.debug(f"🔄 Updated tree node: {node_key} (type: {new_data.get('type', 'unknown')})")
+            logger.debug(f"Updated tree node: {node_key} (type: {new_data.get('type', 'unknown')})")
             
             # Log document structure after manual update
             try:
@@ -433,7 +433,7 @@ class LoroTreeModel:
                 "tree_id": tree_id
             })
             
-            logger.debug(f"🗑️ Removed tree node: {node_key}")
+            logger.debug(f"Removed tree node: {node_key}")
             
             # Log document structure after manual removal
             try:
@@ -686,7 +686,7 @@ class LoroTreeModel:
         while retry_count <= max_retries:
             try:
                 document_url = f"{self.websocket_url}/{self.doc_id}"
-                logger.debug(f"🔌 LoroTreeModel connecting to {document_url} (attempt {retry_count + 1}/{max_retries + 1})")
+                logger.debug(f"LoroTreeModel connecting to {document_url} (attempt {retry_count + 1}/{max_retries + 1})")
                 
                 # Connect with aggressive timeout settings to keep connection alive
                 self.websocket = await websockets.connect(
@@ -698,42 +698,42 @@ class LoroTreeModel:
                     compression=None       # Disable compression for speed
                 )
                 self.websocket_connected = True
-                logger.debug(f"✅ MCP SERVER: *** WEBSOCKET CONNECTION ESTABLISHED *** for doc: {self.doc_id}")
-                logger.debug(f"✅ MCP SERVER: Connected to: {document_url}")
+                logger.debug(f"MCP server: *** WEBSOCKET CONNECTION ESTABLISHED *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: Connected to: {document_url}")
                 
                 # Request initial snapshot
-                logger.debug(f"📞 MCP SERVER: *** REQUESTING INITIAL SNAPSHOT *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: *** REQUESTING INITIAL SNAPSHOT *** for doc: {self.doc_id}")
                 await self._request_snapshot()
-                logger.debug(f"📞 MCP SERVER: Snapshot request sent, waiting for response...")
+                logger.debug(f"MCP server: Snapshot request sent, waiting for response...")
                 
                 # Start listening for messages
-                logger.debug(f"🎧 MCP SERVER: *** STARTING MESSAGE LISTENER *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: *** STARTING MESSAGE LISTENER *** for doc: {self.doc_id}")
                 self._websocket_task = asyncio.create_task(self._listen_for_websocket_messages())
-                logger.debug(f"🎧 MCP SERVER: Message listener task created and started")
+                logger.debug(f"MCP server: Message listener task created and started")
                 
                 # Start keepalive ping to prevent connection timeout
-                logger.debug(f"🎧 MCP SERVER: *** STARTING KEEPALIVE PING *** for doc: {self.doc_id}")
-                logger.debug(f"🎧 MCP SERVER: About to create keepalive task...")
+                logger.debug(f"MCP server: *** STARTING KEEPALIVE PING *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: About to create keepalive task...")
                 self._keepalive_task = asyncio.create_task(self._keepalive_ping())
-                logger.debug(f"💓 MCP SERVER: *** KEEPALIVE TASK CREATED *** - task object: {self._keepalive_task}")
-                logger.debug(f"💓 MCP SERVER: Keepalive task done: {self._keepalive_task.done()}")
-                logger.debug(f"💓 MCP SERVER: Keepalive task cancelled: {self._keepalive_task.cancelled()}")
+                logger.debug(f"MCP server: *** KEEPALIVE TASK CREATED *** - task object: {self._keepalive_task}")
+                logger.debug(f"MCP server: Keepalive task done: {self._keepalive_task.done()}")
+                logger.debug(f"MCP server: Keepalive task cancelled: {self._keepalive_task.cancelled()}")
                 
                 # Start connection monitor
-                logger.debug(f"🔍 MCP SERVER: *** STARTING CONNECTION MONITOR *** for doc: {self.doc_id}")
-                logger.debug(f"🔍 MCP SERVER: About to create monitor task...")
+                logger.debug(f"MCP server: *** STARTING CONNECTION MONITOR *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: About to create monitor task...")
                 self._monitor_task = asyncio.create_task(self._monitor_connection())
-                logger.debug(f"🔍 MCP SERVER: *** MONITOR TASK CREATED *** - task object: {self._monitor_task}")
-                logger.debug(f"🔍 MCP SERVER: Monitor task done: {self._monitor_task.done()}")
-                logger.debug(f"🔍 MCP SERVER: Monitor task cancelled: {self._monitor_task.cancelled()}")
+                logger.debug(f"MCP server: *** MONITOR TASK CREATED *** - task object: {self._monitor_task}")
+                logger.debug(f"MCP server: Monitor task done: {self._monitor_task.done()}")
+                logger.debug(f"MCP server: Monitor task cancelled: {self._monitor_task.cancelled()}")
                 
                 # Set up local update subscription for automatic propagation
-                logger.debug(f"🔔 MCP SERVER: *** SETTING UP LOCAL UPDATE SUBSCRIPTION *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: *** SETTING UP LOCAL UPDATE SUBSCRIPTION *** for doc: {self.doc_id}")
                 self._setup_local_update_subscription()
-                logger.debug(f"🔔 MCP SERVER: Local update subscription configured")
+                logger.debug(f"MCP server: Local update subscription configured")
                 
-                logger.debug(f"🎯 MCP SERVER: *** ALL WEBSOCKET SETUP COMPLETE *** for doc: {self.doc_id}")
-                logger.debug(f"🎯 MCP SERVER: Now ready to receive updates from editor and send updates to WebSocket server")
+                logger.debug(f"MCP server: *** ALL WEBSOCKET SETUP COMPLETE *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: Now ready to receive updates from editor and send updates to WebSocket server")
                 return  # Success, exit retry loop
                 
             except Exception as e:
@@ -743,45 +743,45 @@ class LoroTreeModel:
                 if retry_count <= max_retries:
                     # Calculate exponential backoff delay
                     delay = base_delay * (2 ** (retry_count - 1))
-                    logger.warning(f"❌ Failed to connect to WebSocket server (attempt {retry_count}): {e}")
-                    logger.debug(f"🔄 Retrying in {delay:.1f} seconds...")
+                    logger.warning(f"Failed to connect to WebSocket server (attempt {retry_count}): {e}")
+                    logger.debug(f"Retrying in {delay:.1f} seconds...")
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(f"❌ Failed to connect to WebSocket server after {max_retries + 1} attempts: {e}")
-                    logger.debug("💡 Make sure the WebSocket server is running on port 3002")
+                    logger.error(f"Failed to connect to WebSocket server after {max_retries + 1} attempts: {e}")
+                    logger.debug("Make sure the WebSocket server is running on port 3002")
                     break
 
     async def disconnect_from_websocket_server(self) -> None:
         """Disconnect from the WebSocket server"""
         try:
-            logger.debug(f"🧹 MCP SERVER: *** TASK CLEANUP STARTING *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: *** TASK CLEANUP STARTING *** for doc: {self.doc_id}")
             
             if self._websocket_task:
-                logger.debug(f"🧹 MCP SERVER: Cancelling websocket task - done: {self._websocket_task.done()}, cancelled: {self._websocket_task.cancelled()}")
+                logger.debug(f"MCP server: Cancelling websocket task - done: {self._websocket_task.done()}, cancelled: {self._websocket_task.cancelled()}")
                 self._websocket_task.cancel()
                 self._websocket_task = None
-                logger.debug(f"🧹 MCP SERVER: Websocket task cancelled and cleared")
+                logger.debug(f"MCP server: Websocket task cancelled and cleared")
             
             if hasattr(self, '_keepalive_task') and self._keepalive_task:
-                logger.debug(f"🧹 MCP SERVER: Cancelling keepalive task - done: {self._keepalive_task.done()}, cancelled: {self._keepalive_task.cancelled()}")
+                logger.debug(f"MCP server: Cancelling keepalive task - done: {self._keepalive_task.done()}, cancelled: {self._keepalive_task.cancelled()}")
                 self._keepalive_task.cancel()
                 self._keepalive_task = None
-                logger.debug(f"🧹 MCP SERVER: Keepalive task cancelled and cleared")
+                logger.debug(f"MCP server: Keepalive task cancelled and cleared")
             
             if hasattr(self, '_monitor_task') and self._monitor_task:
-                logger.debug(f"🧹 MCP SERVER: Cancelling monitor task - done: {self._monitor_task.done()}, cancelled: {self._monitor_task.cancelled()}")
+                logger.debug(f"MCP server: Cancelling monitor task - done: {self._monitor_task.done()}, cancelled: {self._monitor_task.cancelled()}")
                 self._monitor_task.cancel()
                 self._monitor_task = None
-                logger.debug(f"🧹 MCP SERVER: Monitor task cancelled and cleared")
+                logger.debug(f"MCP server: Monitor task cancelled and cleared")
                 
-            logger.debug(f"🧹 MCP SERVER: *** TASK CLEANUP COMPLETED ***")
+            logger.debug(f"MCP server: *** TASK CLEANUP COMPLETED ***")
             
             if self.websocket:
                 await self.websocket.close()
                 self.websocket = None
             
             self.websocket_connected = False
-            logger.debug(f"🔌 LoroTreeModel disconnected from WebSocket server for doc: {self.doc_id}")
+            logger.debug(f"LoroTreeModel disconnected from WebSocket server for doc: {self.doc_id}")
             
         except Exception as e:
             logger.error(f"Error disconnecting from WebSocket server: {e}")
@@ -799,157 +799,157 @@ class LoroTreeModel:
             }
             
             await self.websocket.send(json.dumps(message))
-            logger.debug(f"📸 MCP SERVER: Requested initial snapshot for document: {self.doc_id}")
+            logger.debug(f"MCP server: Requested initial snapshot for document: {self.doc_id}")
             
         except Exception as e:
-            logger.error(f"❌ MCP SERVER: Failed to request snapshot for document {self.doc_id}: {e}")
+            logger.error(f"MCP server: Failed to request snapshot for document {self.doc_id}: {e}")
 
     async def _listen_for_websocket_messages(self) -> None:
         """Listen for messages from the WebSocket server"""
         if not self.websocket:
-            logger.warning(f"⚠️ MCP SERVER: Cannot listen for messages - no WebSocket connection for doc: {self.doc_id}")
+            logger.warning(f"MCP server: Cannot listen for messages - no WebSocket connection for doc: {self.doc_id}")
             return
             
-        logger.debug(f"🎧 MCP SERVER: *** STARTING WEBSOCKET MESSAGE LISTENER *** for doc: {self.doc_id}")
-        logger.debug(f"🎧 MCP SERVER: WebSocket URL: {self.websocket_url}/{self.doc_id}")
-        logger.debug(f"🎧 MCP SERVER: Connection object: {self.websocket}")
-        logger.debug(f"🎧 MCP SERVER: Connection state: {self.websocket.state if self.websocket else 'None'}")
-        logger.debug(f"🎧 MCP SERVER: Thread ID: {threading.get_ident()}")
-        logger.debug(f"🎧 MCP SERVER: Async loop: {asyncio.current_task()}")
+        logger.debug(f"MCP server: *** STARTING WEBSOCKET MESSAGE LISTENER *** for doc: {self.doc_id}")
+        logger.debug(f"MCP server: WebSocket URL: {self.websocket_url}/{self.doc_id}")
+        logger.debug(f"MCP server: Connection object: {self.websocket}")
+        logger.debug(f"MCP server: Connection state: {self.websocket.state if self.websocket else 'None'}")
+        logger.debug(f"MCP server: Thread ID: {threading.get_ident()}")
+        logger.debug(f"MCP server: Async loop: {asyncio.current_task()}")
         
         try:
-            logger.debug(f"🎧 MCP SERVER: *** ENTERING WEBSOCKET LISTEN LOOP *** for doc: {self.doc_id}")
-            logger.debug(f"🎧 MCP SERVER: About to start async for loop on websocket messages...")
-            logger.debug(f"🎧 MCP SERVER: Loop entry timestamp: {time.time()}")
+            logger.debug(f"MCP server: *** ENTERING WEBSOCKET LISTEN LOOP *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: About to start async for loop on websocket messages...")
+            logger.debug(f"MCP server: Loop entry timestamp: {time.time()}")
             
             message_count = 0
             heartbeat_count = 0
             last_heartbeat = time.time()
             
             # Add a heartbeat to verify the loop is actually running
-            logger.debug(f"💗 MCP SERVER: *** MESSAGE LISTENER HEARTBEAT #{heartbeat_count} *** - Waiting for messages...")
+            logger.debug(f"MCP server: *** MESSAGE LISTENER HEARTBEAT #{heartbeat_count} *** - Waiting for messages...")
             
             async for message in self.websocket:
                 # Log heartbeat every 5 seconds to confirm listener is alive
                 current_time = time.time()
                 if current_time - last_heartbeat > 5:
                     heartbeat_count += 1
-                    logger.debug(f"💗 MCP SERVER: *** LISTENER HEARTBEAT #{heartbeat_count} *** - Still listening for doc: {self.doc_id}")
+                    logger.debug(f"MCP server: *** LISTENER HEARTBEAT #{heartbeat_count} *** - Still listening for doc: {self.doc_id}")
                     last_heartbeat = current_time
                 message_count += 1
-                logger.debug(f"🚨 MCP SERVER: *** WEBSOCKET MESSAGE #{message_count} RECEIVED *** for doc: {self.doc_id}")
-                logger.debug(f"🚨 MCP SERVER: Timestamp: {time.time()}")
-                logger.debug(f"🚨 MCP SERVER: Raw message type: {type(message)}")
-                logger.debug(f"🚨 MCP SERVER: Raw message length: {len(message) if hasattr(message, '__len__') else 'unknown'}")
+                logger.debug(f"MCP server: *** WEBSOCKET MESSAGE #{message_count} RECEIVED *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: Timestamp: {time.time()}")
+                logger.debug(f"MCP server: Raw message type: {type(message)}")
+                logger.debug(f"MCP server: Raw message length: {len(message) if hasattr(message, '__len__') else 'unknown'}")
                 if isinstance(message, str):
-                    logger.debug(f"🚨 MCP SERVER: String message preview: {message[:100]}{'...' if len(message) > 100 else ''}")
+                    logger.debug(f"MCP server: String message preview: {message[:100]}{'...' if len(message) > 100 else ''}")
                 elif isinstance(message, bytes):
-                    logger.debug(f"🚨 MCP SERVER: Binary message preview: {message[:50]}{'...' if len(message) > 50 else ''}")
-                logger.debug(f"🔔 MCP SERVER: *** NEW WEBSOCKET MESSAGE RECEIVED *** for doc: {self.doc_id}")
-                logger.debug(f"🔔 MCP SERVER: Connection status check - websocket_connected: {self.websocket_connected}")
-                logger.debug(f"🔔 MCP SERVER: WebSocket object status: {self.websocket is not None}")
-                logger.debug(f"🔔 MCP SERVER: Message type: {type(message)}, length: {len(message) if hasattr(message, '__len__') else 'unknown'}")
+                    logger.debug(f"MCP server: Binary message preview: {message[:50]}{'...' if len(message) > 50 else ''}")
+                logger.debug(f"MCP server: *** NEW WEBSOCKET MESSAGE RECEIVED *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: Connection status check - websocket_connected: {self.websocket_connected}")
+                logger.debug(f"MCP server: WebSocket object status: {self.websocket is not None}")
+                logger.debug(f"MCP server: Message type: {type(message)}, length: {len(message) if hasattr(message, '__len__') else 'unknown'}")
                 
                 try:
                     # Handle both binary and text messages
                     if isinstance(message, bytes):
                         # This is binary Loro snapshot data
-                        logger.debug(f"📥 MCP SERVER: ===== PROCESSING BINARY MESSAGE =====")
-                        logger.debug(f"📥 MCP SERVER: Received BINARY message: {len(message)} bytes for doc: {self.doc_id}")
-                        logger.debug(f"📥 MCP SERVER: Binary data preview: {message[:50]}{'...' if len(message) > 50 else ''}")
+                        logger.debug(f"MCP server: ===== PROCESSING BINARY MESSAGE =====")
+                        logger.debug(f"MCP server: Received BINARY message: {len(message)} bytes for doc: {self.doc_id}")
+                        logger.debug(f"MCP server: Binary data preview: {message[:50]}{'...' if len(message) > 50 else ''}")
                         await self._handle_binary_snapshot(message)
-                        logger.debug(f"✅ MCP SERVER: ===== BINARY MESSAGE PROCESSED =====")
+                        logger.debug(f"MCP server: ===== BINARY MESSAGE PROCESSED =====")
                     else:
                         # This is JSON text message
-                        logger.debug(f"📥 MCP SERVER: ===== PROCESSING TEXT MESSAGE =====")
-                        logger.debug(f"📥 MCP SERVER: Received TEXT message for doc: {self.doc_id}: {message[:200]}{'...' if len(message) > 200 else ''}")
+                        logger.debug(f"MCP server: ===== PROCESSING TEXT MESSAGE =====")
+                        logger.debug(f"MCP server: Received TEXT message for doc: {self.doc_id}: {message[:200]}{'...' if len(message) > 200 else ''}")
                         data = json.loads(message)
-                        logger.debug(f"📥 MCP SERVER: Parsed JSON data - type: {data.get('type', 'unknown')}")
+                        logger.debug(f"MCP server: Parsed JSON data - type: {data.get('type', 'unknown')}")
                         await self._handle_websocket_message(data)
-                        logger.debug(f"✅ MCP SERVER: ===== TEXT MESSAGE PROCESSED =====")
+                        logger.debug(f"MCP server: ===== TEXT MESSAGE PROCESSED =====")
                 except json.JSONDecodeError as e:
-                    logger.error(f"❌ MCP SERVER: Failed to parse WebSocket JSON message for doc {self.doc_id}: {e}")
-                    logger.error(f"❌ MCP SERVER: Raw message: {message}")
+                    logger.error(f"MCP server: Failed to parse WebSocket JSON message for doc {self.doc_id}: {e}")
+                    logger.error(f"MCP server: Raw message: {message}")
                 except Exception as e:
-                    logger.error(f"❌ MCP SERVER: Error handling WebSocket message for doc {self.doc_id}: {e}")
-                    logger.error(f"❌ MCP SERVER: Message type: {type(message)}, content: {message}")
+                    logger.error(f"MCP server: Error handling WebSocket message for doc {self.doc_id}: {e}")
+                    logger.error(f"MCP server: Message type: {type(message)}, content: {message}")
                     import traceback
-                    logger.error(f"❌ MCP SERVER: Full traceback: {traceback.format_exc()}")
+                    logger.error(f"MCP server: Full traceback: {traceback.format_exc()}")
                 
-                logger.debug(f"🔔 MCP SERVER: *** MESSAGE #{message_count} HANDLING COMPLETE *** for doc: {self.doc_id}")
-                logger.debug(f"🔔 MCP SERVER: Connection still active: {self.websocket_connected}")
-                logger.debug(f"🔔 MCP SERVER: Waiting for next message... (processed {message_count} so far)")
+                logger.debug(f"MCP server: *** MESSAGE #{message_count} HANDLING COMPLETE *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: Connection still active: {self.websocket_connected}")
+                logger.debug(f"MCP server: Waiting for next message... (processed {message_count} so far)")
                     
         except websockets.exceptions.ConnectionClosed as e:
-            logger.error(f"💔 MCP SERVER: *** WEBSOCKET CONNECTION CLOSED *** for doc: {self.doc_id}")
-            logger.error(f"💔 MCP SERVER: Connection closed exception: {e}")
-            logger.error(f"💔 MCP SERVER: Connection was closed by server or network issue")
-            logger.error(f"💔 MCP SERVER: Total messages processed before close: {message_count}")
+            logger.error(f"MCP server: *** WEBSOCKET CONNECTION CLOSED *** for doc: {self.doc_id}")
+            logger.error(f"MCP server: Connection closed exception: {e}")
+            logger.error(f"MCP server: Connection was closed by server or network issue")
+            logger.error(f"MCP server: Total messages processed before close: {message_count}")
             self.websocket_connected = False
             self.websocket = None
             # Try to reconnect automatically
-            logger.debug(f"🔄 MCP SERVER: Attempting automatic reconnection...")
+            logger.debug(f"MCP server: Attempting automatic reconnection...")
             await self._reconnect_websocket()
         except Exception as e:
-            logger.error(f"❌ MCP SERVER: *** WEBSOCKET LISTENER ERROR *** for doc: {self.doc_id}: {e}")
-            logger.error(f"❌ MCP SERVER: Total messages processed before error: {message_count}")
+            logger.error(f"MCP server: *** WEBSOCKET LISTENER ERROR *** for doc: {self.doc_id}: {e}")
+            logger.error(f"MCP server: Total messages processed before error: {message_count}")
             import traceback
-            logger.error(f"❌ MCP SERVER: Full error traceback: {traceback.format_exc()}")
+            logger.error(f"MCP server: Full error traceback: {traceback.format_exc()}")
             self.websocket_connected = False
             self.websocket = None
             # Try to reconnect automatically
-            logger.debug(f"🔄 MCP SERVER: Attempting reconnection after error...")
+            logger.debug(f"MCP server: Attempting reconnection after error...")
             await self._reconnect_websocket()
             
-        logger.debug(f"🏁 MCP SERVER: *** WEBSOCKET LISTEN LOOP EXITED *** for doc: {self.doc_id}")
-        logger.debug(f"🏁 MCP SERVER: Total messages processed: {message_count}")
-        logger.debug(f"🏁 MCP SERVER: Final connection status: {self.websocket_connected}")
-        logger.debug(f"🏁 MCP SERVER: Loop exit timestamp: {time.time()}")
+        logger.debug(f"MCP server: *** WEBSOCKET LISTEN LOOP EXITED *** for doc: {self.doc_id}")
+        logger.debug(f"MCP server: Total messages processed: {message_count}")
+        logger.debug(f"MCP server: Final connection status: {self.websocket_connected}")
+        logger.debug(f"MCP server: Loop exit timestamp: {time.time()}")
 
     async def _keepalive_ping(self) -> None:
         """Send periodic ping to keep WebSocket connection alive"""
         try:
-            logger.debug(f"💓 MCP SERVER: *** KEEPALIVE TASK STARTED *** for doc: {self.doc_id}")
-            logger.debug(f"💓 MCP SERVER: Will ping every 5 seconds")
-            logger.debug(f"💓 MCP SERVER: Initial connection state: {self.websocket_connected}")
-            logger.debug(f"💓 MCP SERVER: Initial WebSocket object: {self.websocket is not None}")
+            logger.debug(f"MCP server: *** KEEPALIVE TASK STARTED *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: Will ping every 5 seconds")
+            logger.debug(f"MCP server: Initial connection state: {self.websocket_connected}")
+            logger.debug(f"MCP server: Initial WebSocket object: {self.websocket is not None}")
             
             ping_counter = 0
             while self.websocket_connected and self.websocket:
                 try:
-                    logger.debug(f"💓 MCP SERVER: *** KEEPALIVE SLEEP START #{ping_counter + 1} *** - waiting 5 seconds...")
+                    logger.debug(f"MCP server: *** KEEPALIVE SLEEP START #{ping_counter + 1} *** - waiting 5 seconds...")
                     await asyncio.sleep(5)  # Ping every 5 seconds (even more frequent)
                     ping_counter += 1
                     
-                    logger.debug(f"💓 MCP SERVER: *** KEEPALIVE SLEEP END #{ping_counter} *** - checking connection...")
-                    logger.debug(f"💓 MCP SERVER: websocket_connected: {self.websocket_connected}")
-                    logger.debug(f"💓 MCP SERVER: websocket object exists: {self.websocket is not None}")
+                    logger.debug(f"MCP server: *** KEEPALIVE SLEEP END #{ping_counter} *** - checking connection...")
+                    logger.debug(f"MCP server: websocket_connected: {self.websocket_connected}")
+                    logger.debug(f"MCP server: websocket object exists: {self.websocket is not None}")
                     
                     if self.websocket and self.websocket_connected:
-                        logger.debug(f"💓 MCP SERVER: *** SENDING KEEPALIVE PING #{ping_counter} *** for doc: {self.doc_id}")
-                        logger.debug(f"💓 MCP SERVER: WebSocket state: {self.websocket.state if hasattr(self.websocket, 'state') else 'unknown'}")
-                        logger.debug(f"💓 MCP SERVER: Connection status: {self.websocket_connected}")
-                        logger.debug(f"💓 MCP SERVER: Timestamp: {time.time()}")
+                        logger.debug(f"MCP server: *** SENDING KEEPALIVE PING #{ping_counter} *** for doc: {self.doc_id}")
+                        logger.debug(f"MCP server: WebSocket state: {self.websocket.state if hasattr(self.websocket, 'state') else 'unknown'}")
+                        logger.debug(f"MCP server: Connection status: {self.websocket_connected}")
+                        logger.debug(f"MCP server: Timestamp: {time.time()}")
                         
                         # Try both ping() method and keepalive message
                         try:
                             # First try the WebSocket ping() method with short timeout
-                            logger.debug(f"💓 MCP SERVER: *** ATTEMPTING WEBSOCKET PING #{ping_counter} *** for doc: {self.doc_id}")
-                            logger.debug(f"💓 MCP SERVER: Ping timestamp: {time.time()}")
-                            logger.debug(f"💓 MCP SERVER: WebSocket object: {self.websocket}")
-                            logger.debug(f"💓 MCP SERVER: WebSocket closed status: {getattr(self.websocket, 'closed', 'unknown')}")
+                            logger.debug(f"MCP server: *** ATTEMPTING WEBSOCKET PING #{ping_counter} *** for doc: {self.doc_id}")
+                            logger.debug(f"MCP server: Ping timestamp: {time.time()}")
+                            logger.debug(f"MCP server: WebSocket object: {self.websocket}")
+                            logger.debug(f"MCP server: WebSocket closed status: {getattr(self.websocket, 'closed', 'unknown')}")
                             
                             pong_waiter = await self.websocket.ping()
-                            logger.debug(f"✅ MCP SERVER: *** WEBSOCKET PING SENT #{ping_counter} *** - awaiting pong response...")
-                            logger.debug(f"✅ MCP SERVER: Pong waiter object: {pong_waiter}")
+                            logger.debug(f"MCP server: *** WEBSOCKET PING SENT #{ping_counter} *** - awaiting pong response...")
+                            logger.debug(f"MCP server: Pong waiter object: {pong_waiter}")
                             
                             await asyncio.wait_for(pong_waiter, timeout=2.0)
-                            logger.debug(f"🎉 MCP SERVER: *** WEBSOCKET PING-PONG SUCCESS #{ping_counter} *** for doc: {self.doc_id}")
-                            logger.debug(f"🎉 MCP SERVER: Round-trip successful at timestamp: {time.time()}")
+                            logger.debug(f"MCP server: *** WEBSOCKET PING-PONG SUCCESS #{ping_counter} *** for doc: {self.doc_id}")
+                            logger.debug(f"MCP server: Round-trip successful at timestamp: {time.time()}")
                             
                         except asyncio.TimeoutError:
-                            logger.error(f"⚠️ MCP SERVER: *** PING TIMEOUT #{ping_counter} *** after 2s for doc: {self.doc_id}")
-                            logger.error(f"⚠️ MCP SERVER: WebSocket may be unresponsive, trying keepalive message...")
+                            logger.error(f"MCP server: *** PING TIMEOUT #{ping_counter} *** after 2s for doc: {self.doc_id}")
+                            logger.error(f"MCP server: WebSocket may be unresponsive, trying keepalive message...")
                             
                             # Fallback to keepalive message
                             keepalive_msg = {
@@ -959,16 +959,16 @@ class LoroTreeModel:
                                 "ping_id": ping_counter,
                                 "reason": "ping_timeout_fallback"
                             }
-                            logger.debug(f"📤 MCP SERVER: *** SENDING KEEPALIVE MESSAGE #{ping_counter} *** for doc: {self.doc_id}")
-                            logger.debug(f"📤 MCP SERVER: Keepalive message: {keepalive_msg}")
+                            logger.debug(f"MCP server: *** SENDING KEEPALIVE MESSAGE #{ping_counter} *** for doc: {self.doc_id}")
+                            logger.debug(f"MCP server: Keepalive message: {keepalive_msg}")
                             
                             await self.websocket.send(json.dumps(keepalive_msg))
-                            logger.debug(f"✅ MCP SERVER: *** KEEPALIVE MESSAGE SENT #{ping_counter} *** for doc: {self.doc_id}")
+                            logger.debug(f"MCP server: *** KEEPALIVE MESSAGE SENT #{ping_counter} *** for doc: {self.doc_id}")
                             
                         except Exception as ping_error:
-                            logger.error(f"❌ MCP SERVER: *** PING FAILED #{ping_counter} *** for doc: {self.doc_id}: {ping_error}")
-                            logger.error(f"❌ MCP SERVER: Ping error type: {type(ping_error)}")
-                            logger.error(f"❌ MCP SERVER: Trying keepalive message as fallback...")
+                            logger.error(f"MCP server: *** PING FAILED #{ping_counter} *** for doc: {self.doc_id}: {ping_error}")
+                            logger.error(f"MCP server: Ping error type: {type(ping_error)}")
+                            logger.error(f"MCP server: Trying keepalive message as fallback...")
                             
                             # Fallback to keepalive message
                             keepalive_msg = {
@@ -979,101 +979,101 @@ class LoroTreeModel:
                                 "reason": "ping_error_fallback",
                                 "error": str(ping_error)
                             }
-                            logger.debug(f"📤 MCP SERVER: *** SENDING KEEPALIVE MESSAGE #{ping_counter} *** for doc: {self.doc_id}")
-                            logger.debug(f"📤 MCP SERVER: Keepalive message: {keepalive_msg}")
+                            logger.debug(f"MCP server: *** SENDING KEEPALIVE MESSAGE #{ping_counter} *** for doc: {self.doc_id}")
+                            logger.debug(f"MCP server: Keepalive message: {keepalive_msg}")
                             
                             try:
                                 await self.websocket.send(json.dumps(keepalive_msg))
-                                logger.debug(f"✅ MCP SERVER: *** KEEPALIVE MESSAGE SENT #{ping_counter} *** for doc: {self.doc_id}")
+                                logger.debug(f"MCP server: *** KEEPALIVE MESSAGE SENT #{ping_counter} *** for doc: {self.doc_id}")
                             except Exception as send_error:
-                                logger.error(f"💥 MCP SERVER: *** KEEPALIVE SEND FAILED #{ping_counter} *** for doc: {self.doc_id}: {send_error}")
-                                logger.error(f"💥 MCP SERVER: Connection appears to be broken, will exit keepalive loop")
+                                logger.error(f"MCP server: *** KEEPALIVE SEND FAILED #{ping_counter} *** for doc: {self.doc_id}: {send_error}")
+                                logger.error(f"MCP server: Connection appears to be broken, will exit keepalive loop")
                                 self.websocket_connected = False
                                 break
                             
                     else:
-                        logger.warning(f"💔 MCP SERVER: *** WEBSOCKET DISCONNECTED *** - stopping keepalive for doc: {self.doc_id}")
-                        logger.warning(f"💔 MCP SERVER: websocket: {self.websocket is not None}")
-                        logger.warning(f"💔 MCP SERVER: websocket_connected: {self.websocket_connected}")
+                        logger.warning(f"MCP server: *** WEBSOCKET DISCONNECTED *** - stopping keepalive for doc: {self.doc_id}")
+                        logger.warning(f"MCP server: websocket: {self.websocket is not None}")
+                        logger.warning(f"MCP server: websocket_connected: {self.websocket_connected}")
                         break
                         
                 except Exception as e:
-                    logger.error(f"💔 MCP SERVER: Keepalive ping #{ping_counter} failed for doc {self.doc_id}: {e}")
-                    logger.error(f"💔 MCP SERVER: Connection likely closed, stopping keepalive")
+                    logger.error(f"MCP server: Keepalive ping #{ping_counter} failed for doc {self.doc_id}: {e}")
+                    logger.error(f"MCP server: Connection likely closed, stopping keepalive")
                     break
                     
-            logger.debug(f"💔 MCP SERVER: Keepalive ping stopped for doc: {self.doc_id} after {ping_counter} pings")
+            logger.debug(f"MCP server: Keepalive ping stopped for doc: {self.doc_id} after {ping_counter} pings")
             
         except asyncio.CancelledError:
-            logger.debug(f"💤 MCP SERVER: *** KEEPALIVE TASK CANCELLED *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: *** KEEPALIVE TASK CANCELLED *** for doc: {self.doc_id}")
             raise  # Re-raise cancellation
         except Exception as e:
-            logger.error(f"💥 MCP SERVER: *** KEEPALIVE TASK CRASHED *** for doc: {self.doc_id}: {e}")
-            logger.error(f"💥 MCP SERVER: Exception type: {type(e)}")
+            logger.error(f"MCP server: *** KEEPALIVE TASK CRASHED *** for doc: {self.doc_id}: {e}")
+            logger.error(f"MCP server: Exception type: {type(e)}")
             import traceback
-            logger.error(f"💥 MCP SERVER: Full traceback:\n{traceback.format_exc()}")
+            logger.error(f"MCP server: Full traceback:\n{traceback.format_exc()}")
 
     async def _monitor_connection(self) -> None:
         """Monitor WebSocket connection state and attempt reconnection if needed"""
         try:
-            logger.debug(f"🔍 MCP SERVER: *** CONNECTION MONITOR STARTED *** for doc: {self.doc_id}")
-            logger.debug(f"🔍 MCP SERVER: Will check connection every 3 seconds")
-            logger.debug(f"🔍 MCP SERVER: Initial monitor state - connected: {self.websocket_connected}, websocket: {self.websocket is not None}")
+            logger.debug(f"MCP server: *** CONNECTION MONITOR STARTED *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: Will check connection every 3 seconds")
+            logger.debug(f"MCP server: Initial monitor state - connected: {self.websocket_connected}, websocket: {self.websocket is not None}")
             
             monitor_counter = 0
             while self.websocket_connected and self.websocket:
                 try:
-                    logger.debug(f"🔍 MCP SERVER: *** MONITOR SLEEP START #{monitor_counter + 1} *** - waiting 3 seconds...")
+                    logger.debug(f"MCP server: *** MONITOR SLEEP START #{monitor_counter + 1} *** - waiting 3 seconds...")
                     await asyncio.sleep(3)  # Check every 3 seconds
                     monitor_counter += 1
                     
-                    logger.debug(f"🔍 MCP SERVER: *** MONITOR SLEEP END #{monitor_counter} *** - checking connection state...")
+                    logger.debug(f"MCP server: *** MONITOR SLEEP END #{monitor_counter} *** - checking connection state...")
                     
                     if self.websocket:
                         connection_state = getattr(self.websocket, 'state', 'unknown')
-                        logger.debug(f"🔍 MCP SERVER: *** CONNECTION CHECK #{monitor_counter} *** for doc: {self.doc_id}")
-                        logger.debug(f"🔍 MCP SERVER: WebSocket state: {connection_state}")
-                        logger.debug(f"🔍 MCP SERVER: websocket_connected: {self.websocket_connected}")
+                        logger.debug(f"MCP server: *** CONNECTION CHECK #{monitor_counter} *** for doc: {self.doc_id}")
+                        logger.debug(f"MCP server: WebSocket state: {connection_state}")
+                        logger.debug(f"MCP server: websocket_connected: {self.websocket_connected}")
                         
                         # Check if connection is closed or closing
                         if hasattr(self.websocket, 'closed') and self.websocket.closed:
-                            logger.error(f"💔 MCP SERVER: *** CONNECTION DETECTED AS CLOSED *** #{monitor_counter}")
-                            logger.error(f"💔 MCP SERVER: Will attempt reconnection...")
+                            logger.error(f"MCP server: *** CONNECTION DETECTED AS CLOSED *** #{monitor_counter}")
+                            logger.error(f"MCP server: Will attempt reconnection...")
                             self.websocket_connected = False
                             break
                         elif str(connection_state) in ['CLOSED', 'CLOSING']:
-                            logger.error(f"💔 MCP SERVER: *** CONNECTION CLOSING/CLOSED *** #{monitor_counter} - state: {connection_state}")
-                            logger.error(f"💔 MCP SERVER: Will attempt reconnection...")
+                            logger.error(f"MCP server: *** CONNECTION CLOSING/CLOSED *** #{monitor_counter} - state: {connection_state}")
+                            logger.error(f"MCP server: Will attempt reconnection...")
                             self.websocket_connected = False
                             break
                         else:
-                            logger.debug(f"✅ MCP SERVER: Connection healthy #{monitor_counter} - state: {connection_state}")
+                            logger.debug(f"MCP server: Connection healthy #{monitor_counter} - state: {connection_state}")
                             
                 except Exception as e:
-                    logger.error(f"💔 MCP SERVER: Connection monitor error #{monitor_counter}: {e}")
-                    logger.error(f"💔 MCP SERVER: Assuming connection failed, will reconnect")
+                    logger.error(f"MCP server: Connection monitor error #{monitor_counter}: {e}")
+                    logger.error(f"MCP server: Assuming connection failed, will reconnect")
                     self.websocket_connected = False
                     break
                 
-            logger.debug(f"🔍 MCP SERVER: Connection monitor stopped for doc: {self.doc_id} after {monitor_counter} checks")
+            logger.debug(f"MCP server: Connection monitor stopped for doc: {self.doc_id} after {monitor_counter} checks")
             
             # Attempt reconnection if we detected a problem
             if not self.websocket_connected:
-                logger.debug(f"🔄 MCP SERVER: *** TRIGGERING RECONNECTION *** for doc: {self.doc_id}")
+                logger.debug(f"MCP server: *** TRIGGERING RECONNECTION *** for doc: {self.doc_id}")
                 await self._reconnect_websocket()
                 
         except asyncio.CancelledError:
-            logger.debug(f"💤 MCP SERVER: *** CONNECTION MONITOR CANCELLED *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: *** CONNECTION MONITOR CANCELLED *** for doc: {self.doc_id}")
             raise  # Re-raise cancellation
         except Exception as e:
-            logger.error(f"💥 MCP SERVER: *** CONNECTION MONITOR CRASHED *** for doc: {self.doc_id}: {e}")
-            logger.error(f"💥 MCP SERVER: Exception type: {type(e)}")
+            logger.error(f"MCP server: *** CONNECTION MONITOR CRASHED *** for doc: {self.doc_id}: {e}")
+            logger.error(f"MCP server: Exception type: {type(e)}")
             import traceback
-            logger.error(f"💥 MCP SERVER: Full traceback:\n{traceback.format_exc()}")
+            logger.error(f"MCP server: Full traceback:\n{traceback.format_exc()}")
 
     async def _reconnect_websocket(self) -> None:
         """Attempt to reconnect to WebSocket server"""
-        logger.debug(f"🔄 Attempting to reconnect WebSocket for doc: {self.doc_id}")
+        logger.debug(f"Attempting to reconnect WebSocket for doc: {self.doc_id}")
         await asyncio.sleep(2)  # Wait before reconnecting
         try:
             await self.connect_to_websocket_server(max_retries=3)
@@ -1083,47 +1083,47 @@ class LoroTreeModel:
     async def _handle_binary_snapshot(self, binary_data: bytes) -> None:
         """Handle binary snapshot data directly from WebSocket server"""
         try:
-            logger.debug(f"� MCP SERVER: ==== PROCESSING BINARY SNAPSHOT ====")
-            logger.debug(f"📸 MCP SERVER: Binary snapshot size: {len(binary_data)} bytes for document: {self.doc_id}")
-            logger.debug(f"📸 MCP SERVER: Document state BEFORE import - initialized: {self._is_initialized}")
+            logger.debug(f" MCP server: ==== PROCESSING BINARY SNAPSHOT ====")
+            logger.debug(f"MCP server: Binary snapshot size: {len(binary_data)} bytes for document: {self.doc_id}")
+            logger.debug(f"MCP server: Document state BEFORE import - initialized: {self._is_initialized}")
             
             # Log current document state before import
             try:
                 pre_state = self.export_to_lexical_state()
                 pre_children = len(pre_state.get('root', {}).get('children', []))
-                logger.debug(f"📸 MCP SERVER: Pre-import document has {pre_children} children")
+                logger.debug(f"MCP server: Pre-import document has {pre_children} children")
             except Exception as e:
-                logger.debug(f"📸 MCP SERVER: Could not get pre-import state: {e}")
+                logger.debug(f"MCP server: Could not get pre-import state: {e}")
             
             # Import binary snapshot directly into Loro document
-            logger.debug(f"📸 MCP SERVER: Importing binary data into Loro document...")
+            logger.debug(f"MCP server: Importing binary data into Loro document...")
             self.doc.import_(binary_data)
-            logger.debug(f"✅ MCP SERVER: Successfully imported binary snapshot into Loro document: {self.doc_id}")
+            logger.debug(f"MCP server: Successfully imported binary snapshot into Loro document: {self.doc_id}")
             
             # Update tree reference and synchronize mappings
-            logger.debug(f"🔄 MCP SERVER: Updating tree reference and syncing node mappings...")
+            logger.debug(f"MCP server: Updating tree reference and syncing node mappings...")
             self.tree = self.doc.get_tree(self.tree_name)
             
             # Check if tree has nodes after import
             try:
                 all_nodes = list(self.tree.nodes())
-                logger.debug(f"🔍 MCP SERVER: Tree now has {len(all_nodes)} nodes after binary import")
+                logger.debug(f"MCP server: Tree now has {len(all_nodes)} nodes after binary import")
                 
                 if all_nodes:
                     self.mapper.sync_existing_nodes()
-                    logger.debug(f"✅ MCP SERVER: Tree reference updated and mappings synced")
+                    logger.debug(f"MCP server: Tree reference updated and mappings synced")
                 else:
-                    logger.warning(f"⚠️ MCP SERVER: Tree appears empty after binary import - this may be expected for new documents")
+                    logger.warning(f"MCP server: Tree appears empty after binary import - this may be expected for new documents")
                     
             except Exception as tree_check_error:
-                logger.error(f"❌ MCP SERVER: Error checking tree nodes: {tree_check_error}")
+                logger.error(f"MCP server: Error checking tree nodes: {tree_check_error}")
             
             # Mark as initialized if we got valid content
             if not self._is_initialized:
                 self._is_initialized = True
-                logger.debug(f"🎯 MCP SERVER: Document {self.doc_id} NOW INITIALIZED from binary WebSocket snapshot!")
+                logger.debug(f"MCP server: Document {self.doc_id} NOW INITIALIZED from binary WebSocket snapshot!")
             else:
-                logger.debug(f"🔄 MCP SERVER: Document {self.doc_id} was already initialized, updated with new snapshot")
+                logger.debug(f"MCP server: Document {self.doc_id} was already initialized, updated with new snapshot")
             
             # Log document structure after applying snapshot (with better error handling)
             try:
@@ -1133,7 +1133,7 @@ class LoroTreeModel:
                 current_state = self.export_to_lexical_state(log_structure=True)
                 self._log_document_structure(current_state, "BINARY_SNAPSHOT")
                 root_children = current_state.get('root', {}).get('children', [])
-                logger.debug(f"📊 MCP SERVER: AFTER SNAPSHOT - Document {self.doc_id} now has {len(root_children)} root children")
+                logger.debug(f"MCP server: AFTER SNAPSHOT - Document {self.doc_id} now has {len(root_children)} root children")
                 
                 # Log the actual content received
                 for i, child in enumerate(root_children):
@@ -1142,32 +1142,32 @@ class LoroTreeModel:
                     
                     if child_type == 'heading':
                         text_content = self._extract_text_from_node(child)
-                        logger.debug(f"📊 MCP SERVER: Child[{i}]: {child_type} (key: {child_key}) - '{text_content}'")
+                        logger.debug(f"MCP server: Child[{i}]: {child_type} (key: {child_key}) - '{text_content}'")
                     elif child_type == 'paragraph':
                         text_content = self._extract_text_from_node(child)
-                        logger.debug(f"📊 MCP SERVER: Child[{i}]: {child_type} (key: {child_key}) - '{text_content}'")
+                        logger.debug(f"MCP server: Child[{i}]: {child_type} (key: {child_key}) - '{text_content}'")
                     else:
-                        logger.debug(f"📊 MCP SERVER: Child[{i}]: {child_type} (key: {child_key})")
+                        logger.debug(f"MCP server: Child[{i}]: {child_type} (key: {child_key})")
                         
             except Exception as log_error:
-                logger.error(f"❌ MCP SERVER: Failed to log document structure after binary snapshot: {log_error}")
+                logger.error(f"MCP server: Failed to log document structure after binary snapshot: {log_error}")
                 # Try alternative approach to check document content
                 try:
                     all_nodes = list(self.tree.nodes())  # Returns TreeID objects
-                    logger.debug(f"🔍 MCP SERVER: Tree inspection - total nodes: {len(all_nodes)}")
+                    logger.debug(f"MCP server: Tree inspection - total nodes: {len(all_nodes)}")
                     if all_nodes:
-                        logger.debug(f"🔍 MCP SERVER: First few nodes: {[str(node) for node in all_nodes[:5]]}")
+                        logger.debug(f"MCP server: First few nodes: {[str(node) for node in all_nodes[:5]]}")
                     else:
-                        logger.debug(f"🔍 MCP SERVER: Tree is indeed empty - might be a timing issue or empty document")
+                        logger.debug(f"MCP server: Tree is indeed empty - might be a timing issue or empty document")
                 except Exception as inspect_error:
-                    logger.error(f"❌ MCP SERVER: Could not inspect tree: {inspect_error}")
+                    logger.error(f"MCP server: Could not inspect tree: {inspect_error}")
             
-            logger.debug(f"✅ MCP SERVER: ==== BINARY SNAPSHOT PROCESSING COMPLETE ====")
+            logger.debug(f"MCP server: ==== BINARY SNAPSHOT PROCESSING COMPLETE ====")
                 
         except Exception as e:
-            logger.error(f"❌ MCP SERVER: Failed to handle binary snapshot for {self.doc_id}: {e}")
+            logger.error(f"MCP server: Failed to handle binary snapshot for {self.doc_id}: {e}")
             import traceback
-            logger.error(f"❌ MCP SERVER: Traceback: {traceback.format_exc()}")
+            logger.error(f"MCP server: Traceback: {traceback.format_exc()}")
 
     def _extract_text_from_node(self, node: Dict[str, Any]) -> str:
         """Extract text content from a node and its children"""
@@ -1185,29 +1185,29 @@ class LoroTreeModel:
     async def _handle_websocket_message(self, data: Dict[str, Any]) -> None:
         """Handle incoming WebSocket JSON message"""
         message_type = data.get("type", "")
-        logger.debug(f"📨 MCP SERVER: Processing JSON message type '{message_type}' for doc: {self.doc_id}")
+        logger.debug(f"MCP server: Processing JSON message type '{message_type}' for doc: {self.doc_id}")
         
         if message_type == "update":
-            logger.debug(f"🔄 MCP SERVER: Handling UPDATE message for doc: {self.doc_id}")
+            logger.debug(f"MCP server: Handling UPDATE message for doc: {self.doc_id}")
             await self._handle_update_message(data)
         elif message_type == "snapshot":
-            logger.debug(f"📸 MCP SERVER: Handling JSON SNAPSHOT message for doc: {self.doc_id}")
+            logger.debug(f"MCP server: Handling JSON SNAPSHOT message for doc: {self.doc_id}")
             await self._handle_snapshot_message(data)
         elif message_type == "keepalive_ack":
             await self._handle_keepalive_ack(data)
         else:
-            logger.debug(f"❓ MCP SERVER: Received unknown WebSocket message type '{message_type}' for doc: {self.doc_id} with data: {data}")
+            logger.debug(f"MCP server: Received unknown WebSocket message type '{message_type}' for doc: {self.doc_id} with data: {data}")
 
     async def _handle_snapshot_message(self, data: Dict[str, Any]) -> None:
         """Handle snapshot message from WebSocket server"""
         try:
             snapshot_data = data.get("snapshot")
             if snapshot_data:
-                logger.debug(f"📸 MCP SERVER: Receiving initial snapshot from WebSocket server for document: {self.doc_id}")
+                logger.debug(f"MCP server: Receiving initial snapshot from WebSocket server for document: {self.doc_id}")
                 
                 # Import snapshot into Loro document
                 self.doc.import_(bytes(snapshot_data))
-                logger.debug(f"✅ MCP SERVER: Applied initial snapshot for document: {self.doc_id}")
+                logger.debug(f"MCP server: Applied initial snapshot for document: {self.doc_id}")
                 
                 # Update tree reference and synchronize mappings
                 self.tree = self.doc.get_tree(self.tree_name)
@@ -1216,13 +1216,13 @@ class LoroTreeModel:
                 # Mark as initialized if we got valid content
                 if not self._is_initialized:
                     self._is_initialized = True
-                    logger.debug(f"🎯 MCP SERVER: Document {self.doc_id} initialized from WebSocket snapshot - ready for real-time collaboration!")
+                    logger.debug(f"MCP server: Document {self.doc_id} initialized from WebSocket snapshot - ready for real-time collaboration!")
                 
                 # Log initial document structure
                 try:
                     current_state = self.export_to_lexical_state(log_structure=True)
                     self._log_document_structure(current_state, "INITIAL_SNAPSHOT")
-                    logger.debug(f"📊 MCP SERVER: Initial document {self.doc_id} has {len(current_state.get('root', {}).get('children', []))} root children")
+                    logger.debug(f"MCP server: Initial document {self.doc_id} has {len(current_state.get('root', {}).get('children', []))} root children")
                 except Exception as log_error:
                     logger.error(f"Failed to log initial document structure: {log_error}")
                     
@@ -1232,58 +1232,58 @@ class LoroTreeModel:
     async def _handle_update_message(self, data: Dict[str, Any]) -> None:
         """Handle update message from WebSocket server"""
         try:
-            logger.debug(f"🔄 MCP SERVER: ===== PROCESSING UPDATE MESSAGE =====")
-            logger.debug(f"🔄 MCP SERVER: Message data keys: {list(data.keys())}")
+            logger.debug(f"MCP server: ===== PROCESSING UPDATE MESSAGE =====")
+            logger.debug(f"MCP server: Message data keys: {list(data.keys())}")
             
             update_data = data.get("update")
             if update_data:
-                logger.debug(f"🔄 MCP SERVER: *** UPDATE DATA FOUND ***")
-                logger.debug(f"🔄 MCP SERVER: Update data type: {type(update_data)}")
-                logger.debug(f"🔄 MCP SERVER: Update data length: {len(update_data) if hasattr(update_data, '__len__') else 'unknown'}")
-                logger.debug(f"🔄 MCP SERVER: Receiving real-time update from editor for document: {self.doc_id}")
+                logger.debug(f"MCP server: *** UPDATE DATA FOUND ***")
+                logger.debug(f"MCP server: Update data type: {type(update_data)}")
+                logger.debug(f"MCP server: Update data length: {len(update_data) if hasattr(update_data, '__len__') else 'unknown'}")
+                logger.debug(f"MCP server: Receiving real-time update from editor for document: {self.doc_id}")
                 
                 # Log document state BEFORE applying update
                 try:
                     before_state = self.export_to_lexical_state()
                     before_children_count = len(before_state.get('root', {}).get('children', []))
-                    logger.debug(f"📊 MCP SERVER: BEFORE UPDATE - Document {self.doc_id} has {before_children_count} root children")
+                    logger.debug(f"MCP server: BEFORE UPDATE - Document {self.doc_id} has {before_children_count} root children")
                 except Exception as before_log_error:
                     logger.error(f"Failed to log document state before update: {before_log_error}")
                 
                 # Apply update to Loro document
-                logger.debug(f"🔄 MCP SERVER: Applying update to Loro document...")
+                logger.debug(f"MCP server: Applying update to Loro document...")
                 self.doc.import_(bytes(update_data))
-                logger.debug(f"✅ MCP SERVER: Successfully imported update bytes into Loro document")
+                logger.debug(f"MCP server: Successfully imported update bytes into Loro document")
                 
                 # Refresh tree reference
-                logger.debug(f"🔄 MCP SERVER: Refreshing tree reference...")
+                logger.debug(f"MCP server: Refreshing tree reference...")
                 self.tree = self.doc.get_tree(self.tree_name)
-                logger.debug(f"✅ MCP SERVER: Tree reference refreshed")
+                logger.debug(f"MCP server: Tree reference refreshed")
                 
                 # Log document state AFTER applying update
                 try:
                     after_state = self.export_to_lexical_state(log_structure=True)
                     after_children_count = len(after_state.get('root', {}).get('children', []))
-                    logger.debug(f"📊 MCP SERVER: AFTER UPDATE - Document {self.doc_id} now has {after_children_count} root children")
+                    logger.debug(f"MCP server: AFTER UPDATE - Document {self.doc_id} now has {after_children_count} root children")
                     
                     if after_children_count != before_children_count:
-                        logger.debug(f"🎯 MCP SERVER: *** DOCUMENT CONTENT CHANGED *** from {before_children_count} to {after_children_count} children")
+                        logger.debug(f"MCP server: *** DOCUMENT CONTENT CHANGED *** from {before_children_count} to {after_children_count} children")
                     else:
-                        logger.debug(f"📝 MCP SERVER: Document structure unchanged, but content may have been modified within existing nodes")
+                        logger.debug(f"MCP server: Document structure unchanged, but content may have been modified within existing nodes")
                     
                     self._log_document_structure(after_state, "WEBSOCKET_UPDATE")
                 except Exception as log_error:
                     logger.error(f"Failed to log document structure after WebSocket update: {log_error}")
                 
-                logger.debug(f"✅ MCP SERVER: ===== UPDATE MESSAGE PROCESSED SUCCESSFULLY =====")
+                logger.debug(f"MCP server: ===== UPDATE MESSAGE PROCESSED SUCCESSFULLY =====")
             else:
-                logger.warning(f"⚠️ MCP SERVER: No 'update' data found in message")
-                logger.warning(f"⚠️ MCP SERVER: Available keys: {list(data.keys())}")
+                logger.warning(f"MCP server: No 'update' data found in message")
+                logger.warning(f"MCP server: Available keys: {list(data.keys())}")
                 
         except Exception as e:
-            logger.error(f"❌ MCP SERVER: Failed to handle update message: {e}")
+            logger.error(f"MCP server: Failed to handle update message: {e}")
             import traceback
-            logger.error(f"❌ MCP SERVER: Update handling traceback: {traceback.format_exc()}")
+            logger.error(f"MCP server: Update handling traceback: {traceback.format_exc()}")
 
     async def send_update_to_websocket_server(self, update_bytes: bytes) -> None:
         """Send update to WebSocket server"""
@@ -1299,7 +1299,7 @@ class LoroTreeModel:
             }
             
             await self.websocket.send(json.dumps(message))
-            logger.debug(f"📤 Sent update to WebSocket server for doc: {self.doc_id}")
+            logger.debug(f"Sent update to WebSocket server for doc: {self.doc_id}")
             
         except Exception as e:
             logger.error(f"Failed to send update to WebSocket server: {e}")
@@ -1311,26 +1311,26 @@ class LoroTreeModel:
             server_timestamp = data.get("server_timestamp", "unknown")
             acknowledged = data.get("acknowledged", False)
             
-            logger.debug(f"💓 MCP SERVER: *** RECEIVED KEEPALIVE ACK #{ping_id} *** for doc: {self.doc_id}")
-            logger.debug(f"💓 MCP SERVER: Server timestamp: {server_timestamp}")
-            logger.debug(f"💓 MCP SERVER: Acknowledged: {acknowledged}")
-            logger.debug(f"💓 MCP SERVER: Client timestamp: {time.time()}")
+            logger.debug(f"MCP server: *** RECEIVED KEEPALIVE ACK #{ping_id} *** for doc: {self.doc_id}")
+            logger.debug(f"MCP server: Server timestamp: {server_timestamp}")
+            logger.debug(f"MCP server: Acknowledged: {acknowledged}")
+            logger.debug(f"MCP server: Client timestamp: {time.time()}")
             
             if server_timestamp != "unknown":
                 try:
                     roundtrip_time = time.time() - float(server_timestamp)
-                    logger.debug(f"💓 MCP SERVER: *** KEEPALIVE ROUND-TRIP TIME: {roundtrip_time:.3f}s ***")
+                    logger.debug(f"MCP server: *** KEEPALIVE ROUND-TRIP TIME: {roundtrip_time:.3f}s ***")
                 except (ValueError, TypeError):
-                    logger.warning(f"💓 MCP SERVER: Could not calculate round-trip time from server timestamp: {server_timestamp}")
+                    logger.warning(f"MCP server: Could not calculate round-trip time from server timestamp: {server_timestamp}")
             
             if acknowledged:
-                logger.debug(f"✅ MCP SERVER: *** KEEPALIVE #{ping_id} ACKNOWLEDGED *** - connection is healthy")
+                logger.debug(f"MCP server: *** KEEPALIVE #{ping_id} ACKNOWLEDGED *** - connection is healthy")
             else:
-                logger.warning(f"⚠️ MCP SERVER: *** KEEPALIVE #{ping_id} NOT ACKNOWLEDGED *** - potential issue")
+                logger.warning(f"MCP server: *** KEEPALIVE #{ping_id} NOT ACKNOWLEDGED *** - potential issue")
             
         except Exception as e:
-            logger.error(f"💔 MCP SERVER: Error handling keepalive ACK: {e}")
-            logger.error(f"💔 MCP SERVER: ACK data: {data}")
+            logger.error(f"MCP server: Error handling keepalive ACK: {e}")
+            logger.error(f"MCP server: ACK data: {data}")
 
     def _setup_local_update_subscription(self) -> None:
         """Set up subscription to automatically propagate local document changes to WebSocket server"""
@@ -1342,25 +1342,25 @@ class LoroTreeModel:
             def local_update_callback(update_bytes):
                 """Callback to handle local document changes and send to WebSocket"""
                 try:
-                    logger.debug(f"🔄 LOCAL UPDATE: Document {self.doc_id} changed locally, propagating {len(update_bytes)} bytes to WebSocket")
+                    logger.debug(f"LOCAL UPDATE: Document {self.doc_id} changed locally, propagating {len(update_bytes)} bytes to WebSocket")
                     
                     if self.websocket_connected and self.websocket:
                         # Schedule the async send operation
                         asyncio.create_task(self._send_local_update_to_websocket(update_bytes))
                     else:
-                        logger.warning(f"⚠️ LOCAL UPDATE: WebSocket not connected for doc {self.doc_id}, cannot propagate local changes")
+                        logger.warning(f"LOCAL UPDATE: WebSocket not connected for doc {self.doc_id}, cannot propagate local changes")
                     
                     return True  # Continue subscription
                 except Exception as e:
-                    logger.error(f"❌ LOCAL UPDATE: Failed to handle local update for doc {self.doc_id}: {e}")
+                    logger.error(f"LOCAL UPDATE: Failed to handle local update for doc {self.doc_id}: {e}")
                     return True  # Continue subscription even on error
             
             # Subscribe to local document updates
             self._local_update_subscription = self.doc.subscribe_local_update(local_update_callback)
-            logger.debug(f"✅ LOCAL UPDATE: Subscription established for doc: {self.doc_id}")
+            logger.debug(f"LOCAL UPDATE: Subscription established for doc: {self.doc_id}")
             
         except Exception as e:
-            logger.error(f"❌ LOCAL UPDATE: Failed to set up subscription for doc {self.doc_id}: {e}")
+            logger.error(f"LOCAL UPDATE: Failed to set up subscription for doc {self.doc_id}: {e}")
 
     async def _send_local_update_to_websocket(self, update_bytes: bytes) -> None:
         """Send local update to WebSocket server (async helper for subscription callback)"""
@@ -1376,10 +1376,10 @@ class LoroTreeModel:
             }
             
             await self.websocket.send(json.dumps(message))
-            logger.debug(f"✅ LOCAL UPDATE: Successfully propagated {len(update_bytes)} bytes to WebSocket server for doc: {self.doc_id}")
+            logger.debug(f"LOCAL UPDATE: Successfully propagated {len(update_bytes)} bytes to WebSocket server for doc: {self.doc_id}")
             
         except Exception as e:
-            logger.error(f"❌ LOCAL UPDATE: Failed to send to WebSocket server for doc {self.doc_id}: {e}")
+            logger.error(f"LOCAL UPDATE: Failed to send to WebSocket server for doc {self.doc_id}: {e}")
 
     def _log_document_structure(self, lexical_state: Dict[str, Any], operation: str) -> None:
         """
@@ -1391,17 +1391,17 @@ class LoroTreeModel:
         """
         try:
             if not lexical_state or 'root' not in lexical_state:
-                logger.warning(f"📋 [{operation}] Document {self.doc_id}: NO ROOT FOUND in lexical state")
+                logger.warning(f"[{operation}] Document {self.doc_id}: NO ROOT FOUND in lexical state")
                 return
                 
             root = lexical_state['root']
             children = root.get('children', [])
             child_count = len(children)
             
-            logger.debug(f"📋 [{operation}] Document {self.doc_id} structure:")
-            logger.debug(f"  └─ Root type: {root.get('type', 'unknown')}")
-            logger.debug(f"  └─ Root key: {root.get('__key', 'no-key')}")
-            logger.debug(f"  └─ Children count: {child_count}")
+            logger.debug(f"[{operation}] Document {self.doc_id} structure:")
+            logger.debug(f"└─ Root type: {root.get('type', 'unknown')}")
+            logger.debug(f"└─ Root key: {root.get('__key', 'no-key')}")
+            logger.debug(f"└─ Children count: {child_count}")
             
             # Log details of each child
             for i, child in enumerate(children):
@@ -1416,7 +1416,7 @@ class LoroTreeModel:
                     if text_nodes:
                         child_text = f" (text: '{text_nodes[0].get('text', '')}')"
                 
-                logger.debug(f"    └─ Child[{i}]: {child_type} (key: {child_key}, children: {len(child_children)}){child_text}")
+                logger.debug(f"└─ Child[{i}]: {child_type} (key: {child_key}, children: {len(child_children)}){child_text}")
                 
                 # Log grandchildren for debugging
                 for j, grandchild in enumerate(child_children[:3]):  # Limit to first 3 for brevity
@@ -1424,7 +1424,7 @@ class LoroTreeModel:
                     gc_key = grandchild.get('__key', 'no-key')
                     gc_text = grandchild.get('text', '') if gc_type == 'text' else ''
                     gc_text_preview = f" '{gc_text[:50]}{'...' if len(gc_text) > 50 else ''}'" if gc_text else ''
-                    logger.debug(f"      └─ GrandChild[{j}]: {gc_type} (key: {gc_key}){gc_text_preview}")
+                    logger.debug(f"└─ GrandChild[{j}]: {gc_type} (key: {gc_key}){gc_text_preview}")
                     
         except Exception as e:
             logger.error(f"Failed to log document structure: {e}")

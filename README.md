@@ -291,10 +291,10 @@ For complete working examples and demonstrations, see the `src/examples/` direct
 ```bash
 # Run the example application
 npm install
-npm run example
+make example
 
 # This starts both Node.js and Python servers plus a React demo app
-# Open http://localhost:5173 to see dual editor interface
+# Open http://localhost:3000/split/index.html to see the 2 editors view
 ```
 
 The examples include:

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -42,7 +42,7 @@ export class TextIntegrator implements BaseIntegrator<TextDiff> {
             this.integrateTextRetain(change, binding, provider);
             break;
           default:
-            console.warn(`📝 Unknown text change type: ${change.type}`);
+            console.warn(` Unknown text change type: ${change.type}`);
         }
       });
     }

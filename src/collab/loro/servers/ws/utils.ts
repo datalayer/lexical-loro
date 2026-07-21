@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -34,14 +34,14 @@ const persistenceDir = process.env.YPERSISTENCE
 // Helper function to log tree structure for debugging
 const logTreeStructure = (doc: LoroDoc, context: string) => {
   try {
-    console.log(`[Server] ${context} - Tree Structure Debug:`)
+    console.log(`[LORO] ${context} - Tree Structure Debug:`)
     
     // Try to get the tree container using getTree method
     try {
       const tree = doc.getTree('tree')
       if (tree) {
         const nodes = tree.nodes()
-        console.log(`[Server] Total nodes in tree: ${nodes.length}`)
+        console.log(`[LORO] Total nodes in tree: ${nodes.length}`)
         
         // Helper function to recursively log tree structure
         const logTreeStructureRecursive = (node: any, prefix: string = '', isLast: boolean = true, depth: number = 0) => {
@@ -52,7 +52,7 @@ const logTreeStructure = (doc: LoroDoc, context: string) => {
           const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ')
           const nodeInfo = `TreeID(${treeId.slice(0, 8)}...) [${elementType}]`
           
-          console.log(`[Server] ${prefix}${connector}${nodeInfo}`)
+          console.log(`[LORO] ${prefix}${connector}${nodeInfo}`)
           
           const children = node.children()
           if (children && children.length > 0) {
@@ -71,11 +71,11 @@ const logTreeStructure = (doc: LoroDoc, context: string) => {
           return !parent || data.isRoot
         })
         
-        console.log(`[Server] Root nodes: ${rootNodes.length}`)
+        console.log(`[LORO] Root nodes: ${rootNodes.length}`)
         console.log('')
         
         if (rootNodes.length === 0) {
-          console.log('[Server] ⚠️  No root nodes found!')
+          console.log('[LORO]   No root nodes found!')
         } else {
           rootNodes.forEach((root, index) => {
             const isLastRoot = index === rootNodes.length - 1
@@ -84,25 +84,25 @@ const logTreeStructure = (doc: LoroDoc, context: string) => {
         }
         
       } else {
-        console.log(`[Server] No tree container found`)
+        console.log(`[LORO] No tree container found`)
       }
     } catch (treeError) {
-      console.log(`[Server] Error accessing tree container:`, treeError.message)
+      console.log(`[LORO] Error accessing tree container:`, treeError.message)
     }
     
     // Try export with different modes for debugging
     try {
       const snapshot = doc.export({ mode: 'snapshot' })
-      console.log(`[Server] Snapshot size: ${snapshot.length} bytes`)
+      console.log(`[LORO] Snapshot size: ${snapshot.length} bytes`)
       
       const update = doc.export({ mode: 'update' })  
-      console.log(`[Server] Update size: ${update.length} bytes`)
+      console.log(`[LORO] Update size: ${update.length} bytes`)
     } catch (exportError) {
-      console.log(`[Server] Error exporting:`, exportError.message)
+      console.log(`[LORO] Error exporting:`, exportError.message)
     }
     
   } catch (error) {
-    console.warn(`[Server] Error logging tree structure:`, error)
+    console.warn(`[LORO] Error logging tree structure:`, error)
   }
 }
 
@@ -223,7 +223,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         const decoder = new TextDecoder()
         messageStr = decoder.decode(message)
       } catch (decodeError) {
-        console.warn(`[Server] messageListener - Failed to decode ArrayBuffer as string, treating as binary Loro update`)
+        console.warn(`[LORO] messageListener - Failed to decode ArrayBuffer as string, treating as binary Loro update`)
         // If decoding fails, treat as raw binary Loro update
         const updateBytes = new Uint8Array(message)
         doc.doc.import(updateBytes)
@@ -240,7 +240,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         const decoder = new TextDecoder()
         messageStr = decoder.decode(message);
       } catch (decodeError) {
-        console.warn(`[Server] messageListener - Failed to decode Uint8Array as string, treating as binary Loro update`)
+        console.warn(`[LORO] messageListener - Failed to decode Uint8Array as string, treating as binary Loro update`)
         // If decoding fails, treat as raw binary Loro update
         doc.doc.import(message);
         // Broadcast the update to other connections
@@ -252,7 +252,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
         return
       }
     } else {
-      console.warn(`[Server] messageListener - Unknown message type:`, typeof message)
+      console.warn(`[LORO] messageListener - Unknown message type:`, typeof message)
       return
     }
     
@@ -263,37 +263,37 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
     try {
       messageData = JSON.parse(messageStr) as LoroWebSocketMessage
     } catch (parseError) {
-      console.warn(`[Server] messageListener - JSON parse error:`, parseError.message)
-      console.warn(`[Server] messageListener - Raw message:`, messageStr.substring(0, 500))
+      console.warn(`[LORO] messageListener - JSON parse error:`, parseError.message)
+      console.warn(`[LORO] messageListener - Raw message:`, messageStr.substring(0, 500))
       return
     }
 
-    console.log(`[Server] Received message type: ${messageData.type} for doc: ${doc.name}`)
+    console.log(`[LORO] Received message type: ${messageData.type} for doc: ${doc.name}`)
     
     switch (messageData.type) {
 
       case messageQuerySnapshot:
         // Client is requesting a snapshot - send current document state
         const requestId = Math.random().toString(36).substr(2, 9);
-        console.log(`[Server] Client requesting snapshot for doc: ${doc.name} (Request ID: ${requestId})`)
+        console.log(`[LORO] Client requesting snapshot for doc: ${doc.name} (Request ID: ${requestId})`)
         
         // Log tree structure before creating snapshot
         // logTreeStructure(doc.doc, `Before creating snapshot (Request ID: ${requestId})`)
         
         try {
           const snapshot = doc.doc.export({ mode: 'snapshot' })
-          console.log(`[Server] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)
+          console.log(`[LORO] Sending snapshot response: ${snapshot.length} bytes (Request ID: ${requestId})`)
           
           // Verify the snapshot contains expected content
           const tree = doc.doc.getTree('tree')
           const nodes = tree.nodes()
-          console.log(`[Server] Snapshot contains ${nodes.length} nodes from server document`)
+          console.log(`[LORO] Snapshot contains ${nodes.length} nodes from server document`)
           
           // Send binary snapshot data directly instead of wrapped message
           conn.send(snapshot)
         } catch (snapshotError) {
-          console.error(`[Server] ERROR creating/sending snapshot:`, snapshotError.message)
-          console.error(`[Server] Stack:`, snapshotError.stack)
+          console.error(`[LORO] ERROR creating/sending snapshot:`, snapshotError.message)
+          console.error(`[LORO] Stack:`, snapshotError.stack)
         }
         break
 
@@ -312,7 +312,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           const afterStates = doc.ephemeralStore.getAllStates()
           const afterKeys = Object.keys(afterStates)
           
-          console.log(`📡 SERVER DEBUG - Applied ephemeral update from ${conn.id}:`, {
+          console.log(` SERVER DEBUG - Applied ephemeral update from ${conn.id}:`, {
             bytesLength: ephemeralBytes.length,
             beforeKeys,
             afterKeys,
@@ -334,7 +334,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           const allKeys = Object.keys(allStates)
           const ephemeralUpdate = doc.ephemeralStore.encodeAll()
           
-          console.log(`📡 SERVER DEBUG - Client ${conn.id} requesting ephemeral state:`, {
+          console.log(` SERVER DEBUG - Client ${conn.id} requesting ephemeral state:`, {
             allKeysAvailable: allKeys,
             encodedLength: ephemeralUpdate.length,
             totalConnections: doc.conns.size
@@ -347,7 +347,7 @@ const messageListener = (conn, doc: WSSharedDoc, message: ArrayBuffer | string |
           }
           sendMessage(doc, conn, ephemeralResponse)
         } catch (error) {
-            console.warn('[Server] messageQueryEphemeral - ERROR encoding/sending ephemeral state:', error)
+            console.warn('[LORO] messageQueryEphemeral - ERROR encoding/sending ephemeral state:', error)
         }
         break
 
@@ -402,15 +402,15 @@ const closeConn = (doc, conn) => {
     if (doc.conns.size === 0) {
       if (persistence !== null) {
         // if persisted, we store state and cleanup document
-        console.log(`[Server] Persisting document ${doc.name} before cleanup`)
+        console.log(`[LORO] Persisting document ${doc.name} before cleanup`)
         persistence.writeState(doc.name, doc).then(() => {
           // Cleanup WSSharedDoc resources (no destroy method needed for Loro)
-          console.log(`[Server] Document ${doc.name} persisted and cleaned up`)
+          console.log(`[LORO] Document ${doc.name} persisted and cleaned up`)
         })
         docs.delete(doc.name)
       } else {
         // No persistence configured - keep document in memory for reconnections
-        console.log(`[Server] No persistence configured - keeping document ${doc.name} in memory for future connections`)
+        console.log(`[LORO] No persistence configured - keeping document ${doc.name} in memory for future connections`)
         // logTreeStructure(doc.doc, `Document ${doc.name} structure before keeping in memory`)
       }
     }
@@ -471,18 +471,18 @@ export const setupWSConnection = (conn, req, { docName = (req.url || '').slice(1
     
     try {
       const snapshot = doc.doc.export({ mode: 'snapshot' })
-      console.log(`[Server] Sending initial snapshot to new client: ${snapshot.length} bytes`)
+      console.log(`[LORO] Sending initial snapshot to new client: ${snapshot.length} bytes`)
       
       // Verify the snapshot contains expected content
       const tree = doc.doc.getTree('tree')
       const nodes = tree.nodes()
-      console.log(`[Server] Initial snapshot contains ${nodes.length} nodes from server document`)
+      console.log(`[LORO] Initial snapshot contains ${nodes.length} nodes from server document`)
       
       // Send binary snapshot data directly instead of wrapped message
       conn.send(snapshot)
     } catch (snapshotError) {
-      console.error(`[Server] ERROR creating/sending initial snapshot:`, snapshotError.message)
-      console.error(`[Server] Stack:`, snapshotError.stack)
+      console.error(`[LORO] ERROR creating/sending initial snapshot:`, snapshotError.message)
+      console.error(`[LORO] Stack:`, snapshotError.stack)
     }
     
     // Send current ephemeral state if any
@@ -512,7 +512,7 @@ export class WSSharedDoc {
     this.doc = new LoroDoc()
     
     // Initialize the document with default Lexical content
-    console.log(`[Server] Initializing document '${name}' with default content`)
+    console.log(`[LORO] Initializing document '${name}' with default content`)
     initializeLoroDocWithLexicalContent(this.doc)
     
     /**
@@ -559,7 +559,7 @@ export class WSSharedDoc {
           // Clear the sender reference after broadcast
           this.lastEphemeralSender = null
         } catch (broadcastError) {
-          console.warn(`[Server] ephemeralChangeIntegrator - ERROR broadcasting:`, {
+          console.warn(`[LORO] ephemeralChangeIntegrator - ERROR broadcasting:`, {
             error: broadcastError.message,
             stack: broadcastError.stack
           })

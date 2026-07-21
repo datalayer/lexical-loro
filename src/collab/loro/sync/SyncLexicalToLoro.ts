@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -26,6 +26,21 @@ export function syncLexicalToLoro(
     prevEditorState,
     editorState: currEditorState,
   } = update;
+
+  let __seedDebugMutationCount = 0;
+  if (mutatedNodes) {
+    mutatedNodes.forEach((nodeMap) => {
+      __seedDebugMutationCount += nodeMap.size;
+    });
+  }
+  console.log(
+    '[SEED-DEBUG] syncLexicalToLoro: mutatedNodes=',
+    mutatedNodes ? 'map' : 'null',
+    'totalMutations=',
+    __seedDebugMutationCount,
+    'tags=',
+    Array.from(update.tags),
+  );
 
   // Process node mutations if present.
   // NOTE: mutatedNodes is null for selection-only updates (no DOM mutations).
@@ -72,52 +87,109 @@ export function syncLexicalToLoro(
         }
       });
 
-      // Phase 2: Collect all ElementNode mutations, sort by depth, then propagate
-      const elementMutations: Array<{ mutation: 'created' | 'updated' | 'destroyed'; nodeKey: string; depth: number }> = [];
-      
-      mutatedNodes.forEach((nodeMap, Klass) => {
-        if (isClassExtending(Klass, ElementNode) && !isClassExtending(Klass, RootNode)) {
-          nodeMap.forEach((mutation, nodeKey) => {
-            // Compute depth in Lexical tree (root=0, paragraph=1, tablecell=3, etc.)
-            let depth = 0;
-            currEditorState.read(() => {
-              const node = $getNodeByKey(nodeKey);
-              if (node) {
-                let current = node.getParent();
-                while (current) {
-                  depth++;
-                  current = current.getParent();
-                }
-              }
-            });
-            elementMutations.push({ mutation, nodeKey, depth });
-          });
-        }
-      });
-      
-      // Sort by depth ascending → parents (depth 1) are propagated before children (depth 2, 3, …)
-      elementMutations.sort((a, b) => a.depth - b.depth);
-      
-      for (const { mutation, nodeKey } of elementMutations) {
-        propagateElementNode(update, mutation, nodeKey, mutatorOptions);
+      // Phases 2 & 3 (unified): collect every non-root mutation with its Lexical
+      // tree depth AND its sibling index within its parent, then apply them in a
+      // single ordered pass.
+      //
+      // Ordering rationale — the Loro tree requires each inserted child's index
+      // to be <= its parent's current children count. Two guarantees make every
+      // insertion valid:
+      //   1. depth ascending  → a parent is always created before its children.
+      //   2. index ascending  → a node's lower-indexed siblings are created
+      //      before it, so by the time it is inserted the parent already holds
+      //      exactly `index` children.
+      // Crucially, elements and leaves are ordered TOGETHER. Previously all
+      // ElementNodes were created before any TextNode, so a paragraph that
+      // interleaves text with an inline element (e.g. a link at index 11) tried
+      // to insert the link while the paragraph still had 0 children in Loro,
+      // throwing "insertion index out of range". Mixing both node categories in
+      // one index-sorted pass fixes that.
+      type NodeCategory = 'element' | 'text' | 'linebreak' | 'decorator';
+      interface MutationInfo {
+        mutation: 'created' | 'updated' | 'destroyed';
+        nodeKey: string;
+        depth: number;
+        index: number;
+        category: NodeCategory;
       }
-      
-      // Phase 3: Process leaf children (their parents are now guaranteed to be mapped)
+
+      const collected: MutationInfo[] = [];
+
       mutatedNodes.forEach((nodeMap, Klass) => {
-        if (isClassExtending(Klass, TextNode)) {
-          nodeMap.forEach((mutation, nodeKey) => {
-            propagateTextNode(update, mutation, nodeKey, mutatorOptions);
-          });
+        let category: NodeCategory | null = null;
+        if (isClassExtending(Klass, RootNode)) {
+          return; // handled in Phase 1
+        } else if (isClassExtending(Klass, ElementNode)) {
+          category = 'element';
+        } else if (isClassExtending(Klass, TextNode)) {
+          category = 'text';
         } else if (isClassExtending(Klass, LineBreakNode)) {
-          nodeMap.forEach((mutation, nodeKey) => {
-            propagateLineBreakNode(update, mutation, nodeKey, mutatorOptions);
-          });
+          category = 'linebreak';
         } else if (isClassExtending(Klass, DecoratorNode)) {
-          nodeMap.forEach((mutation, nodeKey) => {
-            propagateDecoratorNode(update, mutation, nodeKey, mutatorOptions);
-          });
+          category = 'decorator';
         }
+        if (category === null) {
+          return;
+        }
+        const resolvedCategory = category;
+        nodeMap.forEach((mutation, nodeKey) => {
+          // Compute depth (root=0, paragraph=1, inline element=2, …) and the
+          // node's index within its parent from the current editor state.
+          let depth = 0;
+          let index = 0;
+          currEditorState.read(() => {
+            const node = $getNodeByKey(nodeKey);
+            if (node) {
+              index = node.getIndexWithinParent();
+              let current = node.getParent();
+              while (current) {
+                depth++;
+                current = current.getParent();
+              }
+            }
+          });
+          collected.push({ mutation, nodeKey, depth, index, category: resolvedCategory });
+        });
       });
+
+      const dispatch = (info: MutationInfo) => {
+        switch (info.category) {
+          case 'element':
+            propagateElementNode(update, info.mutation, info.nodeKey, mutatorOptions);
+            break;
+          case 'text':
+            propagateTextNode(update, info.mutation, info.nodeKey, mutatorOptions);
+            break;
+          case 'linebreak':
+            propagateLineBreakNode(update, info.mutation, info.nodeKey, mutatorOptions);
+            break;
+          case 'decorator':
+            propagateDecoratorNode(update, info.mutation, info.nodeKey, mutatorOptions);
+            break;
+        }
+      };
+
+      // Destroys first, deepest-first (children before parents), to avoid
+      // re-create/update races during bulk deletes.
+      collected
+        .filter(m => m.mutation === 'destroyed')
+        .sort((a, b) => b.depth - a.depth)
+        .forEach(dispatch);
+
+      // Creates next, shallow-first then ascending sibling index (see rationale
+      // above) so every Loro insertion index stays within range.
+      collected
+        .filter(m => m.mutation === 'created')
+        .sort((a, b) => a.depth - b.depth || a.index - b.index)
+        .forEach(dispatch);
+
+      // Updates last, parents-first for determinism. Updates never call
+      // createLoroNode (the mapping already exists) so their order is not
+      // index-sensitive.
+      collected
+        .filter(m => m.mutation === 'updated')
+        .sort((a, b) => a.depth - b.depth || a.index - b.index)
+        .forEach(dispatch);
 
       // Commit only when there were actual node mutations (not selection-only changes)
       binding.doc.commit({ origin: binding.doc.peerIdStr });

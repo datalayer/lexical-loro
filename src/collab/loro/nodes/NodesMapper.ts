@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -7,6 +7,7 @@ import { LoroTree, LoroTreeNode, TreeID } from 'loro-crdt';
 import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
 import { LexicalNodeData } from '../types/LexicalNodeData';
+import { invariant } from '../utils/Invariant';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs
@@ -142,18 +143,40 @@ export class NodeMapper {
     parentTreeID?: TreeID,
     index?: number
   ): TreeID {
+    const insertionIndex = index;
+
+    // Loro requires the insertion index to be within [0, children.length]. An
+    // out-of-range index means the position was computed against stale/unsynced
+    // siblings; surface it instead of silently clamping (which would drop the
+    // node at the wrong position and hide the real ordering bug).
+    if (insertionIndex !== undefined) {
+      const parentNode =
+        parentTreeID !== undefined ? this.tree.getNodeByID(parentTreeID) : null;
+      const childrenLength = parentNode
+        ? (parentNode.children()?.length ?? 0)
+        : this.tree.roots().length;
+      invariant(
+        insertionIndex >= 0 && insertionIndex <= childrenLength,
+        'createLoroNode: insertion index out of range',
+        { nodeKey, parentTreeID, insertionIndex, childrenLength },
+      );
+    }
+
     // Create the tree node first
-    const treeNode = this.tree.createNode(parentTreeID, index);
+    const treeNode = this.tree.createNode(parentTreeID, insertionIndex);
     
     // Get the TreeID from the created node
     const treeId: TreeID = treeNode.id;
     
-    // Debug logging for parent relationship issues
+    // A requested parent must actually become this node's parent. If it does
+    // not, the CRDT structure diverges from Lexical — surface it.
     if (parentTreeID) {
       const actualParent = treeNode.parent();
-      if (!actualParent || actualParent.id !== parentTreeID) {
-        console.warn(`⚠️  Parent relationship not set correctly for ${nodeKey}: expected ${parentTreeID}, got ${actualParent?.id || 'None'}`);
-      }
+      invariant(
+        actualParent != null && actualParent.id === parentTreeID,
+        'createLoroNode: parent relationship not established',
+        { nodeKey, expected: parentTreeID, actual: actualParent?.id ?? null },
+      );
     }
     
     // Store basic metadata
@@ -285,7 +308,7 @@ export class NodeMapper {
     // 2. Normal collaboration flow as nodes are created/updated
     // 
     // This method is kept for compatibility but is now a no-op.
-    console.log('📍 syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
+    console.log(' syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
   }
 }
 

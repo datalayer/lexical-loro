@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2025 Datalayer, Inc.
+# Copyright (c) 2025-2026 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
 """
@@ -217,7 +217,7 @@ async def get_or_create_document_manager() -> TreeDocumentManager:
     global document_manager, _websocket_base_url
     
     if document_manager is None:
-        logger.debug("🔧 MCP SERVER: Creating TreeDocumentManager...")
+        logger.debug("MCP server: Creating TreeDocumentManager...")
         document_manager = TreeDocumentManager(
             base_path="./documents",
             websocket_url=_websocket_base_url,
@@ -228,16 +228,17 @@ async def get_or_create_document_manager() -> TreeDocumentManager:
         # Start background tasks in async context
         await document_manager.start_background_tasks_async()
         
-        logger.debug("✅ MCP SERVER: TreeDocumentManager created")
+        logger.debug("MCP server: TreeDocumentManager created")
     
     return document_manager
 
 # Helper function for ensuring document synchronization
 async def _ensure_document_synced(doc_id: str):
     """Ensure document is properly synchronized with WebSocket server before reading"""
+    logger.debug(f"MCP server: Ensuring document sync for {doc_id}")
     model = document_manager.get_document(doc_id)
     if not model:
-        logger.debug(f"� MCP SERVER: Document {doc_id} not found, creating empty document for WebSocket sync")
+        logger.debug(f"MCP server: Document {doc_id} not found, creating empty document for WebSocket sync")
         model = document_manager.create_document_for_websocket_sync(doc_id)
     
     # Ensure WebSocket connection for collaborative sync
@@ -245,6 +246,10 @@ async def _ensure_document_synced(doc_id: str):
     
     # Wait a moment for synchronization
     await asyncio.sleep(0.5)
+    logger.debug(
+        f"MCP server: Document sync complete for {doc_id} "
+        f"(connected={model.websocket_connected}, initialized={model._is_initialized})"
+    )
     
     return model
 
@@ -273,20 +278,22 @@ async def get_document(doc_id: str) -> str:
         # Get existing document or create if not found
         model = manager.get_document(doc_id)
         if not model:
-            logger.debug(f"📄 MCP SERVER: Document {doc_id} not found, creating empty document for WebSocket sync")
+            logger.debug(f"MCP server: Document {doc_id} not found, creating empty document for WebSocket sync")
             # Create empty model without initializing content - let WebSocket populate it
             model = manager.create_document_for_websocket_sync(doc_id)
-            logger.debug(f"✅ MCP SERVER: Empty document created for {doc_id}, now connecting to WebSocket for content")
+            logger.debug(f"MCP server: Empty document created for {doc_id}, now connecting to WebSocket for content")
         else:
-            logger.debug(f"📄 MCP SERVER: Found existing document: {doc_id}")
+            logger.debug(f"MCP server: Found existing document: {doc_id}")
         
         # Ensure WebSocket connection for collaborative sync
-        logger.debug(f"🔌 MCP SERVER: Ensuring WebSocket connection for document: {doc_id}")
+        logger.debug(f"MCP server: Ensuring WebSocket connection for document: {doc_id}")
         await _ensure_websocket_connection(model)
-        logger.debug(f"✅ MCP SERVER: WebSocket connection established for document: {doc_id}")
+        logger.debug(f"MCP server: WebSocket connection established for document: {doc_id}")
         
         # Convert Loro tree to Lexical JSON format
         lexical_json = _loro_tree_to_lexical_json(model)
+        root_children = len(lexical_json.get('root', {}).get('children', []))
+        logger.debug(f"MCP server: Returning document {doc_id} with {root_children} root children")
         
         result = {
             "success": True,
@@ -333,6 +340,8 @@ async def load_document(doc_id: str) -> str:
         
         # Get the lexical data from the model
         lexical_json = _loro_tree_to_lexical_json(model)
+        root_children = len(lexical_json.get('root', {}).get('children', []))
+        logger.debug(f"MCP server: Loaded document {doc_id} with {root_children} root children")
         
         # Format the response
         result = {
@@ -559,45 +568,45 @@ async def append_paragraph(doc_id: str, text: str) -> str:
 async def _ensure_websocket_connection(model: LoroTreeModel) -> None:
     """Ensure the model is connected to the WebSocket server for collaborative sync"""
     try:
-        logger.debug(f"🔍 MCP SERVER: Checking WebSocket connection status for doc: {model.doc_id}")
-        logger.debug(f"🔍 MCP SERVER: Current websocket_connected status: {model.websocket_connected}")
-        logger.debug(f"� MCP SERVER: WebSocket URL: {getattr(model, 'websocket_url', 'Not set')}")
+        logger.debug(f"MCP server: Checking WebSocket connection status for doc: {model.doc_id}")
+        logger.debug(f"MCP server: Current websocket_connected status: {model.websocket_connected}")
+        logger.debug(f"MCP server: WebSocket URL: {getattr(model, 'websocket_url', 'Not set')}")
         
         if not model.websocket_connected:
-            logger.debug(f"🔌 MCP SERVER: *** INITIATING WEBSOCKET CONNECTION *** for doc: {model.doc_id}")
-            logger.debug(f"🔌 MCP SERVER: About to call model.connect_to_websocket_server()...")
+            logger.debug(f"MCP server: Initiating WebSocket connection for doc: {model.doc_id}")
+            logger.debug(f"MCP server: About to call model.connect_to_websocket_server()...")
             
             await model.connect_to_websocket_server()
             
-            logger.debug(f"🔌 MCP SERVER: connect_to_websocket_server() completed")
-            logger.debug(f"🔌 MCP SERVER: New connection status: {model.websocket_connected}")
+            logger.debug(f"MCP server: connect_to_websocket_server() completed")
+            logger.debug(f"MCP server: New connection status: {model.websocket_connected}")
             
             # Wait a moment for the connection to stabilize and receive snapshot
-            logger.debug(f"⏳ MCP SERVER: Waiting 0.5s for connection to stabilize...")
+            logger.debug("MCP server: Waiting 0.5s for connection to stabilize")
             await asyncio.sleep(0.5)
             
-            logger.debug(f"✅ MCP SERVER: *** WEBSOCKET CONNECTION ESTABLISHED *** for doc: {model.doc_id}")
-            logger.debug(f"✅ MCP SERVER: Connection status: {model.websocket_connected}")
-            logger.debug(f"✅ MCP SERVER: Has WebSocket object: {model.websocket is not None}")
-            logger.debug(f"✅ MCP SERVER: Has message listener task: {model._websocket_task is not None}")
+            logger.debug(f"MCP server: WebSocket connection established for doc: {model.doc_id}")
+            logger.debug(f"MCP server: Connection status: {model.websocket_connected}")
+            logger.debug(f"MCP server: Has WebSocket object: {model.websocket is not None}")
+            logger.debug(f"MCP server: Has message listener task: {model._websocket_task is not None}")
             
             # Check if we received initial data
             if model._is_initialized:
-                logger.debug(f"📥 MCP SERVER: *** DOCUMENT INITIALIZED *** - {model.doc_id} received initial snapshot data from WebSocket")
+                logger.debug(f"MCP server: Document initialized from WebSocket snapshot: {model.doc_id}")
             else:
-                logger.warning(f"⏳ MCP SERVER: *** DOCUMENT NOT INITIALIZED *** - {model.doc_id} connected but no initial snapshot received yet")
+                logger.warning(f"MCP server: Document not initialized yet after connect: {model.doc_id}")
                 
         else:
-            logger.debug(f"🔗 MCP SERVER: *** ALREADY CONNECTED *** - Model already connected to WebSocket server for doc: {model.doc_id}")
-            logger.debug(f"🔗 MCP SERVER: Connection details - websocket_connected: {model.websocket_connected}, has_websocket: {model.websocket is not None}")
-            logger.debug(f"🔗 MCP SERVER: REUSING existing connection (PERSISTENT document manager prevents disconnection)")
-            logger.debug(f"🔗 MCP SERVER: Keepalive task running: {model._keepalive_task is not None and not model._keepalive_task.done()}")
-            logger.debug(f"🔗 MCP SERVER: Monitor task running: {model._monitor_task is not None and not model._monitor_task.done()}")
+            logger.debug(f"MCP server: WebSocket already connected for doc: {model.doc_id}")
+            logger.debug(f"MCP server: Connection details - websocket_connected: {model.websocket_connected}, has_websocket: {model.websocket is not None}")
+            logger.debug("MCP server: Reusing existing connection (persistent document manager)")
+            logger.debug(f"MCP server: Keepalive task running: {model._keepalive_task is not None and not model._keepalive_task.done()}")
+            logger.debug(f"MCP server: Monitor task running: {model._monitor_task is not None and not model._monitor_task.done()}")
             
     except Exception as e:
-        logger.error(f"❌ MCP SERVER: *** WEBSOCKET CONNECTION FAILED *** for doc {model.doc_id}: {e}")
+        logger.error(f"MCP server: WebSocket connection failed for doc {model.doc_id}: {e}")
         import traceback
-        logger.error(f"❌ MCP SERVER: Connection failure traceback: {traceback.format_exc()}")
+        logger.error(f"MCP server: Connection failure traceback: {traceback.format_exc()}")
         # Don't raise - allow operations to continue even without collaboration
 
 def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
@@ -610,7 +619,7 @@ def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
             # Log what MCP server is returning to client
             root = lexical_json.get('root', {})
             children = root.get('children', [])
-            logger.debug(f"🔄 MCP SERVER RETURNING: Document {model.doc_id} with {len(children)} root children")
+            logger.debug(f"MCP server RETURNING: Document {model.doc_id} with {len(children)} root children")
             for i, child in enumerate(children):
                 child_type = child.get('type', 'unknown')
                 child_key = child.get('__key', 'no-key')
@@ -620,7 +629,7 @@ def _loro_tree_to_lexical_json(model: LoroTreeModel) -> Dict[str, Any]:
                     text_nodes = [c for c in child_children if c.get('type') == 'text']
                     if text_nodes:
                         text_preview = f" - '{text_nodes[0].get('text', '')[:50]}'"
-                logger.debug(f"  └─ Child[{i}]: {child_type} (key: {child_key}, {len(child_children)} children){text_preview}")
+                logger.debug(f"Child[{i}]: {child_type} (key: {child_key}, {len(child_children)} children){text_preview}")
             
             return lexical_json
         
@@ -656,7 +665,7 @@ async def _add_paragraph_to_tree_at_index(model: LoroTreeModel, text: str, index
     try:
         # Capture version vector BEFORE making any changes for incremental updates
         from_version = model.doc.state_vv
-        logger.debug(f"🔍 MCP SERVER: Captured initial version: {from_version}")
+        logger.debug(f"MCP server: Captured initial version: {from_version}")
         
         # Work directly with TreeIDs since we're in a tree-based system
         tree = model.tree
@@ -671,7 +680,7 @@ async def _add_paragraph_to_tree_at_index(model: LoroTreeModel, text: str, index
         if not root_node:
             raise ValueError("Cannot find root node in document tree")
             
-        logger.debug(f"📝 Adding paragraph to root TreeID: {root_node.id}")
+        logger.debug(f"Adding paragraph to root TreeID: {root_node.id}")
         
         # Get current children count and adjust index
         existing_children = tree.children(root_node.id)
@@ -707,7 +716,7 @@ async def _add_paragraph_to_tree_at_index(model: LoroTreeModel, text: str, index
         
         # Commit the changes - the model's local update subscription will handle WebSocket propagation automatically
         model.doc.commit()
-        logger.debug(f"✅ MCP SERVER: Changes committed for doc {model.doc_id} at index {insert_index}")
+        logger.debug(f"MCP server: Changes committed for doc {model.doc_id} at index {insert_index}")
         
         return paragraph_id
     except Exception as e:
@@ -719,7 +728,7 @@ async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
     try:
         # Capture version vector BEFORE making any changes for incremental updates
         from_version = model.doc.state_vv
-        logger.debug(f"🔍 MCP SERVER: Captured initial version: {from_version}")
+        logger.debug(f"MCP server: Captured initial version: {from_version}")
         
         # Work directly with TreeIDs since we're in a tree-based system
         tree = model.tree
@@ -734,7 +743,7 @@ async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
         if not root_node:
             raise ValueError("Cannot find root node in document tree")
             
-        logger.debug(f"📝 Adding paragraph to root TreeID: {root_node.id}")
+        logger.debug(f"Adding paragraph to root TreeID: {root_node.id}")
         
         # Get current children count to append at the end
         existing_children = tree.children(root_node.id)
@@ -769,7 +778,7 @@ async def _add_paragraph_to_tree(model: LoroTreeModel, text: str):
         
         # Commit the changes - the model's local update subscription will handle WebSocket propagation automatically
         model.doc.commit()
-        logger.debug(f"✅ MCP SERVER: Changes committed for doc {model.doc_id} - model will handle WebSocket propagation via subscription")
+        logger.debug(f"MCP server: Changes committed for doc {model.doc_id} - model will handle WebSocket propagation via subscription")
         
         return paragraph_id
     except Exception as e:
@@ -847,14 +856,14 @@ def start_command(
     _websocket_base_url = websocket_url
     
     # Initialize global document manager with custom path
-    logger.debug("🔧 MCP SERVER CLI: Initializing document manager...")
+    logger.debug("MCP server CLI: Initializing document manager...")
     document_manager = TreeDocumentManager(
         base_path=documents_path,
         websocket_url=websocket_url,
         auto_save_interval=30,
         max_cached_documents=50
     )
-    logger.debug("✅ MCP SERVER CLI: Document manager initialized")
+    logger.debug("MCP server CLI: Document manager initialized")
     
     logger.info(f"Starting Lexical Loro MCP Server with transport: {transport}")
     logger.info(f"WebSocket base URL: {websocket_url}")

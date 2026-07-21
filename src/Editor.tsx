@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -116,6 +116,7 @@ export default function Editor(): JSX.Element {
   const [isSmallWidthViewport, setIsSmallWidthViewport] =
     useState<boolean>(false);
   const [editor] = useLexicalComposerContext();
+  const collabId = new URLSearchParams(window.location.search).get('collabId') || 'main';
   const [activeEditor, setActiveEditor] = useState(editor);
   const [isLinkEditMode, setIsLinkEditMode] = useState<boolean>(false);
 
@@ -188,13 +189,13 @@ export default function Editor(): JSX.Element {
             {isCollab ? (
               useYjs ? (
                 <YjsCollaborationPlugin
-                  id="main" 
+                  id={collabId}
                   providerFactory={createYjsWebsocketProvider}
                   shouldBootstrap={!skipCollaborationInit}
                 />
               ) : (
                 <LoroCollaborationPlugin
-                  id="main"
+                  id={collabId}
                   showCollaborators
                                     
                   providerFactory={createLoroWebsocketProvider}

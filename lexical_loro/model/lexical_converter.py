@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2025 Datalayer, Inc.
+# Copyright (c) 2025-2026 Datalayer, Inc.
 # Distributed under the terms of the MIT License.
 
 """
@@ -42,8 +42,8 @@ KEY DESIGN PRINCIPLES:
    - Provides CRDT conflict resolution
 
 3. **Bidirectional Conversion**:
-   - import_from_lexical_state(): JSON → Tree  
-   - export_to_lexical_state(): Tree → JSON
+   - import_from_lexical_state(): JSON -> Tree  
+   - export_to_lexical_state(): Tree -> JSON
 
 4. **Key Management**:
    - Lexical keys (__key, key, lexicalKey) are stripped during tree storage
@@ -449,7 +449,7 @@ def loro_tree_to_lexical_json(doc: LoroDoc, logger=None) -> str:
         return json.dumps(lexical_state, indent=2)
     except Exception as e:
         if logger:
-            logger.error(f"❌ [Converter] Error converting Loro tree to Lexical JSON: {e}")
+            logger.error(f"[Converter] Error converting Loro tree to Lexical JSON: {e}")
         return json.dumps(INITIAL_LEXICAL_JSON, indent=2)
 
 

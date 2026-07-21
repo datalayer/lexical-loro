@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -62,7 +62,7 @@ class AwarenessAdapter implements AwarenessProvider {
     // Use the same client ID as the binding for consistency
     this.localClientId = doc ? generateClientID(doc) : generateRandomClientID()
     
-    console.log('🔄 AwarenessAdapter created:', {
+    console.log(' AwarenessAdapter created:', {
       localClientId: this.localClientId,
       docPeerId: doc ? doc.peerId : 'no-doc',
       existingStatesCount: Object.keys(ephemeralStore.getAllStates()).length
@@ -336,6 +336,7 @@ messageHandlers[messageUpdate] = (
     const importStatus = provider.doc.import(updateBytes)
 
     const afterVersion = provider.doc.version()
+    console.log('[SEED-DEBUG] messageUpdate: imported', updateBytes.length, 'bytes; importStatus=', JSON.stringify(importStatus))
     
     // Update our last exported version to include the remote changes
     // This ensures we don't re-export remote changes
@@ -347,7 +348,7 @@ messageHandlers[messageUpdate] = (
     
     return null // No response needed
   } catch (error) {
-    console.warn(`❌ [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
+    console.warn(` [LORO-UPDATE-ERROR] Failed to apply Loro update:`, error)
     return null
   }
 }
@@ -520,7 +521,7 @@ const setupWS = (provider) => {
         status: 'connected'
       }])
       
-      console.log('✅ WebSocket connection established, requesting initial data')
+      console.log(' WebSocket connection established, requesting initial data')
       
       // Since we're in onopen, we know the WebSocket is ready
       // Use sendMessage directly to avoid any race conditions
@@ -535,11 +536,11 @@ const setupWS = (provider) => {
           docId: provider.docId,
           clientId: clientId
         }
-        console.log(`🔄 Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
-        console.log(`🔄 Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
+        console.log(` Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
+        console.log(` Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
         sendMessage(ws, snapshotRequest)
       } else {
-        console.log('📸 Snapshot already loaded, skipping request')
+        console.log(' Snapshot already loaded, skipping request')
       }
       
       // Then request initial ephemeral state from server  
@@ -573,6 +574,23 @@ const setupWS = (provider) => {
           })
         }
       }
+
+      // Flush any local document updates that were buffered while the socket
+      // was not ready to send (e.g. the initial-content bootstrap ran before
+      // the connection opened). Without this, seeded content committed before
+      // the socket opened would never reach the server or other collaborators.
+      if (provider._pendingUpdates.length > 0) {
+        const pending = provider._pendingUpdates
+        provider._pendingUpdates = []
+        console.log('[SEED-DEBUG] ws.onopen: flushing', pending.length, 'buffered local updates')
+        for (const pendingUpdate of pending) {
+          sendMessage(ws, {
+            type: 'update',
+            update: Array.from(pendingUpdate),
+            docId: provider.docId
+          })
+        }
+      }
     }
     provider.emit('status', [{
       status: 'connecting'
@@ -588,13 +606,13 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
     sendMessage(ws, message)
   } else {
-    console.log('❌ [BROADCAST] WebSocket not ready for sending');
+    console.log(' [BROADCAST] WebSocket not ready for sending');
   } 
   
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, JSON.stringify(message), provider)
   } else {
-    console.log('📻 [BROADCAST] BroadcastChannel not connected')
+    console.log(' [BROADCAST] BroadcastChannel not connected')
   }
 }
 
@@ -634,6 +652,7 @@ export class WebsocketProvider extends ObservableV2<any> {
   _exitIntegrator = null
   _bcSubscriber = null
   _lastExportedVersion: VersionVector = null  // Track last exported version for incremental updates
+  _pendingUpdates: Uint8Array[] = []  // Local updates buffered while the socket is not ready to send
 
   /**
    * @param {string} wsServerUrl
@@ -688,7 +707,7 @@ export class WebsocketProvider extends ObservableV2<any> {
           WebsocketProvider.globalEphemeralStore = new EphemeralStore(300000) // 5 minute timeout
           console.log('🆕 Created new global EphemeralStore')
         } else {
-          console.log('♻️ Reusing existing global EphemeralStore - cleaning up stale user states')
+          console.log(' Reusing existing global EphemeralStore - cleaning up stale user states')
           // Clean up all existing user states when reusing store to prevent accumulation
           const allStates = WebsocketProvider.globalEphemeralStore.getAllStates()
           Object.keys(allStates).forEach(key => {
@@ -696,7 +715,7 @@ export class WebsocketProvider extends ObservableV2<any> {
             const clientId = parseInt(key, 10)
             if (!isNaN(clientId)) {
               WebsocketProvider.globalEphemeralStore!.delete(key)
-              console.log('🧹 Cleaned up stale user state:', key)
+              console.log(' Cleaned up stale user state:', key)
             }
           })
         }
@@ -777,8 +796,25 @@ export class WebsocketProvider extends ObservableV2<any> {
         update: Array.from(update),
         docId: this.docId
       }
-      
-      broadcastMessage(this, updateMessage)
+
+      const ws = this.ws
+      if (this.wsconnected && ws && ws.readyState === ws.OPEN) {
+        console.log('[SEED-DEBUG] _updateHandler: sending local update over WS', update.length, 'bytes')
+        sendMessage(ws, updateMessage)
+      } else {
+        // The socket is not ready yet — this happens when the initial-content
+        // bootstrap commits before the connection opens. Loro delivers each
+        // local update to subscribeLocalUpdates exactly once, so dropping it
+        // here would lose the seeded content permanently (remote peers would
+        // never receive it). Buffer it and flush on open instead.
+        console.log('[SEED-DEBUG] _updateHandler: WS not ready, buffering local update', update.length, 'bytes (pending now', this._pendingUpdates.length + 1, ')')
+        this._pendingUpdates.push(update)
+      }
+
+      // Mirror to other same-origin tabs when the BroadcastChannel is available.
+      if (this.bcconnected) {
+        bc.publish(this.bcChannel, JSON.stringify(updateMessage), this)
+      }
     }
     // Document update integrater - called when Loro emits document change events
     /**

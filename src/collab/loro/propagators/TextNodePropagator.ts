@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -17,6 +17,7 @@ import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
 import { $diffTextContentAndApplyDelta } from '../utils/Utils';
+import { invariant } from '../utils/Invariant';
 
 /**
  * TextNode Propagator for Loro Tree Collaboration
@@ -49,13 +50,16 @@ export function createTextNodeInLoro(
   options?: TextNodeMutatorOptions
 ): TreeID {
   const mapper = getNodeMapper();
-  
-  // Debug logging for text node creation issues
-  if (!parentId) {
-    console.warn(`❌ Creating TextNode ${nodeKey} without parent in Loro tree - THIS WILL FAIL`);
-    return null as any; // Return early to avoid creating orphaned nodes
-  }
-  
+
+  // A text node is always a leaf with a parent element. A missing parent means
+  // the parent element was not synced first — surface it instead of creating an
+  // orphaned (unrenderable) node.
+  invariant(
+    parentId !== undefined,
+    'createTextNodeInLoro: text node has no parent in Loro tree',
+    { nodeKey },
+  );
+
   // Use mapper to get or create the tree node
   // Note: We can't pass lexicalNode directly due to context issues, but parentId should be sufficient
   const treeNode = mapper.getLoroNodeByLexicalKey(
@@ -101,47 +105,32 @@ export function updateTextNodeInLoro(
   options?: TextNodeMutatorOptions
 ): void {
   const mapper = getNodeMapper();
-  
-  // Get the existing tree node using the mapper
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey, undefined);
-  
-  if (!treeNode) {
-    console.warn(`📝 TextNode ${nodeKey} not found in Loro, skipping update`);
+
+  // Updates must target an existing mapped node. Creating on update can
+  // accidentally create inline nodes at root when parent info is unavailable.
+  const treeID = mapper.getTreeIDByLexicalKey(nodeKey);
+  if (!treeID || !options?.tree.has(treeID)) {
     return;
   }
-  
-  // Note: Container validation is done in each try-catch block below since
-  // the container can be deleted between operations
-  
-  // Store complete lexical node data as clean JSON if provided
+  const treeNode = options.tree.getNodeByID(treeID);
+  if (!treeNode) {
+    return;
+  }
+
+  // Store complete lexical node data as clean JSON if provided.
   if (lexicalNodeJSON) {
-    try {
-      // Store complete lexical JSON without the key
-      if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
-        const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
-      } else {
-        const { children, ...cleanedData } = lexicalNodeJSON as any;
-        treeNode.data.set('lexical', cleanedData);
-      }
-    } catch (error) {
-      // This is expected during text operations when nodes get deleted/recreated
-      console.warn(`📝 TextNode ${nodeKey} container was deleted during update, skipping (normal during text operations):`, error.message);
-      return;
+    if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
+      const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
+      treeNode.data.set('lexical', cleanedData);
+    } else {
+      const { children, ...cleanedData } = lexicalNodeJSON as any;
+      treeNode.data.set('lexical', cleanedData);
     }
   }
-  
-  // Update only essential metadata
-  try {
-    treeNode.data.set('elementType', 'text');
-    treeNode.data.set('updatedAt', Date.now());
-  } catch (error) {
-    console.warn(`📝 TextNode ${nodeKey} container deleted during metadata update (normal during text operations):`, error.message);
-    return;
-  }
-  
-  // The exported Lexical node data is already propagated by the mapper
-  // No additional JSON export needed since mapper propagates exportJSON automatically
+
+  // Update only essential metadata.
+  treeNode.data.set('elementType', 'text');
+  treeNode.data.set('updatedAt', Date.now());
 }
 
 /**
@@ -343,7 +332,7 @@ export function applyTextFormatInLoro(
     // Try a simple read operation to verify the container is accessible
     treeNode.data.get('format');
   } catch (error) {
-    console.warn(`📝 TextNode ${nodeKey} container deleted during format check (normal during text operations):`, error.message);
+    console.warn(` TextNode ${nodeKey} container deleted during format check (normal during text operations):`, error.message);
     return;
   }
   
@@ -362,7 +351,7 @@ export function applyTextFormatInLoro(
     treeNode.data.set('format', currentFormat);
     treeNode.data.set('lastUpdated', Date.now());
   } catch (error) {
-    console.warn(`📝 TextNode ${nodeKey} container deleted during format update (normal during text operations):`, error.message);
+    console.warn(` TextNode ${nodeKey} container deleted during format update (normal during text operations):`, error.message);
     return;
   }
 }
@@ -400,7 +389,7 @@ export function propagateTextNode(
               currentParentId = parentNode ? parentNode.id.toString() : undefined;
             }
           } catch (error) {
-            console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeID}:`, error);
+            console.warn(` Failed to get parent for existing TreeID ${existingTreeID}:`, error);
           }
           
           return { currentParentId, expectedParentId };
@@ -418,7 +407,7 @@ export function propagateTextNode(
               actualTreeID = treeNode.id;
             }
           } catch (error) {
-            console.warn(`📝 Could not get TreeNode for ${existingTreeID} during creation:`, error);
+            console.warn(` Could not get TreeNode for ${existingTreeID} during creation:`, error);
           }
           
           // Clear the old mapping first to avoid conflicts
@@ -430,7 +419,7 @@ export function propagateTextNode(
               tree.delete(actualTreeID);
             }
           } catch (error) {
-            console.warn(`📝 Failed to delete TreeNode ${actualTreeID} during creation:`, error);
+            console.warn(` Failed to delete TreeNode ${actualTreeID} during creation:`, error);
           }
         }
       }
@@ -486,7 +475,7 @@ export function propagateTextNode(
                 currentParentId = parentNode ? parentNode.id.toString() : undefined;
               }
             } catch (error) {
-              console.warn(`📝 Failed to get parent for existing TreeID ${existingTreeID} during update:`, error);
+              console.warn(` Failed to get parent for existing TreeID ${existingTreeID} during update:`, error);
             }
             
             return { currentParentId, expectedParentId, parent };
@@ -502,7 +491,7 @@ export function propagateTextNode(
                 actualTreeID = treeNode.id;
               }
             } catch (error) {
-              console.warn(`📝 Could not get TreeNode for ${existingTreeID}:`, error);
+              console.warn(` Could not get TreeNode for ${existingTreeID}:`, error);
             }
             
             // Clear the old mapping first to avoid conflicts
@@ -514,7 +503,7 @@ export function propagateTextNode(
                 tree.delete(actualTreeID);
               }
             } catch (error) {
-              console.warn(`📝 Failed to delete TreeNode ${actualTreeID} during update:`, error);
+              console.warn(` Failed to delete TreeNode ${actualTreeID} during update:`, error);
             }
             
             // Now recreate the TextNode with the new parent (treat as "created")
@@ -540,6 +529,33 @@ export function propagateTextNode(
           }
         }
         
+        // If a text node emits only an "updated" mutation before we have a
+        // mapping, treat it as a create so parent/index are explicit.
+        if (!existingTreeID) {
+          const { parent, parentId, index, textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
+            const parent = currentNode.getParent();
+            const parentId = parent ? mapper.getTreeIDByLexicalKey(parent.getKey()) : undefined;
+            const index = currentNode.getIndexWithinParent();
+            const textContent = currentNode.getTextContent();
+            const format = currentNode.getFormat();
+            const mode = currentNode.getMode();
+
+            let lexicalNodeJSON: any = undefined;
+            try {
+              lexicalNodeJSON = currentNode.exportJSON();
+            } catch (error) {
+              console.warn('Failed to export node JSON in propagateTextNode updated(create fallback):', error);
+            }
+
+            return { parent, parentId, index, textContent, format, mode, lexicalNodeJSON };
+          });
+
+          if (parentId !== undefined) {
+            createTextNodeInLoro(nodeKey, textContent, format, mode, parentId, index, lexicalNodeJSON, options);
+          }
+          return;
+        }
+
         // Normal update case - parent hasn't changed
         const { textContent, format, mode, lexicalNodeJSON } = update.editorState.read(() => {
           const textContent = currentNode.getTextContent();

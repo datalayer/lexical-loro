@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -52,6 +52,40 @@ export type SyncCursorPositionsFn = (
   provider: Provider,
   options?: SyncCursorPositionsOptions,
 ) => void;
+
+function getDisplayNameFromAwareness(awareness: UserState): string {
+  const awarenessData = awareness.awarenessData;
+  if (!awarenessData || typeof awarenessData !== 'object') {
+    return awareness.name;
+  }
+
+  const data = awarenessData as Record<string, unknown>;
+  const user = data.user;
+  const userRecord =
+    user && typeof user === 'object' ? (user as Record<string, unknown>) : undefined;
+
+  const candidates = [
+    userRecord?.display_name,
+    userRecord?.displayName,
+    userRecord?.name,
+    userRecord?.username,
+    userRecord?.handle,
+    data.display_name,
+    data.displayName,
+    data.name,
+    data.username,
+    data.handle,
+    awareness.name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+
+  return awareness.name;
+}
 
 /*****************************************************************************/
 
@@ -226,21 +260,8 @@ function createCursorSelection(
   isCurrentUser: boolean = false,
 ): CursorSelection {
   const color = cursor.color;
-  
-  // Helper function to convert color to rgba with opacity
-  const getColorWithOpacity = (color: string, opacity: number): string => {
-    if (color.startsWith('#')) {
-      const hex = color.slice(1);
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-    return color;
-  };
-
-  const caretColor = isCurrentUser ? getColorWithOpacity(color, 0.6) : color;
-  const nameBackgroundColor = isCurrentUser ? getColorWithOpacity(color, 0.7) : color;
+  const caretColor = color;
+  const nameBackgroundColor = color;
 
   const caret = document.createElement('span');
   caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:2px;background-color:${caretColor};z-index:10;${isCurrentUser ? 'opacity:0.8;' : ''}`;
@@ -301,7 +322,8 @@ export function syncCursorPositions(
     const [clientID, awareness] = awarenessState;
 
     visitedClientIDs.add(clientID);
-    const { name, color, focusing } = awareness;
+    const { color } = awareness;
+    const displayName = getDisplayNameFromAwareness(awareness);
     const isCurrentUser = clientID === localClientID;
     let selection = null;
 
@@ -309,9 +331,16 @@ export function syncCursorPositions(
 
     if (cursor === undefined) {
       // Add "(Me)" label for current user's cursor
-      const cursorName = isCurrentUser ? `${name} (Me)` : name;
+      const cursorName = isCurrentUser ? `${displayName} (Me)` : displayName;
       cursor = createCollabCursor(cursorName, color);
       cursors.set(clientID, cursor);
+    } else if (cursor.name !== displayName) {
+      cursor.name = displayName;
+      if (cursor.selection) {
+        cursor.selection.name.textContent = isCurrentUser
+          ? `${displayName} (Me)`
+          : displayName;
+      }
     }
 
     // Render cursor/selection whenever valid anchorPos/focusPos exist.

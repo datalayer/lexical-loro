@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -48,35 +48,50 @@ export function syncLoroToLexical(
     // Process Loro events and apply them to Lexical using the appropriate integrators
     eventBatch.events.forEach((event, index) => {
       
-      switch (event.diff.type) {
-        case 'tree':
-          // Call internal method that doesn't wrap in editor.update()
-          treeIntegrator.integrateInternal(event.diff as any, binding, provider);
-          break;
+      try {
+        switch (event.diff.type) {
+          case 'tree':
+            // Call internal method that doesn't wrap in editor.update()
+            treeIntegrator.integrateInternal(event.diff as any, binding, provider);
+            break;
 
-        case 'map':
-          // Call internal method that doesn't wrap in editor.update()
-          if (event.target) {
-            mapIntegrator.integrateWithContextInternal(event.diff as any, event.target, binding, provider);
-          } else {
-            mapIntegrator.integrateInternal(event.diff as any, binding, provider);
-          }
-          break;
+          case 'map':
+            // Call internal method that doesn't wrap in editor.update()
+            if (event.target) {
+              mapIntegrator.integrateWithContextInternal(event.diff as any, event.target, binding, provider);
+            } else {
+              mapIntegrator.integrateInternal(event.diff as any, binding, provider);
+            }
+            break;
 
-        case 'list':
-          listIntegrator.integrateInternal(event.diff as any, binding, provider);
-          break;
+          case 'list':
+            listIntegrator.integrateInternal(event.diff as any, binding, provider);
+            break;
 
-        case 'text':
-          textIntegrator.integrateInternal(event.diff as any, binding, provider);
-          break;
+          case 'text':
+            textIntegrator.integrateInternal(event.diff as any, binding, provider);
+            break;
 
-        case 'counter':
-          counterIntegrator.integrateInternal(event.diff as any, binding, provider);
-          break;
+          case 'counter':
+            counterIntegrator.integrateInternal(event.diff as any, binding, provider);
+            break;
 
-        default:
-          throw new Error(`Unsupported event diff type: ${(event.diff as any).type}. Supported types are: 'tree', 'map', 'list', 'text', 'counter'.`);
+          default:
+            throw new Error(`Unsupported event diff type: ${(event.diff as any).type}. Supported types are: 'tree', 'map', 'list', 'text', 'counter'.`);
+        }
+      } catch (err) {
+        console.error(
+          '[SEED-DEBUG] syncLoroToLexical: integrator threw for event',
+          index,
+          'diffType=',
+          (event.diff as any)?.type,
+          'target=',
+          String((event as any)?.target),
+          'diff=',
+          JSON.stringify((event.diff as any)),
+          err,
+        );
+        throw err;
       }
     });
     

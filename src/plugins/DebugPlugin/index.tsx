@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -21,6 +21,71 @@ export function DebugPlugin(): JSX.Element | null {
   const [selectedTool, setSelectedTool] = useState<string>('');
   const [isLoadingTools, setIsLoadingTools] = useState<boolean>(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
+
+  const getCurrentCollabDocId = (): string => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('collabId') || 'main';
+  };
+
+  const isInSplitScreen = (): boolean => {
+    try {
+      return window.parent != null && window.parent.location.pathname === '/split/';
+    } catch {
+      return false;
+    }
+  };
+
+  const navigateToRoom = (roomId: string, collabId: string): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('roomId', roomId);
+    url.searchParams.set('collabId', collabId);
+
+    if (isInSplitScreen()) {
+      window.parent.location.href = `/split/${url.search}`;
+      return;
+    }
+
+    window.location.href = `${url.pathname}${url.search}`;
+  };
+
+  const createNewRoomWithDocument = async () => {
+    const roomId = Date.now().toString(36);
+    const collabId = `room-${roomId}`;
+    const seedText = `New room ${roomId} created at ${new Date().toISOString()}`;
+
+    try {
+      const response = await fetch('http://localhost:3001/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'append_paragraph',
+          params: {
+            doc_id: collabId,
+            text: seedText,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+      }
+
+      console.log('Created new room document:', collabId, data.result || data);
+    } catch (error) {
+      console.warn('Unable to seed room via MCP, continuing with room navigation:', error);
+    }
+
+    navigateToRoom(roomId, collabId);
+  };
 
   // Fetch available MCP tools from the server
   const fetchMCPTools = async () => {
@@ -82,7 +147,7 @@ export function DebugPlugin(): JSX.Element | null {
           id: Date.now(),
           method: 'get_document',
           params: {
-            doc_id: 'playground/0/main'
+            doc_id: getCurrentCollabDocId()
           }
         })
       });
@@ -121,7 +186,7 @@ export function DebugPlugin(): JSX.Element | null {
           id: Date.now(),
           method: 'append_paragraph',
           params: {
-            doc_id: 'playground/0/main',
+            doc_id: getCurrentCollabDocId(),
             text: paragraphText
           }
         })
@@ -231,6 +296,7 @@ export function DebugPlugin(): JSX.Element | null {
   return (
     <>
       <button onClick={() => {reloadState(editor);}}>Reload State</button>
+      <button onClick={() => {void createNewRoomWithDocument();}}>Create New Room</button>
       <button onClick={() => {addParagraph(editor);}}>Add Paragraph</button>
       <button onClick={() => {first100Keys(editor);}}>100 First keys</button>
       

@@ -1,6 +1,6 @@
 {
   "name": "@datalayer/lexical-loro",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "main": "lib/index.js",
   "files": [
     "lib/**/*.{css,d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -28,7 +28,7 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "dev": "cross-env NODE_ENV=development concurrently \"npm:server:py:ws\" \"npm:server:py:mcp\" \"vite --host --port 3000\"",
-    "build:tsc": "tsc",
+    "build:lib": "tsc",
     "build:dev": "vite build",
     "build:prod": "vite build --mode production",
     "server:loro": "fkill -s :1235 && cross-env HOST=localhost PORT=1235 YPERSISTENCE=./.wss-loro tsx src/collab/loro/servers/ws/server.ts",
@@ -52,7 +52,7 @@
     "server": "tsx dev/node-server.ts",
     "server:py": "lexical-loro-server",
     "server:py:dev": "python3 -m lexical_loro.cli",
-    "server:py:ws": "python3 -m lexical_loro.cli --host localhost --port 3002 --autosave-interval 5",
+    "server:py:ws": "fkill -s :3002 || true && python3 -m lexical_loro.cli --host localhost --port 3002 --autosave-interval 5",
     "server:py:mcp": "python3 -m lexical_loro.mcp start --transport streamable-http --host 0.0.0.0 --port 3001 --websocket-url ws://localhost:3002 --documents-path ./documents --log-level DEBUG",
     "test:js": "vitest run",
     "test:py": "python3 -m pytest tests/ -v",
@@ -60,7 +60,7 @@
     "test:py:watch": "python3 -m pytest tests/ -v --tb=short -f"
   },
   "dependencies": {
-    "@datalayer/primer-addons": "^1.0.8",
+    "@datalayer/primer-addons": "^1.0.12",
     "@floating-ui/react": "^0.27.8",
     "@lexical/clipboard": "^0.35.0",
     "@lexical/code": "^0.35.0",

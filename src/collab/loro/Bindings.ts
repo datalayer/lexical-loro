@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
@@ -51,11 +51,11 @@ export function createBinding(
   
   // Initialize the tree - content will come from server snapshot via sync
   const tree = getLoroTree(doc);
-  console.log('📄 Loro tree initialized, content will be populated via server sync');
+  console.log(' Loro tree initialized, content will be populated via server sync');
   
   const clientID = generateClientID(doc);
   
-  console.log('🏗️ BINDING DEBUG - Creating binding:', {
+  console.log('- Creating binding:', {
     bindingId: id,
     localPeerId: doc.peerId,
     generatedClientID: clientID,
@@ -86,7 +86,7 @@ export function createBinding(
   // Setup debugging utilities only if debug is enabled via URL parameter
   if (isDebugEnabled()) {
     setupLoroDebugging(binding);
-    console.log('🐛 Loro debugging enabled via ?debug=true URL parameter');
+    console.log(' Loro debugging enabled via ?debug=true URL parameter');
   }
 
   return binding;
@@ -114,9 +114,9 @@ export function scheduleAsyncCommit(binding: Binding, delay: number = 500): void
       try {
         // Perform the actual commit
         binding.doc.commit({ origin: binding.doc.peerIdStr });
-        console.log('🔄 Async commit completed for binding:', binding.id);
+        console.log(' Async commit completed for binding:', binding.id);
       } catch (error) {
-        console.error('❌ Async commit failed for binding:', binding.id, error);
+        console.error(' Async commit failed for binding:', binding.id, error);
       }
       
       // Reset pending state
@@ -141,7 +141,7 @@ export function flushPendingCommit(binding: Binding): void {
   if (binding.pendingCommit) {
     binding.doc.commit({ origin: binding.doc.peerIdStr });
     binding.pendingCommit = false;
-    console.log('🔄 Forced commit completed for binding:', binding.id);
+    console.log(' Forced commit completed for binding:', binding.id);
   }
 }
 

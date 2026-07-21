@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2023-2025 Datalayer, Inc.
+ * Copyright (c) 2025-2026 Datalayer, Inc.
  * Distributed under the terms of the MIT License.
  */
 
 import { TreeID, LoroTree } from 'loro-crdt';
 import { LexicalNode, NodeKey } from 'lexical';
 import { Binding } from '../Bindings';
+import { invariant } from '../utils/Invariant';
 
 /**
  * Resolve lexical data from Loro, handling Loro container objects.
@@ -37,10 +38,9 @@ export function createLexicalNodeFromLoro(
   parentKey?: NodeKey,
   nodeDataFromDiff?: any
 ): LexicalNode | null {
-  // Get node data from Loro tree
-  if (!loroTree.has(treeId)) {
-    return null;
-  }
+  // Get node data from Loro tree. A create op for a tree node that does not
+  // exist is a real inconsistency.
+  invariant(loroTree.has(treeId), 'NodeFactory: TreeID not present in Loro tree', { treeId });
 
   const treeNode = loroTree.getNodeByID(treeId);
   
@@ -53,32 +53,30 @@ export function createLexicalNodeFromLoro(
   }
   
   if (!lexicalData || typeof lexicalData !== 'object') {
-    // Last resort: construct a minimal serialization from elementType metadata
+    // Last resort: reconstruct a minimal serialization from elementType metadata.
     const fallbackType =
       nodeDataFromDiff?.elementType ||
       treeNode?.data.get('elementType') ||
       treeNode?.data.get('nodeType');
-    if (!fallbackType || typeof fallbackType !== 'string') {
-      console.warn('🏭 NodeFactory: No lexical data or elementType for TreeID:', treeId);
-      return null;
-    }
+    invariant(
+      typeof fallbackType === 'string' && fallbackType.length > 0,
+      'NodeFactory: no lexical data or elementType for TreeID',
+      { treeId },
+    );
     lexicalData = { type: fallbackType, version: 1 };
   }
 
   const nodeType: string = lexicalData.type || lexicalData.__type;
-  if (!nodeType) {
-    console.warn('🏭 NodeFactory: No type field in lexical data for TreeID:', treeId);
-    return null;
-  }
+  invariant(!!nodeType, 'NodeFactory: no type field in lexical data for TreeID', { treeId });
 
-  // Get the registered node class from the editor
+  // Get the registered node class from the editor.
   const registeredNodes = binding.editor._nodes;
   const nodeInfo = registeredNodes.get(nodeType);
-  
-  if (!nodeInfo) {
-    console.warn(`🏭 NodeFactory: Node type '${nodeType}' is not registered in the editor`);
-    return null;
-  }
+  invariant(
+    nodeInfo != null,
+    'NodeFactory: node type is not registered in the editor',
+    { treeId, nodeType },
+  );
 
   // ---------- Generic creation via importJSON ----------
   // Every Lexical node class must implement the static `importJSON` method.
@@ -89,35 +87,24 @@ export function createLexicalNodeFromLoro(
   //   • Base properties (format, indent, direction, style, mode, detail, …)
   //     are applied via the chained `updateFromJSON` call
   // This removes the need for any node-type-specific branching.
-  try {
-    const serializedData = { ...lexicalData };
+  const serializedData = { ...lexicalData };
 
-    // Ensure required serialization fields
-    if (!serializedData.type) {
-      serializedData.type = nodeType;
-    }
-    if (serializedData.version === undefined) {
-      serializedData.version = 1;
-    }
-    // Provide an empty children array for element-type nodes whose children
-    // are managed as separate Loro tree nodes (importJSON itself does not
-    // recurse into children — that is handled by TreeIntegrator).
-    if (!('children' in serializedData)) {
-      serializedData.children = [];
-    }
-
-    const lexicalNode: LexicalNode = nodeInfo.klass.importJSON(serializedData);
-    return lexicalNode;
-  } catch (importError) {
-    console.warn(`🏭 NodeFactory: importJSON failed for '${nodeType}', trying constructor fallback:`, importError);
-
-    // Fallback: try no-arg constructor (works for simple nodes)
-    try {
-      const lexicalNode: LexicalNode = new nodeInfo.klass();
-      return lexicalNode;
-    } catch (ctorError) {
-      console.warn(`🏭 NodeFactory: Constructor also failed for '${nodeType}':`, ctorError);
-      return null;
-    }
+  // Ensure required serialization fields.
+  if (!serializedData.type) {
+    serializedData.type = nodeType;
   }
+  if (serializedData.version === undefined) {
+    serializedData.version = 1;
+  }
+  // Provide an empty children array for element-type nodes whose children are
+  // managed as separate Loro tree nodes (importJSON does not recurse into
+  // children — that is handled by TreeIntegrator).
+  if (!('children' in serializedData)) {
+    serializedData.children = [];
+  }
+
+  // Every registered Lexical node implements importJSON. If it throws, the
+  // serialized data is malformed — surface it instead of silently substituting
+  // a blank node via a constructor fallback (which hides the real problem).
+  return nodeInfo.klass.importJSON(serializedData);
 }
