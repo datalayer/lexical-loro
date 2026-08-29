@@ -32,7 +32,7 @@ from typing import Any, Dict, Optional
 
 import click
 import uvicorn
-from mcp.server import FastMCP
+from mcp.server import MCPServer
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -51,13 +51,21 @@ _websocket_base_url: str = "ws://localhost:8081"
 
 ###############################################################################
 # MCP Server with CORS support and legacy HTTP endpoints
-class FastMCPWithCORS(FastMCP):
-    def streamable_http_app(self) -> Starlette:
+class MCPServerWithCORS(MCPServer):
+    def streamable_http_app(
+        self, *, stateless_http: bool = True, **kwargs: Any
+    ) -> Starlette:
         """Return StreamableHTTP server app with CORS middleware and legacy endpoints
         See: https://github.com/modelcontextprotocol/python-sdk/issues/187
+
+        `stateless_http` is a parameter here rather than on the constructor:
+        mcp 2 moved it, and it defaults to True so this server keeps the
+        stateless behaviour it asked for under mcp 1. The rest of the keyword
+        arguments are forwarded untouched, so options this override has never
+        heard of still reach the SDK.
         """
         # Get the original Starlette app
-        app = super().streamable_http_app()
+        app = super().streamable_http_app(stateless_http=stateless_http, **kwargs)
         
         # Add CORS middleware
         app.add_middleware(
@@ -74,10 +82,14 @@ class FastMCPWithCORS(FastMCP):
         
         return app
     
-    def sse_app(self, mount_path: str | None = None) -> Starlette:
-        """Return SSE server app with CORS middleware"""
+    def sse_app(self, **kwargs: Any) -> Starlette:
+        """Return SSE server app with CORS middleware
+
+        Keyword-only in mcp 2, and `mount_path` is gone — the path is now
+        `sse_path`. Forwarded wholesale so a caller can still set it.
+        """
         # Get the original Starlette app
-        app = super().sse_app(mount_path)
+        app = super().sse_app(**kwargs)
         # Add CORS middleware
         app.add_middleware(
             CORSMiddleware,
@@ -207,7 +219,7 @@ class FastMCPWithCORS(FastMCP):
             )
 
 # Create MCP server instance
-mcp = FastMCPWithCORS("lexical-loro", stateless_http=True)
+mcp = MCPServerWithCORS("lexical-loro")
 
 ###############################################################################
 # Document Manager Initialization
@@ -873,6 +885,6 @@ def start_command(
         mcp.run(transport="stdio")
     elif transport == "streamable-http":
         logger.info(f"Starting server on {host}:{port}")
-        uvicorn.run(mcp.streamable_http_app, host=host, port=port)
+        uvicorn.run(mcp.streamable_http_app(), host=host, port=port)
     else:
         raise ValueError("Transport should be 'stdio' or 'streamable-http'.")
