@@ -20,7 +20,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import * as ReactDOM from 'react-dom';
 
 class EmojiOption extends MenuOption {
-  title: string;
+  declare title: string;
   emoji: string;
   keywords: Array<string>;
 

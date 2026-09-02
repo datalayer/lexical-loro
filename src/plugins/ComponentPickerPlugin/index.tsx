@@ -48,9 +48,9 @@ import {InsertTableDialog} from '../TablePlugin';
 
 class ComponentPickerOption extends MenuOption {
   // What shows up in the editor
-  title: string;
+  declare title: string;
   // Icon for display
-  icon?: JSX.Element;
+  declare icon?: JSX.Element;
   // For extra searching.
   keywords: Array<string>;
   // TBD

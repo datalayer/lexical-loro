@@ -3,6 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
+import type { JSX } from 'react';
 import React, { useState, useEffect } from 'react';
 import type { Binding } from '../Bindings';
 

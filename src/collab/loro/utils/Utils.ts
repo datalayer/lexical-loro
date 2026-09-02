@@ -174,12 +174,12 @@ export function $moveSelectionToPreviousNode(
   const prevNodeKey = anchorNode.__prev;
   let prevNode: ElementNode | null = null;
   if (prevNodeKey) {
-    prevNode = $getNodeByKey(prevNodeKey);
+    prevNode = $getNodeByKey<ElementNode>(prevNodeKey);
   }
 
   // If previous node not found, get parent node
   if (prevNode === null && anchorNode.__parent !== null) {
-    prevNode = $getNodeByKey(anchorNode.__parent);
+    prevNode = $getNodeByKey<ElementNode>(anchorNode.__parent);
   }
   if (prevNode === null) {
     $getRoot().selectStart();

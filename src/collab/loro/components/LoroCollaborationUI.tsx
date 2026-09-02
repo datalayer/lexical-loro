@@ -3,6 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
+import type { JSX } from 'react';
 import React from 'react';
 import type { Binding } from '../Bindings';
 import { LoroCollaborators } from './LoroCollaborators';

@@ -538,8 +538,9 @@ export function $syncPropertiesFromYjs(
         writableNode = lexicalNode.getWritable();
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      writableNode[property as keyof typeof writableNode] = nextValue as any;
+      // lexical 0.49 marks node internals such as `__type` readonly. This loop
+      // copies properties by name, so go through a mutable view of the node.
+      (writableNode as unknown as Record<string, unknown>)[property] = nextValue;
     }
   }
 }
@@ -557,12 +558,12 @@ export function $moveSelectionToPreviousNode(
   const prevNodeKey = anchorNode.__prev;
   let prevNode: ElementNode | null = null;
   if (prevNodeKey) {
-    prevNode = $getNodeByKey(prevNodeKey);
+    prevNode = $getNodeByKey<ElementNode>(prevNodeKey);
   }
 
   // If previous node not found, get parent node
   if (prevNode === null && anchorNode.__parent !== null) {
-    prevNode = $getNodeByKey(anchorNode.__parent);
+    prevNode = $getNodeByKey<ElementNode>(anchorNode.__parent);
   }
   if (prevNode === null) {
     $getRoot().selectStart();

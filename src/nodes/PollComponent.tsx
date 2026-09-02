@@ -34,6 +34,18 @@ function getTotalVotes(options: Options): number {
   }, 0);
 }
 
+// lexical 0.49 removed `clientID` from the collaboration context. Votes are
+// keyed by the Yjs client id, so read it from the shared document. Outside a
+// collaborative session there is no Yjs doc and a single local voter.
+const LOCAL_CLIENT_ID = 0;
+
+function $clientID(yjsDocMap: Map<string, {clientID: number}>): number {
+  for (const doc of yjsDocMap.values()) {
+    return doc.clientID;
+  }
+  return LOCAL_CLIENT_ID;
+}
+
 function PollOptionComponent({
   option,
   index,
@@ -50,7 +62,8 @@ function PollOptionComponent({
     onSelect?: () => void,
   ) => void;
 }): JSX.Element {
-  const {clientID} = useCollaborationContext();
+  const {yjsDocMap} = useCollaborationContext();
+  const clientID = $clientID(yjsDocMap);
   const checkboxRef = useRef(null);
   const votesArray = option.votes;
   const checkedIndex = votesArray.indexOf(clientID);
