@@ -4,16 +4,20 @@
  */
 
 import type {JSX} from 'react';
+import {useMemo} from 'react';
 import {$createLinkNode} from '@lexical/link';
 import {$createListItemNode, $createListNode} from '@lexical/list';
-import {LexicalComposer} from '@lexical/react/LexicalComposer';
+import {LexicalCollaboration} from '@lexical/react/LexicalCollaborationContext';
+import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
 import {$createHeadingNode, $createQuoteNode} from '@lexical/rich-text';
 import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
   $isTextNode,
+  defineExtension,
   DOMConversionMap,
+  getStaticNodeConfig,
   TextNode,
 } from 'lexical';
 import {isDevPlayground} from './appSettings';
@@ -142,8 +146,12 @@ function buildImportMap(): DOMConversionMap {
   const importMap: DOMConversionMap = {};
 
   // Wrap all TextNode importers with a function that also imports
-  // the custom styles implemented by the playground
-  for (const [tag, fn] of Object.entries(TextNode.importDOM() || {})) {
+  // the custom styles implemented by the playground. Since Lexical 0.49 a
+  // core node's default importers live in its static config rather than in
+  // a static `importDOM()`.
+  const textNodeImporters: DOMConversionMap =
+    getStaticNodeConfig(TextNode).ownNodeConfig?.importDOM ?? {};
+  for (const [tag, fn] of Object.entries(textNodeImporters)) {
     importMap[tag] = (importNode) => {
       const importer = fn(importNode);
       if (!importer) {
@@ -184,49 +192,63 @@ function buildImportMap(): DOMConversionMap {
   return importMap;
 }
 
+// Built once: the map depends on nothing the app changes.
+const HTML_IMPORT_MAP = buildImportMap();
+
 function App(): JSX.Element {
   const {
     settings: {isCollab, emptyEditor, measureTypingPerf},
   } = useSettings();
 
-  const initialConfig = {
-    editorState: isCollab
-      ? null
-      : emptyEditor
-      ? undefined
-      : $prepopulatedRichText,
-    html: {import: buildImportMap()},
-    namespace: 'Lexical Loro Playground',
-    nodes: [...PlaygroundNodes],
-    onError: (error: Error) => {
-      throw error;
-    },
-    theme: PlaygroundEditorTheme,
-  };
+  // The root extension: stable for a given pair of settings, since the
+  // composer rebuilds the editor whenever it changes. `null` leaves the
+  // document for the collaboration provider to fill, `undefined` gives an
+  // empty paragraph, and otherwise the welcome text is written in.
+  const extension = useMemo(
+    () =>
+      defineExtension({
+        $initialEditorState: isCollab
+          ? null
+          : emptyEditor
+          ? undefined
+          : $prepopulatedRichText,
+        html: {import: HTML_IMPORT_MAP},
+        name: '[root]',
+        namespace: 'Lexical Loro Playground',
+        nodes: [...PlaygroundNodes],
+        theme: PlaygroundEditorTheme,
+      }),
+    [emptyEditor, isCollab],
+  );
 
+  // Since Lexical 0.49 the collaboration context has to be provided; the
+  // poll, sticky and image components and the comments read it even when
+  // collaboration is off.
   return (
-    <LexicalComposer initialConfig={initialConfig}>
-      <SharedHistoryContext>
-        <TableContext>
-          <ToolbarContext>
-            <header>
-              <a href="https://lexical.dev" target="_blank" rel="noreferrer">
-                <img src={logo} alt="Lexical Logo" />
-              </a>
-            </header>
-            <div className="editor-shell">
-              <Editor />
-            </div>
-            <Settings />
-            {isDevPlayground ? <DocsPlugin /> : null}
-            {isDevPlayground ? <PasteLogPlugin /> : null}
-            {isDevPlayground ? <TestRecorderPlugin /> : null}
+    <LexicalCollaboration>
+      <LexicalExtensionComposer extension={extension} contentEditable={null}>
+        <SharedHistoryContext>
+          <TableContext>
+            <ToolbarContext>
+              <header>
+                <a href="https://lexical.dev" target="_blank" rel="noreferrer">
+                  <img src={logo} alt="Lexical Logo" />
+                </a>
+              </header>
+              <div className="editor-shell">
+                <Editor />
+              </div>
+              <Settings />
+              {isDevPlayground ? <DocsPlugin /> : null}
+              {isDevPlayground ? <PasteLogPlugin /> : null}
+              {isDevPlayground ? <TestRecorderPlugin /> : null}
 
-            {measureTypingPerf ? <TypingPerfPlugin /> : null}
-          </ToolbarContext>
-        </TableContext>
-      </SharedHistoryContext>
-    </LexicalComposer>
+              {measureTypingPerf ? <TypingPerfPlugin /> : null}
+            </ToolbarContext>
+          </TableContext>
+        </SharedHistoryContext>
+      </LexicalExtensionComposer>
+    </LexicalCollaboration>
   );
 }
 

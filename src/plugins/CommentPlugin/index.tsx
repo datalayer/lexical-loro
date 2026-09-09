@@ -23,16 +23,14 @@ import {
   $wrapSelectionInMarkNode,
   MarkNode,
 } from '@lexical/mark';
-import {AutoFocusPlugin} from '@lexical/react/LexicalAutoFocusPlugin';
-import {ClearEditorPlugin} from '@lexical/react/LexicalClearEditorPlugin';
+import {AutoFocusExtension, ClearEditorExtension} from '@lexical/extension';
+import {HistoryExtension} from '@lexical/history';
+import {PlainTextExtension} from '@lexical/plain-text';
 import {useCollaborationContext} from '@lexical/react/LexicalCollaborationContext';
-import {LexicalComposer} from '@lexical/react/LexicalComposer';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {EditorRefPlugin} from '@lexical/react/LexicalEditorRefPlugin';
-import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
-import {HistoryPlugin} from '@lexical/react/LexicalHistoryPlugin';
+import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
 import {OnChangePlugin} from '@lexical/react/LexicalOnChangePlugin';
-import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin';
 import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import {$isRootTextContentEmpty, $rootTextContent} from '@lexical/text';
 import {mergeRegister, registerNestedElementResolver} from '@lexical/utils';
@@ -48,6 +46,7 @@ import {
   createCommand,
   getDOMSelection,
   KEY_ESCAPE_COMMAND,
+  defineExtension,
 } from 'lexical';
 import {
   useCallback,
@@ -146,6 +145,24 @@ function EscapeHandlerPlugin({
   return null;
 }
 
+/** The small plain-text editor a comment is typed in. */
+const COMMENT_COMPOSER_EXTENSION = defineExtension({
+  dependencies: [PlainTextExtension, HistoryExtension, ClearEditorExtension],
+  name: '@datalayer/lexical-loro/CommentComposer',
+  namespace: 'Commenting',
+  theme: CommentEditorTheme,
+});
+
+/**
+ * The same, focused on mount. A second module-scoped extension rather than a
+ * configuration computed per render: the composer rebuilds the editor
+ * whenever its extension changes.
+ */
+const FOCUSED_COMMENT_COMPOSER_EXTENSION = defineExtension({
+  dependencies: [COMMENT_COMPOSER_EXTENSION, AutoFocusExtension],
+  name: '@datalayer/lexical-loro/CommentComposer/Focused',
+});
+
 function PlainTextEditor({
   className,
   autoFocus,
@@ -161,32 +178,20 @@ function PlainTextEditor({
   onEscape: (e: KeyboardEvent) => boolean;
   placeholder?: string;
 }) {
-  const initialConfig = {
-    namespace: 'Commenting',
-    nodes: [],
-    onError: (error: Error) => {
-      throw error;
-    },
-    theme: CommentEditorTheme,
-  };
+  const extension =
+    autoFocus === false
+      ? COMMENT_COMPOSER_EXTENSION
+      : FOCUSED_COMMENT_COMPOSER_EXTENSION;
 
   return (
-    <LexicalComposer initialConfig={initialConfig}>
+    <LexicalExtensionComposer extension={extension} contentEditable={null}>
       <div className="CommentPlugin_CommentInputBox_EditorContainer">
-        <PlainTextPlugin
-          contentEditable={
-            <ContentEditable placeholder={placeholder} className={className} />
-          }
-          ErrorBoundary={LexicalErrorBoundary}
-        />
+        <ContentEditable placeholder={placeholder} className={className} />
         <OnChangePlugin onChange={onChange} />
-        <HistoryPlugin />
-        {autoFocus !== false && <AutoFocusPlugin />}
         <EscapeHandlerPlugin onEscape={onEscape} />
-        <ClearEditorPlugin />
         {editorRef !== undefined && <EditorRefPlugin editorRef={editorRef} />}
       </div>
-    </LexicalComposer>
+    </LexicalExtensionComposer>
   );
 }
 
