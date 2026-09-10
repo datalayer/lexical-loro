@@ -23,6 +23,7 @@ import {
 } from './useCollaboration';
 import { SyncCursorPositionsFn } from './sync/SyncCursors';
 import { Binding, createBinding, ExcludedProperties, LoroCollaborationUI } from './Bindings';
+import { collaboratorsOf, type Collaborator } from './collaborators';
 
 type Props = {
   id: string;
@@ -52,6 +53,9 @@ type Props = {
     color: string;
     clientID: number;
   }) => void;
+  // Handler told who is in the room, as its awareness changes: for what a
+  // host shows beside the editor, such as a collaboration rail.
+  onCollaboratorsChange?: (collaborators: Array<Collaborator>) => void;
 };
 
 function getIdentityField(
@@ -98,6 +102,7 @@ export function LoroCollaborationPlugin({
   websocketUrl = 'ws://localhost:3002',
   onInitialization,
   onIdentityResolved,
+  onCollaboratorsChange,
 }: Props): JSX.Element {
   const isBindingInitialized = useRef(false);
   const isProviderInitialized = useRef(false);
@@ -218,6 +223,7 @@ export function LoroCollaborationPlugin({
       syncCursorPositionsFn={syncCursorPositionsFn}
       showCollaborators={showCollaborators}
       onInitialization={onInitialization}
+      onCollaboratorsChange={onCollaboratorsChange}
     />
   );
 }
@@ -239,6 +245,7 @@ function LoroCollaborationCursors({
   syncCursorPositionsFn,
   showCollaborators = false,
   onInitialization,
+  onCollaboratorsChange,
 }: {
   editor: LexicalEditor;
   id: string;
@@ -256,6 +263,7 @@ function LoroCollaborationCursors({
   syncCursorPositionsFn?: SyncCursorPositionsFn;
   showCollaborators?: boolean;
   onInitialization?: (isInitialized: boolean) => void;
+  onCollaboratorsChange?: (collaborators: Array<Collaborator>) => void;
 }) {
   const cursorsElement = useCollaboration(
     editor,
@@ -278,6 +286,21 @@ function LoroCollaborationCursors({
 
   useHistory(editor, binding);
   useFocusTracking(editor, provider, name, color, awarenessData);
+
+  // Who is in the room, told to the host each time the awareness changes.
+  useEffect(() => {
+    if (!onCollaboratorsChange) {
+      return;
+    }
+    const {awareness} = provider;
+    const tell = () =>
+      onCollaboratorsChange(collaboratorsOf(awareness.getStates(), binding.clientID));
+    tell();
+    awareness.on('update', tell);
+    return () => {
+      awareness.off('update', tell);
+    };
+  }, [binding, onCollaboratorsChange, provider]);
 
   if (showCollaborators) {
     return (

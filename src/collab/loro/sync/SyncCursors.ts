@@ -53,7 +53,7 @@ export type SyncCursorPositionsFn = (
   options?: SyncCursorPositionsOptions,
 ) => void;
 
-function getDisplayNameFromAwareness(awareness: UserState): string {
+export function getDisplayNameFromAwareness(awareness: UserState): string {
   const awarenessData = awareness.awarenessData;
   if (!awarenessData || typeof awarenessData !== 'object') {
     return awareness.name;

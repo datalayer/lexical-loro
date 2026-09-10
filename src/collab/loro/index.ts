@@ -4,6 +4,7 @@
  */
 
 export * from './Bindings';
+export * from './collaborators';
 export * from './LexicalCollaborationContext';
 export * from './LexicalCollaborationPlugin';
 export * from './State';
