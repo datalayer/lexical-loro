@@ -27,11 +27,13 @@ dev: ## dev
 	@exec echo
 	npm run dev
 
-example: ## run examples
+example: ## run example
 	@exec echo
 	@exec echo open http://localhost:3000/split/index.html
 	@exec echo
 	npm run dev
+
+start: example ## run example
 
 publish-npm: clean build ## publish-npm
 	npm publish
