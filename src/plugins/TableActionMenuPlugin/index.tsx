@@ -697,7 +697,7 @@ function TableCellActionMenuContainer({
   const checkTableCellOverflow = useCallback(
     (tableCellParentNodeDOM: HTMLElement): boolean => {
       const scrollableContainer = tableCellParentNodeDOM.closest(
-        '.PlaygroundEditorTheme__tableScrollableWrapper',
+        '.JupyterLexicalTheme__tableScrollableWrapper',
       );
       if (scrollableContainer) {
         const containerRect = (

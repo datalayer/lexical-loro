@@ -34,7 +34,7 @@ import TestRecorderPlugin from './plugins/TestRecorderPlugin';
 import {parseAllowedFontSize} from './plugins/ToolbarPlugin/fontSize';
 import TypingPerfPlugin from './plugins/TypingPerfPlugin';
 import Settings from './Settings';
-import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
+import JupyterLexicalTheme from './themes/JupyterLexicalTheme';
 import {parseAllowedColor} from './ui/ColorPicker';
 
 import logo from './images/logo.svg';
@@ -216,7 +216,7 @@ function App(): JSX.Element {
         name: '[root]',
         namespace: 'Lexical Loro Playground',
         nodes: [...PlaygroundNodes],
-        theme: PlaygroundEditorTheme,
+        theme: JupyterLexicalTheme,
       }),
     [emptyEditor, isCollab],
   );

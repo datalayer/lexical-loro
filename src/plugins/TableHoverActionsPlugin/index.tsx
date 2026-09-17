@@ -127,7 +127,7 @@ function TableHoverActionsContainer({
         if (
           parentElement &&
           parentElement.classList.contains(
-            'PlaygroundEditorTheme__tableScrollableWrapper',
+            'JupyterLexicalTheme__tableScrollableWrapper',
           )
         ) {
           tableHasScroll =

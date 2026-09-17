@@ -35,7 +35,7 @@ export default function ContextMenuPlugin(): JSX.Element {
         },
         $showOn: (node: LexicalNode) => $isLinkNode(node.getParent()),
         disabled: false,
-        icon: <i className="PlaygroundEditorTheme__contextMenuItemIcon" />,
+        icon: <i className="JupyterLexicalTheme__contextMenuItemIcon" />,
       }),
       new NodeContextMenuSeparator({
         $showOn: (node: LexicalNode) => $isLinkNode(node.getParent()),
@@ -46,7 +46,7 @@ export default function ContextMenuPlugin(): JSX.Element {
         },
         disabled: false,
         icon: (
-          <i className="PlaygroundEditorTheme__contextMenuItemIcon page-break" />
+          <i className="JupyterLexicalTheme__contextMenuItemIcon page-break" />
         ),
       }),
       new NodeContextMenuOption(`Copy`, {
@@ -54,7 +54,7 @@ export default function ContextMenuPlugin(): JSX.Element {
           editor.dispatchCommand(COPY_COMMAND, null);
         },
         disabled: false,
-        icon: <i className="PlaygroundEditorTheme__contextMenuItemIcon copy" />,
+        icon: <i className="JupyterLexicalTheme__contextMenuItemIcon copy" />,
       }),
       new NodeContextMenuOption(`Paste`, {
         $onSelect: () => {
@@ -87,7 +87,7 @@ export default function ContextMenuPlugin(): JSX.Element {
         },
         disabled: false,
         icon: (
-          <i className="PlaygroundEditorTheme__contextMenuItemIcon paste" />
+          <i className="JupyterLexicalTheme__contextMenuItemIcon paste" />
         ),
       }),
       new NodeContextMenuOption(`Paste as Plain Text`, {
@@ -114,7 +114,7 @@ export default function ContextMenuPlugin(): JSX.Element {
           });
         },
         disabled: false,
-        icon: <i className="PlaygroundEditorTheme__contextMenuItemIcon" />,
+        icon: <i className="JupyterLexicalTheme__contextMenuItemIcon" />,
       }),
       new NodeContextMenuSeparator(),
       new NodeContextMenuOption(`Delete Node`, {
@@ -138,7 +138,7 @@ export default function ContextMenuPlugin(): JSX.Element {
         },
         disabled: false,
         icon: (
-          <i className="PlaygroundEditorTheme__contextMenuItemIcon clear" />
+          <i className="JupyterLexicalTheme__contextMenuItemIcon clear" />
         ),
       }),
     ];
@@ -146,9 +146,9 @@ export default function ContextMenuPlugin(): JSX.Element {
 
   return (
     <NodeContextMenuPlugin
-      className="PlaygroundEditorTheme__contextMenu"
-      itemClassName="PlaygroundEditorTheme__contextMenuItem"
-      separatorClassName="PlaygroundEditorTheme__contextMenuSeparator"
+      className="JupyterLexicalTheme__contextMenu"
+      itemClassName="JupyterLexicalTheme__contextMenuItem"
+      separatorClassName="JupyterLexicalTheme__contextMenuSeparator"
       items={items}
     />
   );

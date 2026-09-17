@@ -23,7 +23,7 @@ const initialConfig = {
   },
   theme: {
     // Adding styling to Quote node, see styles.css
-    quote: 'PlaygroundEditorTheme__quote',
+    quote: 'JupyterLexicalTheme__quote',
   },
 };
 const editor = createEditor(initialConfig);
