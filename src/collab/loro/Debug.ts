@@ -11,6 +11,20 @@ import type { Binding } from './Bindings';
  * node mappings, and collaboration state in the Loro-Lexical integration.
  */
 
+/**
+ * Whether the binding should say what it is doing.
+ *
+ * It lived in the example's settings module, which had the library reaching
+ * into the example to answer a question about itself. It is three lines, so
+ * it lives here, and the example now keeps nothing the library needs.
+ */
+export function isDebugEnabled(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return new URLSearchParams(window.location.search).get('debug') === 'true';
+}
+
 export interface LoroDebugger {
   binding: Binding | null;
   logStructure: () => void;

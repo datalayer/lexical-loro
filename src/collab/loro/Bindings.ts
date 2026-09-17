@@ -11,8 +11,7 @@ import type {CollabCursor} from './sync/SyncCursors';
 import { getLoroTree, generateClientID } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
-import { setupLoroDebugging } from './Debug';
-import { isDebugEnabled } from '../../appSettings';
+import { isDebugEnabled, setupLoroDebugging } from './Debug';
 
 export type ClientID = number;
 

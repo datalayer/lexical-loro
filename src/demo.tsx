@@ -1,55 +1,40 @@
 /*
- * Copyright (c) 2025-2026 Datalayer, Inc.
- * Distributed under the terms of the MIT License.
+ * Copyright (c) 2021-Present Datalayer, Inc.
+ *
+ * MIT License
  */
 
-import {createRoot} from 'react-dom/client';
-// setupEnv must load before App because lexical computes CAN_USE_BEFORE_INPUT
-// at import time (disableBeforeInput is used to test legacy events)
-import setupEnv from './setupEnv';
+/**
+ * The example's entry point.
+ *
+ * Mounts {@link LoroExample} inside Primer's theme provider. The editor and
+ * everything around it come from `@datalayer/jupyter-lexical`, which brings
+ * its own plugins, nodes and styles — so there is nothing to set up here
+ * beyond a root and a theme.
+ *
+ * @module demo
+ */
 
-// Initialize Prism.js for code highlighting
-import Prism from 'prismjs';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-markup';
-import 'prismjs/components/prism-markdown';
-import 'prismjs/components/prism-c';
-import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-objectivec';
-import 'prismjs/components/prism-sql';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-rust';
-import 'prismjs/components/prism-swift';
+import { createRoot } from 'react-dom/client';
+import { DatalayerThemeProvider } from '@datalayer/primer-addons';
+import { LoroExample } from './example/LoroExample';
 
-// Make Prism globally available
-(window as any).Prism = Prism;
-
-import App from './App';
-
-import './index.css';
-
-if (setupEnv.disableBeforeInput) {
-  // vite is really aggressive about tree-shaking, this
-  // ensures that the side-effects of importing setupEnv happens
-}
-
-// Handle runtime errors
-const showErrorOverlay = (err: Event) => {
+/** Runtime errors, in Vite's own overlay rather than only in the console. */
+const showErrorOverlay = (err: unknown) => {
   const ErrorOverlay = customElements.get('vite-error-overlay');
   if (!ErrorOverlay) {
     return;
   }
-  const overlay = new ErrorOverlay(err);
-  const body = document.body;
-  if (body !== null) {
-    body.appendChild(overlay);
-  }
+  document.body?.appendChild(new ErrorOverlay(err));
 };
 
 window.addEventListener('error', showErrorOverlay);
-window.addEventListener('unhandledrejection', ({reason}) =>
+window.addEventListener('unhandledrejection', ({ reason }) =>
   showErrorOverlay(reason),
 );
 
-createRoot(document.getElementById('root') as HTMLElement).render(<App />);
+createRoot(document.getElementById('root') as HTMLElement).render(
+  <DatalayerThemeProvider colorMode="light">
+    <LoroExample />
+  </DatalayerThemeProvider>,
+);

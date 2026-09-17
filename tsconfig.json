@@ -10,7 +10,9 @@
     "build",
     "dist",
     "esm",
-    "split"
+    "split",
+    "src/demo.tsx",
+    "src/example"
   ],
   "compilerOptions": {
     "strict": false,
