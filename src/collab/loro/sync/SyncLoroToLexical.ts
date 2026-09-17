@@ -137,10 +137,14 @@ export function syncLoroToLexical(
       // If there was a collision on the top level paragraph
       // we need to re-add a paragraph. To ensure this insertion properly syncs with other clients,
       // it must be placed outside of the update block above that has tags 'collaboration' or 'historic'.
-      editor.update(() => {
-        if ($getRoot().getChildrenSize() === 0) {
-          $getRoot().append($createParagraphNode());
-        }
+      // And off this stack: `onUpdate` runs inside the commit, and an update
+      // started from there is one Lexical 0.49 folds into recursive commits.
+      queueMicrotask(() => {
+        editor.update(() => {
+          if ($getRoot().getChildrenSize() === 0) {
+            $getRoot().append($createParagraphNode());
+          }
+        });
       });
     },
 //    discrete: true,

@@ -17,7 +17,7 @@ import { LexicalNodeData } from '../types/LexicalNodeData';
 import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { Binding } from '../Bindings';
 import { invariant } from '../utils/Invariant';
-import { isLiveTreeNode } from '../utils/Utils';
+import { isLiveTreeNode, setNodeData, moveNodeIfNeeded } from '../utils/Utils';
 
 /**
  * ElementNode Propagator for Loro Tree Collaboration
@@ -57,12 +57,12 @@ export function createElementNodeInLoro(
   if (lexicalNodeJSON) {
     // Remove all key-related fields and children from lexical node data
     const { key, __key, lexicalKey, children, ...cleanedLexicalData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedLexicalData);
+    setNodeData(treeNode, 'lexical', cleanedLexicalData);
   }
   
   // Store only essential metadata (elementType for debug panel)
-  treeNode.data.set('elementType', elementType);
-  treeNode.data.set('createdAt', Date.now());
+  setNodeData(treeNode, 'elementType', elementType);
+  setNodeData(treeNode, 'createdAt', Date.now());
   
   // Return the TreeID from the node's ID
   return treeNode.id;
@@ -90,12 +90,12 @@ export function updateElementNodeInLoro(
   // Store the lexical node data if provided
   if (lexicalNodeJSON) {
     const { key, __key, lexicalKey, children, ...cleanedLexicalData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedLexicalData);
+    setNodeData(treeNode, 'lexical', cleanedLexicalData);
   }
   
   // Update only essential metadata
   if (elementType !== undefined) {
-    treeNode.data.set('elementType', elementType);
+    setNodeData(treeNode, 'elementType', elementType);
   }
   
   // Move the node only if its position in Loro actually differs from Lexical.
@@ -189,15 +189,14 @@ export function updateElementNodeInLoro(
           }
         }
 
-        tree.move(treeNode.id, parentId, targetIndex);
+        moveNodeIfNeeded(tree, treeNode.id, parentId, targetIndex);
       } else {
-        tree.move(treeNode.id, parentId, parentChildCount);
+        moveNodeIfNeeded(tree, treeNode.id, parentId, parentChildCount);
       }
     }
   }
 
   // The exported Lexical node data is already propagated by the mapper.
-  treeNode.data.set('lastUpdated', Date.now());
 }
 
 /**
@@ -372,27 +371,6 @@ export function getElementNodeDataFromTree(treeId: TreeID, tree: LoroTree): any 
   };
 }
 
-/**
- * Sync ElementNode children relationships in Loro tree
- */
-export function syncElementNodeChildrenInLoro(
-  nodeKey: NodeKey,
-  childKeys: string[],
-  options: ElementNodeMutatorOptions
-): void {
-  const mapper = getNodeMapper();
-  const { tree } = options;
-  
-  // Get the existing Loro node from the mapper
-  const treeNode = mapper.getLoroNodeByLexicalKey(nodeKey);
-  if (!treeNode || treeNode.data.get('nodeType') !== 'element') {
-    return;
-  }
-  
-  // Store children relationships for collaborative editing
-  treeNode.data.set('childKeys', childKeys);
-  treeNode.data.set('childrenLastUpdated', Date.now());
-}
 
 /**
  * Main propagate method for ElementNode - propagates all mutation types

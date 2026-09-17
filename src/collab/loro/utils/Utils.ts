@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { LoroDoc, TreeID, LoroTree } from 'loro-crdt';
+import { LoroDoc, TreeID, LoroTree, LoroTreeNode } from 'loro-crdt';
 import { $getNodeByKey, $getRoot, $getSelection, $isRangeSelection, $isTextNode, EditorState, ElementNode, LexicalNode, NodeKey, RangeSelection, TextNode } from 'lexical';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
@@ -213,6 +213,78 @@ export function isLiveTreeNode(
   }
   try {
     return tree.has(treeId) && !tree.isNodeDeleted(treeId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Write a value on a tree node's data only when it differs from what the
+ * node holds.
+ *
+ * Every write is an op the room relays and every peer integrates; writing a
+ * value that is already there sends the document round for nothing — and
+ * when an editor re-commits what it just took from a peer (Lexical does,
+ * recovering from a reconcile error), it is what turns one keystroke into an
+ * avalanche: each side re-sends the other's data as its own, forever. A
+ * write that changes nothing makes no op, so the echo dies where it starts.
+ * `createdAt` is written once; a node keeps the time it was made.
+ */
+export function setNodeData(
+  treeNode: LoroTreeNode,
+  key: string,
+  value: unknown,
+): boolean {
+  const current = treeNode.data.get(key);
+  if (key === 'createdAt' && current !== undefined) {
+    return false;
+  }
+  if (current !== undefined && sameValue(current, value)) {
+    return false;
+  }
+  treeNode.data.set(key, value as never);
+  return true;
+}
+
+/** Move a node only when it is not already where the move would put it. */
+export function moveNodeIfNeeded(
+  tree: LoroTree,
+  treeId: TreeID,
+  parentId: TreeID | undefined,
+  index: number | undefined,
+): boolean {
+  const node = tree.getNodeByID(treeId);
+  if (node) {
+    const parent = node.parent();
+    const currentParent = parent ? String(parent.id) : undefined;
+    const wantedParent = parentId === undefined ? undefined : String(parentId);
+    if (currentParent === wantedParent) {
+      if (index === undefined) {
+        return false;
+      }
+      const siblings = parent ? (parent.children() ?? []) : tree.roots();
+      const currentIndex = siblings.findIndex(
+        (sibling) => String(sibling.id) === String(treeId),
+      );
+      if (currentIndex === index) {
+        return false;
+      }
+    }
+  }
+  tree.move(treeId, parentId, index);
+  return true;
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  try {
+    const plain = (v: unknown) =>
+      v && typeof (v as { toJSON?: unknown }).toJSON === 'function'
+        ? (v as { toJSON: () => unknown }).toJSON()
+        : v;
+    return JSON.stringify(plain(a)) === JSON.stringify(plain(b));
   } catch {
     return false;
   }

@@ -3,6 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
+import { fileURLToPath } from 'node:url';
 import babel from '@rollup/plugin-babel';
 import commonjs from '@rollup/plugin-commonjs';
 import react from '@vitejs/plugin-react';
@@ -51,6 +52,14 @@ export default defineConfig(({mode}) => ({
   },
   resolve: {
     alias: [
+      // The example runs the binding from its source, not from `lib`: it is
+      // there to develop the binding, and a change should show without a
+      // build in between. jupyter-lexical's own import of the package lands
+      // here too, so the page holds one copy. Consumers still get `lib`.
+      {
+        find: /^@datalayer\/lexical-loro$/,
+        replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
+      },
       /*
         JupyterLab's own stylesheets use webpack's `~` prefix to mean "from
         node_modules" — `@import '~react-toastify/…'` in

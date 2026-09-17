@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { $getNodeByKey, $getRoot, $isDecoratorNode, $isElementNode, RootNode, TextNode, DecoratorNode } from 'lexical';
+import { $getNodeByKey, $getRoot, $isDecoratorNode, $isElementNode, RootNode, TextNode, DecoratorNode, type LexicalNode } from 'lexical';
 import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
@@ -223,6 +223,15 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
     }
     
     const targetType = targetNode.getType();
+
+    // What arrived may be what this editor already has — a peer that wrote
+    // the same value again, or the very data this editor sent. Touching the
+    // node would mark it dirty for nothing, and a dirty node is a mutation
+    // the next commit may send back out.
+    if (sameAsExported(targetNode, data, targetType)) {
+      return;
+    }
+
     const textContent = data.__text || data.text || data.textContent;
     
     if (targetType === 'text' && textContent !== undefined) {
@@ -300,5 +309,22 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         console.warn(` MapIntegrator: updateFromJSON failed for ${targetType} node ${lexicalKey}:`, error);
       }
     }
+  }
+}
+
+/** Whether serialized node data says nothing the node does not already say. */
+function sameAsExported(node: LexicalNode, data: Record<string, unknown>, type: string): boolean {
+  try {
+    const exported = node.exportJSON() as Record<string, unknown>;
+    const strip = (value: Record<string, unknown>) => {
+      const {key, __key, lexicalKey, children, ...rest} = value as Record<string, unknown> & {
+        key?: unknown; __key?: unknown; lexicalKey?: unknown; children?: unknown;
+      };
+      void key; void __key; void lexicalKey; void children;
+      return {...rest, type: (rest.type as string | undefined) ?? type, version: rest.version ?? 1};
+    };
+    return JSON.stringify(strip(exported)) === JSON.stringify(strip(data));
+  } catch {
+    return false;
   }
 }

@@ -7,7 +7,7 @@ import { TreeID, LoroTree } from 'loro-crdt';
 import { UpdateListenerPayload, NodeKey, RootNode, $getRoot } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { Binding } from '../Bindings';
-import { isLiveTreeNode } from '../utils/Utils';
+import { isLiveTreeNode, setNodeData } from '../utils/Utils';
 
 /**
  * RootNode Propagator for Loro Tree Collaboration
@@ -55,10 +55,10 @@ export function createRootNodeInLoro(
       // Store complete lexical JSON without all key-related fields
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
         const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-        rootTreeNode.data.set('lexical', cleanedData);
+        setNodeData(rootTreeNode, 'lexical', cleanedData);
       } else {
         const { children, ...cleanedData } = lexicalNodeJSON as any;
-        rootTreeNode.data.set('lexical', cleanedData);
+        setNodeData(rootTreeNode, 'lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to store lexical node JSON for RootNode:', error);
@@ -66,8 +66,8 @@ export function createRootNodeInLoro(
   }
   
   // Store only essential metadata
-  rootTreeNode.data.set('elementType', 'root');
-  rootTreeNode.data.set('createdAt', Date.now());
+  setNodeData(rootTreeNode, 'elementType', 'root');
+  setNodeData(rootTreeNode, 'createdAt', Date.now());
   
   // The exported Lexical node data is already propagated by the mapper
   // Return the TreeID from the node's ID
@@ -93,10 +93,10 @@ export function updateRootNodeInLoro(
       // Store complete lexical JSON without all key-related fields
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
         const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
+        setNodeData(treeNode, 'lexical', cleanedData);
       } else {
         const { children, ...cleanedData } = lexicalNodeJSON as any;
-        treeNode.data.set('lexical', cleanedData);
+        setNodeData(treeNode, 'lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to store lexical node JSON for RootNode update:', error);
@@ -104,8 +104,7 @@ export function updateRootNodeInLoro(
   }
   
   // Update only essential metadata
-  treeNode.data.set('elementType', 'root');
-  treeNode.data.set('lastUpdated', Date.now());
+  setNodeData(treeNode, 'elementType', 'root');
 }
 
 /**

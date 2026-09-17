@@ -14,7 +14,7 @@ import {
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
-import { isLiveTreeNode } from '../utils/Utils';
+import { isLiveTreeNode, setNodeData, moveNodeIfNeeded } from '../utils/Utils';
 
 /**
  * DecoratorNode Propagator for Loro Tree Collaboration
@@ -60,12 +60,12 @@ export function createDecoratorNodeInLoro(
   if (lexicalNodeJSON) {
     // Store complete lexical JSON without all key-related fields and children
     const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedData);
+    setNodeData(treeNode, 'lexical', cleanedData);
   }
   
   // Store only essential metadata
-  treeNode.data.set('elementType', 'decorator');
-  treeNode.data.set('createdAt', Date.now());
+  setNodeData(treeNode, 'elementType', 'decorator');
+  setNodeData(treeNode, 'createdAt', Date.now());
   
   // The exported Lexical node data is already propagated by the mapper
   // Return the TreeID from the node's ID
@@ -100,19 +100,18 @@ export function updateDecoratorNodeInLoro(
   if (lexicalNodeJSON) {
     // Store complete lexical JSON without all key-related fields and children
     const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-    treeNode.data.set('lexical', cleanedData);
+    setNodeData(treeNode, 'lexical', cleanedData);
   }
   
   // All decorator information is now contained in lexical data object
   
   // Move the node if parent or position changed
   if (parentId !== undefined || index !== undefined) {
-    tree.move(treeId, parentId, index);
+    moveNodeIfNeeded(tree, treeId, parentId, index);
   }
   
   // Update only essential metadata
-  treeNode.data.set('elementType', 'decorator');
-  treeNode.data.set('lastUpdated', Date.now());
+  setNodeData(treeNode, 'elementType', 'decorator');
 }
 
 /**

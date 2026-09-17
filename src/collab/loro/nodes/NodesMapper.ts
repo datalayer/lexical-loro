@@ -8,7 +8,7 @@ import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { invariant } from '../utils/Invariant';
-import { isLiveTreeNode } from '../utils/Utils';
+import { isLiveTreeNode, setNodeData } from '../utils/Utils';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs
@@ -74,7 +74,7 @@ export class NodeMapper {
       }
       const rootTreeID = this.createLoroNode(nodeKey, lexicalNode, undefined, 0);
       const rootTreeNode = this.tree.getNodeByID(rootTreeID)!;
-      rootTreeNode.data.set('elementType', 'root');
+      setNodeData(rootTreeNode, 'elementType', 'root');
       return rootTreeNode;
     }
 
@@ -211,7 +211,7 @@ export class NodeMapper {
     }
     
     // Store basic metadata
-    treeNode.data.set('createdAt', Date.now());
+    setNodeData(treeNode, 'createdAt', Date.now());
     
     // Store complete lexical node data if lexical node is provided
     if (lexicalNode) {
@@ -220,10 +220,10 @@ export class NodeMapper {
         // Remove all key-related fields to avoid duplication (TreeID serves as the key)
         if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
           const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON as any;
-          treeNode.data.set('lexical', cleanedData);
+          setNodeData(treeNode, 'lexical', cleanedData);
         } else {
           const { children, ...cleanedData } = lexicalNodeJSON as any;
-          treeNode.data.set('lexical', cleanedData);
+          setNodeData(treeNode, 'lexical', cleanedData);
         }
       } catch (error) {
         console.warn('Failed to export lexical node JSON in NodesMapper:', error);
@@ -248,7 +248,6 @@ export class NodeMapper {
       // Update timestamp in tree node data
       const treeNode = this.tree.getNodeByID(treeId);
       if (treeNode) {
-        treeNode.data.set('updatedAt', Date.now());
       }
     }
   }

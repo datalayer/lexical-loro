@@ -23,6 +23,13 @@
 */
 import '@datalayer/jupyter-react/lib/css/PrismCss';
 
+/*
+  The editor's own styles: the theme classes, the toolbar, the debug tree
+  view. jupyter-lexical's examples import them the same way; without them
+  the page is bare text.
+*/
+import '@datalayer/jupyter-lexical/style/index.css';
+
 import { createRoot } from 'react-dom/client';
 import { DatalayerThemeProvider } from '@datalayer/primer-addons';
 import { LoroExample } from './example/LoroExample';

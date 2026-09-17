@@ -16,7 +16,7 @@ import {
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
-import { $diffTextContentAndApplyDelta, isLiveTreeNode } from '../utils/Utils';
+import { $diffTextContentAndApplyDelta, isLiveTreeNode, setNodeData } from '../utils/Utils';
 import { invariant } from '../utils/Invariant';
 
 /**
@@ -75,10 +75,10 @@ export function createTextNodeInLoro(
       // Store complete lexical JSON without the key
       if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
         const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-        treeNode.data.set('lexical', cleanedData);
+        setNodeData(treeNode, 'lexical', cleanedData);
       } else {
         const { children, ...cleanedData } = lexicalNodeJSON as any;
-        treeNode.data.set('lexical', cleanedData);
+        setNodeData(treeNode, 'lexical', cleanedData);
       }
     } catch (error) {
       console.warn('Failed to store lexical node JSON for TextNode:', error);
@@ -86,8 +86,8 @@ export function createTextNodeInLoro(
   }
   
   // Store only essential metadata (elementType for debug panel)
-  treeNode.data.set('elementType', 'text');
-  treeNode.data.set('createdAt', Date.now());
+  setNodeData(treeNode, 'elementType', 'text');
+  setNodeData(treeNode, 'createdAt', Date.now());
   
   // Return the TreeID from the node's ID
   return treeNode.id;
@@ -121,16 +121,15 @@ export function updateTextNodeInLoro(
   if (lexicalNodeJSON) {
     if ('key' in lexicalNodeJSON || '__key' in lexicalNodeJSON || 'lexicalKey' in lexicalNodeJSON) {
       const { key, __key, lexicalKey, children, ...cleanedData } = lexicalNodeJSON;
-      treeNode.data.set('lexical', cleanedData);
+      setNodeData(treeNode, 'lexical', cleanedData);
     } else {
       const { children, ...cleanedData } = lexicalNodeJSON as any;
-      treeNode.data.set('lexical', cleanedData);
+      setNodeData(treeNode, 'lexical', cleanedData);
     }
   }
 
   // Update only essential metadata.
-  treeNode.data.set('elementType', 'text');
-  treeNode.data.set('updatedAt', Date.now());
+  setNodeData(treeNode, 'elementType', 'text');
 }
 
 /**
@@ -348,8 +347,7 @@ export function applyTextFormatInLoro(
   }
   
   try {
-    treeNode.data.set('format', currentFormat);
-    treeNode.data.set('lastUpdated', Date.now());
+    setNodeData(treeNode, 'format', currentFormat);
   } catch (error) {
     console.warn(` TextNode ${nodeKey} container deleted during format update (normal during text operations):`, error.message);
     return;
