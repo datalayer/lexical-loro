@@ -9,6 +9,7 @@ import { Binding } from '../Bindings';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { invariant } from '../utils/Invariant';
 import { isLiveTreeNode, setNodeData } from '../utils/Utils';
+import { debugLog } from '../Debug';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs
@@ -338,7 +339,7 @@ export class NodeMapper {
     // 2. Normal collaboration flow as nodes are created/updated
     // 
     // This method is kept for compatibility but is now a no-op.
-    console.log(' syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
+    debugLog(' syncExistingNodes: Skipping sync - mappings established through TreeIntegrator');
   }
 }
 

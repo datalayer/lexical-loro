@@ -11,7 +11,7 @@ import type {CollabCursor} from './sync/SyncCursors';
 import { getLoroTree, generateClientID } from './utils/Utils';
 import { NodeMapper, initializeNodeMapper } from './nodes/NodesMapper';
 import {Provider} from './State';
-import { isDebugEnabled, setupLoroDebugging } from './Debug';
+import { isDebugEnabled, setupLoroDebugging, debugLog } from './Debug';
 
 export type ClientID = number;
 
@@ -50,11 +50,11 @@ export function createBinding(
   
   // Initialize the tree - content will come from server snapshot via sync
   const tree = getLoroTree(doc);
-  console.log(' Loro tree initialized, content will be populated via server sync');
+  debugLog(' Loro tree initialized, content will be populated via server sync');
   
   const clientID = generateClientID(doc);
   
-  console.log('- Creating binding:', {
+  debugLog('- Creating binding:', {
     bindingId: id,
     localPeerId: doc.peerId,
     generatedClientID: clientID,
@@ -85,7 +85,7 @@ export function createBinding(
   // Setup debugging utilities only if debug is enabled via URL parameter
   if (isDebugEnabled()) {
     setupLoroDebugging(binding);
-    console.log(' Loro debugging enabled via ?debug=true URL parameter');
+    debugLog(' Loro debugging enabled via ?debug=true URL parameter');
   }
 
   return binding;
@@ -113,7 +113,7 @@ export function scheduleAsyncCommit(binding: Binding, delay: number = 500): void
       try {
         // Perform the actual commit
         binding.doc.commit({ origin: binding.doc.peerIdStr });
-        console.log(' Async commit completed for binding:', binding.id);
+        debugLog(' Async commit completed for binding:', binding.id);
       } catch (error) {
         console.error(' Async commit failed for binding:', binding.id, error);
       }
@@ -140,7 +140,7 @@ export function flushPendingCommit(binding: Binding): void {
   if (binding.pendingCommit) {
     binding.doc.commit({ origin: binding.doc.peerIdStr });
     binding.pendingCommit = false;
-    console.log(' Forced commit completed for binding:', binding.id);
+    debugLog(' Forced commit completed for binding:', binding.id);
   }
 }
 

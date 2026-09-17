@@ -15,6 +15,7 @@ import { isClassExtending, generateClientID } from '../utils/Utils';
 import { syncLexicalSelectionToLoro } from './SyncCursors';
 import { Provider } from '../State';
 import { withNodeMapper } from '../nodes/NodesMapper';
+import { debugLog } from '../Debug';
 // import { scheduleAsyncCommit } from '../Bindings';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
@@ -58,7 +59,7 @@ function syncLexicalToLoroWithMapper(
       __seedDebugMutationCount += nodeMap.size;
     });
   }
-  console.log(
+  debugLog(
     '[SEED-DEBUG] syncLexicalToLoro: mutatedNodes=',
     mutatedNodes ? 'map' : 'null',
     'totalMutations=',

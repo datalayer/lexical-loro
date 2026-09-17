@@ -12,6 +12,7 @@ import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
 import type { UserState, AwarenessProvider } from '../State'
 import { generateClientID, generateRandomClientID } from '../utils/Utils'
+import { debugLog } from '../Debug';
 
 // @todo - this should depend on ephemeral timeout
 const messageReconnectTimeoutMs = 30 * 1000 // 30 seconds
@@ -62,7 +63,7 @@ class AwarenessAdapter implements AwarenessProvider {
     // Use the same client ID as the binding for consistency
     this.localClientId = doc ? generateClientID(doc) : generateRandomClientID()
     
-    console.log(' AwarenessAdapter created:', {
+    debugLog(' AwarenessAdapter created:', {
       localClientId: this.localClientId,
       docPeerId: doc ? doc.peerId : 'no-doc',
       existingStatesCount: Object.keys(ephemeralStore.getAllStates()).length
@@ -142,7 +143,7 @@ class AwarenessAdapter implements AwarenessProvider {
           
           // Remove states that haven't been active for more than the threshold
           if (typeof lastActivity === 'number' && currentTime - lastActivity > staleThreshold) {
-            console.log('Cleaning up stale user state:', key, 'last activity:', new Date(lastActivity).toISOString())
+            debugLog('Cleaning up stale user state:', key, 'last activity:', new Date(lastActivity).toISOString())
             this.ephemeralStore.delete(key)
           }
         }
@@ -211,10 +212,10 @@ class AwarenessAdapter implements AwarenessProvider {
   forceCleanupStaleStates(): void {
     try {
       const allStates = this.ephemeralStore.getAllStates()
-      console.log('Force cleanup - total keys before:', Object.keys(allStates).length)
+      debugLog('Force cleanup - total keys before:', Object.keys(allStates).length)
       this.cleanupStaleStates(allStates)
       const newStates = this.ephemeralStore.getAllStates()
-      console.log('Force cleanup - total keys after:', Object.keys(newStates).length)
+      debugLog('Force cleanup - total keys after:', Object.keys(newStates).length)
     } catch (error) {
       console.warn('Force cleanup failed:', error.message)
     }
@@ -336,7 +337,7 @@ messageHandlers[messageUpdate] = (
     const importStatus = provider.doc.import(updateBytes)
 
     const afterVersion = provider.doc.version()
-    console.log('[SEED-DEBUG] messageUpdate: imported', updateBytes.length, 'bytes; importStatus=', JSON.stringify(importStatus))
+    debugLog('[SEED-DEBUG] messageUpdate: imported', updateBytes.length, 'bytes; importStatus=', JSON.stringify(importStatus))
     
     // Update our last exported version to include the remote changes
     // This ensures we don't re-export remote changes
@@ -472,7 +473,7 @@ const closeWebsocketConnection = (provider, ws, event) => {
         const peerId = generateClientID(provider.doc)
         const userKey = peerId.toString()
         provider.ephemeralStore.delete(userKey)
-        console.log('Disconnect cleanup: removed user key:', userKey)
+        debugLog('Disconnect cleanup: removed user key:', userKey)
       } catch (error) {
         console.warn('Disconnect cleanup failed:', error.message)
       }
@@ -546,7 +547,7 @@ const setupWS = (provider) => {
         status: 'connected'
       }])
       
-      console.log(' WebSocket connection established, requesting initial data')
+      debugLog(' WebSocket connection established, requesting initial data')
       
       // Since we're in onopen, we know the WebSocket is ready
       // Use sendMessage directly to avoid any race conditions
@@ -561,11 +562,11 @@ const setupWS = (provider) => {
           docId: provider.docId,
           clientId: clientId
         }
-        console.log(` Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
-        console.log(` Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
+        debugLog(` Requesting initial snapshot from server (ID: ${requestId}, clientId: ${clientId}):`, snapshotRequest)
+        debugLog(` Provider instance ID: ${provider.wsServerUrl}/${provider.docId}, snapshotLoaded: ${provider.snapshotLoaded}`)
         sendMessage(ws, snapshotRequest)
       } else {
-        console.log(' Snapshot already loaded, skipping request')
+        debugLog(' Snapshot already loaded, skipping request')
       }
       
       // Then request initial ephemeral state from server  
@@ -607,7 +608,7 @@ const setupWS = (provider) => {
       if (provider._pendingUpdates.length > 0) {
         const pending = provider._pendingUpdates
         provider._pendingUpdates = []
-        console.log('[SEED-DEBUG] ws.onopen: flushing', pending.length, 'buffered local updates')
+        debugLog('[SEED-DEBUG] ws.onopen: flushing', pending.length, 'buffered local updates')
         for (const pendingUpdate of pending) {
           sendMessage(ws, {
             type: 'update',
@@ -631,13 +632,13 @@ const broadcastMessage = (provider: WebsocketProvider, message: LoroWebSocketMes
   if (provider.wsconnected && ws && ws.readyState === ws.OPEN) {
     sendMessage(ws, message)
   } else {
-    console.log(' [BROADCAST] WebSocket not ready for sending');
+    debugLog(' [BROADCAST] WebSocket not ready for sending');
   } 
   
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, JSON.stringify(message), provider)
   } else {
-    console.log(' [BROADCAST] BroadcastChannel not connected')
+    debugLog(' [BROADCAST] BroadcastChannel not connected')
   }
 }
 
@@ -730,9 +731,9 @@ export class WebsocketProvider extends ObservableV2<any> {
         // Create or reuse global ephemeral store for session persistence
         if (!WebsocketProvider.globalEphemeralStore) {
           WebsocketProvider.globalEphemeralStore = new EphemeralStore(300000) // 5 minute timeout
-          console.log('🆕 Created new global EphemeralStore')
+          debugLog('🆕 Created new global EphemeralStore')
         } else {
-          console.log(' Reusing existing global EphemeralStore - cleaning up stale user states')
+          debugLog(' Reusing existing global EphemeralStore - cleaning up stale user states')
           // Clean up all existing user states when reusing store to prevent accumulation
           const allStates = WebsocketProvider.globalEphemeralStore.getAllStates()
           Object.keys(allStates).forEach(key => {
@@ -740,7 +741,7 @@ export class WebsocketProvider extends ObservableV2<any> {
             const clientId = parseInt(key, 10)
             if (!isNaN(clientId)) {
               WebsocketProvider.globalEphemeralStore!.delete(key)
-              console.log(' Cleaned up stale user state:', key)
+              debugLog(' Cleaned up stale user state:', key)
             }
           })
         }
@@ -824,7 +825,7 @@ export class WebsocketProvider extends ObservableV2<any> {
 
       const ws = this.ws
       if (this.wsconnected && ws && ws.readyState === ws.OPEN) {
-        console.log('[SEED-DEBUG] _updateHandler: sending local update over WS', update.length, 'bytes')
+        debugLog('[SEED-DEBUG] _updateHandler: sending local update over WS', update.length, 'bytes')
         sendMessage(ws, updateMessage)
       } else {
         // The socket is not ready yet — this happens when the initial-content
@@ -832,7 +833,7 @@ export class WebsocketProvider extends ObservableV2<any> {
         // local update to subscribeLocalUpdates exactly once, so dropping it
         // here would lose the seeded content permanently (remote peers would
         // never receive it). Buffer it and flush on open instead.
-        console.log('[SEED-DEBUG] _updateHandler: WS not ready, buffering local update', update.length, 'bytes (pending now', this._pendingUpdates.length + 1, ')')
+        debugLog('[SEED-DEBUG] _updateHandler: WS not ready, buffering local update', update.length, 'bytes (pending now', this._pendingUpdates.length + 1, ')')
         this._pendingUpdates.push(update)
       }
 
@@ -1029,7 +1030,7 @@ export class WebsocketProvider extends ObservableV2<any> {
       const peerId = generateClientID(this.doc)
       const userKey = peerId.toString()
       this.ephemeralStore.delete(userKey)
-      console.log('Broadcast disconnect cleanup: removed user key:', userKey)
+      debugLog('Broadcast disconnect cleanup: removed user key:', userKey)
     } catch (error) {
       console.warn('Broadcast disconnect cleanup failed:', error.message)
     }

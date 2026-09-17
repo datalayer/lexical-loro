@@ -32,10 +32,15 @@ def main(port: int, host: str, log_level: str, autosave_interval: int):
     All Loro CRDT operations and ephemeral data management are handled by LexicalModel.
     """
     # Configure logging
+    level = getattr(logging, log_level.upper())
     logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
+        level=level,
         format="%(asctime)s - %(levelname)s - %(message)s"
     )
+    # The websockets library announces every connection at INFO; that is
+    # debug output here too.
+    if level > logging.DEBUG:
+        logging.getLogger("websockets").setLevel(logging.WARNING)
     
     # Create and start the server
     server = LoroWebSocketServer(

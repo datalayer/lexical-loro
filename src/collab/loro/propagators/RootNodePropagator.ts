@@ -8,6 +8,7 @@ import { UpdateListenerPayload, NodeKey, RootNode, $getRoot } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { Binding } from '../Bindings';
 import { isLiveTreeNode, setNodeData } from '../utils/Utils';
+import { debugLog } from '../Debug';
 
 /**
  * RootNode Propagator for Loro Tree Collaboration
@@ -145,7 +146,7 @@ export function updateRootNodeFromLoro(
 ): void {
   // Root node updates are typically propagated at the document level
   // Most changes to root would be indirect (children changes)
-  console.log('Root node update from Loro:', treeId);
+  debugLog('Root node update from Loro:', treeId);
 }
 
 /**

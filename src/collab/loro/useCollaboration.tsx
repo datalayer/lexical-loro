@@ -39,6 +39,7 @@ import { Binding } from './Bindings';
 import { syncLexicalToLoro } from './sync/SyncLexicalToLoro';
 import { syncLoroToLexical } from './sync/SyncLoroToLexical';
 import { syncCursorPositions, SyncCursorPositionsFn } from './sync/SyncCursors';
+import { debugLog } from './Debug';
 
 export type CursorsContainerRef = React.MutableRefObject<HTMLElement | null>;
 
@@ -90,7 +91,7 @@ export function useCollaboration(
         hasSynced = true;
         dropUnsyncedContent(editor, binding, initialEditorState);
       }
-      console.log('[SEED-DEBUG] onSync: isSynced=', isSynced, 'shouldBootstrap=', shouldBootstrap, 'isReloadingDoc=', isReloadingDoc.current);
+      debugLog('[SEED-DEBUG] onSync: isSynced=', isSynced, 'shouldBootstrap=', shouldBootstrap, 'isReloadingDoc=', isReloadingDoc.current);
       if (
         shouldBootstrap &&
         isSynced &&
@@ -167,7 +168,7 @@ export function useCollaboration(
     const registeredNodes = (editor as any)._nodes as
       | Map<string, {klass: any}>
       | undefined;
-    console.log(
+    debugLog(
       '[SEED-DEBUG] registering mutation listeners; registeredNodes=',
       registeredNodes ? registeredNodes.size : 'undefined',
     );
@@ -183,7 +184,7 @@ export function useCollaboration(
         }
       });
     }
-    console.log(
+    debugLog(
       '[SEED-DEBUG] mutation listeners registered=',
       mutationListenerCleanups.length,
       'editor._listeners.mutation.size=',
@@ -199,7 +200,7 @@ export function useCollaboration(
             __mn += m.size;
           });
         }
-        console.log(
+        debugLog(
           '[SEED-DEBUG] updateListener fired; tags=',
           Array.from(update.tags),
           'mutatedNodes=',
@@ -487,7 +488,7 @@ function initializeEditor(
   editor.getEditorState().read(() => {
     shouldSeed = !hasMeaningfulContent();
   });
-  console.log('[SEED-DEBUG] initializeEditor: shouldSeed=', shouldSeed, 'hasInitialState=', !!initialEditorState, 'type=', typeof initialEditorState);
+  debugLog('[SEED-DEBUG] initializeEditor: shouldSeed=', shouldSeed, 'hasInitialState=', !!initialEditorState, 'type=', typeof initialEditorState);
   if (!shouldSeed || !initialEditorState) {
     return;
   }
@@ -554,7 +555,7 @@ function initializeEditor(
         .map(child => child.getKey());
     });
 
-    console.log('[SEED-DEBUG] initializeEditor: seeding', serializedChildren.length, 'blocks, removing', scaffoldKeys.length, 'scaffold blocks first');
+    debugLog('[SEED-DEBUG] initializeEditor: seeding', serializedChildren.length, 'blocks, removing', scaffoldKeys.length, 'scaffold blocks first');
 
     // Remove the scaffold blocks one by one so both trees reach an aligned
     // empty root before we append the real content.
@@ -590,7 +591,7 @@ function initializeEditor(
         },
         {tag: HISTORY_MERGE_TAG, discrete: true},
       );
-      console.log('[SEED-DEBUG] appended block', __idx, 'type=', __type, 'children=', __childTypes);
+      debugLog('[SEED-DEBUG] appended block', __idx, 'type=', __type, 'children=', __childTypes);
     }
     return;
   }

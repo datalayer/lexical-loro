@@ -428,7 +428,7 @@ class WSSharedDoc:
         try:
             # Remove the client's ephemeral state
             self.ephemeral_store.delete(client_id)
-            logger.info(f"[LORO SERVER] CLEANED UP ephemeral state for clientID: {client_id}")
+            logger.debug(f"[LORO SERVER] CLEANED UP ephemeral state for clientID: {client_id}")
             return {"success": True, "removed_keys": [client_id]}
         except Exception as e:
             logger.warning(f"[LORO SERVER] Failed to cleanup ephemeral state for {client_id}: {e}")
@@ -547,10 +547,10 @@ async def _global_autosave_loop():
         try:
             await asyncio.sleep(_global_autosave_interval)
             if _global_autosave_running:
-                logger.info(f"Global auto-save check: found {len(docs)} documents")
+                logger.debug(f"Global auto-save check: found {len(docs)} documents")
                 
                 if docs:
-                    logger.info(f"Auto-saving {len(docs)} documents...")
+                    logger.debug(f"Auto-saving {len(docs)} documents...")
                     saved_count = 0
                     unchanged_count = 0
                     
@@ -563,19 +563,19 @@ async def _global_autosave_loop():
                                 success = await asyncio.to_thread(doc.save_to_persistence)
                                 if success:
                                     saved_count += 1
-                                    logger.info(f"Auto-saved document: {doc_name}")
+                                    logger.debug(f"Auto-saved document: {doc_name}")
                                 else:
                                     logger.warning(f"Auto-save failed for document: {doc_name}")
                             else:
                                 unchanged_count += 1
-                                logger.info(f"Skipping auto-save for unchanged document: {doc_name}")
+                                logger.debug(f"Skipping auto-save for unchanged document: {doc_name}")
                         except Exception as e:
                             logger.error(f"Error auto-saving document {doc_name}: {e}")
                     
                     if saved_count > 0:
-                        logger.info(f"Global auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                        logger.debug(f"Global auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                     elif unchanged_count > 0:
-                        logger.info(f"Global auto-save check: {unchanged_count} documents unchanged, none saved")
+                        logger.debug(f"Global auto-save check: {unchanged_count} documents unchanged, none saved")
                 else:
                     logger.debug(f"No documents to auto-save")
                     
@@ -685,10 +685,9 @@ def close_conn(doc, conn):
         client_id = get_client_id(conn)
         display_id = client_id if client_id else conn_id
         
-        print(f"\n[server:py:ws] Connection closed: {display_id} (was {conn_id}) -> document: {doc.name}")
-        logger.info(f"[server:py:ws] Connection closed: {display_id} -> document: {doc.name}")
+        logger.debug(f"[server:py:ws] Connection closed: {display_id} -> document: {doc.name}")
         if client_id:
-            logger.info(f"[CORRELATION] Closed Frontend clientID: {client_id} (WebSocket {conn_id})")
+            logger.debug(f"[CORRELATION] Closed Frontend clientID: {client_id} (WebSocket {conn_id})")
         
         logger.debug(f"[LORO SERVER] Connection closing for document: {doc.name}")
         logger.debug(f"[LORO SERVER] Closing connection: {conn}")
@@ -698,8 +697,8 @@ def close_conn(doc, conn):
             try:
                 # Remove the client's ephemeral state
                 doc.ephemeral_store.delete(client_id)
-                logger.info(f"[LORO SERVER] Cleaned up ephemeral state for clientID: {client_id}")
-                logger.info(f"[CORRELATION] Removed ephemeral data for Frontend clientID: {client_id}")
+                logger.debug(f"[LORO SERVER] Cleaned up ephemeral state for clientID: {client_id}")
+                logger.debug(f"[CORRELATION] Removed ephemeral data for Frontend clientID: {client_id}")
             except Exception as ephemeral_error:
                 logger.warning(f"[LORO SERVER] Failed to cleanup ephemeral state for {client_id}: {ephemeral_error}")
         else:
@@ -722,13 +721,15 @@ async def message_listener(conn, doc, message):
         
         if isinstance(message, str):
             message_str = message
-            logger.info(f"[LORO SERVER] String message from {display_id}: {message_str[:100]}...")
+            # Per-message and per-connection lines are debug output: at INFO the
+            # relay reports how it started and what went wrong, nothing per keystroke.
+            logger.debug(f"[LORO SERVER] String message from {display_id}: {message_str[:100]}...")
         elif isinstance(message, bytes):
             try:
                 message_str = message.decode('utf-8')
-                logger.info(f"[LORO SERVER] Decoded bytes from {display_id}: {message_str[:100]}...")
+                logger.debug(f"[LORO SERVER] Decoded bytes from {display_id}: {message_str[:100]}...")
             except UnicodeDecodeError:
-                logger.info(f"[LORO SERVER] Binary Loro update from {display_id}: {len(message)} bytes")
+                logger.debug(f"[LORO SERVER] Binary Loro update from {display_id}: {len(message)} bytes")
                 logger.debug(f"[LORO SERVER] Received binary Loro update: {len(message)} bytes")
                 # Apply the update to the document
                 doc.doc.import_(message)
@@ -784,17 +785,17 @@ async def handle_query_snapshot(conn, doc, message_data):
             # Store client ID mapping on first snapshot request
             conn.client_id = client_id
             display_id = client_id
-            logger.info(f"[LORO SERVER] Client ID from snapshot request: {conn_id} <-> {client_id}")
-            logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+            logger.debug(f"[LORO SERVER] Client ID from snapshot request: {conn_id} <-> {client_id}")
+            logger.debug(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
         else:
             display_id = get_client_id(conn) or conn_id
         
         request_id = str(time.time())
-        logger.info(f"[LORO SERVER] Client {display_id} requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
+        logger.debug(f"[LORO SERVER] Client {display_id} requesting snapshot for doc: {doc.name} (Request ID: {request_id})")
         
         # Export actual Loro document snapshot
         snapshot = doc.doc.export(ExportMode.Snapshot())
-        logger.info(f"[LORO SERVER] Sending snapshot response to {display_id}: {len(snapshot)} bytes")
+        logger.debug(f"[LORO SERVER] Sending snapshot response to {display_id}: {len(snapshot)} bytes")
         
         # Log tree structure for debugging
         tree = doc.doc.get_tree(DEFAULT_TREE_NAME)
@@ -846,8 +847,8 @@ async def handle_ephemeral(conn, doc, message_data):
             # Store the client ID mapping for future reference
             if not hasattr(conn, 'client_id'):
                 conn.client_id = client_id
-                logger.info(f"[LORO SERVER] New client mapped: {conn_id} <-> {client_id}")
-                logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+                logger.debug(f"[LORO SERVER] New client mapped: {conn_id} <-> {client_id}")
+                logger.debug(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
             else:
                 logger.debug(f"[LORO SERVER] CLIENT ID CONFIRMED: {conn_id} -> {client_id}")
         
@@ -879,7 +880,7 @@ async def handle_ephemeral(conn, doc, message_data):
                 relayed_to += 1
             except Exception as send_error:
                 logger.warning(f"[LORO SERVER] handle_ephemeral - Failed to relay to a connection: {send_error}")
-        logger.info(f"[LORO SERVER] Relayed ephemeral state ({len(ephemeral_bytes)} bytes) from {display_id} to {relayed_to} connection(s)")
+        logger.debug(f"[LORO SERVER] Relayed ephemeral state ({len(ephemeral_bytes)} bytes) from {display_id} to {relayed_to} connection(s)")
         logger.debug(f"SERVER DEBUG - Applied ephemeral update from {display_id}: "
                     f"bytes_length={len(ephemeral_bytes)}, "
                     f"before_keys={before_keys}, "
@@ -899,8 +900,8 @@ async def handle_query_ephemeral(conn, doc, message_data):
     if client_id and not hasattr(conn, 'client_id'):
         # Store client ID mapping if not already stored
         conn.client_id = client_id
-        logger.info(f"[LORO SERVER] Client ID from ephemeral query: {conn_id} <-> {client_id}")
-        logger.info(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
+        logger.debug(f"[LORO SERVER] Client ID from ephemeral query: {conn_id} <-> {client_id}")
+        logger.debug(f"[CORRELATION] WebSocket {conn_id} maps to Frontend clientID: {client_id}")
     
     display_id = client_id if client_id else conn_id
     
@@ -911,7 +912,7 @@ async def handle_query_ephemeral(conn, doc, message_data):
         all_keys = list(all_states.keys())
         ephemeral_update = doc.ephemeral_store.encode_all()
         
-        logger.info(f"[LORO SERVER] Ephemeral query response for {display_id} - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
+        logger.debug(f"[LORO SERVER] Ephemeral query response for {display_id} - all_keys: {all_keys}, encoded_length: {len(ephemeral_update)}")
         logger.debug(f"SERVER DEBUG - Client {display_id} requesting ephemeral state: "
                     f"all_keys_available={all_keys}, "
                     f"encoded_length={len(ephemeral_update)}, "
@@ -1031,10 +1032,9 @@ async def setup_ws_connection(conn, path: str):
     conn_id = get_connection_id(conn)
     
     # Add prominent logging that appears right after websockets.server connection logs
-    print(f"\n[server:py:ws] Connection established: {conn_id} -> path: {doc_name} -> document: {actual_doc_id}")
-    logger.info(f"[server:py:ws] Connection ID: {conn_id} -> path: {doc_name} -> document: {actual_doc_id} (awaiting clientID)")
-    logger.info(f"[CORRELATION] WebSocket {conn_id} awaiting Frontend clientID mapping...")
-    logger.info(f"[LORO SERVER] New connection started: {conn_id} for document: {actual_doc_id}")
+    logger.debug(f"[server:py:ws] Connection ID: {conn_id} -> path: {doc_name} -> document: {actual_doc_id} (awaiting clientID)")
+    logger.debug(f"[CORRELATION] WebSocket {conn_id} awaiting Frontend clientID mapping...")
+    logger.debug(f"[LORO SERVER] New connection started: {conn_id} for document: {actual_doc_id}")
     logger.debug(f"[LORO SERVER] New connection: {conn_id} for document: {actual_doc_id}")
     
     # get_doc may load the document from persistence (e.g. blocking S3 reads) the
@@ -1044,7 +1044,7 @@ async def setup_ws_connection(conn, path: str):
     doc.conns[conn] = set()
     logger.debug(f"[LORO SERVER] Document {actual_doc_id} ready for messaging")
     
-    logger.info(f"[server:py:ws] Total connections for '{actual_doc_id}': {len(doc.conns)} (including {conn_id})")
+    logger.debug(f"[server:py:ws] Total connections for '{actual_doc_id}': {len(doc.conns)} (including {conn_id})")
     logger.debug(f"[LORO SERVER] Total connections now: {len(doc.conns)}")
     logger.debug(f"[LORO SERVER] All connections: {list(doc.conns.keys())}")
     
@@ -1072,10 +1072,10 @@ async def setup_ws_connection(conn, path: str):
             await message_listener(conn, doc, message)
             
     except websockets.exceptions.ConnectionClosed:
-        logger.info(f"[server:py:ws] WebSocket connection {conn_id} closed normally")
+        logger.debug(f"[server:py:ws] WebSocket connection {conn_id} closed normally")
         logger.debug(f"WebSocket connection {conn_id} closed")
     except Exception as e:
-        logger.info(f"[server:py:ws] WebSocket connection {conn_id} error: {e}")
+        logger.debug(f"[server:py:ws] WebSocket connection {conn_id} error: {e}")
         logger.error(f"WebSocket connection {conn_id} error: {e}")
     finally:
         close_conn(doc, conn)
@@ -1174,7 +1174,7 @@ class LoroWebSocketServer:
                     logger.debug(f"Auto-save check: found {len(docs)} documents")
                     
                     if docs:
-                        logger.info(f"Auto-saving {len(docs)} documents...")
+                        logger.debug(f"Auto-saving {len(docs)} documents...")
                         saved_count = 0
                         unchanged_count = 0
                         
@@ -1198,7 +1198,7 @@ class LoroWebSocketServer:
                                 logger.error(f"Error auto-saving document {doc_name}: {e}")
                         
                         if saved_count > 0:
-                            logger.info(f"Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
+                            logger.debug(f"Auto-save completed: {saved_count} saved, {unchanged_count} unchanged")
                         elif unchanged_count > 0:
                             logger.debug(f"Auto-save check: {unchanged_count} documents unchanged, none saved")
                     else:
