@@ -4,6 +4,7 @@
  */
 
 import { UpdateListenerPayload, RootNode, ElementNode, TextNode, LineBreakNode, DecoratorNode, $getSelection, $getNodeByKey, $isElementNode } from 'lexical';
+import type { Klass, LexicalNode, NodeKey, NodeMutation } from 'lexical';
 import { Binding } from '../Bindings';
 import { propagateRootNode } from '../propagators/RootNodePropagator';
 import { propagateLineBreakNode } from '../propagators/LineBreakNodePropagator';
@@ -13,6 +14,7 @@ import { propagateDecoratorNode } from '../propagators/DecoratorNodePropagator';
 import { isClassExtending, generateClientID } from '../utils/Utils';
 import { syncLexicalSelectionToLoro } from './SyncCursors';
 import { Provider } from '../State';
+import { withNodeMapper } from '../nodes/NodesMapper';
 // import { scheduleAsyncCommit } from '../Bindings';
 // import { syncCursorPositions, SyncCursorPositionsFn } from './SyncCursors';
 
@@ -21,11 +23,34 @@ export function syncLexicalToLoro(
   provider: Provider,
   update: UpdateListenerPayload,
 ) {
-  const {
-    mutatedNodes,
-    prevEditorState,
-    editorState: currEditorState,
-  } = update;
+  // The propagators find their mapper through the module; make it this
+  // binding's for the duration (see `withNodeMapper`).
+  withNodeMapper(binding.nodeMapper, () =>
+    syncLexicalToLoroWithMapper(binding, provider, update),
+  );
+}
+
+function syncLexicalToLoroWithMapper(
+  binding: Binding,
+  provider: Provider,
+  update: UpdateListenerPayload,
+) {
+  const {prevEditorState, editorState: currEditorState} = update;
+
+  // Lexical reports mutations from its DOM reconciliation, which is not the
+  // same as what changed in the state. An update made while the editor has no
+  // root element — the bootstrap seed, which a host commits behind a skeleton
+  // before it mounts the content editable — arrives with `mutatedNodes` null
+  // although nodes changed, and what it did (delete the room's scaffold, say)
+  // never reached Loro: read those from the two states instead. And the commit
+  // that mounts the content editable reports every node as created although
+  // nothing is dirty: that changed no node, and sending it pushed into the
+  // room whatever the pane held unmapped, its empty-room placeholder first.
+  const {dirtyElements, dirtyLeaves} = update;
+  const mutatedNodes =
+    dirtyElements.size === 0 && dirtyLeaves.size === 0
+      ? null
+      : (update.mutatedNodes ?? mutationsFromStates(update));
 
   let __seedDebugMutationCount = 0;
   if (mutatedNodes) {
@@ -205,4 +230,47 @@ export function syncLexicalToLoro(
     const prevSelection = prevEditorState._selection;
     syncLexicalSelectionToLoro(binding, provider, prevSelection, selection);
   });
+}
+
+/**
+ * The mutations an update made, read from its states.
+ *
+ * Created is in the new state and not the old; destroyed the other way round,
+ * which also catches the children Lexical garbage-collects under a removed
+ * element without ever marking them dirty; updated is dirty and in both.
+ * Null when nothing was dirty, which is what Lexical gives a selection-only
+ * update too.
+ */
+function mutationsFromStates(
+  update: UpdateListenerPayload,
+): Map<Klass<LexicalNode>, Map<NodeKey, NodeMutation>> | null {
+  const {dirtyElements, dirtyLeaves, prevEditorState, editorState} = update;
+  if (dirtyElements.size === 0 && dirtyLeaves.size === 0) {
+    return null;
+  }
+  const prev = prevEditorState._nodeMap;
+  const curr = editorState._nodeMap;
+  const mutations = new Map<Klass<LexicalNode>, Map<NodeKey, NodeMutation>>();
+  const record = (node: LexicalNode, mutation: NodeMutation) => {
+    const klass = node.constructor as Klass<LexicalNode>;
+    let byKey = mutations.get(klass);
+    if (!byKey) {
+      byKey = new Map();
+      mutations.set(klass, byKey);
+    }
+    byKey.set(node.getKey(), mutation);
+  };
+  curr.forEach((node, key) => {
+    if (!prev.has(key)) {
+      record(node, 'created');
+    } else if (dirtyElements.has(key) || dirtyLeaves.has(key)) {
+      record(node, 'updated');
+    }
+  });
+  prev.forEach((node, key) => {
+    if (!curr.has(key)) {
+      record(node, 'destroyed');
+    }
+  });
+  return mutations;
 }

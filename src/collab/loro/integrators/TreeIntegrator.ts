@@ -3,20 +3,21 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { 
-  $getRoot, 
-  $getNodeByKey, 
+import {
+  $getRoot,
+  $getNodeByKey,
   $isElementNode,
   $isDecoratorNode,
   ElementNode,
   LexicalNode,
   NodeKey,
+  DecoratorNode,
 } from 'lexical';
 import { TreeID } from 'loro-crdt';
 import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
-import { parseTreeID } from '../utils/Utils';
+import { isLiveTreeNode } from '../utils/Utils';
 import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { invariant } from '../utils/Invariant';
 
@@ -79,12 +80,43 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
         }
       }
     }
-    const effectiveMoves = moves.filter(mv => !foldedMoveTargets.has(String(mv.target)));
+    let effectiveMoves = moves.filter(mv => !foldedMoveTargets.has(String(mv.target)));
+
+    // A create for a node the tree no longer holds is one a later transaction
+    // has already undone — the seed bootstrap makes a default paragraph and
+    // then replaces it, and a client that imports both in one tick integrates
+    // the first batch against a tree that is already past it. There is nothing
+    // to draw for such a node; reading its data throws (`NodeFactory: TreeID
+    // not present`), and one throw inside the batch discards every other op in
+    // it, which is where the two sides start to drift. Its children go with
+    // it: they would otherwise defer forever for a parent that never arrives.
+    const stale = new Set<string>();
+    for (const cr of creates) {
+      if (!isLiveTreeNode(binding.tree, cr.target)) {
+        stale.add(String(cr.target));
+      }
+    }
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const cr of creates) {
+        const key = String(cr.target);
+        if (!stale.has(key) && cr.parent !== undefined && stale.has(String(cr.parent))) {
+          stale.add(key);
+          grew = true;
+        }
+      }
+    }
+    const liveCreates = stale.size === 0
+      ? creates
+      : creates.filter(cr => !stale.has(String(cr.target)));
+    if (stale.size > 0) {
+      effectiveMoves = effectiveMoves.filter(mv => !stale.has(String(mv.target)));
+    }
 
     // Topologically sort create operations so parents are created before children.
     // Without this, a TableCellNode may arrive before its parent TableRowNode,
     // causing the cell to fall back to $getRoot() and appear on one flat line.
-    const sortedCreates = this.topologicalSortCreates(creates, binding);
+    const sortedCreates = this.topologicalSortCreates(liveCreates, binding);
 
     // Phase 1: deletes.
     deletes.forEach(op => this.integrateDelete(op, binding, provider));
@@ -119,10 +151,20 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
           false,
           'TreeIntegrator: create operations reference parents missing from the batch',
           {
+            // Which of the two failures this is: a parent the tree does not
+            // hold at all (ordering), or one it holds that this editor never
+            // mapped (an earlier batch lost). And how many roots the tree has
+            // — two peers each making their own is the usual way a subtree
+            // ends up with a parent nobody mapped.
             pending: stillPending.map(op => ({
               target: String(op.target),
               parent: op.parent ? String(op.parent) : null,
+              parentInTree: op.parent ? isLiveTreeNode(binding.tree, op.parent) : null,
+              parentMapped: op.parent
+                ? binding.nodeMapper.getLexicalKeyByLoroId(op.parent) ?? null
+                : null,
             })),
+            roots: binding.tree.roots().map(root => String(root.id)),
           },
         );
       }
@@ -139,30 +181,48 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
     provider: Provider,
     nodeCache: Map<string, LexicalNode | null>,
   ): 'created' | 'deferred' {
-    let { nodeKey } = parseTreeID(operation.target);
-
-    // Root node creation is integrated during initial setup. Only treat as
-    // root if it's actually a root-type node in Loro.
-    if (nodeKey === "0") {
+    // A root is a node the diff gives no parent — not a node whose counter is
+    // 0, which is merely the first node its peer made and, now that a pane
+    // holds its edits until the snapshot has landed, is as likely a text node
+    // as anything. The Lexical root keeps the first Loro root it was mapped
+    // to; a later one (a room written before roots were adopted rather than
+    // minted holds one per peer) is aliased onto it, so its subtree still
+    // lands in the document.
+    if (operation.parent == null) {
       const treeNode = binding.tree.getNodeByID(operation.target);
       const elementType = treeNode?.data.get('elementType');
-      if (elementType === 'root' || !elementType) {
+      const lexicalType = (
+        treeNode?.data.get('lexical') as unknown as {type?: string} | undefined
+      )?.type;
+      if (elementType === 'root' || lexicalType === 'root' || !elementType) {
         const root = $getRoot();
-        binding.nodeMapper.setMapping(root.getKey(), operation.target);
+        const mapped = binding.nodeMapper.getTreeIDByLexicalKey(root.getKey());
+        if (mapped === undefined || !isLiveTreeNode(binding.tree, mapped)) {
+          binding.nodeMapper.setMapping(root.getKey(), operation.target);
+          // The document has arrived. Whatever sits under the Lexical root
+          // without a mapping is this pane's own placeholder — the paragraph
+          // it was given to type into while the room was empty — and gives
+          // way, as the pre-snapshot state did.
+          for (const child of root.getChildren()) {
+            if (!binding.nodeMapper.hasLexicalMapping(child.getKey())) {
+              child.remove();
+            }
+          }
+        } else if (mapped !== operation.target) {
+          binding.nodeMapper.aliasLoroId(operation.target, root.getKey());
+        }
         return 'created';
       }
-      // nodeKey is "0" but not an actual root element — fall through.
+      // No parent, yet not a root element: a stray top-level node. Fall
+      // through and place it under the Lexical root.
     }
 
-    // Node already exists with the same TreeID → idempotent, nothing to do.
-    const existingNode = $getNodeByKey(nodeKey);
-    if (existingNode) {
-      const existingTreeID = binding.nodeMapper.getTreeIDByLexicalKey(nodeKey);
-      if (existingTreeID === operation.target) {
-        return 'created';
-      }
-      // Different TreeID reuses this key — let Lexical assign a fresh one.
-      nodeKey = undefined;
+    // A create for a node this editor already holds — a diff that says a node
+    // came back, or one it never let go of — is nothing to do. Making another
+    // would leave the first standing, unmapped: a copy.
+    const heldKey = binding.nodeMapper.getLexicalKeyByLoroId(operation.target);
+    if (heldKey !== null && $getNodeByKey(heldKey) !== null) {
+      return 'created';
     }
 
     // Create the Lexical node once and cache it, so deferred retries reuse
@@ -256,8 +316,13 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
       newParent = $getRoot();
     }
 
-    // Remove from current position and insert at new position.
+    // Remove from current position and insert at new position — past a
+    // `remove()` override, as in `integrateDelete`, or the node is counted
+    // twice while it is placed.
     nodeToMove.remove();
+    if (nodeToMove.isAttached()) {
+      $removeDespiteOverride(nodeToMove);
+    }
     if (operation.index !== undefined) {
       newParent.splice(operation.index, 0, [nodeToMove]);
     } else {
@@ -297,8 +362,13 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
       binding.nodeMapper.removeMappingForKey(key);
     }
 
-    // Remove from the Lexical tree.
+    // Remove from the Lexical tree. A node may override `remove()` to protect
+    // itself from the user's Backspace — a Jupyter output does — and stay
+    // attached; the room's delete is not the user's, so it goes anyway.
     nodeToDelete.remove();
+    if (nodeToDelete.isAttached()) {
+      $removeDespiteOverride(nodeToDelete);
+    }
 
     // Clean up mapping only — the Loro tree already processed this deletion
     // from the remote peer; calling tree.delete() again would throw.
@@ -383,4 +453,14 @@ export class TreeIntegrator implements BaseIntegrator<TreeDiff> {
     return tagged.map(t => t.op);
   }
 
+}
+
+/**
+ * Remove a node through the base implementation, past any override.
+ *
+ * `LexicalNode` is exported as a type only, so its `remove` is reached through
+ * a subclass that is a value and does not override it.
+ */
+function $removeDespiteOverride(node: LexicalNode): void {
+  DecoratorNode.prototype.remove.call(node, false);
 }

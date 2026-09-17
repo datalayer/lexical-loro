@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { LoroDoc, EphemeralStore, EphemeralStoreEvent, VersionVector } from 'loro-crdt'
+import { LoroDoc, EphemeralStore, EphemeralStoreEvent, VersionVector, decodeImportBlobMeta } from 'loro-crdt'
 import { ObservableV2 } from 'lib0/observable'
 import * as bc from 'lib0/broadcastchannel'
 import * as time from 'lib0/time'
@@ -342,7 +342,11 @@ messageHandlers[messageUpdate] = (
     // This ensures we don't re-export remote changes
     provider._lastExportedVersion = afterVersion
     
-    if (emitSynced && !provider._synced) {
+    // A peer's update can be relayed here before this client's own snapshot
+    // reply arrives; it does not make the document known, only the snapshot
+    // does. Declaring sync on it let the editor bootstrap against an empty
+    // tree and mint a root the snapshot then landed on top of.
+    if (emitSynced && provider.snapshotLoaded && !provider._synced) {
       provider.synced = true
     }
     
@@ -379,9 +383,26 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
         return null
       }
       */
-      // If JSON parsing fails, treat as raw binary Loro update
+      // A binary message is the snapshot: both relays answer `query-snapshot`
+      // with the raw snapshot bytes and carry peers' updates as JSON. Once it
+      // is in, the document is known and the editor may bootstrap.
       const updateBytes = new Uint8Array(data)
+      // Where the server stands, read before the snapshot is merged in.
+      // Everything this document holds beyond that is what the server never
+      // got — the edits made while the socket was down, on a reconnect — and
+      // goes back to it now; the relay passes it on to the other peers.
+      const theirs = decodeImportBlobMeta(updateBytes, false).partialEndVersionVector
       provider.doc.import(updateBytes)
+      provider.snapshotLoaded = true
+      const missing = provider.doc.export({ mode: 'update', from: theirs })
+      if (decodeImportBlobMeta(missing, false).changeNum > 0 && provider.ws) {
+        const catchUp: LoroUpdateMessage = {
+          type: 'update',
+          update: Array.from(missing),
+          docId: provider.docId
+        }
+        sendMessage(provider.ws, catchUp)
+      }
       if (emitSynced && !provider._synced) {
         provider.synced = true
       }
@@ -510,6 +531,10 @@ const setupWS = (provider) => {
       provider.emit('connection-error', [event, provider])
     }
     ws.onclose = (event) => {
+      // The next open asks for the snapshot again: the room moved on while
+      // the socket was down, and the snapshot's version is also how this
+      // client learns what the server missed of its own edits meanwhile.
+      provider.snapshotLoaded = false
       closeWebsocketConnection(provider, ws, event)
     }
     ws.onopen = () => {

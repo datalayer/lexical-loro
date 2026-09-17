@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { LoroDoc, TreeID } from 'loro-crdt';
+import { LoroDoc, TreeID, LoroTree } from 'loro-crdt';
 import { $getNodeByKey, $getRoot, $getSelection, $isRangeSelection, $isTextNode, EditorState, ElementNode, LexicalNode, NodeKey, RangeSelection, TextNode } from 'lexical';
 import simpleDiffWithCursor from '../../utils/simpleDiffWithCursor';
 
@@ -192,5 +192,28 @@ export function $moveSelectionToPreviousNode(
   } else {
     // If the found node is also deleted, select the next one
     $moveSelectionToPreviousNode(prevNode.__key, currentEditorState);
+  }
+}
+
+/**
+ * Whether the tree holds this node as a live one.
+ *
+ * Loro keeps deleted nodes: `tree.has()` answers true for them and
+ * `getNodeByID()` still hands them out, so a check on `has()` alone lets a
+ * peer create, move under, or write to a node that is gone — and lets the
+ * integrator recreate, in Lexical, a node the same batch deleted. Only
+ * `isNodeDeleted()` tells, and it throws for an id the tree never saw.
+ */
+export function isLiveTreeNode(
+  tree: LoroTree | undefined | null,
+  treeId: TreeID | undefined | null,
+): boolean {
+  if (!tree || !treeId) {
+    return false;
+  }
+  try {
+    return tree.has(treeId) && !tree.isNodeDeleted(treeId);
+  } catch {
+    return false;
   }
 }

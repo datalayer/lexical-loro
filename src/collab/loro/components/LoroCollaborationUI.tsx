@@ -23,7 +23,7 @@ export function LoroCollaborationUI({
   binding,
   cursorsContainer,
   currentUserName = 'You',
-  currentUserColor = '#007acc',
+  currentUserColor,
   showCollaborators = true
 }: LoroCollaborationUIProps): JSX.Element {
   return (

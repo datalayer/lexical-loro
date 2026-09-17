@@ -16,6 +16,7 @@ import {createDOMRange, createRectsFromDOMRange} from '@lexical/selection';
 import type { Cursor as LoroCursor, LoroTreeNode } from 'loro-crdt';
 import type { Binding } from '../Bindings';
 import { Provider, UserState } from '../State';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /*****************************************************************************/
 
@@ -98,7 +99,7 @@ function findLoroTreeNodeForLexicalKey(nodeKey: NodeKey, binding: Binding): Loro
       return null;
     }
     const tree = binding.tree;
-    if (tree.has(treeId)) {
+    if (isLiveTreeNode(tree, treeId)) {
       return tree.getNodeByID(treeId) || null;
     }
     return null;
@@ -267,7 +268,7 @@ function createCursorSelection(
   caret.style.cssText = `position:absolute;top:0;bottom:0;right:-1px;width:2px;background-color:${caretColor};z-index:10;${isCurrentUser ? 'opacity:0.8;' : ''}`;
   const name = document.createElement('span');
   name.textContent = cursor.name;
-  name.style.cssText = `position:absolute;left:-2px;top:-16px;background-color:${nameBackgroundColor};color:#fff;line-height:12px;font-size:12px;padding:2px;font-family:Arial;font-weight:bold;white-space:nowrap;${isCurrentUser ? 'opacity:0.9;' : ''}`;
+  name.style.cssText = `position:absolute;left:-2px;top:-16px;background-color:${nameBackgroundColor};color:var(--fgColor-onEmphasis,#fff);line-height:12px;font-size:12px;padding:2px;font-family:Arial;font-weight:bold;white-space:nowrap;${isCurrentUser ? 'opacity:0.9;' : ''}`;
   caret.appendChild(name);
   
   return {

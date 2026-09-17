@@ -8,6 +8,7 @@ import { LexicalNode, NodeKey, EditorState } from 'lexical';
 import { Binding } from '../Bindings';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { invariant } from '../utils/Invariant';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /**
  * Bidirectional mapping between Lexical NodeKeys and Loro TreeIDs
@@ -53,8 +54,28 @@ export class NodeMapper {
   ): LoroTreeNode {
     // Check if mapping already exists
     const existingTreeID = this.lexicalToLoro.get(nodeKey);
-    if (existingTreeID && this.tree.has(existingTreeID)) {
+    if (existingTreeID && isLiveTreeNode(this.tree, existingTreeID)) {
       return this.tree.getNodeByID(existingTreeID)!;
+    }
+
+    // The document has one root, and every peer has to agree on which Loro
+    // node that is. A Lexical root with no mapping adopts the root the tree
+    // already holds — put there by the server's seed, or by the peer that got
+    // there first — and mints one only when the tree has none. Minting a
+    // second root is what happened when a pane propagated its initial state
+    // before the snapshot arrived: this mapper holds one Loro root per
+    // Lexical key, so nothing created under the extra one could ever be
+    // placed by the other peer.
+    if (nodeKey === 'root') {
+      const adoptedRoot = this.tree.roots()[0];
+      if (adoptedRoot) {
+        this.createMapping(nodeKey, adoptedRoot.id);
+        return adoptedRoot;
+      }
+      const rootTreeID = this.createLoroNode(nodeKey, lexicalNode, undefined, 0);
+      const rootTreeNode = this.tree.getNodeByID(rootTreeID)!;
+      rootTreeNode.data.set('elementType', 'root');
+      return rootTreeNode;
     }
 
     // Get parent TreeID from Lexical node if not provided
@@ -131,6 +152,16 @@ export class NodeMapper {
    */
   setMapping(nodeKey: NodeKey, treeId: TreeID): void {
     this.lexicalToLoro.set(nodeKey, treeId);
+    this.loroToLexical.set(treeId, nodeKey);
+  }
+
+  /**
+   * Let a second Loro TreeID resolve to a Lexical key the primary mapping
+   * already owns. Rooms written before roots were adopted rather than minted
+   * hold one root per peer; aliasing the extras onto the Lexical root keeps
+   * their subtrees in the document instead of orphaning them.
+   */
+  aliasLoroId(treeId: TreeID, nodeKey: NodeKey): void {
     this.loroToLexical.set(treeId, nodeKey);
   }
 
@@ -233,7 +264,7 @@ export class NodeMapper {
       this.removeMapping(nodeKey, treeId);
       
       // Delete the tree node
-      if (this.tree.has(treeId)) {
+      if (isLiveTreeNode(this.tree, treeId)) {
         this.tree.delete(treeId);
       }
     }
@@ -321,6 +352,26 @@ let globalNodeMapper: NodeMapper | null = null;
 export function initializeNodeMapper(binding: Binding): NodeMapper {
   globalNodeMapper = new NodeMapper(binding);
   return globalNodeMapper;
+}
+
+/**
+ * Run `fn` with `mapper` as the one `getNodeMapper()` answers.
+ *
+ * Two editors on one page are two bindings with two mappers, but the
+ * propagators reach theirs through this module, where the last binding made
+ * had left its own — so one pane's edits were written into the other pane's
+ * document, under the other pane's peer. A propagation names its mapper first
+ * and puts the previous one back when it is done; it runs synchronously, so
+ * nothing else sees the swap.
+ */
+export function withNodeMapper<T>(mapper: NodeMapper, fn: () => T): T {
+  const previous = globalNodeMapper;
+  globalNodeMapper = mapper;
+  try {
+    return fn();
+  } finally {
+    globalNodeMapper = previous;
+  }
 }
 
 /**

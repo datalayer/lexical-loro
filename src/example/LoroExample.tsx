@@ -27,6 +27,11 @@ import type { JSX } from 'react';
 import { useMemo } from 'react';
 import { Box, Heading, Text } from '@primer/react';
 import { Editor, LexicalProvider } from '@datalayer/jupyter-lexical';
+import {
+  CollaborationContext,
+  type CollaborationContextType,
+} from '@datalayer/lexical-loro';
+import { useCollaboratorColor } from '@datalayer/primer-addons';
 
 /** The websocket the Python server listens on (`npm run server:py:ws`). */
 const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3002';
@@ -34,29 +39,89 @@ const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3002';
 /** The room two panes have to agree on to see each other. */
 const DEFAULT_ROOM = 'lexical-loro-example';
 
-/** Who a pane says it is, and the colour its caret wears. */
-const PEOPLE = [
-  { username: 'Collaborator 1', cursorColor: '#1570ef' },
-  { username: 'Collaborator 2', cursorColor: '#db61a2' },
-];
+/**
+ * Who a pane says it is. The colour its caret wears is the theme's collaborator
+ * palette's, picked by the name — the same one the other pane gives it.
+ */
+const PEOPLE = [{ username: 'Collaborator 1' }, { username: 'Collaborator 2' }];
+
+/**
+ * What the room starts with, when it starts empty.
+ *
+ * Only the first pane offers it. The editor draws nothing until the room has
+ * said what it holds, so an empty room with nobody seeding it leaves both
+ * panes waiting; and both panes seeding it would write the same paragraph
+ * into the document twice.
+ */
+const SEED = JSON.stringify({
+  root: {
+    type: 'root',
+    format: '',
+    indent: 0,
+    version: 1,
+    direction: 'ltr',
+    children: [
+      {
+        type: 'paragraph',
+        format: '',
+        indent: 0,
+        version: 1,
+        direction: 'ltr',
+        textFormat: 0,
+        textStyle: '',
+        children: [
+          {
+            type: 'text',
+            text: 'Type here. The other pane is the same document, over Loro.',
+            format: 0,
+            style: '',
+            mode: 'normal',
+            detail: 0,
+            version: 1,
+          },
+        ],
+      },
+    ],
+  },
+});
 
 function Pane({
   who,
   room,
   websocketUrl,
+  seeds,
 }: {
   who: (typeof PEOPLE)[number];
   room: string;
   websocketUrl: string;
+  /** Whether this pane offers the starting document; only the first does. */
+  seeds: boolean;
 }): JSX.Element {
+  const color = useCollaboratorColor(who.username);
   const collaboration = useMemo(
     () => ({
       id: room,
       websocketUrl,
       username: who.username,
-      cursorColor: who.cursorColor,
+      initialEditorState: seeds ? SEED : undefined,
     }),
-    [room, websocketUrl, who.cursorColor, who.username],
+    [room, seeds, websocketUrl, who.username],
+  );
+  // Its own collaboration context, so its own document. The context keeps the
+  // documents by room, and the default context is one object for the whole
+  // page: two panes sharing it share one LoroDoc and one peer id, and the
+  // binding, which tells remote changes from its own by peer, would take
+  // everything the other pane wrote for its own and show none of it. Two
+  // panes with two contexts are two peers, as two browsers would be.
+  const context = useMemo<CollaborationContextType>(
+    () => ({
+      clientID: 0,
+      color,
+      isCollabActive: false,
+      name: who.username,
+      docMap: new Map(),
+    }),
+    [color, who.username],
   );
   return (
     <Box
@@ -82,13 +147,15 @@ function Pane({
       >
         <Box
           aria-hidden="true"
-          style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: who.cursorColor }}
+          style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: color }}
         />
         <Text sx={{ fontSize: 1, fontWeight: 'semibold' }}>{who.username}</Text>
       </Box>
-      <LexicalProvider>
-        <Editor collaboration={collaboration} />
-      </LexicalProvider>
+      <CollaborationContext.Provider value={context}>
+        <LexicalProvider>
+          <Editor collaboration={collaboration} />
+        </LexicalProvider>
+      </CollaborationContext.Provider>
     </Box>
   );
 }
@@ -111,12 +178,13 @@ export function LoroExample(): JSX.Element {
         </Text>
       </Box>
       <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-        {PEOPLE.slice(0, panes).map(who => (
+        {PEOPLE.slice(0, panes).map((who, index) => (
           <Pane
             key={who.username}
             who={who}
             room={room}
             websocketUrl={websocketUrl}
+            seeds={index === 0}
           />
         ))}
       </Box>

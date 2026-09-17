@@ -112,6 +112,41 @@ def default_load_model(doc_id: str) -> Optional[str]:
         logger.warning(f"[Persistence] Error loading model {doc_id}: {e}")
         return None
 
+def default_load_snapshot(doc_id: str) -> Optional[bytes]:
+    """
+    The room's Loro snapshot, saved beside its JSON model, if there is one.
+
+    The JSON model is content: rebuilding a room from it makes a new CRDT with
+    new peer ids, and a client that reconnects after a relay restart merges
+    that as a second copy of its document. The snapshot is the history itself,
+    so the restored room is the one the clients still hold.
+    """
+    try:
+        snapshot_file = Path(".models") / f"{doc_id}.loro"
+        if snapshot_file.exists():
+            data = snapshot_file.read_bytes()
+            if data:
+                logger.debug(f"[Persistence] Loaded snapshot {doc_id} from {snapshot_file}")
+                return data
+        return None
+    except Exception as e:
+        logger.warning(f"[Persistence] Error loading snapshot {doc_id}: {e}")
+        return None
+
+
+def default_save_snapshot(doc_id: str, snapshot: bytes) -> bool:
+    """Save the room's Loro snapshot beside its JSON model, in `.models`."""
+    try:
+        snapshot_file = Path(".models") / f"{doc_id}.loro"
+        snapshot_file.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_file.write_bytes(snapshot)
+        logger.debug(f"[Persistence] Saved snapshot {doc_id} to {snapshot_file}")
+        return True
+    except Exception as e:
+        logger.error(f"[Persistence] Failed to save snapshot {doc_id}: {e}")
+        return False
+
+
 def default_save_model(doc_id: str, lexical_json: str) -> bool:
     """
     Default save_model implementation - saves to local .models folder.
@@ -165,6 +200,12 @@ class WSSharedDoc:
         self.name = name
         self.load_model = load_model or default_load_model
         self.save_model = save_model or default_save_model
+        # Only the local file store keeps the snapshot too; a host that brings
+        # its own model store (the spacer) persists what it decides to.
+        self.keeps_snapshot = (
+            self.load_model is default_load_model
+            and self.save_model is default_save_model
+        )
         self.last_save_time = 0
         self.has_changes_since_save = False
         
@@ -274,6 +315,15 @@ class WSSharedDoc:
         try:
             logger.debug(f"[Persistence] Loading document '{self.name}' from storage")
             
+            # The snapshot first: it is the same history the clients hold.
+            if self.keeps_snapshot:
+                snapshot = default_load_snapshot(self.name)
+                if snapshot:
+                    self.doc.import_(snapshot)
+                    self.doc.get_tree(DEFAULT_TREE_NAME).enable_fractional_index(1)
+                    logger.debug(f"[Persistence] Restored document '{self.name}' from its snapshot")
+                    return True
+            
             # Load Lexical JSON content
             lexical_content = self.load_model(self.name)
             if not lexical_content:
@@ -333,6 +383,11 @@ class WSSharedDoc:
                 logger.debug(f"[Persistence] Spacer-style save failed ({type(e).__name__}), trying JSON fallback")
                 lexical_json = loro_tree_to_lexical_json(self.doc, logger)
                 success = self.save_model(self.name, lexical_json)
+            
+            if success and self.keeps_snapshot:
+                success = default_save_snapshot(
+                    self.name, bytes(self.doc.export(ExportMode.Snapshot()))
+                )
             
             if success:
                 self.has_changes_since_save = False

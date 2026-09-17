@@ -15,6 +15,14 @@
  * @module demo
  */
 
+/*
+  Prism, before anything that highlights code.
+
+  `@lexical/code` reads `window.Prism` at import time, so this has to come
+  first — the same import `@datalayer/jupyter-lexical`'s own examples make.
+*/
+import '@datalayer/jupyter-react/lib/css/PrismCss';
+
 import { createRoot } from 'react-dom/client';
 import { DatalayerThemeProvider } from '@datalayer/primer-addons';
 import { LoroExample } from './example/LoroExample';

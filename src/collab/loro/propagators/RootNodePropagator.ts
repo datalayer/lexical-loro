@@ -7,6 +7,7 @@ import { TreeID, LoroTree } from 'loro-crdt';
 import { UpdateListenerPayload, NodeKey, RootNode, $getRoot } from 'lexical';
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { Binding } from '../Bindings';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /**
  * RootNode Propagator for Loro Tree Collaboration
@@ -164,7 +165,7 @@ export function deleteRootNodeFromLoro(
  * Utility to check if a tree node represents a RootNode
  */
 export function isRootNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return false;
   }
   

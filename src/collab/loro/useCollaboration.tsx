@@ -10,17 +10,18 @@ import {createPortal} from 'react-dom';
 import type {LexicalEditor} from 'lexical';
 import {mergeRegister} from '@lexical/utils';
 import {
-  $getNodeByKey,
-  $getRoot,
-  $parseSerializedNode,
-  $setSelection,
   BLUR_COMMAND,
   CAN_REDO_COMMAND,
   CAN_UNDO_COMMAND,
   COMMAND_PRIORITY_EDITOR,
+  $createParagraphNode,
   FOCUS_COMMAND,
+  $getNodeByKey,
+  $getRoot,
   HISTORY_MERGE_TAG,
+  $parseSerializedNode,
   REDO_COMMAND,
+  $setSelection,
   SKIP_COLLAB_TAG,
   UNDO_COMMAND,
 } from 'lexical';
@@ -76,7 +77,19 @@ export function useCollaboration(
       editor.dispatchCommand(CONNECTED_COMMAND, status === 'connected');
     };
 
+    // Nothing local reaches Loro before the room has said what it holds.
+    // Lexical commits its initial state — a root and an empty paragraph — as
+    // soon as the editor mounts; propagating that before the snapshot minted
+    // a second root in the shared tree, and whatever this pane then wrote
+    // under it could never be placed by the other peer. Once the snapshot is
+    // in, that pre-sync content gives way to the document.
+    let hasSynced = false;
+
     const onSync = (isSynced: boolean) => {
+      if (isSynced && !hasSynced) {
+        hasSynced = true;
+        dropUnsyncedContent(editor, binding, initialEditorState);
+      }
       console.log('[SEED-DEBUG] onSync: isSynced=', isSynced, 'shouldBootstrap=', shouldBootstrap, 'isReloadingDoc=', isReloadingDoc.current);
       if (
         shouldBootstrap &&
@@ -198,7 +211,7 @@ export function useCollaboration(
           'dirtyLeaves=',
           update.dirtyLeaves?.size,
         );
-        if (update.tags.has(SKIP_COLLAB_TAG) === false) {
+        if (hasSynced && update.tags.has(SKIP_COLLAB_TAG) === false) {
           syncLexicalToLoro(
             binding,
             provider,
@@ -390,6 +403,39 @@ export function useHistory(
   }, [editor, undoManager]);
 
   return clearHistory;
+}
+
+/**
+ * Remove what the editor held before the snapshot arrived.
+ *
+ * Every node the snapshot brought is mapped; a child of the root without a
+ * mapping is the initial state Lexical committed on mount, which never went to
+ * the room. The document wins. A room that is empty and will not be seeded by
+ * this pane still gets one paragraph, as the Yjs binding gives it, so there is
+ * somewhere to type. That paragraph stays this pane's own: it is not sent, so
+ * two panes joining an empty room together do not each put a root in it. The
+ * first keystroke into it sends it, root and all; and if another pane's root
+ * arrives first, the integrator drops it for the document.
+ */
+function dropUnsyncedContent(
+  editor: LexicalEditor,
+  binding: Binding,
+  initialEditorState?: InitialEditorStateType,
+): void {
+  editor.update(
+    () => {
+      const root = $getRoot();
+      for (const child of root.getChildren()) {
+        if (!binding.nodeMapper.hasLexicalMapping(child.getKey())) {
+          child.remove();
+        }
+      }
+      if (root.isEmpty() && !initialEditorState) {
+        root.append($createParagraphNode());
+      }
+    },
+    {discrete: true, tag: SKIP_COLLAB_TAG},
+  );
 }
 
 function initializeEditor(

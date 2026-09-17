@@ -6,6 +6,7 @@
 import type { JSX } from 'react';
 import React, { useState, useEffect } from 'react';
 import type { Binding } from '../Bindings';
+import { useCollaboratorColor } from '@datalayer/primer-addons';
 
 export interface LoroCollaboratorsProps {
   binding: Binding;
@@ -16,7 +17,7 @@ export interface LoroCollaboratorsProps {
 export function LoroCollaborators({ 
   binding, 
   currentUserName = 'Me',
-  currentUserColor = '#007acc'
+  currentUserColor
 }: LoroCollaboratorsProps): JSX.Element {
   // Force re-render when cursors change
   const [updateTrigger, setUpdateTrigger] = useState(0);
@@ -47,8 +48,10 @@ export function LoroCollaborators({
 
   // Get current user's cursor if it exists
   const currentUserCursor = binding.cursors.get(currentClientID);
-  const currentDisplayColor = currentUserCursor?.color || currentUserColor;
   const currentDisplayName = currentUserCursor?.name || currentUserName;
+  // Given no colour, the one the theme's palette picks by name.
+  const paletteColor = useCollaboratorColor(currentDisplayName);
+  const currentDisplayColor = currentUserCursor?.color || currentUserColor || paletteColor;
 
   // Separate current user and others for display order (current user first)
   const currentUserData = allCollaborators.find(({ isCurrentUser }) => isCurrentUser);
@@ -149,15 +152,15 @@ function CollaboratorBadge({ name, color, isCurrentUser, clientId }: Collaborato
         height: '12px',
         borderRadius: '50%',
         backgroundColor: circleColor,
-        border: isCurrentUser ? '2px solid #ffffff' : 'none',
-        boxShadow: isCurrentUser ? '0 0 0 1px #d1d5db' : 'none',
+        border: isCurrentUser ? '2px solid var(--bgColor-default, #ffffff)' : 'none',
+        boxShadow: isCurrentUser ? '0 0 0 1px var(--borderColor-default, #d1d5db)' : 'none',
         flexShrink: 0
       }} />
       
       {/* Name badge */}
       <span style={{
         backgroundColor: badgeColor,
-        color: '#ffffff',
+        color: 'var(--fgColor-onEmphasis, #ffffff)',
         padding: '3px 8px',
         borderRadius: '12px',
         fontSize: '12px',

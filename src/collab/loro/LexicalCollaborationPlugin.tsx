@@ -24,6 +24,7 @@ import {
 import { SyncCursorPositionsFn } from './sync/SyncCursors';
 import { Binding, createBinding, ExcludedProperties, LoroCollaborationUI } from './Bindings';
 import { collaboratorsOf, type Collaborator } from './collaborators';
+import { collaboratorHash, useCollaboratorColors } from '@datalayer/primer-addons';
 
 type Props = {
   id: string;
@@ -108,6 +109,11 @@ export function LoroCollaborationPlugin({
   const isProviderInitialized = useRef(false);
 
   const collabContext = useCollaborationContext(username, cursorColor);
+  // The theme's collaborator palette, read where the binding is made so a
+  // collaborator given no colour gets the one their name picks in it.
+  const palette = useCollaboratorColors();
+  const paletteRef = useRef(palette);
+  paletteRef.current = palette;
 
   const {docMap, name, color} = collabContext;
 
@@ -178,7 +184,9 @@ export function LoroCollaborationPlugin({
     ]);
     const awarenessColor = getIdentityField(awarenessData, ['color']);
     const finalName = username || awarenessDisplayName || deterministicUserData.name;
-    const finalColor = cursorColor || awarenessColor || deterministicUserData.color;
+    const paletteColor =
+      paletteRef.current[collaboratorHash(finalName) % paletteRef.current.length];
+    const finalColor = cursorColor || awarenessColor || paletteColor;
     
     collabContext.name = finalName;
     collabContext.color = finalColor;

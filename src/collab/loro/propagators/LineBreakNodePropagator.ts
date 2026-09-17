@@ -8,6 +8,7 @@ import { $createLineBreakNode, LineBreakNode, $isLineBreakNode, UpdateListenerPa
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /**
  * LineBreakNode Propagator for Loro Tree Collaboration
@@ -125,7 +126,7 @@ export function createLineBreakNodeFromLoro(
 ): LineBreakNode {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return $createLineBreakNode(); // Fallback to empty line break
   }
   
@@ -190,7 +191,7 @@ export function deleteLineBreakNodeFromLoro(
  * Utility to check if a tree node represents a LineBreakNode
  */
 export function isLineBreakNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return false;
   }
   
@@ -202,7 +203,7 @@ export function isLineBreakNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
  * Get LineBreakNode data from Loro tree
  */
 export function getLineBreakNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   

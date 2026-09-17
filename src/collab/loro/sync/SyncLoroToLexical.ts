@@ -80,8 +80,13 @@ export function syncLoroToLexical(
             throw new Error(`Unsupported event diff type: ${(event.diff as any).type}. Supported types are: 'tree', 'map', 'list', 'text', 'counter'.`);
         }
       } catch (err) {
+        // Logged, not rethrown. A throw here leaves `editor.update` — Lexical
+        // then drops the whole pending state, every op of this batch with it,
+        // while the Loro document has already taken the update: from that
+        // moment the two sides disagree and each later batch fails on nodes
+        // the editor never got. Skipping the one op keeps the rest.
         console.error(
-          '[SEED-DEBUG] syncLoroToLexical: integrator threw for event',
+          '[loro-collab] syncLoroToLexical: integrator threw for event',
           index,
           'diffType=',
           (event.diff as any)?.type,
@@ -91,7 +96,6 @@ export function syncLoroToLexical(
           JSON.stringify((event.diff as any)),
           err,
         );
-        throw err;
       }
     });
     

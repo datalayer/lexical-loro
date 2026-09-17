@@ -17,6 +17,7 @@ import { LexicalNodeData } from '../types/LexicalNodeData';
 import { createLexicalNodeFromLoro } from '../nodes/NodeFactory';
 import { Binding } from '../Bindings';
 import { invariant } from '../utils/Invariant';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /**
  * ElementNode Propagator for Loro Tree Collaboration
@@ -221,7 +222,7 @@ export function createElementNodeFromLoro(
 ): ElementNode | null {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   
@@ -285,7 +286,7 @@ export function updateElementNodeFromLoro(
 ): void {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return;
   }
   
@@ -338,7 +339,7 @@ export function deleteElementNodeFromLoro(
  * Utility to check if a tree node represents an ElementNode
  */
 export function isElementNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return false;
   }
   
@@ -350,7 +351,7 @@ export function isElementNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
  * Get ElementNode data from Loro tree
  */
 export function getElementNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   
@@ -488,7 +489,7 @@ export function propagateElementNode(
             for (let i = index - 1; i >= 0; i--) {
               const candidate = siblings[i];
               const candidateTreeId = mapper.getTreeIDByLexicalKey(candidate.getKey());
-              if (candidateTreeId && tree.has(candidateTreeId)) {
+              if (candidateTreeId && isLiveTreeNode(tree, candidateTreeId)) {
                 previousSiblingId = candidateTreeId;
                 break;
               }
@@ -496,7 +497,7 @@ export function propagateElementNode(
             for (let i = index + 1; i < siblings.length; i++) {
               const candidate = siblings[i];
               const candidateTreeId = mapper.getTreeIDByLexicalKey(candidate.getKey());
-              if (candidateTreeId && tree.has(candidateTreeId)) {
+              if (candidateTreeId && isLiveTreeNode(tree, candidateTreeId)) {
                 nextSiblingId = candidateTreeId;
                 break;
               }

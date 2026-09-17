@@ -14,6 +14,7 @@ import {
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /**
  * DecoratorNode Propagator for Loro Tree Collaboration
@@ -140,7 +141,7 @@ export function createDecoratorNodeFromLoro(
 ): DecoratorNode<any> | null {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   
@@ -186,7 +187,7 @@ export function updateDecoratorNodeFromLoro(
 ): void {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return;
   }
   
@@ -238,7 +239,7 @@ export function deleteDecoratorNodeFromLoro(
  * Utility to check if a tree node represents a DecoratorNode
  */
 export function isDecoratorNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return false;
   }
   
@@ -250,7 +251,7 @@ export function isDecoratorNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
  * Get DecoratorNode data from Loro tree
  */
 export function getDecoratorNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   

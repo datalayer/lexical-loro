@@ -16,7 +16,7 @@ import {
 import { getNodeMapper } from '../nodes/NodesMapper';
 import { LexicalNodeData } from '../types/LexicalNodeData';
 import { Binding } from '../Bindings';
-import { $diffTextContentAndApplyDelta } from '../utils/Utils';
+import { $diffTextContentAndApplyDelta, isLiveTreeNode } from '../utils/Utils';
 import { invariant } from '../utils/Invariant';
 
 /**
@@ -109,7 +109,7 @@ export function updateTextNodeInLoro(
   // Updates must target an existing mapped node. Creating on update can
   // accidentally create inline nodes at root when parent info is unavailable.
   const treeID = mapper.getTreeIDByLexicalKey(nodeKey);
-  if (!treeID || !options?.tree.has(treeID)) {
+  if (!treeID || !isLiveTreeNode(options?.tree, treeID)) {
     return;
   }
   const treeNode = options.tree.getNodeByID(treeID);
@@ -155,7 +155,7 @@ export function createTextNodeFromLoro(
 ): TextNode | null {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   
@@ -220,7 +220,7 @@ export function updateTextNodeFromLoro(
 ): void {
   const { tree } = options!;
   
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return;
   }
   
@@ -276,7 +276,7 @@ export function deleteTextNodeFromLoro(
  * Utility to check if a tree node represents a TextNode
  */
 export function isTextNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return false;
   }
   
@@ -288,7 +288,7 @@ export function isTextNodeInTree(treeId: TreeID, tree: LoroTree): boolean {
  * Get TextNode data from Loro tree
  */
 export function getTextNodeDataFromTree(treeId: TreeID, tree: LoroTree): any {
-  if (!tree.has(treeId)) {
+  if (!isLiveTreeNode(tree, treeId)) {
     return null;
   }
   
@@ -415,7 +415,7 @@ export function propagateTextNode(
           
           // Then delete the TreeNode from Loro tree
           try {
-            if (tree.has(actualTreeID)) {
+            if (isLiveTreeNode(tree, actualTreeID)) {
               tree.delete(actualTreeID);
             }
           } catch (error) {
@@ -499,7 +499,7 @@ export function propagateTextNode(
             
             // Then delete the TreeNode from Loro tree
             try {
-              if (tree.has(actualTreeID)) {
+              if (isLiveTreeNode(tree, actualTreeID)) {
                 tree.delete(actualTreeID);
               }
             } catch (error) {

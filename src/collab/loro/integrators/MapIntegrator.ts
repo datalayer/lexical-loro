@@ -3,7 +3,7 @@
  * Distributed under the terms of the MIT License.
  */
 
-import { $getNodeByKey, $getRoot, $isDecoratorNode, $isElementNode, RootNode, TextNode } from 'lexical';
+import { $getNodeByKey, $getRoot, $isDecoratorNode, $isElementNode, RootNode, TextNode, DecoratorNode } from 'lexical';
 import { BaseIntegrator } from './BaseIntegrator';
 import { Binding } from '../Bindings';
 import { Provider } from '../State';
@@ -256,6 +256,19 @@ export class MapIntegrator implements BaseIntegrator<MapDiff> {
         if (!serializedData.type) serializedData.type = targetType;
         if (serializedData.version === undefined) serializedData.version = 1;
         if (!('children' in serializedData)) serializedData.children = [];
+
+        // A decorator that says how to take new data takes it in place: it
+        // keeps its key, its DOM, and whatever it refuses to let go of. One
+        // that overrides `remove()` to protect itself (a Jupyter output does)
+        // cannot be swapped out — `replace` leaves the old node standing, and
+        // every update from a peer left another copy of it in the document.
+        if (
+          nodeInfo.klass.prototype.updateFromJSON !==
+          DecoratorNode.prototype.updateFromJSON
+        ) {
+          targetNode.getWritable().updateFromJSON(serializedData);
+          return;
+        }
 
         const newNode = nodeInfo.klass.importJSON(serializedData);
         targetNode.replace(newNode);

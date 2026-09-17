@@ -7,6 +7,7 @@ import { TreeID, LoroTree } from 'loro-crdt';
 import { LexicalNode, NodeKey } from 'lexical';
 import { Binding } from '../Bindings';
 import { invariant } from '../utils/Invariant';
+import { isLiveTreeNode } from '../utils/Utils';
 
 /**
  * Resolve lexical data from Loro, handling Loro container objects.
@@ -40,7 +41,7 @@ export function createLexicalNodeFromLoro(
 ): LexicalNode | null {
   // Get node data from Loro tree. A create op for a tree node that does not
   // exist is a real inconsistency.
-  invariant(loroTree.has(treeId), 'NodeFactory: TreeID not present in Loro tree', { treeId });
+  invariant(isLiveTreeNode(loroTree, treeId), 'NodeFactory: TreeID not live in Loro tree', { treeId });
 
   const treeNode = loroTree.getNodeByID(treeId);
   
