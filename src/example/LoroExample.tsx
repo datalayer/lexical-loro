@@ -18,7 +18,8 @@
  *
  * Run `npm run server:py:ws` (or `npm run server:loro`) first: the pane needs
  * a room to join, and the address bar can point it elsewhere —
- * `?room=…`, `?ws=…`, `?panes=1`.
+ * `?room=…`, `?ws=…`, `?panes=1`. With `npm run server:py:mcp` up as well,
+ * the MCP menu above the panes calls the server's tools on the room.
  *
  * @module example/LoroExample
  */
@@ -32,6 +33,7 @@ import {
   type CollaborationContextType,
 } from '@datalayer/lexical-loro';
 import { useCollaboratorColor } from '@datalayer/primer-addons';
+import { McpToolsMenu } from './McpToolsMenu';
 
 /** The websocket the Python server listens on (`npm run server:py:ws`). */
 const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3002';
@@ -176,6 +178,9 @@ export function LoroExample(): JSX.Element {
           One document in room <code>{room}</code>, through{' '}
           <code>{websocketUrl}</code>. Type in either pane.
         </Text>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <McpToolsMenu room={room} />
+        </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
         {PEOPLE.slice(0, panes).map((who, index) => (

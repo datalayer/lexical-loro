@@ -1,6 +1,6 @@
 {
   "name": "@datalayer/lexical-loro",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "main": "lib/index.js",
   "files": [
     "lib/**/*.{css,d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -95,6 +95,7 @@
     "yjs": ">=13.5.42"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
     "@babel/preset-react": "^7.24.7",
     "@datalayer/jupyter-lexical": "^1.0.21",

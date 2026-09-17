@@ -1,78 +1,57 @@
-# Lexical MCP Server
+# Lexical Loro MCP Server
 
-This module provides a Model Context Protocol (MCP) server for managing Lexical models using the Loro collaborative editing backend.
+An [MCP](https://modelcontextprotocol.io) server that reads and writes Lexical
+documents through their Loro collaboration rooms. Every tool takes a `doc_id`,
+which is the room's name: the server joins that room on the relay, so what a
+tool writes appears in every editor on the room as it happens, and what the
+editors write is what the tools read.
 
-## Overview
+Built on the `mcp` Python package (2.x) — `MCPServer` with the Streamable HTTP
+and stdio transports.
 
-The Lexical MCP Server exposes three main tools for document manipulation:
+## Running
 
-1. **load_document** - Load a document by its ID
-2. **insert_paragraph** - Insert a text paragraph at a specific index
-3. **append_paragraph** - Append a text paragraph at the end of the document
+```bash
+# Streamable HTTP, beside a relay on ws://localhost:3002
+python -m lexical_loro.mcp start --transport streamable-http --port 3001 \
+    --websocket-url ws://localhost:3002 --documents-path ./documents
+
+# stdio, for a client that spawns the server
+python -m lexical_loro.mcp start --transport stdio --websocket-url ws://localhost:3002
+```
+
+The Streamable HTTP endpoint is `/mcp`. Two plain HTTP routes serve a client
+without an MCP SDK: `GET /tools/list` (the tools, with their input schemas)
+and `POST /` (JSON-RPC: `tools/list`, `tools/call` with `name` and
+`arguments`, or a tool's name as `method` with its arguments as `params`).
 
 ## Tools
 
-### load_document
+Reading:
 
-Loads a document by its unique identifier. If the document doesn't exist, it will be created with default structure.
+- `list_documents` — the documents saved under the documents path, and the
+  ones open in memory with their room connection state.
+- `get_document` / `load_document` — the document as Lexical JSON.
+- `get_document_info` — block count, counts by block type, a text preview of
+  each block.
 
-**Parameters:**
-- `doc_id` (string, required): The unique identifier of the document
+Writing — a block is a top-level node of the document; `index` is its
+zero-based position, and a negative or too large index appends:
 
-**Returns:**
-- Success response with lexical_data structure and metadata
-- Error response if loading fails
+- `append_paragraph`, `insert_paragraph` — a paragraph.
+- `insert_heading` (`level` 1–6), `insert_quote`, `insert_code_block`
+  (`language`) — the other text blocks.
+- `insert_jupyter_cell` — an executable cell: the input holding the `code`,
+  followed by its output.
+- `insert_block` — any block from its serialized Lexical JSON.
+- `update_block_text` — new text for the block at `index`, keeping the block.
+- `delete_block` — removes the block at `index`.
+- `save_document` — writes the document to the documents path.
 
-### insert_paragraph
+Every tool answers a JSON string with `success`, the `doc_id`, and what it
+did (`index`, `added_node_ids`, `total_blocks`…) or an `error`.
 
-Inserts a text paragraph at a specific index position in the document.
+## Tests
 
-**Parameters:**
-- `doc_id` (string, required): The unique identifier of the document
-- `index` (integer, required): The 0-based index position where to insert the paragraph
-- `text` (string, required): The text content of the paragraph
-
-**Returns:**
-- Success response with action confirmation and total block count
-- Error response if insertion fails
-
-### append_paragraph
-
-Appends a text paragraph at the end of the document.
-
-**Parameters:**
-- `doc_id` (string, required): The unique identifier of the document  
-- `text` (string, required): The text content of the paragraph
-
-**Returns:**
-- Success response with action confirmation and total block count
-- Error response if append fails
-
-## Usage
-
-### Running the Server
-
-```bash
-# Run as a module
-python -m lexical_loro.mcp
-
-# Or run the server directly
-python -m lexical_loro.mcp.server
-```
-
-### Integration
-
-The server uses the `LexicalDocumentManager` to handle multiple models and the `LexicalModel` for document operations. Each document is managed as a separate Loro document with real-time collaboration capabilities.
-
-## Architecture
-
-- **LexicalMCPServer**: Main server class that handles MCP protocol
-- **LexicalDocumentManager**: Manages multiple document instances
-- **LexicalModel**: Individual document model with Loro backend
-- **Tools**: Three exposed tools for document manipulation
-
-The server maintains document state using Loro's collaborative editing capabilities, allowing for real-time synchronization across multiple clients.
-
-## Error Handling
-
-All tools include comprehensive error handling and return structured JSON responses indicating success or failure, along with relevant error messages and context information.
+`tests/test_mcp_tools.py` exercises every tool and the HTTP routes against a
+document manager in a temporary directory, without a relay.
