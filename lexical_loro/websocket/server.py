@@ -6,6 +6,7 @@
 import asyncio
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -264,16 +265,20 @@ class WSSharedDoc:
         
         # Subscribe to ephemeral store changes to broadcast updates (like Node.js server)
         def ephemeral_change_handler(event):
-            """Handle ephemeral store changes and broadcast to other connections"""
-            # Only broadcast if there are actual changes
-            if (hasattr(event, 'added') and len(event.added) > 0) or \
-               (hasattr(event, 'updated') and len(event.updated) > 0) or \
-               (hasattr(event, 'removed') and len(event.removed) > 0):
+            """Broadcast the store when a state expires from it.
+
+            What a client sends is relayed as received in `handle_ephemeral`;
+            encoding the store from inside this subscription, while it is
+            applying, gives an empty payload. Removals happen on the store's
+            own clock, with no sender to relay, so those are encoded here.
+            """
+            if hasattr(event, 'removed') and len(event.removed) > 0:
                 try:
                     encoded_data = self.ephemeral_store.encode_all()
                     
-                    # Skip broadcast if no actual data to send
-                    if len(encoded_data) == 0:
+                    # Skip broadcast if no actual data to send (an empty store
+                    # still encodes to a byte, which clients reject).
+                    if len(encoded_data) <= 1:
                         return
                     
                     # MESSAGE_EPHEMERAL and EphemeralMessage are defined locally in this file
@@ -626,6 +631,16 @@ def clear_docs():
     docs.clear()
     logger.debug(f"[LORO SERVER] Cleared document cache")
 
+_room_locks: Dict[str, threading.Lock] = {}
+_room_locks_guard = threading.Lock()
+
+
+def _room_creation_lock(doc_id: str) -> threading.Lock:
+    """The lock under which the room of this name is created, one per name."""
+    with _room_locks_guard:
+        return _room_locks.setdefault(doc_id, threading.Lock())
+
+
 def get_doc(docname: str):
     # Extract the actual document ID from WebSocket path if needed
     # Handle paths like "playground/0/actual_id" -> "actual_id"
@@ -635,9 +650,14 @@ def get_doc(docname: str):
     else:
         actual_doc_id = docname
     
+    # Connections run this in worker threads. Two that arrive together — a
+    # pair of clients reconnecting after a restart — would each find no room
+    # and each make one, and then never hear each other: one room per name.
     if actual_doc_id not in docs:
-        logger.debug(f"[LORO SERVER] Creating new document: {actual_doc_id}")
-        docs[actual_doc_id] = WSSharedDoc(actual_doc_id, global_load_model, global_save_model)
+        with _room_creation_lock(actual_doc_id):
+            if actual_doc_id not in docs:
+                logger.debug(f"[LORO SERVER] Creating new document: {actual_doc_id}")
+                docs[actual_doc_id] = WSSharedDoc(actual_doc_id, global_load_model, global_save_model)
     else:
         logger.debug(f"[LORO SERVER] Retrieved existing document: {actual_doc_id}")
     
@@ -839,6 +859,27 @@ async def handle_ephemeral(conn, doc, message_data):
         
         # Mark this connection as sender to avoid echo (moved after client ID detection)
         doc.last_ephemeral_sender = conn
+        
+        # Pass the sender's encoding on to the other connections as received.
+        # Re-encoding the store from inside its own change subscription (the
+        # broadcast in WSSharedDoc) yields an empty payload, which clients
+        # reject — so a peer already in the room never saw who joined.
+        relayed = EphemeralMessage(
+            type=MESSAGE_EPHEMERAL,
+            ephemeral=list(ephemeral_data),
+            docId=doc.name,
+        )
+        payload = json.dumps(asdict(relayed))
+        relayed_to = 0
+        for other in list(doc.conns):
+            if other is conn:
+                continue
+            try:
+                await other.send(payload)
+                relayed_to += 1
+            except Exception as send_error:
+                logger.warning(f"[LORO SERVER] handle_ephemeral - Failed to relay to a connection: {send_error}")
+        logger.info(f"[LORO SERVER] Relayed ephemeral state ({len(ephemeral_bytes)} bytes) from {display_id} to {relayed_to} connection(s)")
         logger.debug(f"SERVER DEBUG - Applied ephemeral update from {display_id}: "
                     f"bytes_length={len(ephemeral_bytes)}, "
                     f"before_keys={before_keys}, "
