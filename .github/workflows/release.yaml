@@ -1,0 +1,164 @@
+# Copyright (c) 2025-2026 Datalayer, Inc.
+# Distributed under the terms of the MIT License.
+
+# Publishes the release a tag names, to PyPI (lexical-loro) and npm
+# (@datalayer/lexical-loro), with no stored token: both registries trust
+# this workflow file (OIDC trusted publishing, through the `pypi` and `npm`
+# environments). The two packages share one version — pyproject.toml reads
+# it straight from package.json (hatch-nodejs-version) — which the tag must
+# name. A package already published at that version is skipped, so a re-run
+# after a partial upload publishes the rest. See RELEASE.md.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      npm: ${{ steps.plan.outputs.npm }}
+      python: ${{ steps.plan.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the tag names the version both packages carry
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          echo "tag=$tag version=$version"
+          test "$tag" = "$version"
+
+      - name: Find what is not published yet
+        id: plan
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if npm view "@datalayer/lexical-loro@$version" version >/dev/null 2>&1; then
+            echo "npm: @datalayer/lexical-loro@$version is already published, skipping"
+            echo "npm=" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm: @datalayer/lexical-loro@$version will be published"
+            echo "npm=yes" >> "$GITHUB_OUTPUT"
+          fi
+          status="$(curl -sL -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/lexical-loro/$version/json")"
+          if [ "$status" = "200" ]; then
+            echo "PyPI: lexical-loro $version is already published, skipping"
+            echo "python=" >> "$GITHUB_OUTPUT"
+          else
+            echo "PyPI: lexical-loro $version will be published"
+            echo "python=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and pack the npm package
+        if: steps.plan.outputs.npm != ''
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npm run build:lib
+          mkdir -p dist-npm
+          npm pack --pack-destination dist-npm
+          ls -la dist-npm
+
+      - name: Build the Python package
+        if: steps.plan.outputs.python != ''
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip build
+          python -m build --sdist --wheel --outdir dist-py .
+          ls -la dist-py
+
+      - uses: actions/upload-artifact@v4
+        if: steps.plan.outputs.npm != ''
+        with:
+          name: npm
+          path: dist-npm/*.tgz
+
+      - uses: actions/upload-artifact@v4
+        if: steps.plan.outputs.python != ''
+        with:
+          name: python
+          path: dist-py/*
+
+  pypi:
+    needs: build
+    if: needs.build.outputs.python != ''
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
+  npm:
+    needs: build
+    if: needs.build.outputs.npm != ''
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@^11.5.1 && npm --version
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm
+          path: dist
+      - name: Publish
+        run: |
+          set -euo pipefail
+          for tarball in dist/*.tgz; do
+            # "./": npm reads a bare "dist/x.tgz" as the GitHub shorthand
+            # github:dist/x.tgz and refuses to fetch it (EALLOWGIT).
+            npm publish "./$tarball" --provenance --access public
+          done
+
+  release:
+    name: GitHub release
+    needs: [build, pypi, npm]
+    if: always() && needs.build.result == 'success' && needs.pypi.result != 'failure' && needs.npm.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create the release with generated notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && exit 0
+          gh release create "$GITHUB_REF_NAME" --title "Release $version" --generate-notes \
+            --notes "- [PyPI lexical-loro](https://pypi.org/project/lexical-loro/$version/)
+          - [npm @datalayer/lexical-loro](https://www.npmjs.com/package/@datalayer/lexical-loro/v/$version)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
