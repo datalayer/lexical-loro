@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws'
 import http from 'http'
 import * as number from 'lib0/number'
 
-import { setRoomSeeder, setupWSConnection } from '../../transport'
+import { setRoomSeeder, setupWSConnection } from '../../transport/server'
 import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
 
 // The Lexical server's rooms start with Lexical's initial content; the transport itself seeds nothing.
