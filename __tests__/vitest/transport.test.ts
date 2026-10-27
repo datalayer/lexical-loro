@@ -13,7 +13,11 @@ vi.mock('lexical', () => {
   throw new Error('The transport imported lexical.');
 });
 
-const transport = await import('../../src/collab/loro/transport');
+// The browser barrel (the provider) and the server's rooms (Node), both without Lexical.
+const transport = {
+  ...(await import('../../src/collab/loro/transport')),
+  ...(await import('../../src/collab/loro/transport/server')),
+};
 
 describe('the Loro transport', () => {
   let server: http.Server;
