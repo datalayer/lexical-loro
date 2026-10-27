@@ -6,47 +6,17 @@
 import type {LexicalCommand} from 'lexical';
 import {createCommand} from 'lexical';
 import type {LoroDoc, Cursor} from 'loro-crdt';
+import type {Provider, UserState} from './transport/types';
 import {UndoManager} from 'loro-crdt';
 import type {Binding} from './Bindings';
 
-export type UserState = {
-  anchorPos: Cursor | null;
-  color: string;
-  focusing: boolean;
-  focusPos: Cursor | null;
-  name: string;
-  awarenessData: object;
-  [key: string]: unknown;
-};
+export type { UserState, AwarenessProvider, Provider } from './transport/types';
 
 export const CONNECTED_COMMAND: LexicalCommand<boolean> =
   createCommand('CONNECTED_COMMAND');
 
 export const TOGGLE_CONNECT_COMMAND: LexicalCommand<boolean> =
   createCommand('TOGGLE_CONNECT_COMMAND');
-
-export type AwarenessProvider = {
-  getLocalState: () => UserState | null;
-  getStates: () => Map<number, UserState>;
-  off: (type: 'update', cb: () => void) => void;
-  on: (type: 'update', cb: () => void) => void;
-  setLocalState: (userState: UserState) => void;
-  setLocalStateField: (field: string, value: unknown) => void;
-};
-
-export type Provider = {
-  awareness: AwarenessProvider;
-  connect(): void | Promise<void>;
-  disconnect(): void;
-  off(type: 'sync', cb: (isSynced: boolean) => void): void;
-  off(type: 'update', cb: (update: unknown) => void): void;
-  off(type: 'status', cb: (status: {status: string}) => void): void;
-  off(type: 'reload', cb: (doc: LoroDoc) => void): void;
-  on(type: 'sync', cb: (isSynced: boolean) => void): void;
-  on(type: 'status', cb: (status: {status: string}) => void): void;
-  on(type: 'update', cb: (update: unknown) => void): void;
-  on(type: 'reload', cb: (doc: LoroDoc) => void): void;
-}
 
 export type Operation = {
   attributes: {

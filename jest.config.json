@@ -18,7 +18,8 @@
   ],
   "testPathIgnorePatterns": [
     "/__tests__/unit/",
-    "/__tests__/e2e/"
+    "/__tests__/e2e/",
+    "/__tests__/vitest/"
   ],
   "collectCoverageFrom": [
     "src/**/*.{ts,tsx}",

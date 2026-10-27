@@ -10,3 +10,4 @@ export * from './LexicalCollaborationPlugin';
 export * from './State';
 export * from './useCollaboration';
 export * from './wsProvider';
+export * from './transport';

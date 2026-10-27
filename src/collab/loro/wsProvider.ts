@@ -4,7 +4,7 @@
  */
 
 import {LoroDoc} from 'loro-crdt';
-import {WebsocketProvider} from './provider/websocket';
+import {WebsocketProvider} from './transport/websocket';
 import { Provider } from './State';
 import { debugLog } from './Debug';
 

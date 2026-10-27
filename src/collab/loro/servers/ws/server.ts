@@ -9,7 +9,14 @@ import { WebSocketServer } from 'ws'
 import http from 'http'
 import * as number from 'lib0/number'
 
-import { setupWSConnection } from './utils'
+import { setRoomSeeder, setupWSConnection } from '../../transport'
+import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
+
+// The Lexical server's rooms start with Lexical's initial content; the transport itself seeds nothing.
+setRoomSeeder((doc, name) => {
+  console.log(`[LORO] Initializing document '${name}' with default content`)
+  initializeLoroDocWithLexicalContent(doc)
+})
 
 const wss = new WebSocketServer({ noServer: true })
 const host = process.env.HOST || 'localhost'

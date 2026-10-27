@@ -10,9 +10,9 @@ import * as time from 'lib0/time'
 import * as math from 'lib0/math'
 import * as url from 'lib0/url'
 import * as env from 'lib0/environment'
-import type { UserState, AwarenessProvider } from '../State'
-import { generateClientID, generateRandomClientID } from '../utils/Utils'
-import { debugLog } from '../Debug';
+import type { UserState, AwarenessProvider } from './types'
+import { generateClientID, generateRandomClientID } from './ids'
+import { debugLog } from './debug';
 
 // @todo - this should depend on ephemeral timeout
 const messageReconnectTimeoutMs = 30 * 1000 // 30 seconds

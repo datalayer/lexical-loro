@@ -13,9 +13,8 @@ import {
   messageUpdate,
   EphemeralMessage,
   LoroWebSocketMessage,
-} from '../../provider/websocket'
+} from './websocket'
 import { callbackIntegrator, isCallbackSet } from './callback'
-import { initializeLoroDocWithLexicalContent } from '../../utils/InitialContent'
 
 const pingTimeout = 30000
 
@@ -147,6 +146,19 @@ export const getPersistence = () => persistence
  * 
  */
 export const docs = new Map<string, WSSharedDoc>()
+
+/** What a new room holds before anyone writes: nothing, unless the server's caller says. */
+export type RoomSeeder = (doc: LoroDoc, name: string) => void
+
+let roomSeeder: RoomSeeder = () => {}
+
+/**
+ * Seed every new room: the Lexical server writes Lexical's initial content,
+ * a spreadsheet server an empty workbook, or nothing.
+ */
+export const setRoomSeeder = (seeder: RoomSeeder) => {
+  roomSeeder = seeder
+}
 
 /**
  * @type {(ydoc: Y.Doc) => Promise<void>}
@@ -511,9 +523,8 @@ export class WSSharedDoc {
     this.name = name
     this.doc = new LoroDoc()
     
-    // Initialize the document with default Lexical content
-    console.log(`[LORO] Initializing document '${name}' with default content`)
-    initializeLoroDocWithLexicalContent(this.doc)
+    // A new room starts empty; the server's caller decides what it holds first.
+    roomSeeder(this.doc, name)
     
     /**
      * Maps from conn to set of controlled ephemeral keys. Delete all keys when this conn is closed
