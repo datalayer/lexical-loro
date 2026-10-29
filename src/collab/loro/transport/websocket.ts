@@ -458,6 +458,11 @@ const processMessage = (provider: WebsocketProvider, data: string | ArrayBuffer 
  */
 const closeWebsocketConnection = (provider, ws, event) => {
   if (ws === provider.ws) {
+    // The next socket asks for the snapshot again: the room moved on while this one was
+    // silent or down, and the snapshot's version is also how this client learns what the
+    // server missed of its own edits meanwhile. Set here, not only in the close event: when
+    // the watchdog drops a silent socket, its close handshake may hang past the next open.
+    provider.snapshotLoaded = false
     provider.emit('connection-close', [event, provider])
     provider.ws = null
     ws.close()
@@ -532,10 +537,8 @@ const setupWS = (provider) => {
       provider.emit('connection-error', [event, provider])
     }
     ws.onclose = (event) => {
-      // The next open asks for the snapshot again: the room moved on while
-      // the socket was down, and the snapshot's version is also how this
-      // client learns what the server missed of its own edits meanwhile.
-      provider.snapshotLoaded = false
+      // A late close of a socket already replaced does nothing (closeWebsocketConnection
+      // checks it is the current one), so it cannot undo the snapshot the next socket loaded.
       closeWebsocketConnection(provider, ws, event)
     }
     ws.onopen = () => {

@@ -23,10 +23,21 @@ describe('the Loro transport', () => {
   let server: http.Server;
   let url: string;
   const seeded: string[] = [];
+  /** The server's side of every connection, in the order they came. */
+  const accepted: import('ws').WebSocket[] = [];
+  /** The connections (by their place in `accepted`) that asked for the snapshot. */
+  const askedSnapshot = new Set<number>();
 
   beforeAll(async () => {
     const wss = new WebSocketServer({ noServer: true });
-    wss.on('connection', transport.setupWSConnection);
+    wss.on('connection', (ws, req) => {
+      accepted.push(ws);
+      const at = accepted.length - 1;
+      ws.on('message', (m) => {
+        if (String(m).includes('"query-snapshot"')) askedSnapshot.add(at);
+      });
+      transport.setupWSConnection(ws, req);
+    });
     server = http.createServer((_req, res) => res.end('okay'));
     server.on('upgrade', (req, socket, head) =>
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req)),
@@ -38,6 +49,8 @@ describe('the Loro transport', () => {
 
   afterAll(async () => {
     for (const room of transport.docs.values()) for (const conn of room.conns.keys()) conn.close();
+    // A socket a test silenced never finishes its close handshake: drop it.
+    for (const ws of accepted) ws.terminate();
     await new Promise((resolve) => server.close(resolve));
   });
 
@@ -70,4 +83,37 @@ describe('the Loro transport', () => {
       pb.destroy();
     }
   });
+
+  it('catches up on a reconnect after a silent socket, though the old socket has not closed yet', async () => {
+    const a = new LoroDoc();
+    const b = new LoroDoc();
+    const options = { disableBc: true, WebSocketPolyfill: WebSocket };
+    const pa = new transport.WebsocketProvider(url, 'gap', a, options);
+    await vi.waitFor(() => expect(pa.synced).toBe(true), { timeout: 5000 });
+    const pb = new transport.WebsocketProvider(url, 'gap', b, options);
+    try {
+      await vi.waitFor(() => expect(pb.synced).toBe(true), { timeout: 5000 });
+      const bServer = accepted[accepted.length - 1];
+      // B's socket goes silent, as an idle one behind a proxy does: the room stops relaying to
+      // it, and its server side stops reading, so B's close handshake hangs and its close
+      // event does not come before B's next socket opens.
+      const room = transport.docs.get('gap')!;
+      room.conns.delete(bServer as never);
+      (bServer as unknown as { _socket: { pause(): void } })._socket.pause();
+      // A edits while B is between sockets.
+      a.getMap('cells').set('0.0', 42);
+      a.commit();
+      // B's watchdog finds the socket silent (no message for 30 s) and opens another.
+      const before = accepted.length;
+      pb.wsLastMessageReceived = 0;
+      await vi.waitFor(() => expect(accepted.length).toBe(before + 1), { timeout: 8000 });
+      // The new socket asks for the snapshot: a relay that answers only that (Spacer does not
+      // send one on connect, as this test's server does) is how B learns what it missed.
+      await vi.waitFor(() => expect(askedSnapshot.has(before)).toBe(true), { timeout: 3000 });
+      await vi.waitFor(() => expect(b.getMap('cells').get('0.0')).toBe(42), { timeout: 5000 });
+    } finally {
+      pa.destroy();
+      pb.destroy();
+    }
+  }, 15_000);
 });
